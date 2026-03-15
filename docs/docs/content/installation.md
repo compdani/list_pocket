@@ -89,7 +89,7 @@ A nightly build is automatically published with the latest changes merged to the
 
 To compile the latest unreleased version (`master` branch):
 
-1. Make sure `go`, `nodejs`, and `yarn` are installed on your system.
+1. Make sure `go`, `nodejs`, and `npm` are installed on your system.
 2. `git clone git@github.com:knadh/listmonk.git`
 3. `cd listmonk && make dist`. This will generate the `listmonk` binary.
 

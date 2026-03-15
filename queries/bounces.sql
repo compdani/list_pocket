@@ -1,10 +1,10 @@
 -- name: record-bounce
 -- Insert a bounce and count the bounces for the subscriber and either unsubscribe them,
 WITH sub AS (
-    SELECT id, status FROM subscribers WHERE CASE WHEN $1 != '' THEN uuid = $1::UUID ELSE email = $2 END
+    SELECT id, status FROM subscribers WHERE CASE WHEN $1 != '' THEN uuid = $1 ELSE email = $2 END
 ),
 camp AS (
-    SELECT id FROM campaigns WHERE $3 != '' AND uuid = $3::UUID
+    SELECT id FROM campaigns WHERE $3 != '' AND uuid = $3
 ),
 num AS (
     -- Add a +1 to include the current insertion that is happening.
@@ -21,7 +21,7 @@ block2 AS (
 ),
 bounce AS (
     -- Record the bounce if the subscriber is not already blocklisted;
-    INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created_at)
+    INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
     SELECT (SELECT id FROM sub), (SELECT id FROM camp), $4, $5, $6, $7
     WHERE NOT EXISTS (SELECT 1 WHERE (SELECT status FROM sub) = 'blocklisted' OR (SELECT num FROM num) > $8)
 )
@@ -35,7 +35,7 @@ SELECT COUNT(*) OVER () AS total,
     bounces.type,
     bounces.source,
     bounces.meta,
-    bounces.created_at,
+    bounces.created,
     bounces.subscriber_id,
     subscribers.uuid AS subscriber_uuid,
     subscribers.email AS email,
@@ -55,7 +55,7 @@ WHERE ($1 = 0 OR bounces.id = $1)
 ORDER BY %order% OFFSET $5 LIMIT (CASE WHEN $6 < 1 THEN NULL ELSE $6 END);
 
 -- name: delete-bounces
-DELETE FROM bounces WHERE $2 = TRUE OR id = ANY($1);
+DELETE FROM bounces WHERE $2 = TRUE OR id IN $1;
 
 -- name: delete-bounces-by-subscriber
 WITH sub AS (
@@ -68,9 +68,9 @@ WITH subs AS (
     SELECT subscriber_id FROM bounces
 ),
 b AS (
-    UPDATE subscribers SET status='blocklisted', updated_at=NOW()
-    WHERE id = ANY(SELECT subscriber_id FROM subs)
+    UPDATE subscribers SET status='blocklisted', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE id IN SELECT subscriber_id FROM subs
 )
-UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
-    WHERE subscriber_id = ANY(SELECT subscriber_id FROM subs);
+UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE subscriber_id IN SELECT subscriber_id FROM subs;
 

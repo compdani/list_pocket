@@ -5,11 +5,13 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +21,6 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/zerodha/simplesessions/stores/postgres/v3"
 	"github.com/zerodha/simplesessions/v3"
 	"golang.org/x/oauth2"
 )
@@ -77,12 +78,10 @@ type Auth struct {
 	verifier  *oidc.IDTokenVerifier
 	provider  *oidc.Provider
 	sess      *simplesessions.Manager
-	sessStore *postgres.Store
+	sessStore *memoryStore
 	cb        *Callbacks
 	log       *log.Logger
 }
-
-var sessPruneInterval = time.Hour * 12
 
 var regexBcryptHash = regexp.MustCompile(`^\$2[abxy]\$`)
 
@@ -90,15 +89,15 @@ var regexBcryptHash = regexp.MustCompile(`^\$2[abxy]\$`)
 func New(cfg Config, db *sql.DB, pb *pocketbase.PocketBase, cb *Callbacks, lo *log.Logger) (*Auth, error) {
 	authCollection := cfg.AuthCollection
 	if authCollection == "" {
-		authCollection = "lm_users_auth"
+		authCollection = "users"
 	}
 
 	a := &Auth{
-		cfg: cfg,
-		pb:  pb,
+		cfg:     cfg,
+		pb:      pb,
 		authCol: authCollection,
-		cb:  cb,
-		log: lo,
+		cb:      cb,
+		log:     lo,
 
 		apiUsers: map[string]User{},
 	}
@@ -112,35 +111,13 @@ func New(cfg Config, db *sql.DB, pb *pocketbase.PocketBase, cb *Callbacks, lo *l
 			MaxAge:     time.Hour * 24 * 7,
 		},
 	})
-	st, err := postgres.New(postgres.Opt{}, db)
-	if err != nil {
-		return nil, err
-	}
+	st := newMemoryStore()
 	a.sessStore = st
 	a.sess.UseStore(st)
 	a.sess.SetCookieHooks(cb.GetCookie, cb.SetCookie)
 
 	if err := a.ensureAuthCollection(); err != nil {
 		return nil, err
-	}
-
-	// Prune dead sessions from the DB periodically.
-	go func() {
-		if err := st.Prune(); err != nil {
-			lo.Printf("error pruning login sessions: %v", err)
-		}
-		time.Sleep(sessPruneInterval)
-	}()
-
-	if cb != nil && cb.GetUsers != nil {
-		users, err := cb.GetUsers()
-		if err != nil {
-			return nil, err
-		}
-
-		if err := a.SyncUsers(users); err != nil {
-			return nil, err
-		}
 	}
 
 	return a, nil
@@ -157,6 +134,161 @@ func (o *Auth) CacheAPIUsers(users []User) {
 	for _, u := range users {
 		o.apiUsers[u.Username] = u
 	}
+}
+
+func (o *Auth) ensureAuthCollection() error {
+	if o.pb == nil {
+		return fmt.Errorf("pocketbase instance is nil")
+	}
+
+	col, err := o.pb.FindCollectionByNameOrId(o.authCol)
+	if err != nil {
+		return err
+	}
+
+	changed := false
+
+	if col.Fields.GetByName("username") == nil {
+		col.Fields.Add(&pbcore.TextField{Name: "username", Required: true, Min: 3, Max: 255})
+		changed = true
+	}
+
+	if col.Fields.GetByName("user_type") == nil {
+		col.Fields.Add(&pbcore.TextField{Name: "user_type", Required: true})
+		changed = true
+	}
+
+	if col.Fields.GetByName("status") == nil {
+		col.Fields.Add(&pbcore.TextField{Name: "status", Required: true})
+		changed = true
+	}
+
+	if col.Fields.GetByName("role") == nil {
+		col.Fields.Add(&pbcore.TextField{Name: "role"})
+		changed = true
+	}
+
+	if changed {
+		return o.pb.Save(col)
+	}
+
+	return nil
+}
+
+func (o *Auth) SyncUsers(users []User) error {
+	for _, u := range users {
+		if err := o.SyncUser(u); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Auth) SyncUser(u User) error {
+	rec, err := o.findAuthRecordByUsername(u.Username)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	if rec == nil {
+		col, err := o.pb.FindCollectionByNameOrId(o.authCol)
+		if err != nil {
+			return err
+		}
+		rec = pbcore.NewRecord(col)
+	}
+
+	email := strings.TrimSpace(u.Email.String)
+	if email == "" {
+		email = fmt.Sprintf("%s@api.local", strings.ToLower(u.Username))
+	}
+
+	rec.SetEmail(email)
+	rec.Set("username", u.Username)
+	rec.Set("user_type", u.Type)
+	rec.Set("status", u.Status)
+	rec.Set("role", strconv.Itoa(u.UserRoleID))
+	rec.SetVerified(true)
+
+	if u.Password.String != "" {
+		if regexBcryptHash.MatchString(u.Password.String) {
+			rec.SetRaw(pbcore.FieldNamePassword, u.Password.String)
+		} else {
+			rec.Set(pbcore.FieldNamePassword, u.Password.String)
+			rec.Set("passwordConfirm", u.Password.String)
+		}
+	} else if rec.Id == "" {
+		placeholder := fmt.Sprintf("lm-disabled-%d-%d", u.ID, time.Now().UnixNano())
+		rec.Set(pbcore.FieldNamePassword, placeholder)
+		rec.Set("passwordConfirm", placeholder)
+	}
+
+	return o.pb.Save(rec)
+}
+
+func (o *Auth) DeleteUsers(ids []int) error {
+	for _, id := range ids {
+		rec, err := o.findAuthRecordByUserID(id)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue
+			}
+			return err
+		}
+
+		if err := o.pb.Delete(rec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Auth) findAuthRecordByUserID(userID int) (*pbcore.Record, error) {
+	if userID < 1 {
+		return nil, sql.ErrNoRows
+	}
+
+	return o.pb.FindRecordById(o.authCol, strconv.Itoa(userID))
+}
+
+func (o *Auth) findAuthRecordByUsername(username string) (*pbcore.Record, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return nil, sql.ErrNoRows
+	}
+
+	return o.pb.FindFirstRecordByData(o.authCol, "username", username)
+}
+
+func (o *Auth) LoginUser(username, password string) (User, error) {
+	if o.cb == nil || o.cb.GetUserByUsername == nil {
+		return User{}, echo.NewHTTPError(http.StatusInternalServerError, "user lookup callback missing")
+	}
+
+	user, err := o.cb.GetUserByUsername(username)
+	if err != nil {
+		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
+	}
+
+	if user.Type != UserTypeUser || user.Status != UserStatusEnabled || !user.PasswordLogin {
+		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
+	}
+
+	if err := o.SyncUser(user); err != nil {
+		return User{}, echo.NewHTTPError(http.StatusInternalServerError, "failed syncing auth user")
+	}
+
+	rec, err := o.findAuthRecordByUsername(user.Username)
+	if err != nil || rec == nil || !rec.ValidatePassword(password) {
+		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
+	}
+
+	return user, nil
+}
+
+func (o *Auth) ValidateUserPassword(username, password string) bool {
+	u, err := o.LoginUser(username, password)
+	return err == nil && u.ID > 0
 }
 
 // CacheAPIUser caches an API user for authenticating requests.
@@ -177,6 +309,72 @@ func (o *Auth) GetAPIToken(user string, token string) (User, bool) {
 	}
 
 	return t, true
+}
+
+func (o *Auth) ValidateAPIToken(user string, token string) (User, bool) {
+	// Legacy in-memory cache fallback.
+	if out, ok := o.GetAPIToken(user, token); ok {
+		return out, true
+	}
+
+	if o.cb == nil || o.cb.GetUserByUsername == nil {
+		return User{}, false
+	}
+
+	u, err := o.cb.GetUserByUsername(user)
+	if err != nil || u.Status != UserStatusEnabled || u.Type != UserTypeAPI {
+		return User{}, false
+	}
+
+	if err := o.SyncUser(u); err != nil {
+		return User{}, false
+	}
+
+	rec, err := o.findAuthRecordByUsername(u.Username)
+	if err != nil || rec == nil || !rec.ValidatePassword(token) {
+		return User{}, false
+	}
+
+	return u, true
+}
+
+// LoadCachedUsersFromPocketBase refreshes API token cache and user presence
+// info from the auth collection, without querying legacy SQL tables.
+func (o *Auth) LoadCachedUsersFromPocketBase() (bool, error) {
+	if o.pb == nil {
+		return false, fmt.Errorf("pocketbase instance is nil")
+	}
+
+	recs, err := o.pb.FindRecordsByFilter(o.authCol, "", "", 0, 0)
+	if err != nil {
+		return false, err
+	}
+
+	hasUser := false
+	apiUsers := make([]User, 0, len(recs))
+	for _, rec := range recs {
+		u := User{
+			Username: rec.GetString("username"),
+			Type:     rec.GetString("user_type"),
+			Status:   rec.GetString("status"),
+		}
+
+		if o.cb != nil && o.cb.GetUserByUsername != nil {
+			if dbUser, err := o.cb.GetUserByUsername(u.Username); err == nil {
+				u.ID = dbUser.ID
+			}
+		}
+
+		if u.Type == UserTypeUser && u.Status == UserStatusEnabled {
+			hasUser = true
+		}
+		if u.Type == UserTypeAPI && u.Status == UserStatusEnabled {
+			apiUsers = append(apiUsers, u)
+		}
+	}
+
+	o.CacheAPIUsers(apiUsers)
+	return hasUser, nil
 }
 
 // initOIDC initializes the OIDC provider, verifier, and OAuth config.
@@ -334,6 +532,20 @@ func (o *Auth) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		if len(hdr) > 0 {
+			// Primary auth path: PocketBase auth token.
+			if strings.HasPrefix(hdr, "Bearer ") {
+				token := strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
+				user, rec, err := o.validatePBToken(token)
+				if err != nil {
+					c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid auth token"))
+					return next(c)
+				}
+				c.Set(UserHTTPCtxKey, user)
+				c.Set(AuthRecordHTTPCtxKey, rec)
+				return next(c)
+			}
+
+			// Backward-compatibility for legacy api_key:token auth header.
 			key, token, err := parseAuthHeader(hdr)
 			if err != nil {
 				c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, err.Error()))
@@ -341,7 +553,7 @@ func (o *Auth) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 			}
 
 			// Validate the token.
-			user, ok := o.GetAPIToken(key, token)
+			user, ok := o.ValidateAPIToken(key, token)
 			if !ok {
 				c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid API credentials"))
 				return next(c)
@@ -361,8 +573,168 @@ func (o *Auth) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 		// Set the user details on the handler context.
 		c.Set(UserHTTPCtxKey, user)
+		if rec, err := o.findAuthRecordByUserID(user.ID); err == nil && rec != nil {
+			c.Set(AuthRecordHTTPCtxKey, rec)
+		}
 		c.Set(SessionKey, sess)
 		return next(c)
+	}
+}
+
+// APIMiddleware is a token-only HTTP middleware for API handlers.
+// It validates Authorization Bearer tokens (or access_token query param fallback)
+// and sets authenticated user context. It does not use cookie sessions.
+func (o *Auth) APIMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		hdr := strings.TrimSpace(c.Request().Header.Get("Authorization"))
+		token := ""
+		if strings.HasPrefix(hdr, "Bearer ") {
+			token = strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
+		}
+		if token == "" {
+			token = strings.TrimSpace(c.QueryParam("access_token"))
+		}
+		if token == "" {
+			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "missing auth token"))
+			return next(c)
+		}
+
+		user, rec, err := o.validatePBToken(token)
+		if err != nil {
+			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid auth token"))
+			return next(c)
+		}
+
+		c.Set(UserHTTPCtxKey, user)
+		c.Set(AuthRecordHTTPCtxKey, rec)
+		return next(c)
+	}
+}
+
+func (o *Auth) validatePBToken(token string) (User, *pbcore.Record, error) {
+	if token == "" {
+		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "empty token")
+	}
+
+	rec, err := o.pb.FindAuthRecordByToken(token, pbcore.TokenTypeAuth)
+	if err != nil || rec == nil {
+		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "invalid token")
+	}
+
+	username := strings.TrimSpace(rec.GetString("username"))
+	if username == "" {
+		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "invalid token user")
+	}
+
+	user := User{
+		Username:       username,
+		Type:           strings.TrimSpace(rec.GetString("user_type")),
+		Status:         strings.TrimSpace(rec.GetString("status")),
+		PermissionsMap: map[string]struct{}{},
+	}
+
+	if user.Type == "" {
+		user.Type = UserTypeUser
+	}
+	if user.Status == "" {
+		user.Status = UserStatusEnabled
+	}
+
+	if roleID := ExtractRoleIDFromRecord(rec); roleID > 0 {
+		user.UserRoleID = roleID
+		user.UserRole.ID = roleID
+	}
+
+	if perms, err := o.loadRolePermissions(rec); err == nil {
+		user.PermissionsMap = perms
+		user.UserRole.Permissions = make([]string, 0, len(perms))
+		for perm := range perms {
+			user.UserRole.Permissions = append(user.UserRole.Permissions, perm)
+		}
+	}
+
+	if o.cb != nil && o.cb.GetUserByUsername != nil {
+		if dbUser, err := o.cb.GetUserByUsername(username); err == nil {
+			if dbUser.Username == "" {
+				dbUser.Username = username
+			}
+			if dbUser.Type == "" {
+				dbUser.Type = user.Type
+			}
+			if dbUser.Status == "" {
+				dbUser.Status = user.Status
+			}
+			if user.UserRoleID > 0 {
+				dbUser.UserRoleID = user.UserRoleID
+				dbUser.UserRole.ID = user.UserRoleID
+			}
+			if len(user.PermissionsMap) > 0 {
+				dbUser.PermissionsMap = user.PermissionsMap
+				dbUser.UserRole.Permissions = user.UserRole.Permissions
+			}
+			user = dbUser
+		}
+	}
+
+	if user.Status != UserStatusEnabled {
+		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "disabled user")
+	}
+
+	return user, rec, nil
+}
+
+func (o *Auth) loadRolePermissions(rec *pbcore.Record) (map[string]struct{}, error) {
+	out := map[string]struct{}{}
+	if rec == nil || o.pb == nil {
+		return out, nil
+	}
+
+	roleID := ExtractRoleIDFromRecord(rec)
+	if roleID < 1 {
+		return out, nil
+	}
+
+	roleRec, err := o.pb.FindFirstRecordByFilter("roles", "legacy_id={:id}", dbx.Params{"id": roleID})
+	if err != nil || roleRec == nil {
+		return out, err
+	}
+
+	for _, perm := range normalizeStringArray(roleRec.Get("permissions")) {
+		perm = strings.TrimSpace(perm)
+		if perm == "" {
+			continue
+		}
+		out[perm] = struct{}{}
+	}
+
+	return out, nil
+}
+
+func normalizeStringArray(raw any) []string {
+	switch value := raw.(type) {
+	case []string:
+		return value
+	case []any:
+		out := make([]string, 0, len(value))
+		for _, entry := range value {
+			if text, ok := entry.(string); ok {
+				out = append(out, text)
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return nil
+		}
+
+		var out []string
+		if err := json.Unmarshal([]byte(value), &out); err == nil {
+			return out
+		}
+
+		return []string{value}
+	default:
+		return nil
 	}
 }
 
@@ -376,7 +748,7 @@ func (o *Auth) Perm(next echo.HandlerFunc, perms ...string) echo.HandlerFunc {
 		}
 
 		// If the current user is a Super Admin user, do no checks.
-		if u.UserRole.ID == SuperAdminRoleID {
+		if ExtractRoleID(c) == SuperAdminRoleID || u.UserRole.ID == SuperAdminRoleID {
 			return next(c)
 		}
 
@@ -400,6 +772,45 @@ func (o *Auth) Perm(next echo.HandlerFunc, perms ...string) echo.HandlerFunc {
 	}
 }
 
+// ExtractRoleID returns the role ID from the auth record in the request context.
+// Falls back to the hydrated auth.User profile when unavailable.
+func ExtractRoleID(c echo.Context) int {
+	if rec, ok := c.Get(AuthRecordHTTPCtxKey).(*pbcore.Record); ok && rec != nil {
+		if id := ExtractRoleIDFromRecord(rec); id > 0 {
+			return id
+		}
+	}
+
+	if u, ok := c.Get(UserHTTPCtxKey).(User); ok {
+		if u.UserRole.ID > 0 {
+			return u.UserRole.ID
+		}
+		if u.UserRoleID > 0 {
+			return u.UserRoleID
+		}
+	}
+
+	return 0
+}
+
+func ExtractRoleIDFromRecord(rec *pbcore.Record) int {
+	if rec == nil {
+		return 0
+	}
+
+	if id := rec.GetInt("role"); id > 0 {
+		return id
+	}
+
+	if raw := strings.TrimSpace(rec.GetString("role")); raw != "" {
+		if id, err := strconv.Atoi(raw); err == nil && id > 0 {
+			return id
+		}
+	}
+
+	return 0
+}
+
 // SaveSession creates and sets a session (post successful login/auth).
 func (o *Auth) SaveSession(u User, oidcToken string, c echo.Context) error {
 	sess, err := o.sess.NewSession(c, c)
@@ -408,7 +819,24 @@ func (o *Auth) SaveSession(u User, oidcToken string, c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
 	}
 
-	if err := sess.SetMulti(map[string]any{"user_id": u.ID, "oidc_token": oidcToken}); err != nil {
+	if err := o.SyncUser(u); err != nil {
+		o.log.Printf("error syncing auth user: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
+	}
+
+	rec, err := o.findAuthRecordByUsername(u.Username)
+	if err != nil {
+		o.log.Printf("error fetching auth user record: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
+	}
+
+	token, err := rec.NewAuthToken()
+	if err != nil {
+		o.log.Printf("error generating auth token: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
+	}
+
+	if err := sess.SetMulti(map[string]any{"user_id": u.ID, "username": u.Username, "oidc_token": oidcToken, "auth_token": token}); err != nil {
 		o.log.Printf("error setting login session: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
 	}
@@ -425,7 +853,7 @@ func (o *Auth) validateSession(c echo.Context) (*simplesessions.Session, User, e
 	}
 
 	// Get the session variables.
-	vars, err := sess.GetMulti("user_id", "oidc_token")
+	vars, err := sess.GetMulti("user_id", "username", "oidc_token", "auth_token")
 	if err != nil {
 		return nil, User{}, echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
@@ -437,8 +865,33 @@ func (o *Auth) validateSession(c echo.Context) (*simplesessions.Session, User, e
 		return nil, User{}, echo.NewHTTPError(http.StatusInternalServerError, "invalid session.")
 	}
 
+	authToken, ok := vars["auth_token"].(string)
+	if !ok || authToken == "" {
+		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
+	}
+
+	rec, err := o.pb.FindAuthRecordByToken(authToken, pbcore.TokenTypeAuth)
+	if err != nil || rec == nil {
+		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
+	}
+
+	username := strings.TrimSpace(rec.GetString("username"))
+	if username == "" {
+		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
+	}
+
+	if sessionUsername, ok := vars["username"].(string); ok && strings.TrimSpace(sessionUsername) != "" {
+		if strings.TrimSpace(sessionUsername) != username {
+			return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
+		}
+	}
+
+	if rec.GetString("status") != UserStatusEnabled {
+		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
+	}
+
 	// Fetch user details from the database.
-	user, err := o.cb.GetUser(userID)
+	user, err := o.cb.GetUserByUsername(username)
 	if err != nil {
 		o.log.Printf("error fetching session user: %v", err)
 	}

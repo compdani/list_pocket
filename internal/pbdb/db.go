@@ -20,13 +20,24 @@ func NewFromPocketBase(pb *pocketbase.PocketBase) (*DB, error) {
 		return nil, fmt.Errorf("pocketbase instance is nil")
 	}
 
-	builder := pb.DB()
-	carrier, ok := builder.(interface{ DB() *dbx.DB })
-	if !ok {
-		return nil, fmt.Errorf("pocketbase builder does not expose db handle")
-	}
+	// pb.DB() may return PocketBase's dual routing builder wrapper, which doesn't
+	// expose the raw *dbx.DB handle. Use concrete pools directly.
+	var dbxDB *dbx.DB
+	for _, builder := range []any{pb.NonconcurrentDB(), pb.ConcurrentDB()} {
+		if direct, ok := builder.(*dbx.DB); ok && direct != nil {
+			dbxDB = direct
+			break
+		}
 
-	dbxDB := carrier.DB()
+		carrier, ok := builder.(interface{ DB() *dbx.DB })
+		if !ok {
+			continue
+		}
+		dbxDB = carrier.DB()
+		if dbxDB != nil {
+			break
+		}
+	}
 	if dbxDB == nil {
 		return nil, fmt.Errorf("pocketbase db handle is nil")
 	}
@@ -54,6 +65,14 @@ func MustNewFromPocketBase(pb *pocketbase.PocketBase) *DB {
 	}
 
 	return db
+}
+
+func NewFromSQLX(db *sqlx.DB) *DB {
+	if db == nil {
+		return nil
+	}
+
+	return &DB{DB: db}
 }
 
 func (d *DB) PocketBase() *pocketbase.PocketBase {

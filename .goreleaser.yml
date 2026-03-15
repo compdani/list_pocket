@@ -10,7 +10,7 @@ before:
 
 builds:
   - binary: listmonk
-    main: ./cmd
+    main: .
     goos:
       - linux
       - windows
@@ -26,7 +26,7 @@ builds:
       - 6
       - 7
     ldflags:
-      - -s -w -X "main.buildString={{ .Tag }} ({{ .ShortCommit }} {{ .Date }}, {{ .Os }}/{{ .Arch }})" -X "main.versionString={{ .Tag }}"
+      - -s -w -X "github.com/knadh/listmonk/cmd.buildString={{ .Tag }} ({{ .ShortCommit }} {{ .Date }}, {{ .Os }}/{{ .Arch }})" -X "github.com/knadh/listmonk/cmd.versionString={{ .Tag }}"
 
     hooks:
       # stuff executables with static assets.

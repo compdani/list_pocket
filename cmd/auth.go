@@ -166,9 +166,12 @@ func (a *App) TwofaPage(c echo.Context) error {
 
 // Logout logs a user out.
 func (a *App) Logout(c echo.Context) error {
-	// Delete the session from the DB and cookie.
-	sess := c.Get(auth.SessionKey).(*simplesessions.Session)
-	_ = sess.Destroy()
+	// Delete the session from the DB and cookie when available.
+	if v := c.Get(auth.SessionKey); v != nil {
+		if sess, ok := v.(*simplesessions.Session); ok && sess != nil {
+			_ = sess.Destroy()
+		}
+	}
 
 	return c.JSON(http.StatusOK, okResp{true})
 }
@@ -469,7 +472,7 @@ func (a *App) doLogin(c echo.Context) error {
 	}
 
 	// Log the user in by fetching and verifying credentials from the DB.
-	user, err := a.core.LoginUser(username, password)
+	user, err := a.auth.LoginUser(username, password)
 	if err != nil {
 		return err
 	}
@@ -553,7 +556,7 @@ func (a *App) doFirstTimeSetup(c echo.Context) error {
 	}
 
 	// Log the user in directly.
-	user, err := a.core.LoginUser(username, password)
+	user, err := a.auth.LoginUser(username, password)
 	if err != nil {
 		return err
 	}

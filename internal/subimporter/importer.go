@@ -35,6 +35,46 @@ const (
 	commitBatchSize = 10000
 )
 
+const (
+	sqliteUpsertSubscriber = `
+INSERT INTO subscribers (uuid, email, name, attribs, status, updated_at)
+VALUES (?, ?, ?, ?, 'enabled', (strftime('%Y-%m-%d %H:%M:%fZ')))
+ON CONFLICT(email) DO UPDATE SET
+	name=(CASE WHEN ? THEN excluded.name ELSE subscribers.name END),
+	attribs=(CASE WHEN ? THEN excluded.attribs ELSE subscribers.attribs END),
+	updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'));
+`
+
+	sqliteUpsertSubscriberLists = `
+INSERT INTO subscriber_lists (subscriber_id, list_id, status, updated_at)
+SELECT
+	s.id,
+	CAST(j.value AS INTEGER),
+	CASE WHEN s.status = 'blocklisted' THEN 'unsubscribed' ELSE ? END,
+	(strftime('%Y-%m-%d %H:%M:%fZ'))
+FROM subscribers s
+JOIN json_each(?) AS j
+WHERE s.email = ?
+ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
+	updated_at = (strftime('%Y-%m-%d %H:%M:%fZ')),
+	status = CASE WHEN ? THEN excluded.status ELSE subscriber_lists.status END;
+`
+
+	sqliteUpsertBlocklistedSubscriber = `
+INSERT INTO subscribers (uuid, email, name, attribs, status, updated_at)
+VALUES (?, ?, ?, ?, 'blocklisted', (strftime('%Y-%m-%d %H:%M:%fZ')))
+ON CONFLICT (email) DO UPDATE SET
+	status='blocklisted',
+	updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'));
+`
+
+	sqliteMarkSubscriptionsUnsubscribed = `
+UPDATE subscriber_lists
+SET status='unsubscribed', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+WHERE subscriber_id = (SELECT id FROM subscribers WHERE email = ?);
+`
+)
+
 // Various import statuses.
 const (
 	StatusNone      = "none"
@@ -71,6 +111,7 @@ type Options struct {
 	UpsertStmt         *sql.Stmt
 	BlocklistStmt      *sql.Stmt
 	UpdateListDateStmt *sql.Stmt
+	UseJSONListArgs    bool
 	PostCB             func(subject string, data any) error
 
 	DomainBlocklist []string
@@ -282,6 +323,22 @@ func (s *Session) Start() {
 	listIDs := make([]int, len(s.opt.ListIDs))
 	copy(listIDs, s.opt.ListIDs)
 
+	var (
+		listIDsArg  any = pq.Array(listIDs)
+		listIDsJSON string
+	)
+	if s.im.opt.UseJSONListArgs {
+		b, err := json.Marshal(listIDs)
+		if err != nil {
+			s.im.setStatus(StatusFailed)
+			s.log.Printf("error marshaling list IDs: %v", err)
+			s.im.sendNotif(StatusFailed)
+			return
+		}
+		listIDsJSON = string(b)
+		listIDsArg = listIDsJSON
+	}
+
 	for sub := range s.subQueue {
 		if cur == 0 {
 			// New transaction batch.
@@ -291,9 +348,9 @@ func (s *Session) Start() {
 				continue
 			}
 
-			if s.opt.Mode == ModeSubscribe {
+			if !s.im.opt.UseJSONListArgs && s.opt.Mode == ModeSubscribe {
 				stmt = tx.Stmt(s.im.opt.UpsertStmt)
-			} else {
+			} else if !s.im.opt.UseJSONListArgs {
 				stmt = tx.Stmt(s.im.opt.BlocklistStmt)
 			}
 		}
@@ -305,8 +362,18 @@ func (s *Session) Start() {
 			break
 		}
 
-		if s.opt.Mode == ModeSubscribe {
-			_, err = stmt.Exec(uu, sub.Email, sub.Name, sub.Attribs, pq.Array(listIDs), s.opt.SubStatus, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
+		if s.im.opt.UseJSONListArgs {
+			if s.opt.Mode == ModeSubscribe {
+				if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
+					_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus)
+				}
+			} else if s.opt.Mode == ModeBlocklist {
+				if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.Name, sub.Attribs); err == nil {
+					_, err = tx.Exec(sqliteMarkSubscriptionsUnsubscribed, sub.Email)
+				}
+			}
+		} else if s.opt.Mode == ModeSubscribe {
+			_, err = stmt.Exec(uu, sub.Email, sub.Name, sub.Attribs, listIDsArg, s.opt.SubStatus, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
 		} else if s.opt.Mode == ModeBlocklist {
 			_, err = stmt.Exec(uu, sub.Email, sub.Name, sub.Attribs)
 		}
@@ -336,7 +403,7 @@ func (s *Session) Start() {
 	if cur == 0 {
 		s.im.setStatus(StatusFinished)
 		s.log.Printf("imported finished")
-		if _, err := s.im.opt.UpdateListDateStmt.Exec(pq.Array(listIDs)); err != nil {
+		if _, err := s.im.opt.UpdateListDateStmt.Exec(listIDsArg); err != nil {
 			s.log.Printf("error updating lists date: %v", err)
 		}
 		s.im.sendNotif(StatusFinished)
@@ -355,7 +422,7 @@ func (s *Session) Start() {
 	s.im.incrementImportCount(cur)
 	s.im.setStatus(StatusFinished)
 	s.log.Printf("imported finished")
-	if _, err := s.im.opt.UpdateListDateStmt.Exec(pq.Array(listIDs)); err != nil {
+	if _, err := s.im.opt.UpdateListDateStmt.Exec(listIDsArg); err != nil {
 		s.log.Printf("error updating lists date: %v", err)
 	}
 

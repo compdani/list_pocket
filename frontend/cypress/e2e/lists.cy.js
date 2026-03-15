@@ -151,7 +151,7 @@ describe('Lists', () => {
 
     // Create 30 in a loop.
     for (let i = 0; i < 30; i += 1) {
-      cy.request('POST', `${apiUrl}/api/lists`, { name: `test-list-${i}`, type: 'public', optin: 'single' });
+      cy.request('POST', `${apiUrl}/mailapi/lists`, { name: `test-list-${i}`, type: 'public', optin: 'single' });
     }
 
     cy.loginAndVisit('/admin/lists');
@@ -168,7 +168,7 @@ describe('Lists', () => {
     // Bulk delete with the selected IDs.
     // Create 5 lists in a loop.
     for (let i = 0; i < 5; i += 1) {
-      cy.request('POST', `${apiUrl}/api/lists`, { name: `test-list-bulk-${i}`, type: 'public', optin: 'single' });
+      cy.request('POST', `${apiUrl}/mailapi/lists`, { name: `test-list-bulk-${i}`, type: 'public', optin: 'single' });
     }
 
     cy.visit('/admin/lists');

@@ -25,7 +25,7 @@ describe('Bounces', () => {
 
     // Get campaign.
     let camp = {};
-    cy.request(`${apiUrl}/api/campaigns`).then((resp) => {
+    cy.request(`${apiUrl}/mailapi/campaigns`).then((resp) => {
       camp = resp.body.data.results[0];
     }).then(() => {
       console.log('campaign is ', camp.uuid);
@@ -33,14 +33,14 @@ describe('Bounces', () => {
 
     // Get subscribers.
     let subs = [];
-    cy.request(`${apiUrl}/api/subscribers`).then((resp) => {
+    cy.request(`${apiUrl}/mailapi/subscribers`).then((resp) => {
       subs = resp.body.data.results;
     }).then(() => {
       // Register soft bounces do nothing.
       let sub = {};
       cy.request('POST', `${apiUrl}/webhooks/bounce`, { source: 'api', type: 'soft', email: subs[0].email });
       cy.request('POST', `${apiUrl}/webhooks/bounce`, { source: 'api', type: 'soft', email: subs[0].email });
-      cy.request(`${apiUrl}/api/subscribers/${subs[0].id}`).then((resp) => {
+      cy.request(`${apiUrl}/mailapi/subscribers/${subs[0].id}`).then((resp) => {
         sub = resp.body.data;
       }).then(() => {
         cy.expect(sub.status).to.equal('enabled');
@@ -50,7 +50,7 @@ describe('Bounces', () => {
       cy.request('POST', `${apiUrl}/webhooks/bounce`, { source: 'api', type: 'hard', email: subs[0].email });
       cy.request('POST', `${apiUrl}/webhooks/bounce`, { source: 'api', type: 'hard', email: subs[0].email });
 
-      cy.request(`${apiUrl}/api/subscribers/${subs[0].id}`).then((resp) => {
+      cy.request(`${apiUrl}/mailapi/subscribers/${subs[0].id}`).then((resp) => {
         sub = resp.body.data;
       }).then(() => {
         cy.expect(sub.status).to.equal('blocklisted');
@@ -59,7 +59,7 @@ describe('Bounces', () => {
       // Complaint bounces delete.
       cy.request('POST', `${apiUrl}/webhooks/bounce`, { source: 'api', type: 'complaint', email: subs[1].email });
       cy.request('POST', `${apiUrl}/webhooks/bounce`, { source: 'api', type: 'complaint', email: subs[1].email });
-      cy.request({ url: `${apiUrl}/api/subscribers/${subs[1].id}`, failOnStatusCode: false }).then((resp) => {
+      cy.request({ url: `${apiUrl}/mailapi/subscribers/${subs[1].id}`, failOnStatusCode: false }).then((resp) => {
         expect(resp.status).to.eq(400);
       });
 

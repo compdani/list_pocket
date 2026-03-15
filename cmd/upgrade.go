@@ -6,11 +6,9 @@ import (
 	"strings"
 
 	"github.com/knadh/koanf/v2"
-	"github.com/knadh/listmonk/internal/migrations"
 	"github.com/knadh/listmonk/internal/pbdb"
 	"github.com/knadh/stuffbin"
 	"github.com/lib/pq"
-	"golang.org/x/mod/semver"
 )
 
 // migFunc represents a migration function for a particular version.
@@ -20,30 +18,6 @@ import (
 type migFunc struct {
 	version string
 	fn      func(*pbdb.DB, stuffbin.FileSystem, *koanf.Koanf, *log.Logger) error
-}
-
-// migList is the list of available migList ordered by the semver.
-// Each migration is a Go file in internal/migrations named after the semver.
-// The functions are named as: v0.7.0 => migrations.V0_7_0() and are idempotent.
-var migList = []migFunc{
-	{"v0.4.0", migrations.V0_4_0},
-	{"v0.7.0", migrations.V0_7_0},
-	{"v0.8.0", migrations.V0_8_0},
-	{"v0.9.0", migrations.V0_9_0},
-	{"v1.0.0", migrations.V1_0_0},
-	{"v2.0.0", migrations.V2_0_0},
-	{"v2.1.0", migrations.V2_1_0},
-	{"v2.2.0", migrations.V2_2_0},
-	{"v2.3.0", migrations.V2_3_0},
-	{"v2.4.0", migrations.V2_4_0},
-	{"v2.5.0", migrations.V2_5_0},
-	{"v3.0.0", migrations.V3_0_0},
-	{"v4.0.0", migrations.V4_0_0},
-	{"v4.1.0", migrations.V4_1_0},
-	{"v5.0.0", migrations.V5_0_0},
-	{"v5.1.0", migrations.V5_1_0},
-	{"v6.0.0", migrations.V6_0_0},
-	{"v6.1.0", migrations.V6_1_0},
 }
 
 // upgrade upgrades the database to the current version by running SQL migration files
@@ -126,18 +100,7 @@ func getPendingMigrations(db *pbdb.DB) (string, []migFunc, error) {
 	if err != nil {
 		return "", nil, err
 	}
-
-	// Iterate through the migration versions and get everything above the last
-	// upgraded semver.
-	var toRun []migFunc
-	for i, m := range migList {
-		if semver.Compare(m.version, lastVer) > 0 {
-			toRun = migList[i:]
-			break
-		}
-	}
-
-	return lastVer, toRun, nil
+	return lastVer, nil, nil
 }
 
 // getLastMigrationVersion returns the last migration semver recorded in the DB.

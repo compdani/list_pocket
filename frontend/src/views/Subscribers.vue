@@ -153,7 +153,7 @@
 
       <b-table-column v-slot="props" cell-class="actions" align="right">
         <div>
-          <a :href="`/api/subscribers/${props.row.id}/export`" data-cy="btn-download"
+          <a :href="`/mailapi/subscribers/${props.row.id}/export`" data-cy="btn-download"
             :aria-label="$t('subscribers.downloadData')">
             <b-tooltip :label="$t('subscribers.downloadData')" type="is-dark">
               <b-icon icon="cloud-download-outline" size="is-small" />

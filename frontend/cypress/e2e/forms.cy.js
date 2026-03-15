@@ -31,7 +31,7 @@ describe('Forms', () => {
 
   it('Subscribes from public form page', () => {
     // Create a public test list.
-    cy.request('POST', `${apiUrl}/api/lists`, { name: 'test-list', type: 'public', optin: 'single' });
+    cy.request('POST', `${apiUrl}/mailapi/lists`, { name: 'test-list', type: 'public', optin: 'single' });
 
     // Open the public page and subscribe to alternating lists multiple times.
     // There should be no errors and two new subscribers should be subscribed to two lists.
@@ -48,7 +48,7 @@ describe('Forms', () => {
     }
 
     // Verify form subscriptions.
-    cy.request(`${apiUrl}/api/subscribers`).should((response) => {
+    cy.request(`${apiUrl}/mailapi/subscribers`).should((response) => {
       const { data } = response.body;
 
       // Two new + two dummy subscribers that are there by default.
@@ -63,12 +63,12 @@ describe('Forms', () => {
 
   it('Unsubscribes', () => {
     // Add all lists to the dummy campaign.
-    cy.request('PUT', `${apiUrl}/api/campaigns/1`, { lists: [2] });
+    cy.request('PUT', `${apiUrl}/mailapi/campaigns/1`, { lists: [2] });
 
-    cy.request('GET', `${apiUrl}/api/subscribers`).then((response) => {
+    cy.request('GET', `${apiUrl}/mailapi/subscribers`).then((response) => {
       const subUUID = response.body.data.results[0].uuid;
 
-      cy.request('GET', `${apiUrl}/api/campaigns`).then((response) => {
+      cy.request('GET', `${apiUrl}/mailapi/campaigns`).then((response) => {
         const campUUID = response.body.data.results[0].uuid;
         cy.loginAndVisit(`${apiUrl}/subscription/${campUUID}/${subUUID}`);
       });
@@ -78,7 +78,7 @@ describe('Forms', () => {
 
     // Unsubscribe from one list.
     cy.get('button').click();
-    cy.request('GET', `${apiUrl}/api/subscribers`).then((response) => {
+    cy.request('GET', `${apiUrl}/mailapi/subscribers`).then((response) => {
       const { data } = response.body;
       expect(data.results[0].lists.find((s) => s.id === 2).subscription_status).to.equal('unsubscribed');
       expect(data.results[0].lists.find((s) => s.id === 3).subscription_status).to.equal('unconfirmed');
@@ -93,7 +93,7 @@ describe('Forms', () => {
     cy.get('#privacy-blocklist').click();
     cy.get('button').click();
 
-    cy.request('GET', `${apiUrl}/api/subscribers`).then((response) => {
+    cy.request('GET', `${apiUrl}/mailapi/subscribers`).then((response) => {
       const { data } = response.body;
       expect(data.results[0].status).to.equal('blocklisted');
       expect(data.results[0].lists.find((s) => s.id === 2).subscription_status).to.equal('unsubscribed');
@@ -102,10 +102,10 @@ describe('Forms', () => {
   });
 
   it('Manages subscription preferences', () => {
-    cy.request('GET', `${apiUrl}/api/subscribers`).then((response) => {
+    cy.request('GET', `${apiUrl}/mailapi/subscribers`).then((response) => {
       const subUUID = response.body.data.results[1].uuid;
 
-      cy.request('GET', `${apiUrl}/api/campaigns`).then((response) => {
+      cy.request('GET', `${apiUrl}/mailapi/campaigns`).then((response) => {
         const campUUID = response.body.data.results[0].uuid;
         cy.loginAndVisit(`${apiUrl}/subscription/${campUUID}/${subUUID}?manage=1`);
         cy.get('a').contains('Manage').click();
@@ -117,7 +117,7 @@ describe('Forms', () => {
     cy.get('ul.lists input:first').click();
     cy.get('button:first').click();
 
-    cy.request('GET', `${apiUrl}/api/subscribers`).then((response) => {
+    cy.request('GET', `${apiUrl}/mailapi/subscribers`).then((response) => {
       const { data } = response.body;
       expect(data.results[1].name).to.equal('new-name');
       expect(data.results[1].lists.find((s) => s.id === 2).subscription_status).to.equal('unsubscribed');

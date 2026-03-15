@@ -4,7 +4,7 @@ The app has two distinct components, the Go backend and the VueJS frontend. In t
 
 ### Pre-requisites
 - `go`
-- `nodejs` (if you are working on the frontend) and `yarn`
+- `nodejs` (if you are working on the frontend) and `npm`
 - Postgres database. If there is no local installation, the demo docker DB can be used for development (`docker compose up demo-db`)
 
 
@@ -26,7 +26,7 @@ After setting up the dev environment, you can visit `http://localhost:8080`.
 1. Locally
 
     - Run `make run` to start the listmonk dev server on `:9000`.
-    - Run `make run-frontend` to start the Vue frontend in dev mode using yarn on `:8080`. All `/api/*` calls are proxied to the app running on `:9000`. Refer to the [frontend README](https://github.com/knadh/listmonk/blob/master/frontend/README.md) for an overview on how the frontend is structured.
+    - Run `make run-frontend` to start the Vue frontend in dev mode using npm on `:8080`. All `/api/*` calls are proxied to the app running on `:9000`. Refer to the [frontend README](https://github.com/knadh/listmonk/blob/master/frontend/README.md) for an overview on how the frontend is structured.
 
 2. Inside containers (Using Makefile)
 

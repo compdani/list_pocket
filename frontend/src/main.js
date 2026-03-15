@@ -33,6 +33,8 @@ router.afterEach((to) => {
 
 async function initConfig(app) {
   // Load logged in user profile, server side config, and the language file before mounting the app.
+  // If user is not authenticated (no valid PocketBase token), the API call will fail and
+  // the backend middleware will redirect to the login page.
   const [profile, cfg] = await Promise.all([api.getUserProfile(), api.getServerConfig()]);
 
   const lang = await api.getLang(cfg.lang);
@@ -83,7 +85,9 @@ async function initConfig(app) {
   document.title = `${title} listmonk`;
 
   if (app) {
-    app.$mount('#app');
+    const mountedApp = app;
+    mountedApp.$mount('#app');
+    mountedApp.isLoaded = true;
   }
 }
 
@@ -128,9 +132,11 @@ const v = new Vue({
     },
   },
 
-  mounted() {
-    v.isLoaded = true;
-  },
 });
 
-initConfig(v);
+initConfig(v).catch((err) => {
+  // Keep the loading screen visible on bootstrap failures.
+  // The request helpers already surface the actual backend error toast.
+  // eslint-disable-next-line no-console
+  console.error(err);
+});

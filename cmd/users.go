@@ -100,6 +100,10 @@ func (a *App) CreateUser(c echo.Context) error {
 		return err
 	}
 
+	if err := a.auth.SyncUser(user); err != nil {
+		return err
+	}
+
 	return c.JSON(http.StatusOK, okResp{user})
 }
 
@@ -178,6 +182,10 @@ func (a *App) UpdateUser(c echo.Context) error {
 		return err
 	}
 
+	if err := a.auth.SyncUser(user); err != nil {
+		return err
+	}
+
 	return c.JSON(http.StatusOK, okResp{user})
 }
 
@@ -191,6 +199,10 @@ func (a *App) DeleteUser(c echo.Context) error {
 
 	// Cache the API token for in-memory, off-DB /api/* request auth.
 	if _, err := cacheUsers(a.core, a.auth); err != nil {
+		return err
+	}
+
+	if err := a.auth.DeleteUsers([]int{id}); err != nil {
 		return err
 	}
 
@@ -211,6 +223,10 @@ func (a *App) DeleteUsers(c echo.Context) error {
 
 	// Cache the API token for in-memory, off-DB /api/* request auth.
 	if _, err := cacheUsers(a.core, a.auth); err != nil {
+		return err
+	}
+
+	if err := a.auth.DeleteUsers(ids); err != nil {
 		return err
 	}
 
@@ -265,6 +281,10 @@ func (a *App) UpdateUserProfile(c echo.Context) error {
 
 	// Blank out the password hash in the response.
 	out.Password = null.String{}
+
+	if err := a.auth.SyncUser(out); err != nil {
+		return err
+	}
 
 	return c.JSON(http.StatusOK, okResp{out})
 }
@@ -323,7 +343,7 @@ func (a *App) DisableTOTP(c echo.Context) error {
 	}
 
 	// Verify the password.
-	if _, err := a.core.LoginUser(u.Username, password); err != nil {
+	if _, err := a.auth.LoginUser(u.Username, password); err != nil {
 		return echo.NewHTTPError(http.StatusForbidden, a.i18n.T("users.invalidPassword"))
 	}
 
@@ -341,6 +361,10 @@ func (a *App) DisableTOTP(c echo.Context) error {
 func cacheUsers(co *core.Core, a *auth.Auth) (bool, error) {
 	users, err := co.GetUsers()
 	if err != nil {
+		return false, err
+	}
+
+	if err := a.SyncUsers(users); err != nil {
 		return false, err
 	}
 

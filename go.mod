@@ -35,7 +35,6 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/yuin/goldmark v1.7.12
 	github.com/zerodha/easyjson v1.0.1
-	github.com/zerodha/simplesessions/stores/postgres/v3 v3.0.0
 	github.com/zerodha/simplesessions/v3 v3.0.0
 	golang.org/x/mod v0.32.0
 	golang.org/x/oauth2 v0.35.0

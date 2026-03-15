@@ -21,8 +21,9 @@ const (
 
 const (
 	// UserHTTPCtxKey is the key on which the User profile is set on echo handlers.
-	UserHTTPCtxKey = "auth_user"
-	SessionKey     = "auth_session"
+	UserHTTPCtxKey       = "auth_user"
+	SessionKey           = "auth_session"
+	AuthRecordHTTPCtxKey = "auth_record"
 )
 
 const (

@@ -2,15 +2,18 @@ package main
 
 import (
 	"bytes"
+	"html/template"
 	"net/http"
-	"net/url"
 	"path"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/knadh/listmonk/internal/auth"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/pocketbase/pocketbase/apis"
+	pbcore "github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/router"
 )
 
 const (
@@ -29,277 +32,253 @@ var (
 	reUUID = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 )
 
-// registerHandlers registers HTTP handlers.
-func initHTTPHandlers(e *echo.Echo, a *App) {
-	// Default error handler.
-	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		// Generic, non-echo error. Log it.
-		if _, ok := err.(*echo.HTTPError); !ok {
-			a.log.Println(err.Error())
-		}
-		e.DefaultHTTPErrorHandler(err, c)
-	}
+// registerHandlers registers HTTP handlers on the PocketBase router.
+func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig) {
+	admin := se.Group("")
+	admin.GET(path.Join(uriAdmin, ""), wrapEcho(a, tpl, cfg, urlCfg, nil, a.AdminPage))
+	admin.GET(path.Join(uriAdmin, "/custom.css"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_css")))
+	admin.GET(path.Join(uriAdmin, "/custom.js"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
+	admin.GET(path.Join(uriAdmin, "/{path...}"), wrapEcho(a, tpl, cfg, urlCfg, []string{"path"}, a.AdminPage))
 
-	// Configure CORS middleware if domains are configured.
-	if len(a.cfg.Security.CorsOrigins) > 0 {
-		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-			AllowOrigins: a.cfg.Security.CorsOrigins,
-			AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
-		}))
-	}
+	pm := a.auth.Perm
+	api := se.Group("/mailapi").Bind(apis.RequireAuth())
 
-	// =================================================================
-	// Authenticated non /api handlers.
-	{
-		// Attach a middleware to the group that checks for auth.
-		g := e.Group("", a.auth.Middleware, func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
-				u := c.Get(auth.UserHTTPCtxKey)
+	api.GET("/health", wrapEcho(a, tpl, cfg, urlCfg, nil, a.HealthCheck))
+	api.GET("/config", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetServerConfig))
+	api.GET("/lang/{lang}", wrapEcho(a, tpl, cfg, urlCfg, []string{"lang"}, a.GetI18nLang))
+	api.GET("/dashboard/charts", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetDashboardCharts))
+	api.GET("/dashboard/counts", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetDashboardCounts))
 
-				// On no-auth, redirect to login page
-				if _, ok := u.(*echo.HTTPError); ok {
-					u, _ := url.Parse(a.urlCfg.LoginURL)
-					q := url.Values{}
-					q.Set("next", c.Request().RequestURI)
-					u.RawQuery = q.Encode()
-					return c.Redirect(http.StatusTemporaryRedirect, u.String())
-				}
+	api.GET("/settings", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetSettings, "settings:get")))
+	api.PUT("/settings", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UpdateSettings, "settings:manage")))
+	api.PUT("/settings/{key}", wrapEcho(a, tpl, cfg, urlCfg, []string{"key"}, pm(a.UpdateSettingsByKey, "settings:manage")))
+	api.POST("/settings/smtp/test", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.TestSMTPSettings, "settings:manage")))
+	api.POST("/admin/reload", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ReloadApp, "settings:manage")))
+	api.GET("/logs", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetLogs, "settings:get")))
+	api.GET("/events", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.EventStream, "settings:get")))
+	api.GET("/about", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetAboutInfo))
 
-				return next(c)
-			}
-		})
-
-		// Authenticated endpoints.
-		g.GET(path.Join(uriAdmin, ""), a.AdminPage)
-		g.GET(path.Join(uriAdmin, "/custom.css"), serveCustomAppearance("admin.custom_css"))
-		g.GET(path.Join(uriAdmin, "/custom.js"), serveCustomAppearance("admin.custom_js"))
-		g.GET(path.Join(uriAdmin, "/*"), a.AdminPage)
-	}
-
-	// =================================================================
-	// Authenticated /api/* handlers.
-	{
-		var (
-			// Permission check middleware.
-			pm = a.auth.Perm
-
-			// Attach a middleware to the group that checks for auth.
-			g = e.Group("", a.auth.Middleware, func(next echo.HandlerFunc) echo.HandlerFunc {
-				return func(c echo.Context) error {
-					u := c.Get(auth.UserHTTPCtxKey)
-
-					// On no-auth, respond with a JSON error.
-					if err, ok := u.(*echo.HTTPError); ok {
-						return err
-					}
-
-					return next(c)
-				}
-			})
-		)
-
-		// API endpoints.
-		g.GET("/api/health", a.HealthCheck)
-		g.GET("/api/config", a.GetServerConfig)
-		g.GET("/api/lang/:lang", a.GetI18nLang)
-		g.GET("/api/dashboard/charts", a.GetDashboardCharts)
-		g.GET("/api/dashboard/counts", a.GetDashboardCounts)
-
-		g.GET("/api/settings", pm(a.GetSettings, "settings:get"))
-		g.PUT("/api/settings", pm(a.UpdateSettings, "settings:manage"))
-		g.PUT("/api/settings/:key", pm(a.UpdateSettingsByKey, "settings:manage"))
-		g.POST("/api/settings/smtp/test", pm(a.TestSMTPSettings, "settings:manage"))
-		g.POST("/api/admin/reload", pm(a.ReloadApp, "settings:manage"))
-		g.GET("/api/logs", pm(a.GetLogs, "settings:get"))
-		g.GET("/api/events", pm(a.EventStream, "settings:get"))
-		g.GET("/api/about", a.GetAboutInfo)
-
-		g.GET("/api/subscribers", pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get"))
-		g.GET("/api/subscribers/:id", pm(hasID(a.GetSubscriber), "subscribers:get_all", "subscribers:get"))
-		g.GET("/api/subscribers/:id/activity", pm(hasID(a.GetSubscriberActivity), "subscribers:get_all", "subscribers:get"))
-		g.GET("/api/subscribers/:id/export", pm(hasID(a.ExportSubscriberData), "subscribers:get_all", "subscribers:get"))
-		g.GET("/api/subscribers/:id/bounces", pm(hasID(a.GetSubscriberBounces), "bounces:get"))
-		g.DELETE("/api/subscribers/:id/bounces", pm(hasID(a.DeleteSubscriberBounces), "bounces:manage"))
-		g.POST("/api/subscribers", pm(a.CreateSubscriber, "subscribers:manage"))
-		g.PUT("/api/subscribers/:id", pm(hasID(a.UpdateSubscriber), "subscribers:manage"))
-		g.POST("/api/subscribers/:id/optin", pm(hasID(a.SubscriberSendOptin), "subscribers:manage"))
-		g.PUT("/api/subscribers/blocklist", pm(a.BlocklistSubscribers, "subscribers:manage"))
-		g.PUT("/api/subscribers/:id/blocklist", pm(hasID(a.BlocklistSubscriber), "subscribers:manage"))
-		g.PUT("/api/subscribers/lists/:id", pm(a.ManageSubscriberLists, "subscribers:manage"))
-		g.PUT("/api/subscribers/lists", pm(a.ManageSubscriberLists, "subscribers:manage"))
-		g.DELETE("/api/subscribers/:id", pm(hasID(a.DeleteSubscriber), "subscribers:manage"))
-		g.DELETE("/api/subscribers", pm(a.DeleteSubscribers, "subscribers:manage"))
-
-		g.GET("/api/bounces", pm(a.GetBounces, "bounces:get"))
-		g.PUT("/api/bounces/blocklist", pm(a.BlocklistBouncedSubscribers, "bounces:manage"))
-		g.GET("/api/bounces/:id", pm(hasID(a.GetBounce), "bounces:get"))
-		g.DELETE("/api/bounces", pm(a.DeleteBounces, "bounces:manage"))
-		g.DELETE("/api/bounces/:id", pm(hasID(a.DeleteBounce), "bounces:manage"))
-
-		// Subscriber operations based on arbitrary SQL queries.
-		// These aren't very REST-like.
-		g.POST("/api/subscribers/query/delete", pm(a.DeleteSubscribersByQuery, "subscribers:manage"))
-		g.PUT("/api/subscribers/query/blocklist", pm(a.BlocklistSubscribersByQuery, "subscribers:manage"))
-		g.PUT("/api/subscribers/query/lists", pm(a.ManageSubscriberListsByQuery, "subscribers:manage"))
-		g.GET("/api/subscribers/export",
-			pm(middleware.GzipWithConfig(middleware.GzipConfig{Level: 9})(a.ExportSubscribers), "subscribers:get_all", "subscribers:get"))
-
-		g.GET("/api/import/subscribers", pm(a.GetImportSubscribers, "subscribers:import"))
-		g.GET("/api/import/subscribers/logs", pm(a.GetImportSubscriberStats, "subscribers:import"))
-		g.POST("/api/import/subscribers", pm(a.ImportSubscribers, "subscribers:import"))
-		g.DELETE("/api/import/subscribers", pm(a.StopImportSubscribers, "subscribers:import"))
-
-		// Individual list permissions are applied directly within handleGetLists.
-		g.GET("/api/lists", a.GetLists)
-		g.GET("/api/lists/:id", hasID(a.GetList))
-		g.POST("/api/lists", pm(a.CreateList, "lists:manage_all"))
-		g.PUT("/api/lists/:id", hasID(a.UpdateList))
-		g.DELETE("/api/lists", a.DeleteLists)
-		g.DELETE("/api/lists/:id", hasID(a.DeleteList))
-
-		g.GET("/api/campaigns", pm(a.GetCampaigns, "campaigns:get_all", "campaigns:get"))
-		g.GET("/api/campaigns/running/stats", pm(a.GetRunningCampaignStats, "campaigns:get_all", "campaigns:get"))
-		g.GET("/api/campaigns/:id", pm(hasID(a.GetCampaign), "campaigns:get_all", "campaigns:get"))
-		g.GET("/api/campaigns/analytics/:type", pm(a.GetCampaignViewAnalytics, "campaigns:get_analytics"))
-		g.GET("/api/campaigns/:id/preview", pm(hasID(a.PreviewCampaign), "campaigns:get_all", "campaigns:get"))
-		g.POST("/api/campaigns/:id/preview/archive", pm(hasID(a.PreviewCampaignArchive), "campaigns:get_all", "campaigns:get"))
-		g.POST("/api/campaigns/:id/preview", pm(hasID(a.PreviewCampaign), "campaigns:get_all", "campaigns:get"))
-		g.POST("/api/campaigns/:id/content", pm(hasID(a.CampaignContent), "campaigns:manage_all", "campaigns:manage"))
-		g.POST("/api/campaigns/:id/text", pm(hasID(a.PreviewCampaign), "campaigns:get"))
-		g.POST("/api/campaigns/:id/test", pm(hasID(a.TestCampaign), "campaigns:manage_all", "campaigns:manage"))
-		g.POST("/api/campaigns", pm(a.CreateCampaign, "campaigns:manage_all", "campaigns:manage"))
-		g.PUT("/api/campaigns/:id", pm(hasID(a.UpdateCampaign), "campaigns:manage_all", "campaigns:manage"))
-		g.PUT("/api/campaigns/:id/status", pm(hasID(a.UpdateCampaignStatus), "campaigns:manage_all", "campaigns:manage"))
-		g.PUT("/api/campaigns/:id/archive", pm(hasID(a.UpdateCampaignArchive), "campaigns:manage_all", "campaigns:manage"))
-		g.DELETE("/api/campaigns", pm(a.DeleteCampaigns, "campaigns:manage", "campaigns:manage_all"))
-		g.DELETE("/api/campaigns/:id", pm(hasID(a.DeleteCampaign), "campaigns:manage_all", "campaigns:manage"))
-
-		g.GET("/api/media", pm(a.GetAllMedia, "media:get"))
-		g.GET("/api/media/:id", pm(hasID(a.GetMedia), "media:get"))
-		g.POST("/api/media", pm(a.UploadMedia, "media:manage"))
-		g.DELETE("/api/media/:id", pm(hasID(a.DeleteMedia), "media:manage"))
-
-		g.GET("/api/templates", pm(a.GetTemplates, "templates:get"))
-		g.GET("/api/templates/:id", pm(hasID(a.GetTemplate), "templates:get"))
-		g.GET("/api/templates/:id/preview", pm(hasID(a.PreviewTemplate), "templates:get"))
-		g.POST("/api/templates/preview", pm(a.PreviewTemplateBody, "templates:get"))
-		g.POST("/api/templates", pm(a.CreateTemplate, "templates:manage"))
-		g.PUT("/api/templates/:id", pm(hasID(a.UpdateTemplate), "templates:manage"))
-		g.PUT("/api/templates/:id/default", pm(hasID(a.TemplateSetDefault), "templates:manage"))
-		g.DELETE("/api/templates/:id", pm(hasID(a.DeleteTemplate), "templates:manage"))
-
-		g.DELETE("/api/maintenance/subscribers/:type", pm(a.GCSubscribers, "settings:maintain"))
-		g.DELETE("/api/maintenance/analytics/:type", pm(a.GCCampaignAnalytics, "settings:maintain"))
-		g.DELETE("/api/maintenance/subscriptions/unconfirmed", pm(a.GCSubscriptions, "settings:maintain"))
-
-		g.POST("/api/tx", pm(a.SendTxMessage, "tx:send"))
-
-		g.GET("/api/profile", a.GetUserProfile)
-		g.PUT("/api/profile", a.UpdateUserProfile)
-		g.GET("/api/users", pm(a.GetUsers, "users:get"))
-		g.GET("/api/users/:id", pm(hasID(a.GetUser), "users:get"))
-		g.POST("/api/users", pm(a.CreateUser, "users:manage"))
-		g.PUT("/api/users/:id", pm(hasID(a.UpdateUser), "users:manage"))
-		g.DELETE("/api/users", pm(a.DeleteUsers, "users:manage"))
-		g.DELETE("/api/users/:id", pm(hasID(a.DeleteUser), "users:manage"))
-		g.POST("/api/logout", a.Logout)
-
-		// TOTP 2FA endpoints
-		g.GET("/api/users/:id/twofa/totp", hasID(a.GenerateTOTPQR))
-		g.PUT("/api/users/:id/twofa", hasID(a.EnableTOTP))
-		g.DELETE("/api/users/:id/twofa", hasID(a.DisableTOTP))
-
-		g.GET("/api/roles/users", pm(a.GetUserRoles, "roles:get"))
-		g.GET("/api/roles/lists", pm(a.GeListRoles, "roles:get"))
-		g.POST("/api/roles/users", pm(a.CreateUserRole, "roles:manage"))
-		g.POST("/api/roles/lists", pm(a.CreateListRole, "roles:manage"))
-		g.PUT("/api/roles/users/:id", pm(hasID(a.UpdateUserRole), "roles:manage"))
-		g.PUT("/api/roles/lists/:id", pm(hasID(a.UpdateListRole), "roles:manage"))
-		g.DELETE("/api/roles/:id", pm(hasID(a.DeleteRole), "roles:manage"))
-
-		if a.cfg.BounceWebhooksEnabled {
-			// Private authenticated bounce endpoint.
-			g.POST("/webhooks/bounce", pm(a.BounceWebhook, "webhooks:post_bounce"))
-		}
-	}
-
-	// =================================================================
-	// Public API endpoints.
-	{
-		// Public unauthenticated endpoints.
-		g := e.Group("")
-
-		if a.cfg.BounceWebhooksEnabled {
-			// Public bounce endpoints for webservices like SES.
-			g.POST("/webhooks/service/:service", a.BounceWebhook)
-		}
-
-		// Landing page.
-		g.GET("/", func(c echo.Context) error {
-			return c.Render(http.StatusOK, "home", publicTpl{Title: "listmonk"})
-		})
-
-		// Public admin endpoints (login page, OIDC endpoints, password reset).
-		g.GET(path.Join(uriAdmin, "/login"), a.LoginPage)
-		g.POST(path.Join(uriAdmin, "/login"), a.LoginPage)
-		g.GET(path.Join(uriAdmin, "/login/twofa"), a.TwofaPage)
-		g.POST(path.Join(uriAdmin, "/login/twofa"), a.TwofaPage)
-		g.GET(path.Join(uriAdmin, "/forgot"), a.ForgotPage)
-		g.POST(path.Join(uriAdmin, "/forgot"), a.ForgotPage)
-		g.GET(path.Join(uriAdmin, "/reset"), a.ResetPage)
-		g.POST(path.Join(uriAdmin, "/reset"), a.ResetPage)
-
-		if a.cfg.Security.OIDC.Enabled {
-			g.POST("/auth/oidc", a.OIDCLogin)
-			g.GET("/auth/oidc", a.OIDCFinish)
-		}
-
-		// Public APIs.
-		g.GET("/api/public/lists", a.GetPublicLists)
-		g.POST("/api/public/subscription", a.PublicSubscription)
-		g.GET("/api/public/captcha/altcha", a.AltchaChallenge)
-		if a.cfg.EnablePublicArchive {
-			g.GET("/api/public/archive", a.GetCampaignArchives)
-		}
-
-		// /public/static/* file server is registered in initHTTPServer().
-		// Public subscriber facing views.
-		g.GET("/subscription/form", a.SubscriptionFormPage)
-		g.POST("/subscription/form", a.SubscriptionForm)
-		g.GET("/subscription/:campUUID/:subUUID", noIndex(a.hasUUID(a.hasSub(a.SubscriptionPage), "campUUID", "subUUID")))
-		g.POST("/subscription/:campUUID/:subUUID", a.hasUUID(a.hasSub(a.SubscriptionPrefs), "campUUID", "subUUID"))
-		g.GET("/subscription/optin/:subUUID", noIndex(a.hasUUID(a.hasSub(a.OptinPage), "subUUID")))
-		g.POST("/subscription/optin/:subUUID", a.hasUUID(a.hasSub(a.OptinPage), "subUUID"))
-		g.POST("/subscription/export/:subUUID", a.hasUUID(a.hasSub(a.SelfExportSubscriberData), "subUUID"))
-		g.POST("/subscription/wipe/:subUUID", a.hasUUID(a.hasSub(a.WipeSubscriberData), "subUUID"))
-		g.GET("/link/:linkUUID/:campUUID/:subUUID", noIndex(a.hasUUID(a.LinkRedirect, "linkUUID", "campUUID", "subUUID")))
-		g.GET("/campaign/:campUUID/:subUUID", noIndex(a.hasUUID(a.ViewCampaignMessage, "campUUID", "subUUID")))
-		g.GET("/campaign/:campUUID/:subUUID/px.png", noIndex(a.hasUUID(a.RegisterCampaignView, "campUUID", "subUUID")))
-
-		if a.cfg.EnablePublicArchive {
-			g.GET("/archive", a.CampaignArchivesPage)
-			g.GET("/archive.xml", a.GetCampaignArchivesFeed)
-			g.GET("/archive/:id", a.CampaignArchivePage)
-			g.GET("/archive/latest", a.CampaignArchivePageLatest)
-		}
-
-		g.GET("/public/custom.css", serveCustomAppearance("public.custom_css"))
-		g.GET("/public/custom.js", serveCustomAppearance("public.custom_js"))
-
-		// Public health API endpoint.
-		g.GET("/health", a.HealthCheck)
-
-		// 404 pages.
-		g.RouteNotFound("/*", func(c echo.Context) error {
-			return c.Render(http.StatusNotFound, tplMessage,
-				makeMsgTpl("404 - "+a.i18n.T("public.notFoundTitle"), "", ""))
-		})
-		g.RouteNotFound("/api/*", func(c echo.Context) error {
+	api.GET("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetSubscriber), "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/activity", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetSubscriberActivity), "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/export", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.ExportSubscriberData), "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetSubscriberBounces), "bounces:get")))
+	api.DELETE("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteSubscriberBounces), "bounces:manage")))
+	api.POST("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateSubscriber, "subscribers:manage")))
+	api.PUT("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateSubscriber), "subscribers:manage")))
+	api.POST("/subscribers/{id}/optin", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.SubscriberSendOptin), "subscribers:manage")))
+	api.PUT("/subscribers/blocklist", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BlocklistSubscribers, "subscribers:manage")))
+	api.PUT("/subscribers/{first}/{second}", wrapEcho(a, tpl, cfg, urlCfg, []string{"first", "second"}, func(c echo.Context) error {
+		switch {
+		case c.Param("first") == "lists":
+			c.SetParamNames("id")
+			c.SetParamValues(c.Param("second"))
+			return pm(a.ManageSubscriberLists, "subscribers:manage")(c)
+		case c.Param("second") == "blocklist":
+			c.SetParamNames("id")
+			c.SetParamValues(c.Param("first"))
+			return pm(hasID(a.BlocklistSubscriber), "subscribers:manage")(c)
+		default:
 			return echo.NewHTTPError(http.StatusNotFound, "404 unknown endpoint")
-		})
-		g.RouteNotFound("/admin/*", func(c echo.Context) error {
-			return echo.NewHTTPError(http.StatusNotFound, "404 page not found")
-		})
+		}
+	}))
+	api.PUT("/subscribers/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ManageSubscriberLists, "subscribers:manage")))
+	api.DELETE("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteSubscriber), "subscribers:manage")))
+	api.DELETE("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteSubscribers, "subscribers:manage")))
+
+	api.GET("/bounces", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetBounces, "bounces:get")))
+	api.PUT("/bounces/blocklist", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BlocklistBouncedSubscribers, "bounces:manage")))
+	api.GET("/bounces/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetBounce), "bounces:get")))
+	api.DELETE("/bounces", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteBounces, "bounces:manage")))
+	api.DELETE("/bounces/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteBounce), "bounces:manage")))
+
+	api.POST("/subscribers/query/delete", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteSubscribersByQuery, "subscribers:manage")))
+	api.PUT("/subscribers/query/blocklist", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BlocklistSubscribersByQuery, "subscribers:manage")))
+	api.PUT("/subscribers/query/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ManageSubscriberListsByQuery, "subscribers:manage")))
+	api.GET("/subscribers/export", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ExportSubscribers, "subscribers:get_all", "subscribers:get")))
+
+	api.GET("/import/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetImportSubscribers, "subscribers:import")))
+	api.GET("/import/subscribers/logs", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetImportSubscriberStats, "subscribers:import")))
+	api.POST("/import/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ImportSubscribers, "subscribers:import")))
+	api.DELETE("/import/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.StopImportSubscribers, "subscribers:import")))
+
+	api.GET("/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetLists))
+	api.GET("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.GetList)))
+	api.POST("/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateList, "lists:manage_all")))
+	api.PUT("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.UpdateList)))
+	api.DELETE("/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, a.DeleteLists))
+	api.DELETE("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.DeleteList)))
+
+	api.GET("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetCampaigns, "campaigns:get_all", "campaigns:get")))
+	api.GET("/campaigns/running/stats", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetRunningCampaignStats, "campaigns:get_all", "campaigns:get")))
+	api.GET("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetCampaign), "campaigns:get_all", "campaigns:get")))
+	api.GET("/campaigns/{first}/{second}", wrapEcho(a, tpl, cfg, urlCfg, []string{"first", "second"}, func(c echo.Context) error {
+		switch {
+		case c.Param("first") == "analytics":
+			c.SetParamNames("type")
+			c.SetParamValues(c.Param("second"))
+			return pm(a.GetCampaignViewAnalytics, "campaigns:get_analytics")(c)
+		case c.Param("second") == "preview":
+			c.SetParamNames("id")
+			c.SetParamValues(c.Param("first"))
+			return pm(hasID(a.PreviewCampaign), "campaigns:get_all", "campaigns:get")(c)
+		default:
+			return echo.NewHTTPError(http.StatusNotFound, "404 unknown endpoint")
+		}
+	}))
+	api.POST("/campaigns/{id}/preview/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewCampaignArchive), "campaigns:get_all", "campaigns:get")))
+	api.POST("/campaigns/{id}/preview", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewCampaign), "campaigns:get_all", "campaigns:get")))
+	api.POST("/campaigns/{id}/content", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.CampaignContent), "campaigns:manage_all", "campaigns:manage")))
+	api.POST("/campaigns/{id}/text", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewCampaign), "campaigns:get")))
+	api.POST("/campaigns/{id}/test", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.TestCampaign), "campaigns:manage_all", "campaigns:manage")))
+	api.POST("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateCampaign, "campaigns:manage_all", "campaigns:manage")))
+	api.PUT("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateCampaign), "campaigns:manage_all", "campaigns:manage")))
+	api.PUT("/campaigns/{id}/status", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateCampaignStatus), "campaigns:manage_all", "campaigns:manage")))
+	api.PUT("/campaigns/{id}/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateCampaignArchive), "campaigns:manage_all", "campaigns:manage")))
+	api.DELETE("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteCampaigns, "campaigns:manage", "campaigns:manage_all")))
+	api.DELETE("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteCampaign), "campaigns:manage_all", "campaigns:manage")))
+
+	api.GET("/media", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetAllMedia, "media:get")))
+	api.GET("/media/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetMedia), "media:get")))
+	api.POST("/media", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UploadMedia, "media:manage")))
+	api.DELETE("/media/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteMedia), "media:manage")))
+
+	api.GET("/templates", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetTemplates, "templates:get")))
+	api.GET("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetTemplate), "templates:get")))
+	api.GET("/templates/{id}/preview", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewTemplate), "templates:get")))
+	api.POST("/templates/preview", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.PreviewTemplateBody, "templates:get")))
+	api.POST("/templates", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateTemplate, "templates:manage")))
+	api.PUT("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateTemplate), "templates:manage")))
+	api.PUT("/templates/{id}/default", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.TemplateSetDefault), "templates:manage")))
+	api.DELETE("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteTemplate), "templates:manage")))
+
+	api.DELETE("/maintenance/subscribers/{type}", wrapEcho(a, tpl, cfg, urlCfg, []string{"type"}, pm(a.GCSubscribers, "settings:maintain")))
+	api.DELETE("/maintenance/analytics/{type}", wrapEcho(a, tpl, cfg, urlCfg, []string{"type"}, pm(a.GCCampaignAnalytics, "settings:maintain")))
+	api.DELETE("/maintenance/subscriptions/unconfirmed", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GCSubscriptions, "settings:maintain")))
+
+	api.POST("/tx", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.SendTxMessage, "tx:send")))
+
+	api.GET("/profile", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetUserProfile))
+	api.PUT("/profile", wrapEcho(a, tpl, cfg, urlCfg, nil, a.UpdateUserProfile))
+	api.GET("/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetUsers, "users:get")))
+	api.GET("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetUser), "users:get")))
+	api.POST("/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateUser, "users:manage")))
+	api.PUT("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateUser), "users:manage")))
+	api.DELETE("/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteUsers, "users:manage")))
+	api.DELETE("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteUser), "users:manage")))
+	api.POST("/logout", wrapEcho(a, tpl, cfg, urlCfg, nil, a.Logout))
+
+	api.GET("/users/{id}/twofa/totp", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.GenerateTOTPQR)))
+	api.PUT("/users/{id}/twofa", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.EnableTOTP)))
+	api.DELETE("/users/{id}/twofa", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.DisableTOTP)))
+
+	api.GET("/roles/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetUserRoles, "roles:get")))
+	api.GET("/roles/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GeListRoles, "roles:get")))
+	api.POST("/roles/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateUserRole, "roles:manage")))
+	api.POST("/roles/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateListRole, "roles:manage")))
+	api.PUT("/roles/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateUserRole), "roles:manage")))
+	api.PUT("/roles/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateListRole), "roles:manage")))
+	api.DELETE("/roles/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteRole), "roles:manage")))
+
+	if a.cfg.BounceWebhooksEnabled {
+		api.POST("/webhooks/bounce", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BounceWebhook, "webhooks:post_bounce")))
+	}
+
+	public := se.Group("")
+	if a.cfg.BounceWebhooksEnabled {
+		public.POST("/webhooks/service/{service}", wrapEcho(a, tpl, cfg, urlCfg, []string{"service"}, a.BounceWebhook))
+	}
+
+	public.GET("/", wrapEcho(a, tpl, cfg, urlCfg, nil, func(c echo.Context) error {
+		return c.Render(http.StatusOK, "home", publicTpl{Title: "listmonk"})
+	}))
+
+	public.GET("/mailapi/public/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetPublicLists))
+	public.POST("/mailapi/public/subscription", wrapEcho(a, tpl, cfg, urlCfg, nil, a.PublicSubscription))
+	public.GET("/mailapi/public/captcha/altcha", wrapEcho(a, tpl, cfg, urlCfg, nil, a.AltchaChallenge))
+	if a.cfg.EnablePublicArchive {
+		public.GET("/mailapi/public/archive", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetCampaignArchives))
+	}
+
+	public.GET("/subscription/form", wrapEcho(a, tpl, cfg, urlCfg, nil, a.SubscriptionFormPage))
+	public.POST("/subscription/form", wrapEcho(a, tpl, cfg, urlCfg, nil, a.SubscriptionForm))
+	public.GET("/subscription/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.hasSub(a.SubscriptionPage), "campUUID", "subUUID"))))
+	public.POST("/subscription/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, a.hasUUID(a.hasSub(a.SubscriptionPrefs), "campUUID", "subUUID")))
+	public.GET("/subscription/optin/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, noIndex(a.hasUUID(a.hasSub(a.OptinPage), "subUUID"))))
+	public.POST("/subscription/optin/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.OptinPage), "subUUID")))
+	public.POST("/subscription/export/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.SelfExportSubscriberData), "subUUID")))
+	public.POST("/subscription/wipe/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.WipeSubscriberData), "subUUID")))
+	public.GET("/link/{linkUUID}/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"linkUUID", "campUUID", "subUUID"}, noIndex(a.hasUUID(a.LinkRedirect, "linkUUID", "campUUID", "subUUID"))))
+	public.GET("/campaign/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.ViewCampaignMessage, "campUUID", "subUUID"))))
+	public.GET("/campaign/{campUUID}/{subUUID}/px.png", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.RegisterCampaignView, "campUUID", "subUUID"))))
+
+	if a.cfg.EnablePublicArchive {
+		public.GET("/archive", wrapEcho(a, tpl, cfg, urlCfg, nil, a.CampaignArchivesPage))
+		public.GET("/archive.xml", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetCampaignArchivesFeed))
+		public.GET("/archive/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.CampaignArchivePage))
+		public.GET("/archive/latest", wrapEcho(a, tpl, cfg, urlCfg, nil, a.CampaignArchivePageLatest))
+	}
+
+	public.GET("/public/custom.css", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("public.custom_css")))
+	public.GET("/public/custom.js", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("public.custom_js")))
+	public.GET("/health", wrapEcho(a, tpl, cfg, urlCfg, nil, a.HealthCheck))
+}
+
+func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, params []string, handler echo.HandlerFunc) func(e *pbcore.RequestEvent) error {
+	return func(e *pbcore.RequestEvent) error {
+		ec := echo.New()
+		ec.HideBanner = true
+		ec.HidePort = true
+		ec.Renderer = &tplRenderer{
+			templates:           tpl,
+			SiteName:            cfg.SiteName,
+			RootURL:             urlCfg.RootURL,
+			LogoURL:             urlCfg.LogoURL,
+			FaviconURL:          urlCfg.FaviconURL,
+			AssetVersion:        cfg.AssetVersion,
+			EnablePublicSubPage: cfg.EnablePublicSubPage,
+			EnablePublicArchive: cfg.EnablePublicArchive,
+			IndividualTracking:  cfg.Privacy.IndividualTracking,
+		}
+		ec.HTTPErrorHandler = func(err error, c echo.Context) {
+			if _, ok := err.(*echo.HTTPError); !ok {
+				a.log.Println(err.Error())
+			}
+			ec.DefaultHTTPErrorHandler(err, c)
+		}
+
+		c := ec.NewContext(e.Request, e.Response)
+		c.Set("app", a)
+
+		if len(params) > 0 {
+			values := make([]string, len(params))
+			for i, name := range params {
+				values[i] = e.Request.PathValue(name)
+			}
+			c.SetParamNames(params...)
+			c.SetParamValues(values...)
+		}
+
+		if e.Auth != nil {
+			c.Set(auth.AuthRecordHTTPCtxKey, e.Auth)
+
+			username := strings.TrimSpace(e.Auth.GetString("username"))
+			if username != "" {
+				user, err := a.core.GetUser(0, "", username)
+				if err != nil {
+					return echo.NewHTTPError(http.StatusForbidden, "invalid auth user")
+				}
+
+				if roleID := auth.ExtractRoleIDFromRecord(e.Auth); roleID > 0 {
+					user.UserRoleID = roleID
+					user.UserRole.ID = roleID
+				}
+
+				c.Set(auth.UserHTTPCtxKey, user)
+			}
+		}
+
+		return handler(c)
 	}
 }
 
