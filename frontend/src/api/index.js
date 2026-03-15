@@ -511,12 +511,6 @@ export const getLang = async (lang) => http.get(
 
 export const logout = async () => {
   pb.authStore.clear();
-  // Optionally notify backend
-  try {
-    await http.post('/api/logout', {}, { disableToast: true });
-  } catch (err) {
-    // Ignore errors on logout
-  }
 };
 
 export const deleteGCCampaignAnalytics = async (typ, beforeDate) => http.delete(

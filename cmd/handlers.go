@@ -7,7 +7,6 @@ import (
 	"path"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/knadh/listmonk/internal/auth"
 	"github.com/labstack/echo/v4"
@@ -262,20 +261,22 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 		if e.Auth != nil {
 			c.Set(auth.AuthRecordHTTPCtxKey, e.Auth)
 
-			username := strings.TrimSpace(e.Auth.GetString("username"))
-			if username != "" {
-				user, err := a.core.GetUser(0, "", username)
-				if err != nil {
-					return echo.NewHTTPError(http.StatusForbidden, "invalid auth user")
-				}
-
-				if roleID := auth.ExtractRoleIDFromRecord(e.Auth); roleID > 0 {
-					user.UserRoleID = roleID
-					user.UserRole.ID = roleID
-				}
-
-				c.Set(auth.UserHTTPCtxKey, user)
+			legacyUserID := e.Auth.GetInt("legacy_user_id")
+			if legacyUserID < 1 {
+				return echo.NewHTTPError(http.StatusForbidden, "invalid auth user")
 			}
+
+			user, err := a.core.GetUser(legacyUserID, "", "")
+			if err != nil {
+				return echo.NewHTTPError(http.StatusForbidden, "invalid auth user")
+			}
+
+			if roleID := auth.ExtractRoleIDFromRecord(e.Auth); roleID > 0 {
+				user.UserRoleID = roleID
+				user.UserRole.ID = roleID
+			}
+
+			c.Set(auth.UserHTTPCtxKey, user)
 		}
 
 		return handler(c)

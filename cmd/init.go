@@ -54,7 +54,6 @@ import (
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/cron"
 	flag "github.com/spf13/pflag"
-	"gopkg.in/volatiletech/null.v6"
 )
 
 const (
@@ -1370,31 +1369,49 @@ func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 	return funcs
 }
 
-// initAuth initializes the auth module with the given DB connection and
-func initAuth(co *core.Core, db *sql.DB, pb *pocketbase.PocketBase, ko *koanf.Koanf) {
+// initAuth initializes the auth module.
+func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *koanf.Koanf) *auth.Auth {
+	callbacks := &auth.Callbacks{
+		SetCookie: func(cookie *http.Cookie, w any) error {
+			switch v := w.(type) {
+			case echo.Context:
+				v.SetCookie(cookie)
+				return nil
+			case http.ResponseWriter:
+				http.SetCookie(v, cookie)
+				return nil
+			default:
+				return fmt.Errorf("unsupported cookie writer type %T", w)
+			}
+		},
+		GetCookie: func(name string, r any) (*http.Cookie, error) {
+			switch v := r.(type) {
+			case echo.Context:
+				return v.Cookie(name)
+			case *http.Request:
+				return v.Cookie(name)
+			default:
+				return nil, fmt.Errorf("unsupported cookie reader type %T", r)
+			}
+		},
+		GetUser:           func(id int) (auth.User, error) { return co.GetUser(id, "", "") },
+		GetUsers:          co.GetUsers,
+		GetUserByUsername: func(username string) (auth.User, error) { return co.GetUser(0, username, "") },
+	}
 
-	// If the legacy username+password is set in the TOML file, use that as an API
-	// access token in the auth module to preserve backwards compatibility for existing
-	// API integrations. The presence of these values show a red banner on the admin UI
-	// prompting the creation of new API credentials and the removal of values from
-	// the TOML config.
-	var (
-		username = ko.String("app.admin_username")
-		password = ko.String("app.admin_password")
-	)
+	a, err := auth.New(auth.Config{AuthCollection: "users"}, nil, pb, callbacks, lo)
+	if err != nil {
+		lo.Fatalf("error initializing auth module: %v", err)
+	}
+
+	// If the legacy username+password is set in the TOML file, warn users about migration.
+	username := ko.String("app.admin_username")
+	password := ko.String("app.admin_password")
 	if len(username) > 2 && len(password) > 6 {
-		u := auth.User{
-			Username:      username,
-			Password:      null.String{Valid: true, String: password},
-			PasswordLogin: true,
-			HasPassword:   true,
-			Status:        auth.UserStatusEnabled,
-			Type:          auth.UserTypeAPI,
-		}
-		u.UserRole.ID = auth.SuperAdminRoleID
-
 		lo.Println(`WARNING: Remove the admin_username and admin_password fields from the TOML configuration file. If you are using APIs, create and use new credentials. Users are now managed via the Admin -> Settings -> Users dashboard.`)
 	}
+
+	return a
 }
 
 // joinFSPaths joins the given paths with the root path and returns the full paths.

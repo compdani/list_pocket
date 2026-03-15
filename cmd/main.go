@@ -199,6 +199,9 @@ func main() {
 		// Crud core.
 		core = initCore(fbOptinNotify, queries, db, i18n, ko)
 
+		// Auth module.
+		authn = initAuth(core, pb, ko)
+
 		// Initialize all messengers, SMTP and postback.
 		msgrs = append(initSMTPMessengers(), initPostbackMessengers(ko)...)
 
@@ -252,6 +255,11 @@ func main() {
 		go mgr.Run()
 	}
 
+	// Sync user/auth records and determine first-time setup state.
+	hasUser, err := cacheUsers(core, authn)
+	if err != nil {
+		lo.Fatalf("error caching users: %v", err)
+	}
 	// =========================================================================
 	// Initialize the App{} with all the global shared components, controllers and fields.
 	app := &App{
@@ -265,6 +273,7 @@ func main() {
 		messengers: msgrs,
 		emailMsgr:  emailMsgr,
 		importer:   importer,
+		auth:       authn,
 		media:      media,
 		bounce:     bounce,
 		captcha:    initCaptcha(),
@@ -286,8 +295,8 @@ func main() {
 		about:         initAbout(queries, db),
 		chReload:      chReload,
 
-		// TODO: Needs to be moved to checking with pocketbase users collection for existence of user records. If no user records, then it's a first time installation and needs user setup.
-		needsUserSetup: false,
+		// First time installation with no user records in the DB.
+		needsUserSetup: !hasUser,
 	}
 
 	// Star the update checker.

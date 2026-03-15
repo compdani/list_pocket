@@ -81,6 +81,7 @@ type Auth struct {
 	sessStore *memoryStore
 	cb        *Callbacks
 	log       *log.Logger
+	pbAuth    *PocketBaseAuthService
 }
 
 var regexBcryptHash = regexp.MustCompile(`^\$2[abxy]\$`)
@@ -102,6 +103,8 @@ func New(cfg Config, db *sql.DB, pb *pocketbase.PocketBase, cb *Callbacks, lo *l
 		apiUsers: map[string]User{},
 	}
 
+	a.pbAuth = newPocketBaseAuthService(a)
+
 	// Initialize session manager.
 	a.sess = simplesessions.New(simplesessions.Options{
 		EnableAutoCreate: false,
@@ -121,6 +124,11 @@ func New(cfg Config, db *sql.DB, pb *pocketbase.PocketBase, cb *Callbacks, lo *l
 	}
 
 	return a, nil
+}
+
+// UpsertUserAuthRecord writes user credentials and status to PocketBase auth records.
+func (o *Auth) UpsertUserAuthRecord(u User, lookupUsername string) (*pbcore.Record, error) {
+	return o.pbAuth.UpsertUser(u, lookupUsername)
 }
 
 // CacheAPIUsers caches API users for authenticating requests. It wipes
@@ -163,6 +171,11 @@ func (o *Auth) ensureAuthCollection() error {
 		changed = true
 	}
 
+	if col.Fields.GetByName("legacy_user_id") == nil {
+		col.Fields.Add(&pbcore.NumberField{Name: "legacy_user_id", OnlyInt: true})
+		changed = true
+	}
+
 	if col.Fields.GetByName("role") == nil {
 		col.Fields.Add(&pbcore.TextField{Name: "role"})
 		changed = true
@@ -185,58 +198,13 @@ func (o *Auth) SyncUsers(users []User) error {
 }
 
 func (o *Auth) SyncUser(u User) error {
-	rec, err := o.findAuthRecordByUsername(u.Username)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-
-	if rec == nil {
-		col, err := o.pb.FindCollectionByNameOrId(o.authCol)
-		if err != nil {
-			return err
-		}
-		rec = pbcore.NewRecord(col)
-	}
-
-	email := strings.TrimSpace(u.Email.String)
-	if email == "" {
-		email = fmt.Sprintf("%s@api.local", strings.ToLower(u.Username))
-	}
-
-	rec.SetEmail(email)
-	rec.Set("username", u.Username)
-	rec.Set("user_type", u.Type)
-	rec.Set("status", u.Status)
-	rec.Set("role", strconv.Itoa(u.UserRoleID))
-	rec.SetVerified(true)
-
-	if u.Password.String != "" {
-		if regexBcryptHash.MatchString(u.Password.String) {
-			rec.SetRaw(pbcore.FieldNamePassword, u.Password.String)
-		} else {
-			rec.Set(pbcore.FieldNamePassword, u.Password.String)
-			rec.Set("passwordConfirm", u.Password.String)
-		}
-	} else if rec.Id == "" {
-		placeholder := fmt.Sprintf("lm-disabled-%d-%d", u.ID, time.Now().UnixNano())
-		rec.Set(pbcore.FieldNamePassword, placeholder)
-		rec.Set("passwordConfirm", placeholder)
-	}
-
-	return o.pb.Save(rec)
+	_, err := o.pbAuth.UpsertUser(u, "")
+	return err
 }
 
 func (o *Auth) DeleteUsers(ids []int) error {
 	for _, id := range ids {
-		rec, err := o.findAuthRecordByUserID(id)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				continue
-			}
-			return err
-		}
-
-		if err := o.pb.Delete(rec); err != nil {
+		if err := o.pbAuth.DeleteByUserID(id); err != nil {
 			return err
 		}
 	}
@@ -248,7 +216,7 @@ func (o *Auth) findAuthRecordByUserID(userID int) (*pbcore.Record, error) {
 		return nil, sql.ErrNoRows
 	}
 
-	return o.pb.FindRecordById(o.authCol, strconv.Itoa(userID))
+	return o.pb.FindFirstRecordByFilter(o.authCol, "legacy_user_id={:id}", dbx.Params{"id": userID})
 }
 
 func (o *Auth) findAuthRecordByUsername(username string) (*pbcore.Record, error) {
@@ -278,8 +246,8 @@ func (o *Auth) LoginUser(username, password string) (User, error) {
 		return User{}, echo.NewHTTPError(http.StatusInternalServerError, "failed syncing auth user")
 	}
 
-	rec, err := o.findAuthRecordByUsername(user.Username)
-	if err != nil || rec == nil || !rec.ValidatePassword(password) {
+	rec, err := o.pbAuth.AuthenticatePassword(user.Username, password)
+	if err != nil || rec == nil {
 		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
 	}
 
@@ -330,8 +298,8 @@ func (o *Auth) ValidateAPIToken(user string, token string) (User, bool) {
 		return User{}, false
 	}
 
-	rec, err := o.findAuthRecordByUsername(u.Username)
-	if err != nil || rec == nil || !rec.ValidatePassword(token) {
+	rec, err := o.pbAuth.AuthenticatePassword(u.Username, token)
+	if err != nil || rec == nil {
 		return User{}, false
 	}
 
@@ -824,7 +792,7 @@ func (o *Auth) SaveSession(u User, oidcToken string, c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
 	}
 
-	rec, err := o.findAuthRecordByUsername(u.Username)
+	rec, err := o.pbAuth.FindByUsername(u.Username)
 	if err != nil {
 		o.log.Printf("error fetching auth user record: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
