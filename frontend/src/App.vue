@@ -177,8 +177,14 @@ export default Vue.extend({
     },
 
     listenEvents() {
+      const token = this.$api.getAuthToken();
+      if (!token) {
+        return;
+      }
+
       const reMatchLog = /(.+?)\.go:\d+:(.+?)$/im;
-      const evtSource = new EventSource(uris.errorEvents, { withCredentials: true });
+      const delim = uris.errorEvents.includes('?') ? '&' : '?';
+      const evtSource = new EventSource(`${uris.errorEvents}${delim}access_token=${encodeURIComponent(token)}`);
       let numEv = 0;
       evtSource.onmessage = (e) => {
         if (numEv > 50) {

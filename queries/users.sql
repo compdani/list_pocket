@@ -3,7 +3,7 @@ INSERT INTO users (username, password_login, password, email, name, type, user_r
     VALUES($1, $2, (
         CASE
             -- For user types with password_login enabled, bcrypt and store the hash of the password.
-            WHEN $6::user_type != 'api' AND $2 AND $3 != ''
+            WHEN $6 != 'api' AND $2 AND $3 != ''
                 THEN CRYPT($3, GEN_SALT('bf'))
             WHEN $6 = 'api'
             -- For APIs, store the password (token) as-is.
@@ -29,7 +29,7 @@ UPDATE users SET
     password=(CASE WHEN $3 = TRUE THEN (CASE WHEN $4 != '' THEN CRYPT($4, GEN_SALT('bf')) ELSE password END) ELSE NULL END),
     email=(CASE WHEN $5 != '' THEN $5 ELSE email END),
     name=(CASE WHEN $6 != '' THEN $6 ELSE name END),
-    type=(CASE WHEN $7 != '' THEN $7::user_type ELSE type END),
+    type=(CASE WHEN $7 != '' THEN $7 ELSE type END),
     user_role_id=(CASE WHEN $8 != 0 THEN (SELECT id FROM roles WHERE id = $8 AND type = 'user') ELSE user_role_id END),
     list_role_id=(
         CASE
@@ -37,13 +37,13 @@ UPDATE users SET
             WHEN $9 > 0 THEN (SELECT id FROM roles WHERE id = $9 AND type = 'list')
             ELSE list_role_id END
     ),
-    status=(CASE WHEN $10 != '' THEN $10::user_status ELSE status END),
-    updated_at=NOW()
+    status=(CASE WHEN $10 != '' THEN $10 ELSE status END),
+    updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     WHERE id=$1 AND (SELECT canEdit FROM u) = TRUE;
 
 -- name: delete-users
 WITH u AS (
-    SELECT COUNT(*) AS num FROM users WHERE NOT(id = ANY($1)) AND user_role_id=1 AND type='user' AND status='enabled'
+    SELECT COUNT(*) AS num FROM users WHERE NOT(id IN $1) AND user_role_id=1 AND type='user' AND status='enabled'
 )
 DELETE FROM users WHERE id = ALL($1) AND (SELECT num FROM u) > 0;
 
@@ -59,8 +59,8 @@ lr AS (
 ),
 lp AS (
     SELECT lr.id AS list_role_id,
-        JSONB_AGG(
-            JSONB_BUILD_OBJECT(
+        JSON_AGG(
+            JSON_BUILD_OBJECT(
                 'id', COALESCE(cr.list_id, lr.list_id),
                 'name', COALESCE(cl.name, lr.list_name),
                 'permissions', COALESCE(cr.permissions, lr.permissions)
@@ -83,7 +83,7 @@ FROM users
     LEFT JOIN ur ON users.user_role_id = ur.id
     LEFT JOIN lp ON users.list_role_id = lp.list_role_id
     LEFT JOIN lr ON lp.list_role_id = lr.id
-    ORDER BY users.created_at;
+    ORDER BY users.created;
 
 -- name: get-user
 WITH sel AS (
@@ -91,9 +91,9 @@ WITH sel AS (
     WHERE
     (
         CASE
-            WHEN $1::INT != 0 THEN users.id = $1
-            WHEN $2::TEXT != '' THEN username = $2
-            WHEN $3::TEXT != '' THEN email = $3
+            WHEN $1 != 0 THEN users.id = $1
+            WHEN $2 != '' THEN username = $2
+            WHEN $3 != '' THEN email = $3
         END
     )
 )
@@ -114,8 +114,8 @@ FROM sel
         WHERE r.type = 'list' AND r.parent_id IS NULL
     ) lr ON sel.list_role_id = lr.id
     LEFT JOIN LATERAL (
-        SELECT JSONB_AGG(
-                JSONB_BUILD_OBJECT(
+        SELECT JSON_AGG(
+                JSON_BUILD_OBJECT(
                     'id', COALESCE(cr.list_id, lr.list_id),
                     'name', COALESCE(cl.name, lr.list_name),
                     'permissions', COALESCE(cr.permissions, lr.permissions)
@@ -138,7 +138,7 @@ WITH u AS (
     WHERE username = $1 AND status != 'disabled' AND password_login = TRUE
     AND CRYPT($2, password) = password
 )
-UPDATE users SET loggedin_at = NOW() WHERE id = (SELECT id FROM u) RETURNING *;
+UPDATE users SET loggedin_at = strftime('%Y-%m-%d %H:%M:%fZ', 'now') WHERE id = (SELECT id FROM u) RETURNING *;
 
 -- name: update-user-profile
 UPDATE users SET name=$2, email=(CASE WHEN password_login THEN $3 ELSE email END),
@@ -146,7 +146,7 @@ UPDATE users SET name=$2, email=(CASE WHEN password_login THEN $3 ELSE email END
     WHERE id=$1;
 
 -- name: update-user-login
-UPDATE users SET loggedin_at=NOW(), avatar=(CASE WHEN $2 != '' THEN $2 ELSE avatar END) WHERE id=$1;
+UPDATE users SET loggedin_at=strftime('%Y-%m-%d %H:%M:%fZ', 'now'), avatar=(CASE WHEN $2 != '' THEN $2 ELSE avatar END) WHERE id=$1;
 
 -- name: set-user-twofa
-UPDATE users SET twofa_type=$2::twofa_type, twofa_key=$3, updated_at=NOW() WHERE id=$1;
+UPDATE users SET twofa_type=$2, twofa_key=$3, updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now') WHERE id=$1;

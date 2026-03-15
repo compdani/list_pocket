@@ -41,7 +41,7 @@ describe('Subscribers', () => {
 
     // listIDs[] and ids[] are unused for now as Cypress doesn't support encoding of arrays in `qs`.
     cases.forEach((c) => {
-      cy.request({ url: `${apiUrl}/api/subscribers/export`, qs: { query: c.query, list_id: c.listIDs, id: c.ids } }).then((resp) => {
+      cy.request({ url: `${apiUrl}/mailapi/subscribers/export`, qs: { query: c.query, list_id: c.listIDs, id: c.ids } }).then((resp) => {
         cy.expect(resp.body.trim().split('\n')).to.have.lengthOf(c.length);
       });
     });
@@ -282,7 +282,7 @@ describe('Domain blocklist', () => {
     // Add non-banned domain.
     cy.request({
       method: 'POST',
-      url: `${apiUrl}/api/subscribers`,
+      url: `${apiUrl}/mailapi/subscribers`,
       failOnStatusCode: true,
       body: {
         email: 'test1@noban.net', name: 'test', lists: [1], status: 'enabled',
@@ -294,7 +294,7 @@ describe('Domain blocklist', () => {
     // Add banned domain.
     cy.request({
       method: 'POST',
-      url: `${apiUrl}/api/subscribers`,
+      url: `${apiUrl}/mailapi/subscribers`,
       failOnStatusCode: false,
       body: {
         email: 'test1@ban.com', name: 'test', lists: [1], status: 'enabled',
@@ -306,7 +306,7 @@ describe('Domain blocklist', () => {
     // Modify an existinb subscriber to a banned domain.
     cy.request({
       method: 'PUT',
-      url: `${apiUrl}/api/subscribers/1`,
+      url: `${apiUrl}/mailapi/subscribers/1`,
       failOnStatusCode: false,
       body: {
         email: 'test3@ban.org', name: 'test', lists: [1], status: 'enabled',
@@ -346,7 +346,7 @@ describe('Domain blocklist', () => {
     // Add banned domain.
     cy.request({
       method: 'POST',
-      url: `${apiUrl}/api/subscribers`,
+      url: `${apiUrl}/mailapi/subscribers`,
       failOnStatusCode: true,
       body: {
         email: 'test4@BAN.com', name: 'test', lists: [1], status: 'enabled',
@@ -358,7 +358,7 @@ describe('Domain blocklist', () => {
     // Modify an existinb subscriber to a banned domain.
     cy.request({
       method: 'PUT',
-      url: `${apiUrl}/api/subscribers/1`,
+      url: `${apiUrl}/mailapi/subscribers/1`,
       failOnStatusCode: true,
       body: {
         email: 'test4@BAN.org', name: 'test', lists: [1], status: 'enabled',

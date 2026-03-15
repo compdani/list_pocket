@@ -1,94 +1,150 @@
 import { ToastProgrammatic as Toast } from 'buefy';
-import axios from 'axios';
+import PocketBase from 'pocketbase';
 import qs from 'qs';
 import store from '../store';
 import { models } from '../constants';
 import Utils from '../utils';
 
-const http = axios.create({
-  baseURL: import.meta.env.VUE_APP_ROOT_URL || '/',
-  withCredentials: false,
-  responseType: 'json',
+const rootURL = (import.meta.env.VUE_APP_ROOT_URL || '/').trim();
+const pbBaseURL = rootURL === '/' ? window.location.origin : rootURL.replace(/\/$/, '');
+const pb = new PocketBase(pbBaseURL);
+pb.autoCancellation(false);
 
-  // Override the default serializer to switch params from becoming []id=a&[]id=b ...
-  // in GET and DELETE requests to id=a&id=b.
-  paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
+pb.beforeSend = (url, sendOptions) => ({
+  url,
+  sendOptions: {
+    ...sendOptions,
+    credentials: 'omit',
+  },
 });
 
 const utils = new Utils();
 
-// Intercept requests to set the 'loading' state of a model.
-http.interceptors.request.use((config) => {
+function setLoading(config, status) {
   if ('loading' in config) {
-    store.commit('setLoading', { model: config.loading, status: true });
+    store.commit('setLoading', { model: config.loading, status });
   }
-  return config;
-}, (error) => Promise.reject(error));
+}
 
-// Intercept responses to set them to store.
-http.interceptors.response.use((resp) => {
-  // Clear the loading state for a model.
-  if ('loading' in resp.config) {
-    store.commit('setLoading', { model: resp.config.loading, status: false });
-  }
+function transformResponse(resp, config) {
+  const payload = resp && typeof resp === 'object' && 'data' in resp ? resp.data : resp;
 
-  let data = {};
-  if (typeof resp.data.data === 'object') {
-    if (resp.data.data.constructor === Object) {
-      data = { ...resp.data.data };
-    } else {
-      data = [...resp.data.data];
+  let out = {};
+  if (typeof payload === 'object') {
+    if (payload && payload.constructor === Object) {
+      out = { ...payload };
+    } else if (payload) {
+      out = [...payload];
     }
 
-    // Transform keys to camelCase.
-    switch (typeof resp.config.camelCase) {
+    switch (typeof config.camelCase) {
       case 'function':
-        data = utils.camelKeys(data, resp.config.camelCase);
+        out = utils.camelKeys(out, config.camelCase);
         break;
       case 'boolean':
-        if (resp.config.camelCase) {
-          data = utils.camelKeys(data);
+        if (config.camelCase) {
+          out = utils.camelKeys(out);
         }
         break;
       default:
-        data = utils.camelKeys(data);
+        out = utils.camelKeys(out);
         break;
     }
   } else {
-    data = resp.data.data;
+    out = payload;
   }
 
-  // Store the API response for a model.
-  if ('store' in resp.config) {
-    store.commit('setModelResponse', { model: resp.config.store, data });
+  if ('store' in config) {
+    store.commit('setModelResponse', { model: config.store, data: out });
   }
 
-  return data;
-}, (err) => {
-  // Clear the loading state for a model.
-  if ('loading' in err.config) {
-    store.commit('setLoading', { model: err.config.loading, status: false });
-  }
+  return out;
+}
 
-  let msg = '';
-  if (err.response && err.response.data && err.response.data.message) {
-    msg = err.response.data.message;
-  } else {
-    msg = err.toString();
+function getErrorMessage(err) {
+  if (err && err.response && err.response.message) {
+    return err.response.message;
   }
-
-  if (!err.config.disableToast) {
-    Toast.open({
-      message: msg,
-      type: 'is-danger',
-      queue: false,
-      position: 'is-top',
-      pauseOnHover: true,
-    });
+  if (err && err.message) {
+    return err.message;
   }
+  return String(err);
+}
 
-  return Promise.reject(err);
-});
+async function send(method, url, data, config = {}) {
+  setLoading(config, true);
+
+  const requestURL = url.startsWith('/api/')
+    ? `/mailapi/${url.slice('/api/'.length)}`
+    : url;
+
+  try {
+    const requestConfig = {
+      method,
+      query: config.params,
+      paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
+    };
+
+    if (data !== undefined) {
+      requestConfig.body = data;
+    }
+
+    const response = await pb.send(requestURL, requestConfig);
+    return transformResponse(response, config);
+  } catch (err) {
+    const msg = getErrorMessage(err);
+
+    if (!config.disableToast) {
+      Toast.open({
+        message: msg,
+        type: 'is-danger',
+        queue: false,
+        position: 'is-top',
+        pauseOnHover: true,
+      });
+    }
+
+    return Promise.reject(err);
+  } finally {
+    setLoading(config, false);
+  }
+}
+
+const http = {
+  get(url, config = {}) {
+    return send('GET', url, undefined, config);
+  },
+  post(url, data = {}, config = {}) {
+    return send('POST', url, data, config);
+  },
+  put(url, data = {}, config = {}) {
+    return send('PUT', url, data, config);
+  },
+  delete(url, config = {}) {
+    return send('DELETE', url, config.data, config);
+  },
+};
+
+export const getAuthToken = () => pb.authStore.token;
+export const clearAuthToken = () => pb.authStore.clear();
+
+// Authenticate with PocketBase using username/password
+export const login = async (username, password) => {
+  try {
+    // Use PocketBase SDK's native authentication
+    const authData = await pb.collection('users').authWithPassword(username, password);
+    return authData;
+  } catch (err) {
+    pb.authStore.clear();
+    throw err;
+  }
+};
+
+// Check if user is authenticated
+export const isAuthenticated = () => pb.authStore.isValid;
+
+// Export pb instance for direct access to PocketBase SDK
+export { pb };
 
 // API calls accept the following config keys.
 // loading: modelName (set's the loading status in the global store: eg: store.loading.lists = true)
@@ -453,7 +509,15 @@ export const getLang = async (lang) => http.get(
   { loading: models.lang, camelCase: false },
 );
 
-export const logout = async () => http.post('/api/logout');
+export const logout = async () => {
+  pb.authStore.clear();
+  // Optionally notify backend
+  try {
+    await http.post('/api/logout', {}, { disableToast: true });
+  } catch (err) {
+    // Ignore errors on logout
+  }
+};
 
 export const deleteGCCampaignAnalytics = async (typ, beforeDate) => http.delete(
   `/api/maintenance/analytics/${typ}`,

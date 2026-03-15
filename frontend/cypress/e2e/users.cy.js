@@ -129,7 +129,7 @@ describe('Users ', () => {
     cy.wait(500);
 
     // Fetch the campaigns API and verfiy the values that couldn't be verified on the table UI.
-    cy.request(`${apiUrl}/api/users/4`).should((response) => {
+    cy.request(`${apiUrl}/mailapi/users/4`).should((response) => {
       const { data } = response.body;
 
       expect(data.password_login).to.equal(false);

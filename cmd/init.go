@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	stdfs "io/fs"
 	"log"
 	"maps"
 	"net/http"
@@ -48,8 +49,6 @@ import (
 	"github.com/knadh/listmonk/models"
 	"github.com/knadh/stuffbin"
 	"github.com/labstack/echo/v4"
-	"github.com/lib/pq"
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -175,7 +174,15 @@ func initFlags(ko *koanf.Koanf) {
 	f.String("i18n-dir", "", "(optional) path to directory with i18n language files")
 	f.Bool("yes", false, "assume 'yes' to prompts during --install/upgrade")
 	f.Bool("passive", false, "run in passive mode where campaigns are not processed")
-	if err := f.Parse(os.Args[1:]); err != nil {
+	args := os.Args[1:]
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "serve", "start":
+			args = args[1:]
+		}
+	}
+
+	if err := f.Parse(args); err != nil {
 		lo.Fatalf("error loading flags: %v", err)
 	}
 
@@ -308,15 +315,95 @@ func initFS(appDir, frontendDir, staticDir, i18nDir string) stuffbin.FileSystem 
 	return fs
 }
 
+type stuffbinSubFS struct {
+	base stuffbin.FileSystem
+	root string
+}
+
+func (s stuffbinSubFS) Open(name string) (stdfs.File, error) {
+	name = strings.TrimPrefix(filepath.ToSlash(name), "/")
+	name = path.Clean(name)
+	if name == "." {
+		name = ""
+	}
+
+	if name == ".." || strings.HasPrefix(name, "../") {
+		return nil, os.ErrNotExist
+	}
+
+	fullPath := s.root
+	if name != "" {
+		fullPath = path.Join(s.root, name)
+	}
+
+	return s.base.Open(fullPath)
+}
+
 // initDB initializes the main DB connection pool and parse and loads the app's
 // SQL queries into a prepared query map.
-func initDB(pb *pocketbase.PocketBase) *pbdb.DB {
+func initDB() *pbdb.DB {
 	db, err := pbdb.NewFromPocketBase(pb)
 	if err != nil {
 		lo.Fatalf("error initializing SQL adapter from PocketBase: %v", err)
 	}
 
 	return db
+}
+
+func isSQLiteDB(db *pbdb.DB) bool {
+	if db == nil || db.DB == nil {
+		return false
+	}
+
+	return strings.Contains(strings.ToLower(db.DriverName()), "sqlite")
+}
+
+func sqliteTableHasColumn(raw *sql.DB, table, column string) bool {
+	if raw == nil {
+		return false
+	}
+
+	rows, err := raw.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid      int
+			name     string
+			colType  string
+			notNull  int
+			defaultV sql.NullString
+			primaryK int
+		)
+
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultV, &primaryK); err != nil {
+			continue
+		}
+
+		if name == column {
+			return true
+		}
+	}
+
+	return false
+}
+
+func sqliteTimestampColumns(raw *sql.DB, table string) (string, string) {
+	createdCol := "created"
+	updatedCol := "updated"
+
+	if !sqliteTableHasColumn(raw, table, createdCol) && sqliteTableHasColumn(raw, table, "created_at") {
+		createdCol = "created_at"
+	}
+
+	if !sqliteTableHasColumn(raw, table, updatedCol) && sqliteTableHasColumn(raw, table, "updated_at") {
+		updatedCol = "updated_at"
+	}
+
+	return createdCol, updatedCol
 }
 
 func readQueries(dir string, fs stuffbin.FileSystem) goyesql.Queries {
@@ -356,6 +443,39 @@ func prepareQueries(qMap goyesql.Queries, db *pbdb.DB, ko *koanf.Koanf) *models.
 		countQuery = "get-campaign-analytics-counts"
 		linkSel    = "*"
 	)
+
+	// PocketBase mode is SQLite-backed. Override a few startup-critical
+	// queries that still use PostgreSQL-only syntax.
+	if isSQLiteDB(db) {
+		tplCreatedCol, tplUpdatedCol := sqliteTimestampColumns(db.DB.DB, "templates")
+
+		qMap["get-templates"] = &goyesql.Query{
+			Query: fmt.Sprintf(`SELECT id, name, type, subject,
+	(CASE WHEN $2 = false THEN body ELSE '' END) as body,
+	(CASE WHEN $2 = false THEN body_source ELSE NULL END) as body_source,
+	is_default, %s, %s
+	FROM templates WHERE ($1 = 0 OR id = $1) AND ($3 = '' OR type = $3)
+	ORDER BY %s;`, tplCreatedCol, tplUpdatedCol, tplCreatedCol),
+			Tags: map[string]string{"name": "get-templates"},
+		}
+
+		qMap["get-db-info"] = &goyesql.Query{
+			Query: `SELECT JSON_OBJECT('version', SQLITE_VERSION(), 'size_mb', NULL) AS info;`,
+			Tags:  map[string]string{"name": "get-db-info"},
+		}
+
+		qMap["get-media"] = &goyesql.Query{
+			Query: `SELECT * FROM media WHERE
+				CASE
+					WHEN $1 > 0 THEN id = $1
+					WHEN $2 != '' THEN uuid = $2
+					WHEN $3 != '' THEN filename = $3
+					ELSE false
+				END;`,
+			Tags: map[string]string{"name": "get-media"},
+		}
+	}
+
 	if ko.Bool("privacy.individual_tracking") {
 		countQuery = "get-campaign-analytics-unique-counts"
 		linkSel = "DISTINCT subscriber_id"
@@ -414,6 +534,9 @@ func bindQueries(qMap goyesql.Queries, db *pbdb.DB) (*models.Queries, error) {
 
 // initSettings loads settings from the DB into the given Koanf map.
 func initSettings(query string, db *pbdb.DB, ko *koanf.Koanf) {
+	_ = query
+	_ = db
+
 	var s types.JSONText
 
 	if pb != nil {
@@ -422,31 +545,19 @@ func initSettings(query string, db *pbdb.DB, ko *koanf.Koanf) {
 		} else if ok {
 			s = out
 		} else {
-			// Fallback to existing SQL source for first run and seed PocketBase persistence.
-			if err := db.Get(&s, query); err != nil {
-				msg := err.Error()
-				if err, ok := err.(*pq.Error); ok {
-					if err.Detail != "" {
-						msg = fmt.Sprintf("%s. %s", err, err.Detail)
-					}
-				}
-
-				lo.Fatalf("error reading settings from DB: %s", msg)
+			// First run: persist the currently loaded config into PocketBase settings.
+			flat, _ := koanfmaps.Flatten(ko.All(), nil, ".")
+			b, err := json.Marshal(flat)
+			if err != nil {
+				lo.Fatalf("error marshaling default settings: %v", err)
 			}
-
-			if err := setPBSettings(pb, s); err != nil {
-				lo.Fatalf("error seeding PocketBase settings from SQL: %v", err)
+			if err := setPBSettings(pb, b); err != nil {
+				lo.Fatalf("error seeding PocketBase settings: %v", err)
 			}
+			s = b
 		}
-	} else if err := db.Get(&s, query); err != nil {
-		msg := err.Error()
-		if err, ok := err.(*pq.Error); ok {
-			if err.Detail != "" {
-				msg = fmt.Sprintf("%s. %s", err, err.Detail)
-			}
-		}
-
-		lo.Fatalf("error reading settings from DB: %s", msg)
+	} else {
+		lo.Fatalf("pocketbase is not initialized")
 	}
 
 	// Setting keys are dot separated, eg: app.favicon_url. Unflatten them into
@@ -457,6 +568,27 @@ func initSettings(query string, db *pbdb.DB, ko *koanf.Koanf) {
 	}
 	if err := ko.Load(confmap.Provider(out, "."), nil); err != nil {
 		lo.Fatalf("error parsing settings from DB: %v", err)
+	}
+
+	if strings.TrimSpace(ko.String("app.lang")) == "" {
+		if err := ko.Set("app.lang", "en"); err != nil {
+			lo.Fatalf("error setting default app.lang: %v", err)
+		}
+	}
+	if strings.TrimSpace(ko.String("upload.provider")) == "" {
+		if err := ko.Set("upload.provider", "filesystem"); err != nil {
+			lo.Fatalf("error setting default upload.provider: %v", err)
+		}
+	}
+	if strings.TrimSpace(ko.String("upload.filesystem.upload_uri")) == "" {
+		if err := ko.Set("upload.filesystem.upload_uri", "/uploads"); err != nil {
+			lo.Fatalf("error setting default upload.filesystem.upload_uri: %v", err)
+		}
+	}
+	if strings.TrimSpace(ko.String("upload.filesystem.upload_path")) == "" {
+		if err := ko.Set("upload.filesystem.upload_path", "uploads"); err != nil {
+			lo.Fatalf("error setting default upload.filesystem.upload_path: %v", err)
+		}
 	}
 }
 
@@ -470,13 +602,8 @@ func initPocketBase() *pocketbase.PocketBase {
 		lo.Fatalf("error bootstrapping pocketbase: %v", err)
 	}
 
-	if _, err := pb.DB().NewQuery(`
-CREATE TABLE IF NOT EXISTS listmonk_settings (
-	id INTEGER PRIMARY KEY,
-	value TEXT NOT NULL,
-	updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-)`).Execute(); err != nil {
-		lo.Fatalf("error initializing pocketbase settings table: %v", err)
+	if err := pb.RunAppMigrations(); err != nil {
+		lo.Fatalf("error running pocketbase app migrations: %v", err)
 	}
 
 	return pb
@@ -487,7 +614,7 @@ func getPBSettings(pb *pocketbase.PocketBase) (types.JSONText, bool, error) {
 		Value []byte `db:"value"`
 	}
 
-	err := pb.DB().NewQuery("SELECT value FROM listmonk_settings WHERE id = 1").One(&row)
+	err := pb.DB().NewQuery("SELECT value FROM listmonk_settings LIMIT 1").One(&row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -499,13 +626,28 @@ func getPBSettings(pb *pocketbase.PocketBase) (types.JSONText, bool, error) {
 }
 
 func setPBSettings(pb *pocketbase.PocketBase, value []byte) error {
-	_, err := pb.DB().Upsert("listmonk_settings", dbx.Params{
-		"id":         1,
-		"value":      string(value),
-		"updated_at": time.Now().UTC().Format(time.RFC3339),
-	}, "id").Execute()
+	collection, err := pb.FindCollectionByNameOrId("listmonk_settings")
+	if err != nil {
+		return err
+	}
 
-	return err
+	// Check if a settings record already exists
+	var existingRecord *pbcore.Record
+	records, err := pb.FindRecordsByFilter(collection, "", "", 1, 0)
+	if err == nil && len(records) > 0 {
+		existingRecord = records[0]
+	}
+
+	if existingRecord != nil {
+		// Update existing record
+		existingRecord.Set("value", string(value))
+		return pb.Save(existingRecord)
+	} else {
+		// Create new record
+		record := pbcore.NewRecord(collection)
+		record.Set("value", string(value))
+		return pb.Save(record)
+	}
 }
 
 func patchPBSettings(pb *pocketbase.PocketBase, key string, value json.RawMessage) error {
@@ -680,7 +822,7 @@ func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), 
 }
 
 // initCampaignManager initializes the campaign manager.
-func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, u *UrlConfig, co *core.Core, md media.Store, i *i18n.I18n, ko *koanf.Koanf) *manager.Manager {
+func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.DB, u *UrlConfig, co *core.Core, md media.Store, i *i18n.I18n, ko *koanf.Koanf) *manager.Manager {
 	if ko.Bool("passive") {
 		lo.Println("running in passive mode. won't process campaigns.")
 	}
@@ -706,7 +848,7 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, u *UrlCon
 		SlidingWindowRate:     ko.Int("app.message_sliding_window_rate"),
 		ScanInterval:          time.Second * 5,
 		ScanCampaigns:         !ko.Bool("passive"),
-	}, newManagerStore(q, co, md), i, lo)
+	}, newManagerStore(q, db, co, md), i, lo)
 
 	// Attach all messengers to the campaign manager.
 	for _, m := range msgrs {
@@ -720,7 +862,8 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, u *UrlCon
 func initTxTemplates(m *manager.Manager, co *core.Core) {
 	tpls, err := co.GetTemplates(models.TemplateTypeTx, false)
 	if err != nil {
-		lo.Fatalf("error loading transactional templates: %v", err)
+		lo.Printf("skipping transactional template cache initialization: %v", err)
+		return
 	}
 
 	for _, t := range tpls {
@@ -735,19 +878,45 @@ func initTxTemplates(m *manager.Manager, co *core.Core) {
 
 // initImporter initializes the bulk subscriber importer.
 func initImporter(q *models.Queries, db *pbdb.DB, core *core.Core, i *i18n.I18n, ko *koanf.Koanf) *subimporter.Importer {
-	upsertStmt, err := q.UpsertSubscriber.SQLStmt()
-	if err != nil {
-		lo.Fatalf("error preparing subscriber upsert query: %v", err)
-	}
+	var (
+		upsertStmt         *sql.Stmt
+		blocklistStmt      *sql.Stmt
+		updateListDateStmt *sql.Stmt
+		err                error
+		useJSONListArgs    bool
+	)
 
-	blocklistStmt, err := q.UpsertBlocklistSubscriber.SQLStmt()
-	if err != nil {
-		lo.Fatalf("error preparing subscriber blocklist query: %v", err)
-	}
+	if isSQLiteDB(db) {
+		_, listUpdatedCol := sqliteTimestampColumns(db.DB.DB, "lists")
 
-	updateListDateStmt, err := q.UpdateListsDate.SQLStmt()
+		updateListDateStmt, err = db.DB.DB.Prepare(`
+UPDATE lists
+SET ` + listUpdatedCol + `=(strftime('%Y-%m-%d %H:%M:%fZ'))
+WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?1));
+`)
+		useJSONListArgs = true
+	} else {
+		upsertStmt, err = q.UpsertSubscriber.SQLStmt()
+		if err != nil {
+			lo.Printf("disabling importer: unable to prepare subscriber upsert query: %v", err)
+			return nil
+		}
+
+		blocklistStmt, err = q.UpsertBlocklistSubscriber.SQLStmt()
+		if err != nil {
+			lo.Printf("disabling importer: unable to prepare blocklist upsert query: %v", err)
+			return nil
+		}
+
+		updateListDateStmt, err = q.UpdateListsDate.SQLStmt()
+	}
 	if err != nil {
-		lo.Fatalf("error preparing list date update query: %v", err)
+		lo.Printf("disabling importer: unable to prepare importer queries: %v", err)
+		return nil
+	}
+	if updateListDateStmt == nil {
+		lo.Printf("disabling importer: unable to prepare list update query")
+		return nil
 	}
 
 	return subimporter.New(
@@ -757,6 +926,7 @@ func initImporter(q *models.Queries, db *pbdb.DB, core *core.Core, i *i18n.I18n,
 			UpsertStmt:         upsertStmt,
 			BlocklistStmt:      blocklistStmt,
 			UpdateListDateStmt: updateListDateStmt,
+			UseJSONListArgs:    useJSONListArgs,
 
 			// Hook for triggering admin notifications and refreshing stats materialized
 			// views after a successful import.
@@ -1014,66 +1184,51 @@ func initAbout(q *models.Queries, db *pbdb.DB) about {
 
 }
 
-// initHTTPServer sets up and runs the app's main HTTP server and blocks forever.
+// initHTTPServer sets up and runs the app's main HTTP server.
 func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.FileSystem, app *App) *echo.Echo {
-	// Initialize the HTTP server.
-	var srv = echo.New()
-	srv.HideBanner = true
-
-	// Register app (*App) to be injected into all HTTP handlers.
-	srv.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			c.Set("app", app)
-			return next(c)
-		}
-	})
-
+	// Parse templates for public pages.
 	tpl, err := stuffbin.ParseTemplatesGlob(initTplFuncs(i, urlCfg), fs, "/public/templates/*.html")
 	if err != nil {
 		lo.Fatalf("error parsing public templates: %v", err)
 	}
-	srv.Renderer = &tplRenderer{
-		templates:           tpl,
-		SiteName:            cfg.SiteName,
-		RootURL:             urlCfg.RootURL,
-		LogoURL:             urlCfg.LogoURL,
-		FaviconURL:          urlCfg.FaviconURL,
-		AssetVersion:        cfg.AssetVersion,
-		EnablePublicSubPage: cfg.EnablePublicSubPage,
-		EnablePublicArchive: cfg.EnablePublicArchive,
-		IndividualTracking:  cfg.Privacy.IndividualTracking,
-	}
 
-	// Initialize the static file server.
-	fSrv := fs.FileServer()
+	app.tpl = tpl
 
-	// Public (subscriber) facing static files.
-	srv.GET("/public/static/*", echo.WrapHandler(fSrv))
+	// Register all routes using PocketBase's router.
+	pb.OnServe().BindFunc(func(se *pbcore.ServeEvent) error {
+		// Inject app into request context middleware.
+		se.Router.BindFunc(func(e *pbcore.RequestEvent) error {
+			e.Set("app", app)
+			return e.Next()
+		})
 
-	// Admin (frontend) facing static files.
-	srv.GET("/admin/static/*", echo.WrapHandler(fSrv))
+		// Public (subscriber) facing static files.
+		se.Router.GET("/public/static/{path...}", apis.Static(stuffbinSubFS{base: fs, root: "/public/static"}, false))
 
-	// Public (subscriber) facing media upload files.
-	var (
-		uploadProvider = ko.String("upload.provider")
-		uploadFsURI    = ko.String("upload.filesystem.upload_uri")
-		publicURL      = ko.String("upload.s3.public_url")
-	)
-	switch {
-	case uploadProvider == "filesystem" && uploadFsURI != "":
-		srv.Static(uploadFsURI, ko.String("upload.filesystem.upload_path"))
-	case uploadProvider == "s3" && strings.HasPrefix(publicURL, "/"):
-		srv.GET(path.Join(publicURL, "/:filepath"), app.ServeS3Media)
-	}
+		// Admin (frontend) facing static files.
+		se.Router.GET("/admin/static/{path...}", apis.Static(stuffbinSubFS{base: fs, root: "/admin/static"}, false))
 
-	// Register all HTTP handlers.
-	initHTTPHandlers(srv, app)
+		// Public (subscriber) facing media upload files.
+		var (
+			uploadProvider = ko.String("upload.provider")
+			uploadFsURI    = ko.String("upload.filesystem.upload_uri")
+			publicURL      = ko.String("upload.s3.public_url")
+		)
+		switch {
+		case uploadProvider == "filesystem" && uploadFsURI != "":
+			staticPath := ko.String("upload.filesystem.upload_path")
+			se.Router.GET(path.Join(uploadFsURI, "{filepath...}"), func(e *pbcore.RequestEvent) error {
+				http.StripPrefix(uploadFsURI, http.FileServer(http.Dir(staticPath))).ServeHTTP(e.Response, e.Request)
+				return nil
+			})
+		case uploadProvider == "s3" && strings.HasPrefix(publicURL, "/"):
+			se.Router.GET(path.Join(publicURL, "{filepath}"), wrapEcho(app, tpl, cfg, urlCfg, []string{"filepath"}, app.ServeS3Media))
+		}
 
-	// Start listmonk with PocketBase as the routing server and proxy all listmonk
-	// routes through PocketBase's router.
-	pb.OnServe().BindFunc(func(e *pbcore.ServeEvent) error {
-		e.Router.Any("/{path...}", apis.WrapStdHandler(srv))
-		return e.Next()
+		// Register all HTTP handlers.
+		registerHandlers(se.Router, app, tpl, cfg, urlCfg)
+
+		return se.Next()
 	})
 
 	go func() {
@@ -1088,7 +1243,8 @@ func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.Fi
 
 	app.pb = pb
 
-	return srv
+	// Return a dummy Echo instance for compatibility with shutdown code.
+	return echo.New()
 }
 
 // initCaptcha initializes the captcha service.
@@ -1215,52 +1371,7 @@ func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 }
 
 // initAuth initializes the auth module with the given DB connection and
-func initAuth(co *core.Core, db *sql.DB, ko *koanf.Koanf) (bool, *auth.Auth) {
-	var oidcCfg auth.OIDCConfig
-
-	// If OIDC is enabled, set up the OIDC config.
-	if ko.Bool("security.oidc.enabled") {
-		oidcCfg = auth.OIDCConfig{
-			Enabled:           true,
-			ProviderURL:       ko.String("security.oidc.provider_url"),
-			ClientID:          ko.String("security.oidc.client_id"),
-			ClientSecret:      ko.String("security.oidc.client_secret"),
-			AutoCreateUsers:   ko.Bool("security.oidc.auto_create_users"),
-			DefaultUserRoleID: ko.Int("security.oidc.default_user_role_id"),
-			DefaultListRoleID: ko.Int("security.oidc.default_list_role_id"),
-			RedirectURL:       fmt.Sprintf("%s/auth/oidc", strings.TrimRight(ko.String("app.root_url"), "/")),
-		}
-	}
-
-	// Setup the sessio manager callbacks for getting and setting cookies.
-	cb := &auth.Callbacks{
-		GetCookie: func(name string, r any) (*http.Cookie, error) {
-			c := r.(echo.Context)
-			cookie, err := c.Cookie(name)
-			return cookie, err
-		},
-		SetCookie: func(cookie *http.Cookie, w any) error {
-			c := w.(echo.Context)
-			cookie.SameSite = http.SameSiteLaxMode
-			c.SetCookie(cookie)
-			return nil
-		},
-		GetUser: func(id int) (auth.User, error) {
-			return co.GetUser(id, "", "")
-		},
-	}
-
-	// Initiaize the auth module.
-	a, err := auth.New(auth.Config{OIDC: oidcCfg}, db, cb, lo)
-	if err != nil {
-		lo.Fatalf("error initializing auth: %v", err)
-	}
-
-	// Cache all API users in-memory for token auth.
-	hasUsers, err := cacheUsers(co, a)
-	if err != nil {
-		lo.Fatalf("error loading API users to cache: %v", err)
-	}
+func initAuth(co *core.Core, db *sql.DB, pb *pocketbase.PocketBase, ko *koanf.Koanf) {
 
 	// If the legacy username+password is set in the TOML file, use that as an API
 	// access token in the auth module to preserve backwards compatibility for existing
@@ -1281,12 +1392,9 @@ func initAuth(co *core.Core, db *sql.DB, ko *koanf.Koanf) (bool, *auth.Auth) {
 			Type:          auth.UserTypeAPI,
 		}
 		u.UserRole.ID = auth.SuperAdminRoleID
-		a.CacheAPIUser(u)
 
 		lo.Println(`WARNING: Remove the admin_username and admin_password fields from the TOML configuration file. If you are using APIs, create and use new credentials. Users are now managed via the Admin -> Settings -> Users dashboard.`)
 	}
-
-	return hasUsers, a
 }
 
 // joinFSPaths joins the given paths with the root path and returns the full paths.

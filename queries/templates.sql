@@ -4,9 +4,9 @@
 SELECT id, name, type, subject,
     (CASE WHEN $2 = false THEN body ELSE '' END) as body,
     (CASE WHEN $2 = false THEN body_source ELSE NULL END) as body_source,
-    is_default, created_at, updated_at
-    FROM templates WHERE ($1 = 0 OR id = $1) AND ($3 = '' OR type = $3::template_type)
-    ORDER BY created_at;
+    is_default, created, updated
+    FROM templates WHERE ($1 = 0 OR id = $1) AND ($3 = '' OR type = $3)
+    ORDER BY created;
 
 -- name: create-template
 INSERT INTO templates (name, type, subject, body, body_source) VALUES($1, $2, $3, $4, $5) RETURNING id;
@@ -17,7 +17,7 @@ UPDATE templates SET
     subject=(CASE WHEN $3 != '' THEN $3 ELSE name END),
     body=(CASE WHEN $4 != '' THEN $4 ELSE body END),
     body_source=(CASE WHEN $5 != '' THEN $5 ELSE body_source END),
-    updated_at=NOW()
+    updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
 WHERE id = $1;
 
 -- name: set-default-template

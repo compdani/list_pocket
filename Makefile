@@ -7,14 +7,14 @@ VERSION := $(or $(LISTMONK_VERSION),$(shell git describe --tags --abbrev=0 2> /d
 BUILDDATE := $(if $(SOURCE_DATE_EPOCH),$(shell date -u -d @$(SOURCE_DATE_EPOCH) +"%Y-%m-%dT%H:%M:%S%z"),$(shell date -u +"%Y-%m-%dT%H:%M:%S%z"))
 BUILDSTR := ${VERSION} (\#${LAST_COMMIT} $(BUILDDATE))
 
-YARN ?= yarn
+NPM ?= npm
 GOPATH ?= $(HOME)/go
 STUFFBIN ?= $(GOPATH)/bin/stuffbin
-FRONTEND_YARN_MODULES = frontend/node_modules
+FRONTEND_NPM_MODULES = frontend/node_modules
 FRONTEND_DIST = frontend/dist
 FRONTEND_EMAIL_BUILDER_DIST_FINAL = frontend/public/static/email-builder
 FRONTEND_DEPS = \
-	$(FRONTEND_YARN_MODULES) \
+	$(FRONTEND_NPM_MODULES) \
 	$(FRONTEND_EMAIL_BUILDER_DIST_FINAL) \
 	frontend/index.html \
 	frontend/package.json \
@@ -23,10 +23,10 @@ FRONTEND_DEPS = \
 	$(shell find frontend/fontello frontend/public frontend/src -type f)
 
 FRONTEND_EMAIL_BUILDER = frontend/email-builder
-FRONTEND_EMAIL_BUILDER_YARN_MODULES = $(FRONTEND_EMAIL_BUILDER)/node_modules
+FRONTEND_EMAIL_BUILDER_NPM_MODULES = $(FRONTEND_EMAIL_BUILDER)/node_modules
 FRONTEND_EMAIL_BUILDER_DIST = $(FRONTEND_EMAIL_BUILDER)/dist
 FRONTEND_EMAIL_BUILDER_DEPS = \
-	$(FRONTEND_EMAIL_BUILDER_YARN_MODULES) \
+	$(FRONTEND_EMAIL_BUILDER_NPM_MODULES) \
 	$(FRONTEND_EMAIL_BUILDER)/package.json \
 	$(FRONTEND_EMAIL_BUILDER)/tsconfig.json \
 	$(FRONTEND_EMAIL_BUILDER)/vite.config.ts \
@@ -49,31 +49,31 @@ build: $(BIN)
 $(STUFFBIN):
 	go install github.com/knadh/stuffbin/...
 
-$(FRONTEND_YARN_MODULES): frontend/package.json frontend/yarn.lock
-	cd frontend && $(YARN) install
-	touch -c $(FRONTEND_YARN_MODULES)
+$(FRONTEND_NPM_MODULES): frontend/package.json
+	cd frontend && $(NPM) install
+	touch -c $(FRONTEND_NPM_MODULES)
 
-$(FRONTEND_EMAIL_BUILDER_YARN_MODULES): frontend/package.json frontend/yarn.lock
-	cd $(FRONTEND_EMAIL_BUILDER) && $(YARN) install
-	touch -c $(FRONTEND_EMAIL_BUILDER_YARN_MODULES)
+$(FRONTEND_EMAIL_BUILDER_NPM_MODULES): $(FRONTEND_EMAIL_BUILDER)/package.json
+	cd $(FRONTEND_EMAIL_BUILDER) && $(NPM) install
+	touch -c $(FRONTEND_EMAIL_BUILDER_NPM_MODULES)
 
 # Build the backend to ./listmonk.
 $(BIN): $(SRC) go.mod go.sum schema.sql $(SQL) permissions.json
-	CGO_ENABLED=0 go build -o ${BIN} -ldflags="-s -w -X 'main.buildString=${BUILDSTR}' -X 'main.versionString=${VERSION}'" cmd/*.go
+	CGO_ENABLED=0 go build -o ${BIN} -ldflags="-s -w -X 'github.com/knadh/listmonk/cmd.buildString=${BUILDSTR}' -X 'github.com/knadh/listmonk/cmd.versionString=${VERSION}'" .
 
 # Run the backend in dev mode. The frontend assets in dev mode are loaded from disk from frontend/dist.
 .PHONY: run
 run:
-	CGO_ENABLED=0 go run -ldflags="-s -w -X 'main.buildString=${BUILDSTR}' -X 'main.versionString=${VERSION}' -X 'main.frontendDir=frontend/dist'" cmd/*.go
+	CGO_ENABLED=0 go run -ldflags="-s -w -X 'github.com/knadh/listmonk/cmd.buildString=${BUILDSTR}' -X 'github.com/knadh/listmonk/cmd.versionString=${VERSION}' -X 'github.com/knadh/listmonk/cmd.frontendDir=frontend/dist'" .
 
 # Build the JS frontend into frontend/dist.
 $(FRONTEND_DIST): $(FRONTEND_DEPS)
-	export VUE_APP_VERSION="${VERSION}" && cd frontend && $(YARN) build
+	export VUE_APP_VERSION="${VERSION}" && cd frontend && $(NPM) run build
 	touch -c $(FRONTEND_DIST)
 
 # Build the JS email-builder dist.
 $(FRONTEND_EMAIL_BUILDER_DIST): $(FRONTEND_EMAIL_BUILDER_DEPS)
-	export VUE_APP_VERSION="${VERSION}" && cd $(FRONTEND_EMAIL_BUILDER) && $(YARN) build
+	export VUE_APP_VERSION="${VERSION}" && cd $(FRONTEND_EMAIL_BUILDER) && $(NPM) run build
 	touch -c $(FRONTEND_EMAIL_BUILDER_DIST)
 
 # Copy the build assets to frontend.
@@ -91,7 +91,7 @@ build-email-builder: $(FRONTEND_EMAIL_BUILDER_DIST_FINAL)
 # Run the JS frontend server in dev mode.
 .PHONY: run-frontend
 run-frontend: $(FRONTEND_EMAIL_BUILDER_DIST_FINAL)
-	export VUE_APP_VERSION="${VERSION}" && cd frontend && $(YARN) dev
+	export VUE_APP_VERSION="${VERSION}" && cd frontend && $(NPM) run dev
 
 # Run Go tests.
 .PHONY: test
@@ -134,7 +134,7 @@ dev-docker: build-dev-docker ## Build and spawns docker containers for the entir
 # Run the backend in docker-dev mode. The frontend assets in dev mode are loaded from disk from frontend/dist.
 .PHONY: run-backend-docker
 run-backend-docker:
-	CGO_ENABLED=0 go run -ldflags="-s -w -X 'main.buildString=${BUILDSTR}' -X 'main.versionString=${VERSION}' -X 'main.frontendDir=frontend/dist'" cmd/*.go --config=dev/config.toml
+	CGO_ENABLED=0 go run -ldflags="-s -w -X 'github.com/knadh/listmonk/cmd.buildString=${BUILDSTR}' -X 'github.com/knadh/listmonk/cmd.versionString=${VERSION}' -X 'github.com/knadh/listmonk/cmd.frontendDir=frontend/dist'" . --config=dev/config.toml
 
 # Tear down the complete local development docker suite.
 .PHONY: rm-dev-docker

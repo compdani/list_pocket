@@ -4,7 +4,7 @@
 SELECT * FROM subscribers WHERE
     CASE
         WHEN $1 > 0 THEN id = $1
-        WHEN $2 != '' THEN uuid = $2::UUID
+        WHEN $2 != '' THEN uuid = $2
         WHEN $3 != '' THEN email = $3
     END;
 
@@ -12,11 +12,11 @@ SELECT * FROM subscribers WHERE
 -- Used for checking access permission by list.
 SELECT s.id AS subscriber_id,
     CASE
-        WHEN EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = s.id AND sl.list_id = ANY($2))
+        WHEN EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = s.id AND sl.list_id IN $2)
         THEN TRUE
         ELSE FALSE
     END AS has
-FROM subscribers s WHERE s.id = ANY($1);
+FROM subscribers s WHERE s.id IN $1;
 
 -- name: get-subscribers-by-emails
 -- Get subscribers by emails.
@@ -30,12 +30,12 @@ SELECT * FROM lists
     LEFT JOIN subscriber_lists ON (lists.id = subscriber_lists.list_id)
     WHERE subscriber_id = (SELECT id FROM sub)
     -- Optional list IDs or UUIDs to filter.
-    AND (CASE WHEN CARDINALITY($3::INT[]) > 0 THEN id = ANY($3::INT[])
-          WHEN CARDINALITY($4::UUID[]) > 0 THEN uuid = ANY($4::UUID[])
+    AND (CASE WHEN CARDINALITY($3[]) > 0 THEN id IN $3[]
+          WHEN CARDINALITY($4[]) > 0 THEN uuid IN $4[]
           ELSE TRUE
     END)
-    AND (CASE WHEN $5 != '' THEN subscriber_lists.status = $5::subscription_status ELSE TRUE END)
-    AND (CASE WHEN $6 != '' THEN lists.optin = $6::list_optin ELSE TRUE END)
+    AND (CASE WHEN $5 != '' THEN subscriber_lists.status = $5 ELSE TRUE END)
+    AND (CASE WHEN $6 != '' THEN lists.optin = $6 ELSE TRUE END)
     ORDER BY id;
 
 -- name: get-subscriber-lists-lazy
@@ -50,15 +50,15 @@ WITH subs AS (
             (SELECT l FROM (
                 SELECT
                     subscriber_lists.status AS subscription_status,
-                    subscriber_lists.created_at AS subscription_created_at,
-                    subscriber_lists.updated_at AS subscription_updated_at,
+                    subscriber_lists.created AS subscription_created,
+                    subscriber_lists.updated AS subscription_updated,
                     subscriber_lists.meta AS subscription_meta,
                     lists.*
             ) l)
         )
     ) AS lists FROM lists
     LEFT JOIN subscriber_lists ON (subscriber_lists.list_id = lists.id)
-    WHERE subscriber_lists.subscriber_id = ANY($1)
+    WHERE subscriber_lists.subscriber_id IN $1
     GROUP BY subscriber_id
 )
 SELECT id as subscriber_id,
@@ -70,13 +70,13 @@ SELECT id as subscriber_id,
 -- name: get-subscriptions
 -- Retrieves all lists a subscriber is attached to.
 -- if $3 is set to true, all lists are fetched including the subscriber's subscriptions.
--- subscription_status, and subscription_created_at are null in that case.
+-- subscription_status, and subscription_created are null in that case.
 WITH sub AS (
     SELECT id FROM subscribers WHERE CASE WHEN $1 > 0 THEN id = $1 ELSE uuid = $2 END
 )
 SELECT lists.*,
     subscriber_lists.status as subscription_status,
-    subscriber_lists.created_at as subscription_created_at,
+    subscriber_lists.created as subscription_created,
     subscriber_lists.meta as subscription_meta
     FROM lists LEFT JOIN subscriber_lists
     ON (subscriber_lists.list_id = lists.id AND subscriber_lists.subscriber_id = (SELECT id FROM sub))
@@ -91,22 +91,22 @@ WITH sub AS (
 ),
 listIDs AS (
     SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($6::INT[]) > 0 THEN id=ANY($6)
-              ELSE uuid=ANY($7::UUID[]) END)
+        (CASE WHEN CARDINALITY($6[]) > 0 THEN id=ANY($6)
+              ELSE uuid=ANY($7[]) END)
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
     VALUES(
         (SELECT id FROM sub),
         UNNEST(ARRAY(SELECT id FROM listIDs)),
-        (CASE WHEN $4='blocklisted' THEN 'unsubscribed'::subscription_status ELSE $8::subscription_status END)
+        (CASE WHEN $4='blocklisted' THEN 'unsubscribed' ELSE $8 END)
     )
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
-        SET updated_at=NOW(),
+        SET updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
             status=(
                 CASE WHEN $4='blocklisted' OR (SELECT status FROM sub)='blocklisted'
-                THEN 'unsubscribed'::subscription_status
-                ELSE $8::subscription_status END
+                THEN 'unsubscribed'
+                ELSE $8 END
             )
 )
 SELECT id from sub;
@@ -121,15 +121,15 @@ WITH sub AS (
     DO UPDATE SET
         name=(CASE WHEN $7 THEN $3 ELSE s.name END),
         attribs=(CASE WHEN $7 THEN $4 ELSE s.attribs END),
-        updated_at=NOW()
+        updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     RETURNING uuid, id, status
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $6::subscription_status END
-    FROM sub, UNNEST($5::INT[]) AS listID
+    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $6 END
+    FROM sub, UNNEST($5[]) AS listID
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
-    SET updated_at = NOW(),
+    SET updated = strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
         status = CASE WHEN $8 THEN EXCLUDED.status ELSE subscriber_lists.status END
 )
 SELECT uuid, id from sub;
@@ -142,19 +142,19 @@ SELECT uuid, id from sub;
 WITH sub AS (
     INSERT INTO subscribers (uuid, email, name, attribs, status)
     VALUES($1, $2, $3, $4, 'blocklisted')
-    ON CONFLICT (email) DO UPDATE SET status='blocklisted', updated_at=NOW()
+    ON CONFLICT (email) DO UPDATE SET status='blocklisted', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     RETURNING id
 )
-UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
+UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     WHERE subscriber_id = (SELECT id FROM sub);
 
 -- name: update-subscriber
 UPDATE subscribers SET
     email=(CASE WHEN $2 != '' THEN $2 ELSE email END),
     name=(CASE WHEN $3 != '' THEN $3 ELSE name END),
-    status=(CASE WHEN $4 != '' THEN $4::subscriber_status ELSE status END),
-    attribs=(CASE WHEN $5 != '' THEN $5::JSONB ELSE attribs END),
-    updated_at=NOW()
+    status=(CASE WHEN $4 != '' THEN $4 ELSE status END),
+    attribs=(CASE WHEN $5 != '' THEN $5 ELSE attribs END),
+    updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
 WHERE id = $1;
 
 -- name: update-subscriber-with-lists
@@ -164,40 +164,40 @@ WITH s AS (
     UPDATE subscribers SET
         email=(CASE WHEN $2 != '' THEN $2 ELSE email END),
         name=(CASE WHEN $3 != '' THEN $3 ELSE name END),
-        status=(CASE WHEN $4 != '' THEN $4::subscriber_status ELSE status END),
-        attribs=(CASE WHEN $5 != '' THEN $5::JSONB ELSE attribs END),
-        updated_at=NOW()
+        status=(CASE WHEN $4 != '' THEN $4 ELSE status END),
+        attribs=(CASE WHEN $5 != '' THEN $5 ELSE attribs END),
+        updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     WHERE id = $1 RETURNING id
 ),
 listIDs AS (
     SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($6::INT[]) > 0 THEN id=ANY($6)
-              ELSE uuid=ANY($7::UUID[]) END)
+        (CASE WHEN CARDINALITY($6[]) > 0 THEN id=ANY($6)
+              ELSE uuid=ANY($7[]) END)
 ),
 d AS (
-    DELETE FROM subscriber_lists WHERE $9 = TRUE AND subscriber_id = $1 AND list_id != ALL(SELECT id FROM listIDs)
+    DELETE FROM subscriber_lists WHERE $9 = TRUE AND subscriber_id = $1 AND list_id NOT IN SELECT id FROM listIDs
 )
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
     VALUES(
         (SELECT id FROM s),
         UNNEST(ARRAY(SELECT id FROM listIDs)),
-        (CASE WHEN $4='blocklisted' THEN 'unsubscribed'::subscription_status ELSE $8::subscription_status END)
+        (CASE WHEN $4='blocklisted' THEN 'unsubscribed' ELSE $8 END)
     )
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET status = (
         CASE
-            WHEN $4='blocklisted' THEN 'unsubscribed'::subscription_status
+            WHEN $4='blocklisted' THEN 'unsubscribed'
             -- When subscriber is edited from the admin form, retain the status. Otherwise, a blocklisted
             -- subscriber when being re-enabled, their subscription statuses change.
             WHEN subscriber_lists.status = 'confirmed' THEN 'confirmed'
-            WHEN subscriber_lists.status = 'unsubscribed' THEN 'unsubscribed'::subscription_status
-            ELSE $8::subscription_status
+            WHEN subscriber_lists.status = 'unsubscribed' THEN 'unsubscribed'
+            ELSE $8
         END
     );
 
 -- name: delete-subscribers
 -- Delete one or more subscribers by ID or UUID.
-DELETE FROM subscribers WHERE CASE WHEN ARRAY_LENGTH($1::INT[], 1) > 0 THEN id = ANY($1) ELSE uuid = ANY($2::UUID[]) END;
+DELETE FROM subscribers WHERE CASE WHEN ARRAY_LENGTH($1[], 1) > 0 THEN id IN $1 ELSE uuid IN $2[] END;
 
 -- name: delete-blocklisted-subscribers
 DELETE FROM subscribers WHERE status = 'blocklisted';
@@ -208,40 +208,40 @@ DELETE FROM subscribers a WHERE NOT EXISTS
 
 -- name: blocklist-subscribers
 WITH b AS (
-    UPDATE subscribers SET status='blocklisted', updated_at=NOW()
-    WHERE id = ANY($1::INT[])
+    UPDATE subscribers SET status='blocklisted', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE id IN $1[]
 )
-UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
-    WHERE subscriber_id = ANY($1::INT[]);
+UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE subscriber_id IN $1[];
 
 -- name: add-subscribers-to-lists
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    (SELECT a, b, (CASE WHEN $3 != '' THEN $3::subscription_status ELSE 'unconfirmed' END) FROM UNNEST($1::INT[]) a, UNNEST($2::INT[]) b)
-    ON CONFLICT (subscriber_id, list_id) DO UPDATE SET status=(CASE WHEN $3 != '' THEN $3::subscription_status ELSE subscriber_lists.status END);
+    (SELECT a, b, (CASE WHEN $3 != '' THEN $3 ELSE 'unconfirmed' END) FROM UNNEST($1[]) a, UNNEST($2[]) b)
+    ON CONFLICT (subscriber_id, list_id) DO UPDATE SET status=(CASE WHEN $3 != '' THEN $3 ELSE subscriber_lists.status END);
 
 -- name: delete-subscriptions
 DELETE FROM subscriber_lists
-    WHERE (subscriber_id, list_id) = ANY(SELECT a, b FROM UNNEST($1::INT[]) a, UNNEST($2::INT[]) b);
+    WHERE (subscriber_id, list_id) IN SELECT a, b FROM UNNEST($1[] a, UNNEST($2[]) b);
 
 -- name: confirm-subscription-optin
 WITH subID AS (
-    SELECT id FROM subscribers WHERE uuid = $1::UUID
+    SELECT id FROM subscribers WHERE uuid = $1
 ),
 listIDs AS (
-    SELECT id FROM lists WHERE uuid = ANY($2::UUID[])
+    SELECT id FROM lists WHERE uuid IN $2[]
 )
-UPDATE subscriber_lists SET status='confirmed', meta=meta || $3, updated_at=NOW()
-    WHERE subscriber_id = (SELECT id FROM subID) AND list_id = ANY(SELECT id FROM listIDs);
+UPDATE subscriber_lists SET status='confirmed', meta=meta || $3, updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE subscriber_id = (SELECT id FROM subID) AND list_id IN SELECT id FROM listIDs;
 
 -- name: unsubscribe-subscribers-from-lists
 WITH listIDs AS (
     SELECT ARRAY(
         SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($2::INT[]) > 0 THEN id=ANY($2) ELSE uuid=ANY($3::UUID[]) END)
+        (CASE WHEN CARDINALITY($2[]) > 0 THEN id=ANY($2) ELSE uuid=ANY($3[]) END)
     ) id
 )
-UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
-    WHERE (subscriber_id, list_id) = ANY(SELECT a, b FROM UNNEST($1::INT[]) a, UNNEST((SELECT id FROM listIDs)) b);
+UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE (subscriber_id, list_id) IN SELECT a, b FROM UNNEST($1[] a, UNNEST((SELECT id FROM listIDs)) b);
 
 -- name: unsubscribe-by-campaign
 -- Unsubscribes a subscriber given a campaign UUID (from all the lists in the campaign) and the subscriber UUID.
@@ -256,17 +256,17 @@ sub AS (
     UPDATE subscribers SET status = (CASE WHEN $3 IS TRUE THEN 'blocklisted' ELSE status END)
     WHERE uuid = $2 RETURNING id
 )
-UPDATE subscriber_lists SET status = 'unsubscribed', updated_at=NOW() WHERE
+UPDATE subscriber_lists SET status = 'unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now') WHERE
     subscriber_id = (SELECT id FROM sub) AND status != 'unsubscribed' AND
     -- If $3 is false, unsubscribe from the campaign's lists, otherwise all lists.
-    CASE WHEN $3 IS FALSE THEN list_id = ANY(SELECT list_id FROM lists) ELSE list_id != 0 END;
+    CASE WHEN $3 IS FALSE THEN list_id IN SELECT list_id FROM lists ELSE list_id != 0 END;
 
 -- name: delete-unconfirmed-subscriptions
 WITH optins AS (
     SELECT id FROM lists WHERE optin = 'double'
 )
 DELETE FROM subscriber_lists
-    WHERE status = 'unconfirmed' AND list_id IN (SELECT id FROM optins) AND created_at < $1;
+    WHERE status = 'unconfirmed' AND list_id IN (SELECT id FROM optins) AND created < $1;
 
 
 -- Partial and RAW queries used to construct arbitrary subscriber
@@ -283,11 +283,11 @@ SELECT subscribers.* FROM subscribers
     LEFT JOIN subscriber_lists
     ON (
         -- Optional list filtering.
-        (CASE WHEN CARDINALITY($1::INT[]) > 0 THEN true ELSE false END)
+        (CASE WHEN CARDINALITY($1[]) > 0 THEN true ELSE false END)
         AND subscriber_lists.subscriber_id = subscribers.id
-        AND ($2 = '' OR subscriber_lists.status = $2::subscription_status)
+        AND ($2 = '' OR subscriber_lists.status = $2)
     )
-    WHERE (CARDINALITY($1) = 0 OR subscriber_lists.list_id = ANY($1::INT[]))
+    WHERE (CARDINALITY($1) = 0 OR subscriber_lists.list_id IN $1[])
     AND (CASE WHEN $3 != '' THEN name ~* $3 OR email ~* $3 ELSE TRUE END)
     AND %query%
     ORDER BY %order% OFFSET $4 LIMIT (CASE WHEN $5 < 1 THEN NULL ELSE $5 END);
@@ -298,19 +298,19 @@ SELECT COUNT(*) AS total FROM subscribers
     LEFT JOIN subscriber_lists
     ON (
         -- Optional list filtering.
-        (CASE WHEN CARDINALITY($1::INT[]) > 0 THEN true ELSE false END)
+        (CASE WHEN CARDINALITY($1[]) > 0 THEN true ELSE false END)
         AND subscriber_lists.subscriber_id = subscribers.id
-        AND ($2 = '' OR subscriber_lists.status = $2::subscription_status)
+        AND ($2 = '' OR subscriber_lists.status = $2)
     )
-    WHERE (CARDINALITY($1) = 0 OR subscriber_lists.list_id = ANY($1::INT[]))
+    WHERE (CARDINALITY($1) = 0 OR subscriber_lists.list_id IN $1[])
     AND (CASE WHEN $3 != '' THEN name ~* $3 OR email ~* $3 ELSE TRUE END)
     AND %query%;
 
 -- name: query-subscribers-count-all
 -- Cached query for getting the "all" subscriber count without arbitrary conditions.
 SELECT COALESCE(SUM(subscriber_count), 0) AS total FROM mat_list_subscriber_stats
-    WHERE list_id = ANY(CASE WHEN CARDINALITY($1::INT[]) > 0 THEN $1 ELSE '{0}' END)
-    AND ($2 = '' OR status = $2::subscription_status);
+    WHERE list_id IN CASE WHEN CARDINALITY($1[] > 0 THEN $1 ELSE '{0}' END)
+    AND ($2 = '' OR status = $2);
 
 -- name: query-subscribers-for-export
 -- raw: true
@@ -322,18 +322,18 @@ SELECT subscribers.id,
        subscribers.name,
        subscribers.status,
        subscribers.attribs,
-       subscribers.created_at,
-       subscribers.updated_at
+       subscribers.created,
+       subscribers.updated
        FROM subscribers
     LEFT JOIN subscriber_lists
     ON (
         -- Optional list filtering.
-        (CASE WHEN CARDINALITY($1::INT[]) > 0 THEN true ELSE false END)
+        (CASE WHEN CARDINALITY($1[]) > 0 THEN true ELSE false END)
         AND subscriber_lists.subscriber_id = subscribers.id
-        AND ($4 = '' OR subscriber_lists.status = $4::subscription_status)
+        AND ($4 = '' OR subscriber_lists.status = $4)
     )
-    WHERE subscriber_lists.list_id = ALL($1::INT[]) AND id > $2
-    AND (CASE WHEN CARDINALITY($3::INT[]) > 0 THEN id=ANY($3) ELSE true END)
+    WHERE subscriber_lists.list_id = ALL($1[]) AND id > $2
+    AND (CASE WHEN CARDINALITY($3[]) > 0 THEN id=ANY($3) ELSE true END)
     AND (CASE WHEN $5 != '' THEN name ~* $5 OR email ~* $5 ELSE TRUE END)
     AND %query%
     ORDER BY subscribers.id ASC LIMIT (CASE WHEN $6 < 1 THEN NULL ELSE $6 END);
@@ -351,11 +351,11 @@ SELECT subscribers.id FROM subscribers
 LEFT JOIN subscriber_lists
 ON (
     -- Optional list filtering.
-    (CASE WHEN CARDINALITY($2::INT[]) > 0 THEN true ELSE false END)
+    (CASE WHEN CARDINALITY($2[]) > 0 THEN true ELSE false END)
     AND subscriber_lists.subscriber_id = subscribers.id
-    AND ($3 = '' OR subscriber_lists.status = $3::subscription_status)
+    AND ($3 = '' OR subscriber_lists.status = $3)
 )
-WHERE subscriber_lists.list_id = ALL($2::INT[])
+WHERE subscriber_lists.list_id = ALL($2[])
     AND (CASE WHEN $4 != '' THEN name ~* $4 OR email ~* $4 ELSE TRUE END)
     AND %query%
 LIMIT (CASE WHEN $1 THEN 1 END)
@@ -369,42 +369,42 @@ DELETE FROM subscribers WHERE id=ANY(SELECT id FROM subs);
 -- raw: true
 WITH subs AS (%query%),
 b AS (
-    UPDATE subscribers SET status='blocklisted', updated_at=NOW()
-    WHERE id = ANY(SELECT id FROM subs)
+    UPDATE subscribers SET status='blocklisted', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE id IN SELECT id FROM subs
 )
-UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
-    WHERE subscriber_id = ANY(SELECT id FROM subs);
+UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE subscriber_id IN SELECT id FROM subs;
 
 -- name: add-subscribers-to-lists-by-query
 -- raw: true
 WITH subs AS (%query%)
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    (SELECT a, b, (CASE WHEN $6 != '' THEN $6::subscription_status ELSE 'unconfirmed' END) FROM UNNEST(ARRAY(SELECT id FROM subs)) a, UNNEST($5::INT[]) b)
+    (SELECT a, b, (CASE WHEN $6 != '' THEN $6 ELSE 'unconfirmed' END) FROM UNNEST(ARRAY(SELECT id FROM subs)) a, UNNEST($5[]) b)
     ON CONFLICT (subscriber_id, list_id) DO NOTHING;
 
 -- name: delete-subscriptions-by-query
 -- raw: true
 WITH subs AS (%query%)
 DELETE FROM subscriber_lists
-    WHERE (subscriber_id, list_id) = ANY(SELECT a, b FROM UNNEST(ARRAY(SELECT id FROM subs)) a, UNNEST($5::INT[]) b);
+    WHERE (subscriber_id, list_id) IN SELECT a, b FROM UNNEST(ARRAY(SELECT id FROM subs) a, UNNEST($5[]) b);
 
 -- name: unsubscribe-subscribers-from-lists-by-query
 -- raw: true
 WITH subs AS (%query%)
-UPDATE subscriber_lists SET status='unsubscribed', updated_at=NOW()
-    WHERE (subscriber_id, list_id) = ANY(SELECT a, b FROM UNNEST(ARRAY(SELECT id FROM subs)) a, UNNEST($5::INT[]) b);
+UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+    WHERE (subscriber_id, list_id) IN SELECT a, b FROM UNNEST(ARRAY(SELECT id FROM subs) a, UNNEST($5[]) b);
 
 
 -- privacy
 -- name: export-subscriber-data
 WITH prof AS (
-    SELECT id, uuid, email, name, attribs, status, created_at, updated_at FROM subscribers WHERE
+    SELECT id, uuid, email, name, attribs, status, created, updated FROM subscribers WHERE
     CASE WHEN $1 > 0 THEN id = $1 ELSE uuid = $2 END
 ),
 subs AS (
     SELECT subscriber_lists.status AS subscription_status,
             (CASE WHEN lists.type = 'private' THEN 'Private list' ELSE lists.name END) as name,
-            lists.type, subscriber_lists.created_at
+            lists.type, subscriber_lists.created
     FROM lists
     LEFT JOIN subscriber_lists ON (subscriber_lists.list_id = lists.id)
     WHERE subscriber_lists.subscriber_id = (SELECT id FROM prof)
@@ -437,7 +437,7 @@ WITH views AS (
         c.name,
         c.subject,
         COUNT(*) as view_count,
-        MAX(cv.created_at) as last_viewed_at
+        MAX(cv.created) as last_viewed_at
     FROM campaign_views cv
     LEFT JOIN campaigns c ON c.id = cv.campaign_id
     WHERE cv.subscriber_id = $1
@@ -453,7 +453,7 @@ clicks AS (
         c.name as campaign_name,
         c.subject as campaign_subject,
         COUNT(*) as click_count,
-        MAX(lc.created_at) as last_clicked_at
+        MAX(lc.created) as last_clicked_at
     FROM link_clicks lc
     LEFT JOIN links l ON l.id = lc.link_id
     LEFT JOIN campaigns c ON c.id = lc.campaign_id

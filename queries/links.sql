@@ -12,7 +12,7 @@ WITH link AS(
 INSERT INTO link_clicks (campaign_id, subscriber_id, link_id) VALUES(
     (SELECT id FROM campaigns WHERE uuid = $2),
     (SELECT id FROM subscribers WHERE
-        (CASE WHEN $3::TEXT != '' THEN subscribers.uuid = $3::UUID ELSE FALSE END)
+        (CASE WHEN $3 != '' THEN subscribers.uuid = $3 ELSE FALSE END)
     ),
     (SELECT id FROM link)
 ) RETURNING (SELECT url FROM link);

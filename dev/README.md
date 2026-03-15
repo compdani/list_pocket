@@ -58,5 +58,5 @@ make rm-dev-docker
 - Backend: Anytime you do a change to the Go app, it needs to be compiled. Just
   run `make dev-docker` again and that should automatically handle it for you.
 - Frontend: Anytime you change the frontend code, you don't need to do anything.
-  Since `yarn` is watching for all the changes and we have mounted the code
-  inside the docker container, `yarn` server automatically restarts.
+  Since `npm run dev` is watching for all the changes and we have mounted the code
+  inside the docker container, the frontend server automatically restarts.

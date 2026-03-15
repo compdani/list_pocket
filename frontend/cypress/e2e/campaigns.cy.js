@@ -101,7 +101,7 @@ describe('Campaigns', () => {
     cy.wait(250);
 
     // Verify the changes.
-    cy.request(`${apiUrl}/api/campaigns/1`).should((response) => {
+    cy.request(`${apiUrl}/mailapi/campaigns/1`).should((response) => {
       const { data } = response.body;
       expect(data.status).to.equal('scheduled');
       expect(data.name).to.equal('new-name');
@@ -245,7 +245,7 @@ describe('Campaigns', () => {
         // Verify the changes.
         (function (n) {
           cy.location('pathname').then((p) => {
-            cy.request(`${apiUrl}/api/campaigns/${p.split('/').at(-1)}`).should((response) => {
+            cy.request(`${apiUrl}/mailapi/campaigns/${p.split('/').at(-1)}`).should((response) => {
               const { data } = response.body;
               expect(data.status).to.equal('draft');
               expect(data.name).to.equal(`name${n}`);
@@ -335,7 +335,7 @@ describe('Campaigns', () => {
     });
 
     // Fetch the campaigns API and verfiy the values that couldn't be verified on the table UI.
-    cy.request(`${apiUrl}/api/campaigns?order=asc&order_by=created_at`).should((response) => {
+    cy.request(`${apiUrl}/mailapi/campaigns?order=asc&order_by=created_at`).should((response) => {
       const { data } = response.body;
       expect(data.total).to.equal(lists.length * cTypes.length);
 
@@ -393,7 +393,7 @@ describe('Campaigns', () => {
 
     // Create 30 in a loop.
     for (let i = 0; i < 30; i += 1) {
-      cy.request('POST', `${apiUrl}/api/campaigns`, params);
+      cy.request('POST', `${apiUrl}/mailapi/campaigns`, params);
     }
 
     cy.loginAndVisit('/admin/campaigns');
@@ -410,7 +410,7 @@ describe('Campaigns', () => {
     // Bulk delete with the selected IDs.
     // Create 5 campaigns in a loop.
     for (let i = 0; i < 5; i += 1) {
-      cy.request('POST', `${apiUrl}/api/campaigns`, params);
+      cy.request('POST', `${apiUrl}/mailapi/campaigns`, params);
     }
 
     cy.visit('/admin/campaigns');

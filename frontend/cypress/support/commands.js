@@ -59,7 +59,7 @@ Cypress.Commands.add('waitForBackend', () => {
   // Keep trying until backend responds successfully
   cy.waitUntil(
     () => cy.request({
-      url: '/api/health',
+      url: '/mailapi/health',
       failOnStatusCode: false,
     }).then((res) =>
       // Re-enable exception handling once backend is healthy

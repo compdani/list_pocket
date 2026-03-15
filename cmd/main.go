@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	_ "github.com/knadh/listmonk/internal/migrations"
 
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
@@ -30,6 +33,7 @@ import (
 	"github.com/knadh/paginator"
 	"github.com/knadh/stuffbin"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 )
 
 // App contains the "global" shared components, controllers and fields.
@@ -54,6 +58,7 @@ type App struct {
 	log        *log.Logger
 	bufLog     *buflog.BufLog
 	pb         *pocketbase.PocketBase
+	tpl        *template.Template
 
 	about         about
 	fnOptinNotify func(models.Subscriber, []int) (int, error)
@@ -138,9 +143,15 @@ func init() {
 		lo.Fatalf("error loading config from env: %v", err)
 	}
 
-	// Initialize PocketBase and source the SQL-compatible handle from it.
+	// Initialize PocketBase.
 	pb = initPocketBase()
-	db = initDB(pb)
+	migratecmd.MustRegister(pb, pb.RootCmd, migratecmd.Config{
+		// enable auto creation of migration files when making collection changes in the Dashboard
+		// (the IsProbablyGoRun check is to enable it only during development)
+		Automigrate: false, // disable automigrate to prevent accidental migration file creation in production
+	})
+
+	db = initDB()
 
 	// Initialize the embedded filesystem with static assets.
 	fs = initFS(appDir, frontendDir, ko.String("static-dir"), ko.String("i18n-dir"))
@@ -148,38 +159,13 @@ func init() {
 	// Installer mode? This runs before the SQL queries are loaded and prepared
 	// as the installer needs to work on an empty DB.
 	if ko.Bool("install") {
-		// Save the version of the last listed migration.
-		install(migList[len(migList)-1].version, db, fs, !ko.Bool("yes"), ko.Bool("idempotent"))
+		lo.Printf("PocketBase mode: app migrations are applied automatically on startup; skipping --install")
 		os.Exit(0)
-	}
-
-	// Is this a nightly build?
-	isNightly := strings.Contains(versionString, "nightly")
-
-	// Check if the DB schema is installed.
-	if ok, err := checkSchema(db); err != nil {
-		log.Fatalf("error checking schema in DB: %v", err)
-	} else if !ok {
-		lo.Fatal("the database does not appear to be setup. Run --install.")
 	}
 
 	if ko.Bool("upgrade") {
-		// Even on explicit upgrade runs, for nightly builds, do not record the last
-		// migration version in the DB.
-		lo.Printf("running upgrade...")
-		upgrade(db, fs, !ko.Bool("yes"), !isNightly)
+		lo.Printf("PocketBase mode: app migrations are applied automatically on startup; skipping --upgrade")
 		os.Exit(0)
-	}
-
-	// For nightly builds, always auto-run pending migrations without
-	// recording the last version in the DB. Migrations are idempotent, and between
-	// nightly releases, they may change multiple times.
-	if isNightly {
-		lo.Printf("auto-running all migrations for nightly %s since last major version", versionString)
-		upgrade(db, fs, false, false)
-	} else {
-		// Before the queries are prepared, see if there are pending upgrades.
-		checkUpgrade(db)
 	}
 
 	// Read the SQL queries from the queries file.
@@ -217,13 +203,10 @@ func main() {
 		msgrs = append(initSMTPMessengers(), initPostbackMessengers(ko)...)
 
 		// Campaign manager.
-		mgr = initCampaignManager(msgrs, queries, urlCfg, core, media, i18n, ko)
+		mgr = initCampaignManager(msgrs, queries, db, urlCfg, core, media, i18n, ko)
 
 		// Bulk importer.
 		importer = initImporter(queries, db, core, i18n, ko)
-
-		// Initialize the auth manager.
-		hasUsers, auth = initAuth(core, db.DB.DB, ko)
 
 		// Initialize the webhook/POP3 bounce processor.
 		bounce *bounce.Manager
@@ -263,7 +246,11 @@ func main() {
 
 	// Start the campaign manager workers. The campaign batches (fetch from DB, push out
 	// messages) get processed at the specified interval.
-	go mgr.Run()
+	if ko.Bool("passive") {
+		lo.Println("running in passive mode. won't process campaigns.")
+	} else {
+		go mgr.Run()
+	}
 
 	// =========================================================================
 	// Initialize the App{} with all the global shared components, controllers and fields.
@@ -278,7 +265,6 @@ func main() {
 		messengers: msgrs,
 		emailMsgr:  emailMsgr,
 		importer:   importer,
-		auth:       auth,
 		media:      media,
 		bounce:     bounce,
 		captcha:    initCaptcha(),
@@ -300,8 +286,8 @@ func main() {
 		about:         initAbout(queries, db),
 		chReload:      chReload,
 
-		// If there are no users, then the app needs to prompt for new user setup.
-		needsUserSetup: !hasUsers,
+		// TODO: Needs to be moved to checking with pocketbase users collection for existence of user records. If no user records, then it's a first time installation and needs user setup.
+		needsUserSetup: false,
 	}
 
 	// Star the update checker.

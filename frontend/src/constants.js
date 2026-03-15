@@ -27,12 +27,12 @@ const rootURL = import.meta.env.VUE_APP_ROOT_URL || '/';
 const baseURL = import.meta.env.BASE_URL.replace(/\/$/, '');
 
 export const uris = Object.freeze({
-  previewCampaign: '/api/campaigns/:id/preview',
-  previewCampaignArchive: '/api/campaigns/:id/preview/archive',
-  previewTemplate: '/api/templates/:id/preview',
-  previewRawTemplate: '/api/templates/preview',
-  exportSubscribers: '/api/subscribers/export',
-  errorEvents: '/api/events?type=error',
+  previewCampaign: '/mailapi/campaigns/:id/preview',
+  previewCampaignArchive: '/mailapi/campaigns/:id/preview/archive',
+  previewTemplate: '/mailapi/templates/:id/preview',
+  previewRawTemplate: '/mailapi/templates/preview',
+  exportSubscribers: '/mailapi/subscribers/export',
+  errorEvents: '/mailapi/events?type=error',
   base: `${baseURL}/static`,
   root: rootURL,
   static: `${baseURL}/static`,

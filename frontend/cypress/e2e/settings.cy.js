@@ -34,7 +34,7 @@ describe('Settings', () => {
 
   it('Verify settings change', () => {
     // Verify the changes.
-    cy.request(`${apiUrl}/api/settings`).should((response) => {
+    cy.request(`${apiUrl}/mailapi/settings`).should((response) => {
       const { data } = response.body;
       expect(data['app.root_url']).to.equal(rootURL);
       expect(data['app.favicon_url']).to.equal(faveURL);
