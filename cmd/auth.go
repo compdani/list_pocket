@@ -21,7 +21,6 @@ import (
 	"github.com/knadh/listmonk/models"
 	"github.com/labstack/echo/v4"
 	"github.com/pquerna/otp/totp"
-	"github.com/zerodha/simplesessions/v3"
 	"gopkg.in/volatiletech/null.v6"
 )
 
@@ -166,13 +165,8 @@ func (a *App) TwofaPage(c echo.Context) error {
 
 // Logout logs a user out.
 func (a *App) Logout(c echo.Context) error {
-	// Delete the session from the DB and cookie when available.
-	if v := c.Get(auth.SessionKey); v != nil {
-		if sess, ok := v.(*simplesessions.Session); ok && sess != nil {
-			_ = sess.Destroy()
-		}
-	}
-
+	// API auth is token-based via PocketBase. Logout is handled by clearing
+	// the token on the client and does not depend on server-side sessions.
 	return c.JSON(http.StatusOK, okResp{true})
 }
 

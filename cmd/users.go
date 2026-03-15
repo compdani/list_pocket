@@ -84,9 +84,18 @@ func (a *App) CreateUser(c echo.Context) error {
 		u.Name = u.Username
 	}
 
-	// Create the user in the DB.
+	// Write auth credentials/status to PocketBase first.
+	authRec, err := a.auth.UpsertUserAuthRecord(u, "")
+	if err != nil {
+		return err
+	}
+
+	// Create the user in the DB and then mirror role/user metadata back to PocketBase.
 	user, err := a.core.CreateUser(u)
 	if err != nil {
+		if authRec != nil {
+			_ = a.pb.Delete(authRec)
+		}
 		return err
 	}
 
@@ -100,7 +109,7 @@ func (a *App) CreateUser(c echo.Context) error {
 		return err
 	}
 
-	if err := a.auth.SyncUser(user); err != nil {
+	if _, err := a.auth.UpsertUserAuthRecord(user, u.Username); err != nil {
 		return err
 	}
 
@@ -168,9 +177,20 @@ func (a *App) UpdateUser(c echo.Context) error {
 		u.Name = u.Username
 	}
 
-	// Update the user in the DB.
+	oldUser, err := a.core.GetUser(id, "", "")
+	if err != nil {
+		return err
+	}
+
+	// Write auth credentials/status to PocketBase first.
+	if _, err := a.auth.UpsertUserAuthRecord(u, oldUser.Username); err != nil {
+		return err
+	}
+
+	// Update the user in the DB and then mirror role/user metadata back to PocketBase.
 	user, err := a.core.UpdateUser(id, u)
 	if err != nil {
+		_ = a.auth.SyncUser(oldUser)
 		return err
 	}
 
@@ -182,7 +202,7 @@ func (a *App) UpdateUser(c echo.Context) error {
 		return err
 	}
 
-	if err := a.auth.SyncUser(user); err != nil {
+	if _, err := a.auth.UpsertUserAuthRecord(user, oldUser.Username); err != nil {
 		return err
 	}
 
