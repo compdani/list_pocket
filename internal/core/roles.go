@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/knadh/listmonk/internal/auth"
+	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	"github.com/pocketbase/dbx"
@@ -100,6 +100,31 @@ func parseIntVal(raw any) int {
 	default:
 		return 0
 	}
+}
+
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	if len(a) == 0 {
+		return true
+	}
+
+	seen := make(map[string]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+
+	for _, v := range b {
+		n, ok := seen[v]
+		if !ok || n == 0 {
+			return false
+		}
+		seen[v]--
+	}
+
+	return true
 }
 
 func (c *Core) useSQLRoleStore() bool {
@@ -224,6 +249,16 @@ func (c *Core) nextRoleLegacyID() (int, error) {
 
 // GetRoles retrieves all roles.
 func (c *Core) GetRoles() ([]auth.Role, error) {
+	if c.useSQLRoleStore() {
+		out := []auth.Role{}
+		if err := c.q.GetUserRoles.Select(&out, 0); err != nil {
+			return nil, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", pqErrMsg(err)))
+		}
+
+		return out, nil
+	}
+
 	if err := c.ensureRolesCollection(); err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", err.Error()))
@@ -285,6 +320,16 @@ func (c *Core) GetRole(id int) (auth.Role, error) {
 
 // GetListRoles retrieves all list roles.
 func (c *Core) GetListRoles() ([]auth.ListRole, error) {
+	if c.useSQLRoleStore() {
+		out := []auth.ListRole{}
+		if err := c.q.GetListRoles.Select(&out); err != nil {
+			return nil, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", pqErrMsg(err)))
+		}
+
+		return out, nil
+	}
+
 	if err := c.ensureRolesCollection(); err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", err.Error()))
@@ -396,6 +441,13 @@ func (c *Core) CreateRole(r auth.Role) (auth.Role, error) {
 			"name": r.Name.String,
 		})
 		if err == nil && rec != nil {
+			if !sameStringSet(parsePermissions(rec.Get("permissions")), []string(r.Permissions)) {
+				rec.Set("permissions", []string(r.Permissions))
+				if saveErr := pb.Save(rec); saveErr != nil {
+					return auth.Role{}, echo.NewHTTPError(http.StatusInternalServerError,
+						c.i18n.Ts("globals.messages.errorUpdating", "name", "{users.role}", "error", saveErr.Error()))
+				}
+			}
 			return roleFromRecord(rec), nil
 		}
 	}
@@ -418,6 +470,17 @@ func (c *Core) CreateRole(r auth.Role) (auth.Role, error) {
 	rec.Set("permissions", []string(r.Permissions))
 
 	if err := pb.Save(rec); err != nil {
+		if isRoleNameUniqueErr(err) && r.Name.Valid {
+			roles, getErr := c.GetRoles()
+			if getErr == nil {
+				for _, role := range roles {
+					if role.Name.Valid && role.Name.String == r.Name.String {
+						return role, nil
+					}
+				}
+			}
+		}
+
 		return auth.Role{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
 	}

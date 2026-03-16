@@ -3,7 +3,7 @@ package media
 import (
 	"io"
 
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/models"
 	"gopkg.in/volatiletech/null.v6"
 )
 

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/models"
 )
 
 type sendgridNotif struct {

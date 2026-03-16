@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/knadh/listmonk/internal/auth"
+	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/labstack/echo/v4"
 )
 
@@ -97,7 +97,7 @@ func (a *App) UpdateUserRole(c echo.Context) error {
 	}
 
 	// Cache API tokens for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 
@@ -134,7 +134,7 @@ func (a *App) UpdateListRole(c echo.Context) error {
 	}
 
 	// Cache API tokens for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 
@@ -157,7 +157,7 @@ func (a *App) DeleteRole(c echo.Context) error {
 	}
 
 	// Cache API tokens for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 

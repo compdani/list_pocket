@@ -74,15 +74,16 @@ function getErrorMessage(err) {
 async function send(method, url, data, config = {}) {
   setLoading(config, true);
 
-  const requestURL = url.startsWith('/api/')
+  const baseRequestURL = url.startsWith('/api/')
     ? `/mailapi/${url.slice('/api/'.length)}`
     : url;
+  const requestURL = config.params
+    ? `${baseRequestURL}${baseRequestURL.includes('?') ? '&' : '?'}${qs.stringify(config.params, { arrayFormat: 'repeat' })}`
+    : baseRequestURL;
 
   try {
     const requestConfig = {
       method,
-      query: config.params,
-      paramsSerializer: (params) => qs.stringify(params, { arrayFormat: 'repeat' }),
     };
 
     if (data !== undefined) {
@@ -127,6 +128,48 @@ const http = {
 
 export const getAuthToken = () => pb.authStore.token;
 export const clearAuthToken = () => pb.authStore.clear();
+export const getAuthRecord = () => pb.authStore.record;
+
+function normalizeAuthProfile(profile) {
+  if (!profile) {
+    return profile;
+  }
+
+  const normalized = utils.camelKeys(profile);
+  if (!normalized.userRole) {
+    normalized.userRole = { id: 0, permissions: [] };
+  }
+  if (!Array.isArray(normalized.userRole.permissions)) {
+    normalized.userRole.permissions = [];
+  }
+  if (!normalized.listRole) {
+    normalized.listRole = { lists: [] };
+  }
+  if (!Array.isArray(normalized.listRole.lists)) {
+    normalized.listRole.lists = [];
+  }
+
+  return normalized;
+}
+
+function syncAuthProfile(profile) {
+  const normalized = normalizeAuthProfile(profile);
+  if (!normalized || !pb.authStore.record) {
+    return normalized;
+  }
+
+  pb.authStore.save(pb.authStore.token, {
+    ...pb.authStore.record,
+    profile: normalized,
+  });
+
+  store.commit('setModelResponse', { model: models.profile, data: normalized });
+  return normalized;
+}
+
+export const getStoredUserProfile = () => syncAuthProfile(pb.authStore.record && pb.authStore.record.profile
+  ? pb.authStore.record.profile
+  : null);
 
 // Authenticate with PocketBase using username/password
 export const login = async (username, password) => {
@@ -511,12 +554,6 @@ export const getLang = async (lang) => http.get(
 
 export const logout = async () => {
   pb.authStore.clear();
-  // Optionally notify backend
-  try {
-    await http.post('/api/logout', {}, { disableToast: true });
-  } catch (err) {
-    // Ignore errors on logout
-  }
 };
 
 export const deleteGCCampaignAnalytics = async (typ, beforeDate) => http.delete(
@@ -573,16 +610,18 @@ export const deleteUser = (id) => http.delete(
   { loading: models.users },
 );
 
-export const getUserProfile = () => http.get(
+export const getUserProfile = () => Promise.resolve(getStoredUserProfile());
+
+export const refreshUserProfile = () => http.get(
   '/api/profile',
   { loading: models.users, store: models.profile },
-);
+).then((profile) => syncAuthProfile(profile));
 
 export const updateUserProfile = (data) => http.put(
   '/api/profile',
   data,
   { loading: models.users, store: models.profile },
-);
+).then((profile) => syncAuthProfile(profile));
 
 export const getUserRoles = async () => http.get(
   '/api/roles/users',

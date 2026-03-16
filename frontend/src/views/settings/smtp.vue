@@ -165,7 +165,7 @@
             </div>
             <hr />
 
-            <form @submit.prevent="() => doSMTPTest(item, n)">
+            <div>
               <div class="columns">
                 <template v-if="smtpTestItem === n">
                   <div class="column is-5">
@@ -197,7 +197,7 @@
                   <b-input v-model="errMsg" type="textarea" custom-class="has-text-danger is-size-6" readonly />
                 </b-field>
               </div>
-            </form><!-- smtp test -->
+            </div><!-- smtp test -->
           </div>
         </div><!-- second container column -->
       </div><!-- block -->

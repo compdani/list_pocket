@@ -22,7 +22,6 @@ const (
 const (
 	// UserHTTPCtxKey is the key on which the User profile is set on echo handlers.
 	UserHTTPCtxKey       = "auth_user"
-	SessionKey           = "auth_session"
 	AuthRecordHTTPCtxKey = "auth_record"
 )
 
@@ -271,6 +270,11 @@ func (u *User) GetPermittedLists(types PermType) (bool, []int) {
 func (u *User) FilterListsByPerm(types PermType, listIDs []int) []int {
 	if types == 0 {
 		return nil
+	}
+
+	// Short-circuit if the user is the primordial super admin.
+	if u.UserRoleID == SuperAdminRoleID {
+		return listIDs
 	}
 
 	var (

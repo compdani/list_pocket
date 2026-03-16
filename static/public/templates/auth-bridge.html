@@ -1,0 +1,18 @@
+{{ define "admin-auth-bridge" }}
+{{ template "header" .}}
+
+<section class="login">
+	<h2>{{ .L.T "users.login" }}</h2>
+	<p>Signing you in...</p>
+</section>
+
+<script>
+	(function() {
+		var payload = {{ .Data.PayloadJSON }};
+		window.localStorage.setItem('pocketbase_auth', JSON.stringify(payload));
+		window.location.replace({{ printf "%q" .Data.NextURI }});
+	})();
+</script>
+
+{{ template "footer" .}}
+{{ end }}
