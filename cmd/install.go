@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/pbdb"
-	"github.com/knadh/listmonk/internal/utils"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/utils"
+	"github.com/compdani/list_pocket/models"
 	"github.com/knadh/stuffbin"
 	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
@@ -77,9 +77,9 @@ func install(lastVer string, db *pbdb.DB, fs stuffbin.FileSystem, prompt, idempo
 
 	// Setup admin user optionally.
 	var (
-		user     = os.Getenv("LISTMONK_ADMIN_USER")
-		password = os.Getenv("LISTMONK_ADMIN_PASSWORD")
-		apiUser  = os.Getenv("LISTMONK_ADMIN_API_USER")
+		user     = os.Getenv("LISTPOCKET_ADMIN_USER")
+		password = os.Getenv("LISTPOCKET_ADMIN_PASSWORD")
+		apiUser  = os.Getenv("LISTPOCKET_ADMIN_API_USER")
 
 		hasUser = false
 	)
@@ -87,7 +87,7 @@ func install(lastVer string, db *pbdb.DB, fs stuffbin.FileSystem, prompt, idempo
 	// Admin user.
 	if user != "" && password != "" {
 		if len(user) < 3 || len(password) < 8 {
-			lo.Fatal("LISTMONK_ADMIN_USER should be min 3 chars and LISTMONK_ADMIN_PASSWORD should be min 8 chars")
+			lo.Fatal("LISTPOCKET_ADMIN_USER should be min 3 chars and LISTPOCKET_ADMIN_PASSWORD should be min 8 chars")
 		}
 
 		lo.Printf("creating superadmin user '%s'", user)
@@ -99,11 +99,11 @@ func install(lastVer string, db *pbdb.DB, fs stuffbin.FileSystem, prompt, idempo
 	// API User.
 	if apiUser != "" {
 		if !hasUser {
-			lo.Fatal("LISTMONK_ADMIN_API_USER requires LISTMONK_ADMIN_USER and LISTMONK_ADMIN_PASSWORD to be set")
+			lo.Fatal("LISTPOCKET_ADMIN_API_USER requires LISTPOCKET_ADMIN_USER and LISTPOCKET_ADMIN_PASSWORD to be set")
 		}
 
 		if len(apiUser) < 3 {
-			lo.Fatal("LISTMONK_ADMIN_API_USER should be min 3 chars")
+			lo.Fatal("LISTPOCKET_ADMIN_API_USER should be min 3 chars")
 		}
 
 		lo.Printf("creating superadmin API user '%s'", apiUser)
@@ -245,7 +245,7 @@ func installCampaign(campTplID, archiveTplID int, q *models.Queries) {
 	if _, err := q.CreateCampaign.Exec(uuid.Must(uuid.NewV4()),
 		models.CampaignTypeRegular,
 		"Test campaign",
-		"Welcome to listmonk",
+		"Welcome to listpocket",
 		"No Reply <noreply@yoursite.com>",
 		`<h3>Hi {{ .Subscriber.FirstName }}!</h3>
 		<p>This is a test e-mail campaign. Your second name is {{ .Subscriber.LastName }} and you are from {{ .Subscriber.Attribs.city }}.</p>
@@ -265,7 +265,7 @@ func installCampaign(campTplID, archiveTplID int, q *models.Queries) {
 		campTplID,
 		pq.Int64Array{1},
 		false,
-		"welcome-to-listmonk",
+		"welcome-to-listpocket",
 		archiveTplID,
 		`{"name": "Subscriber"}`,
 		nil,
@@ -328,7 +328,7 @@ func installUser(username, password, apiUsername string, q *models.Queries) {
 	}
 
 	// Create the admin user.
-	if _, err := q.CreateUser.Exec(username, true, password, username+"@listmonk", username, auth.RoleTypeUser, role.ID, nil, auth.UserStatusEnabled); err != nil {
+	if _, err := q.CreateUser.Exec(username, true, password, username+"@listpocket", username, auth.RoleTypeUser, role.ID, nil, auth.UserStatusEnabled); err != nil {
 		lo.Fatalf("error creating superadmin user: %v", err)
 	}
 
@@ -350,7 +350,7 @@ func installUser(username, password, apiUsername string, q *models.Queries) {
 		}
 
 		// Print the token to stdout so that it can be grepped out.
-		lo.Println("writing API token LISTMONK_ADMIN_API_TOKEN to stderr")
-		fmt.Fprintf(os.Stderr, "export LISTMONK_ADMIN_API_TOKEN=\"%s\"\n", tk)
+		lo.Println("writing API token LISTPOCKET_ADMIN_API_TOKEN to stderr")
+		fmt.Fprintf(os.Stderr, "export LISTPOCKET_ADMIN_API_TOKEN=\"%s\"\n", tk)
 	}
 }

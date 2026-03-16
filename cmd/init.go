@@ -23,6 +23,22 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/bounce"
+	"github.com/compdani/list_pocket/internal/bounce/mailbox"
+	"github.com/compdani/list_pocket/internal/captcha"
+	"github.com/compdani/list_pocket/internal/core"
+	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/manager"
+	"github.com/compdani/list_pocket/internal/media"
+	"github.com/compdani/list_pocket/internal/media/providers/filesystem"
+	"github.com/compdani/list_pocket/internal/media/providers/s3"
+	"github.com/compdani/list_pocket/internal/messenger/email"
+	"github.com/compdani/list_pocket/internal/messenger/postback"
+	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/subimporter"
+	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
 	"github.com/knadh/goyesql/v2"
 	koanfmaps "github.com/knadh/koanf/maps"
@@ -31,30 +47,12 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
 	"github.com/knadh/koanf/v2"
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/bounce"
-	"github.com/knadh/listmonk/internal/bounce/mailbox"
-	"github.com/knadh/listmonk/internal/captcha"
-	"github.com/knadh/listmonk/internal/core"
-	"github.com/knadh/listmonk/internal/i18n"
-	"github.com/knadh/listmonk/internal/manager"
-	"github.com/knadh/listmonk/internal/media"
-	"github.com/knadh/listmonk/internal/media/providers/filesystem"
-	"github.com/knadh/listmonk/internal/media/providers/s3"
-	"github.com/knadh/listmonk/internal/messenger/email"
-	"github.com/knadh/listmonk/internal/messenger/postback"
-	"github.com/knadh/listmonk/internal/notifs"
-	"github.com/knadh/listmonk/internal/pbdb"
-	"github.com/knadh/listmonk/internal/subimporter"
-	"github.com/knadh/listmonk/models"
 	"github.com/knadh/stuffbin"
 	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/cron"
 	flag "github.com/spf13/pflag"
-	"gopkg.in/volatiletech/null.v6"
 )
 
 const (
@@ -543,11 +541,21 @@ func initSettings(query string, db *pbdb.DB, ko *koanf.Koanf) {
 		if out, ok, err := getPBSettings(pb); err != nil {
 			lo.Fatalf("error reading settings from PocketBase: %v", err)
 		} else if ok {
-			s = out
+			if isLegacyPBSettingsBlob(out) {
+				b, err := makeDefaultPBSettings(ko)
+				if err != nil {
+					lo.Fatalf("error marshaling repaired settings: %v", err)
+				}
+				if err := setPBSettings(pb, b); err != nil {
+					lo.Fatalf("error repairing PocketBase settings: %v", err)
+				}
+				s = b
+			} else {
+				s = out
+			}
 		} else {
-			// First run: persist the currently loaded config into PocketBase settings.
-			flat, _ := koanfmaps.Flatten(ko.All(), nil, ".")
-			b, err := json.Marshal(flat)
+			// First run: persist app settings defaults into PocketBase settings.
+			b, err := makeDefaultPBSettings(ko)
 			if err != nil {
 				lo.Fatalf("error marshaling default settings: %v", err)
 			}
@@ -592,6 +600,120 @@ func initSettings(query string, db *pbdb.DB, ko *koanf.Koanf) {
 	}
 }
 
+func isLegacyPBSettingsBlob(raw []byte) bool {
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return false
+	}
+
+	_, hasSiteName := m["app.site_name"]
+	_, hasSMTP := m["smtp"]
+	_, hasAppAddress := m["app.address"]
+	_, hasDBHost := m["db.host"]
+
+	return !hasSiteName && !hasSMTP && (hasAppAddress || hasDBHost)
+}
+
+func makeDefaultPBSettings(ko *koanf.Koanf) ([]byte, error) {
+	s := models.Settings{
+		AppLang:                    "en",
+		UploadProvider:             "filesystem",
+		UploadFilesystemUploadURI:  "/uploads",
+		UploadFilesystemUploadPath: "uploads",
+		UploadExtensions:           []string{},
+		AppNotifyEmails:            []string{},
+		PrivacyExportable:          []string{},
+		DomainBlocklist:            []string{},
+		DomainAllowlist:            []string{},
+		SecurityCORSOrigins:        []string{},
+		SMTP: []struct {
+			Name          string              `json:"name"`
+			UUID          string              `json:"uuid"`
+			Enabled       bool                `json:"enabled"`
+			Host          string              `json:"host"`
+			HelloHostname string              `json:"hello_hostname"`
+			Port          int                 `json:"port"`
+			AuthProtocol  string              `json:"auth_protocol"`
+			Username      string              `json:"username"`
+			Password      string              `json:"password,omitempty"`
+			EmailHeaders  []map[string]string `json:"email_headers"`
+			MaxConns      int                 `json:"max_conns"`
+			MaxMsgRetries int                 `json:"max_msg_retries"`
+			IdleTimeout   string              `json:"idle_timeout"`
+			WaitTimeout   string              `json:"wait_timeout"`
+			TLSType       string              `json:"tls_type"`
+			TLSSkipVerify bool                `json:"tls_skip_verify"`
+		}{
+			{
+				Enabled:       true,
+				Port:          25,
+				AuthProtocol:  "login",
+				EmailHeaders:  []map[string]string{},
+				MaxConns:      10,
+				MaxMsgRetries: 2,
+				IdleTimeout:   "15s",
+				WaitTimeout:   "5s",
+				TLSType:       "none",
+			},
+		},
+		Messengers: []struct {
+			UUID          string `json:"uuid"`
+			Enabled       bool   `json:"enabled"`
+			Name          string `json:"name"`
+			RootURL       string `json:"root_url"`
+			Username      string `json:"username"`
+			Password      string `json:"password,omitempty"`
+			MaxConns      int    `json:"max_conns"`
+			Timeout       string `json:"timeout"`
+			MaxMsgRetries int    `json:"max_msg_retries"`
+		}{},
+		BounceActions: map[string]struct {
+			Count  int    `json:"count"`
+			Action string `json:"action"`
+		}{
+			"soft":      {Count: 1, Action: "none"},
+			"hard":      {Count: 1, Action: "none"},
+			"complaint": {Count: 1, Action: "none"},
+		},
+		BounceBoxes: []struct {
+			UUID          string `json:"uuid"`
+			Enabled       bool   `json:"enabled"`
+			Type          string `json:"type"`
+			Host          string `json:"host"`
+			Port          int    `json:"port"`
+			AuthProtocol  string `json:"auth_protocol"`
+			ReturnPath    string `json:"return_path"`
+			Username      string `json:"username"`
+			Password      string `json:"password,omitempty"`
+			TLSEnabled    bool   `json:"tls_enabled"`
+			TLSSkipVerify bool   `json:"tls_skip_verify"`
+			ScanInterval  string `json:"scan_interval"`
+		}{
+			{
+				Type:         "pop",
+				Port:         110,
+				AuthProtocol: "userpass",
+				ScanInterval: "15m",
+			},
+		},
+	}
+
+	if v := strings.TrimSpace(ko.String("app.lang")); v != "" {
+		s.AppLang = v
+	}
+	if v := strings.TrimSpace(ko.String("upload.provider")); v != "" {
+		s.UploadProvider = v
+	}
+	if v := strings.TrimSpace(ko.String("upload.filesystem.upload_uri")); v != "" {
+		s.UploadFilesystemUploadURI = v
+	}
+	if v := strings.TrimSpace(ko.String("upload.filesystem.upload_path")); v != "" {
+		s.UploadFilesystemUploadPath = v
+	}
+
+	return json.Marshal(s)
+}
+
 func initPocketBase() *pocketbase.PocketBase {
 	pb := pocketbase.NewWithConfig(pocketbase.Config{
 		HideStartBanner: true,
@@ -614,19 +736,31 @@ func getPBSettings(pb *pocketbase.PocketBase) (types.JSONText, bool, error) {
 		Value []byte `db:"value"`
 	}
 
-	err := pb.DB().NewQuery("SELECT value FROM listmonk_settings LIMIT 1").One(&row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, err
+	for _, table := range []string{"listpocket_settings", "listmonk_settings"} {
+		err := pb.DB().NewQuery("SELECT value FROM " + table + " LIMIT 1").One(&row)
+		if err == nil {
+			return row.Value, true, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
 	}
 
-	return row.Value, true, nil
+	return nil, false, nil
 }
 
 func setPBSettings(pb *pocketbase.PocketBase, value []byte) error {
-	collection, err := pb.FindCollectionByNameOrId("listmonk_settings")
+	var (
+		collection *pbcore.Collection
+		err        error
+	)
+
+	for _, name := range []string{"listpocket_settings", "listmonk_settings"} {
+		collection, err = pb.FindCollectionByNameOrId(name)
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -847,8 +981,8 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.
 		SlidingWindowDuration: ko.Duration("app.message_sliding_window_duration"),
 		SlidingWindowRate:     ko.Int("app.message_sliding_window_rate"),
 		ScanInterval:          time.Second * 5,
-		ScanCampaigns:         !ko.Bool("passive"),
-	}, newManagerStore(q, db, co, md), i, lo)
+		ScanCampaigns:         false,
+	}, newManagerStore(q, db, co, md, lo), i, lo)
 
 	// Attach all messengers to the campaign manager.
 	for _, m := range msgrs {
@@ -1258,8 +1392,16 @@ func initCaptcha() *captcha.Captcha {
 }
 
 // initCron initializes cron jobs for slow query cache refresh and database vacuum.
-func initCron(co *core.Core, db *pbdb.DB) {
-	c := cron.New()
+func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manager.Manager) {
+	if pb != nil && mgr != nil && !ko.Bool("passive") {
+		if err := pb.Cron().Add("campaign-scheduler", "* * * * *", func() {
+			mgr.ScanCampaignsOnce()
+		}); err != nil {
+			lo.Printf("error initializing campaign scheduler cron: %v", err)
+		} else {
+			lo.Println("campaign scheduler cron enabled at interval: * * * * *")
+		}
+	}
 
 	// Slow query cache cron job.
 	if ko.Bool("app.cache_slow_queries") {
@@ -1267,7 +1409,7 @@ func initCron(co *core.Core, db *pbdb.DB) {
 		if intval == "" {
 			lo.Println("error: invalid cron interval string for slow query cache")
 		} else {
-			err := c.Add("slow-query-cache-refresh", intval, func() {
+			err := pb.Cron().Add("slow-query-cache-refresh", intval, func() {
 				lo.Println("refreshing slow query cache")
 				_ = co.RefreshMatViews(true)
 				lo.Println("done refreshing slow query cache")
@@ -1286,7 +1428,7 @@ func initCron(co *core.Core, db *pbdb.DB) {
 		if intval == "" {
 			lo.Println("error: invalid cron interval string for database vacuum")
 		} else {
-			err := c.Add("database-vacuum", intval, func() {
+			err := pb.Cron().Add("database-vacuum", intval, func() {
 				RunDBVacuum(db, lo)
 			})
 			if err != nil {
@@ -1297,9 +1439,6 @@ func initCron(co *core.Core, db *pbdb.DB) {
 		}
 	}
 
-	if c.Total() > 0 {
-		c.Start()
-	}
 }
 
 // awaitReload waits for a SIGHUP signal to reload the app. Every setting change on the UI causes a reload.
@@ -1370,31 +1509,27 @@ func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 	return funcs
 }
 
-// initAuth initializes the auth module with the given DB connection and
-func initAuth(co *core.Core, db *sql.DB, pb *pocketbase.PocketBase, ko *koanf.Koanf) {
+// initAuth initializes the auth module.
+func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *koanf.Koanf) *auth.Auth {
+	callbacks := &auth.Callbacks{
+		GetUser:           func(id int) (auth.User, error) { return co.GetUser(id, "", "") },
+		GetUsers:          co.GetUsers,
+		GetUserByUsername: func(username string) (auth.User, error) { return co.GetUser(0, username, "") },
+	}
 
-	// If the legacy username+password is set in the TOML file, use that as an API
-	// access token in the auth module to preserve backwards compatibility for existing
-	// API integrations. The presence of these values show a red banner on the admin UI
-	// prompting the creation of new API credentials and the removal of values from
-	// the TOML config.
-	var (
-		username = ko.String("app.admin_username")
-		password = ko.String("app.admin_password")
-	)
+	a, err := auth.New(auth.Config{AuthCollection: "users"}, nil, pb, callbacks, lo)
+	if err != nil {
+		lo.Fatalf("error initializing auth module: %v", err)
+	}
+
+	// If the legacy username+password is set in the TOML file, warn users about migration.
+	username := ko.String("app.admin_username")
+	password := ko.String("app.admin_password")
 	if len(username) > 2 && len(password) > 6 {
-		u := auth.User{
-			Username:      username,
-			Password:      null.String{Valid: true, String: password},
-			PasswordLogin: true,
-			HasPassword:   true,
-			Status:        auth.UserStatusEnabled,
-			Type:          auth.UserTypeAPI,
-		}
-		u.UserRole.ID = auth.SuperAdminRoleID
-
 		lo.Println(`WARNING: Remove the admin_username and admin_password fields from the TOML configuration file. If you are using APIs, create and use new credentials. Users are now managed via the Admin -> Settings -> Users dashboard.`)
 	}
+
+	return a
 }
 
 // joinFSPaths joins the given paths with the root path and returns the full paths.

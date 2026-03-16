@@ -10,11 +10,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/i18n"
-	"github.com/knadh/listmonk/internal/notifs"
-	"github.com/knadh/listmonk/internal/subimporter"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/subimporter"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 )
@@ -48,7 +49,7 @@ type subOptin struct {
 
 var (
 	dummySubscriber = models.Subscriber{
-		Email:   "demo@listmonk.app",
+		Email:   "demo@listpocket.app",
 		Name:    "Demo Subscriber",
 		UUID:    dummyUUID,
 		Attribs: models.JSON{"city": "Bengaluru"},
@@ -120,12 +121,16 @@ func (a *App) QuerySubscribers(c echo.Context) error {
 		orderBy   = c.FormValue("order_by")
 		pg        = a.pg.NewFromURL(c.Request().URL.Query())
 	)
+	a.log.Printf("query subscribers: username=%q role_id=%d search=%q query=%q list_ids=%v sub_status=%q order_by=%q order=%q page=%d per_page=%d offset=%d limit=%d",
+		user.Username, user.UserRoleID, searchStr, query, listIDs, subStatus, orderBy, order, pg.Page, pg.PerPage, pg.Offset, pg.Limit)
 
 	// Query subscribers from the DB.
 	res, total, err := a.core.QuerySubscribers(searchStr, query, listIDs, subStatus, order, orderBy, pg.Offset, pg.Limit)
 	if err != nil {
+		a.log.Printf("query subscribers: failed username=%q error=%v", user.Username, err)
 		return err
 	}
+	a.log.Printf("query subscribers: success username=%q total=%d results=%d", user.Username, total, len(res))
 
 	out := models.PageResults{
 		Query:   query,
@@ -234,12 +239,16 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 
 	// Filter lists against the current user's permitted lists.
 	listIDs := user.FilterListsByPerm(auth.PermTypeManage, req.Lists)
+	a.log.Printf("create subscriber: email=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
+		req.Email, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
 
 	// Insert the subscriber into the DB.
 	sub, _, err := a.core.InsertSubscriber(req.Subscriber, listIDs, nil, req.PreconfirmSubs, false)
 	if err != nil {
+		a.log.Printf("create subscriber: insert failed email=%q error=%v", req.Email, err)
 		return err
 	}
+	a.log.Printf("create subscriber: success email=%q subscriber_id=%d uuid=%q", sub.Email, sub.ID, sub.UUID)
 
 	return c.JSON(http.StatusOK, okResp{sub})
 }
@@ -646,6 +655,21 @@ func (a *App) hasSubPerm(u auth.User, subIDs []int) error {
 func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User) ([]int, error) {
 	var listIDs []int
 
+	// Primordial super admin and users with blanket subscriber access should never
+	// be forced into a list-scoped fallback filter.
+	if user.UserRoleID == auth.SuperAdminRoleID || user.HasPerm(auth.PermSubscribersGetAll) {
+		if qp.Has(param) {
+			ids, err := getQueryInts(param, qp)
+			if err != nil {
+				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			}
+
+			return user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, ids), nil
+		}
+
+		return nil, nil
+	}
+
 	// If there are incoming list query params, filter them by permission.
 	if qp.Has(param) {
 		ids, err := getQueryInts(param, qp)
@@ -690,14 +714,49 @@ func formatSQLExp(q string) string {
 // makeOptinNotifyHook returns an enclosed callback that sends optin confirmation e-mails.
 // This is plugged into the 'core' package to send optin confirmations when a new subscriber is
 // created via `core.CreateSubscriber()`.
-func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, q *models.Queries, i *i18n.I18n) func(sub models.Subscriber, listIDs []int) (int, error) {
+func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, q *models.Queries, db *pbdb.DB, i *i18n.I18n) func(sub models.Subscriber, listIDs []int) (int, error) {
 	return func(sub models.Subscriber, listIDs []int) (int, error) {
 		// Fetch double opt-in lists from the given list IDs.
 		// Get the list of subscription lists where the subscriber hasn't confirmed.
-		var lists = []models.List{}
-		if err := q.GetSubscriberLists.Select(&lists, sub.ID, nil, pq.Array(listIDs), nil, models.SubscriptionStatusUnconfirmed, models.ListOptinDouble); err != nil {
-			lo.Printf("error fetching lists for opt-in: %s", err)
-			return 0, err
+		var lists []models.List
+		if db != nil && strings.Contains(strings.ToLower(db.DriverName()), "sqlite") {
+			query := `
+				SELECT
+					l.rowid AS id,
+					l.uuid,
+					l.name,
+					l.type,
+					l.optin,
+					l.status,
+					l.tags,
+					l.description,
+					s.rowid AS subscriber_id,
+					sl.status AS subscription_status
+				FROM lists l
+				LEFT JOIN subscriber_lists sl ON l.id = sl.list_id
+				LEFT JOIN subscribers s ON s.id = sl.subscriber_id
+				WHERE s.rowid = ?
+				  AND sl.status = ?
+				  AND l.optin = ?
+			`
+			args := []any{sub.ID, models.SubscriptionStatusUnconfirmed, models.ListOptinDouble}
+			if len(listIDs) > 0 {
+				query += ` AND l.rowid IN (` + strings.TrimSuffix(strings.Repeat("?,", len(listIDs)), ",") + `)`
+				for _, id := range listIDs {
+					args = append(args, id)
+				}
+			}
+			query += ` ORDER BY l.rowid`
+
+			if err := db.Select(&lists, query, args...); err != nil {
+				lo.Printf("error fetching lists for opt-in: %s", err)
+				return 0, err
+			}
+		} else {
+			if err := q.GetSubscriberLists.Select(&lists, sub.ID, nil, pq.Array(listIDs), nil, models.SubscriptionStatusUnconfirmed, models.ListOptinDouble); err != nil {
+				lo.Printf("error fetching lists for opt-in: %s", err)
+				return 0, err
+			}
 		}
 
 		// None.

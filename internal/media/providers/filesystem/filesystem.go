@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/knadh/listmonk/internal/media"
+	"github.com/compdani/list_pocket/internal/media"
 )
 
 // Opts represents filesystem params

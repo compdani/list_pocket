@@ -208,6 +208,38 @@ export default Vue.extend({
   },
 
   methods: {
+    initForm() {
+      const baseForm = {
+        id: null,
+        email: '',
+        name: '',
+        lists: [],
+        strAttribs: '{}',
+        status: 'enabled',
+        preconfirm: false,
+      };
+
+      if (!this.$props.isEditing) {
+        this.form = baseForm;
+        this.bounces = [];
+        this.visibleMeta = {};
+        return;
+      }
+
+      this.form = {
+        ...baseForm,
+        ...this.$props.data,
+        lists: Array.isArray(this.$props.data.lists) ? [...this.$props.data.lists] : [],
+        strAttribs: JSON.stringify(this.$props.data.attribs || {}, null, 4),
+      };
+      this.bounces = [];
+      this.visibleMeta = {};
+
+      if (this.form.id) {
+        this.getBounces();
+      }
+    },
+
     toggleBounces() {
       this.isBounceVisible = !this.isBounceVisible;
     },
@@ -339,19 +371,21 @@ export default Vue.extend({
     },
   },
 
+  watch: {
+    data: {
+      deep: true,
+      handler() {
+        this.initForm();
+      },
+    },
+
+    isEditing() {
+      this.initForm();
+    },
+  },
+
   mounted() {
-    if (this.$props.isEditing) {
-      this.form = {
-        ...this.$props.data,
-
-        // Deep-copy the lists array on to the form.
-        strAttribs: JSON.stringify(this.$props.data.attribs, null, 4),
-      };
-    }
-
-    if (this.form.id) {
-      this.getBounces();
-    }
+    this.initForm();
 
     this.$nextTick(() => {
       this.$refs.focus.focus();

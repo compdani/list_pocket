@@ -13,23 +13,23 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/knadh/listmonk/internal/migrations"
+	_ "github.com/compdani/list_pocket/internal/migrations"
 
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/bounce"
+	"github.com/compdani/list_pocket/internal/buflog"
+	"github.com/compdani/list_pocket/internal/captcha"
+	"github.com/compdani/list_pocket/internal/core"
+	"github.com/compdani/list_pocket/internal/events"
+	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/manager"
+	"github.com/compdani/list_pocket/internal/media"
+	"github.com/compdani/list_pocket/internal/messenger/email"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/subimporter"
+	"github.com/compdani/list_pocket/models"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/bounce"
-	"github.com/knadh/listmonk/internal/buflog"
-	"github.com/knadh/listmonk/internal/captcha"
-	"github.com/knadh/listmonk/internal/core"
-	"github.com/knadh/listmonk/internal/events"
-	"github.com/knadh/listmonk/internal/i18n"
-	"github.com/knadh/listmonk/internal/manager"
-	"github.com/knadh/listmonk/internal/media"
-	"github.com/knadh/listmonk/internal/messenger/email"
-	"github.com/knadh/listmonk/internal/pbdb"
-	"github.com/knadh/listmonk/internal/subimporter"
-	"github.com/knadh/listmonk/models"
 	"github.com/knadh/paginator"
 	"github.com/knadh/stuffbin"
 	"github.com/pocketbase/pocketbase"
@@ -128,10 +128,10 @@ func init() {
 	initConfigFiles(ko.Strings("config"), ko)
 
 	// Load environment variables and merge into the loaded config.
-	// LISTMONK_foo__bar -> foo.bar (double underscore becomes dot for nested config)
-	// LISTMONK_static_dir -> static-dir (top-level keys with underscore become hyphen for CLI flags)
-	if err := ko.Load(env.Provider("LISTMONK_", ".", func(s string) string {
-		key := strings.ToLower(strings.TrimPrefix(s, "LISTMONK_"))
+	// LISTPOCKET_foo__bar -> foo.bar (double underscore becomes dot for nested config)
+	// LISTPOCKET_static_dir -> static-dir (top-level keys with underscore become hyphen for CLI flags)
+	if err := ko.Load(env.Provider("LISTPOCKET_", ".", func(s string) string {
+		key := strings.ToLower(strings.TrimPrefix(s, "LISTPOCKET_"))
 		key = strings.ReplaceAll(key, "__", ".")
 		// Only convert underscore to hyphen for top-level keys (CLI flags like static-dir, i18n-dir)
 		// Nested config keys (containing dots) keep underscores (e.g., db.ssl_mode)
@@ -194,10 +194,13 @@ func main() {
 		// Initialize the media store.
 		media = initMediaStore(ko)
 
-		fbOptinNotify = makeOptinNotifyHook(ko.Bool("privacy.unsubscribe_header"), urlCfg, queries, i18n)
+		fbOptinNotify = makeOptinNotifyHook(ko.Bool("privacy.unsubscribe_header"), urlCfg, queries, db, i18n)
 
 		// Crud core.
 		core = initCore(fbOptinNotify, queries, db, i18n, ko)
+
+		// Auth module.
+		authn = initAuth(core, pb, ko)
 
 		// Initialize all messengers, SMTP and postback.
 		msgrs = append(initSMTPMessengers(), initPostbackMessengers(ko)...)
@@ -242,7 +245,7 @@ func main() {
 	}
 
 	// Start cronjobs.
-	initCron(core, db)
+	initCron(pb, core, db, mgr)
 
 	// Start the campaign manager workers. The campaign batches (fetch from DB, push out
 	// messages) get processed at the specified interval.
@@ -252,6 +255,15 @@ func main() {
 		go mgr.Run()
 	}
 
+	if err := ensureSuperAdminRolePermissions(core, cfg); err != nil {
+		lo.Fatalf("error ensuring super admin permissions: %v", err)
+	}
+
+	// Sync user/auth records and determine first-time setup state.
+	hasUser, err := refreshAuthCache(authn)
+	if err != nil {
+		lo.Fatalf("error caching users: %v", err)
+	}
 	// =========================================================================
 	// Initialize the App{} with all the global shared components, controllers and fields.
 	app := &App{
@@ -265,6 +277,7 @@ func main() {
 		messengers: msgrs,
 		emailMsgr:  emailMsgr,
 		importer:   importer,
+		auth:       authn,
 		media:      media,
 		bounce:     bounce,
 		captcha:    initCaptcha(),
@@ -272,6 +285,7 @@ func main() {
 		log:        lo,
 		events:     evStream,
 		bufLog:     bufLog,
+		pb:         pb,
 
 		pg: paginator.New(paginator.Opt{
 			DefaultPerPage: 20,
@@ -286,9 +300,10 @@ func main() {
 		about:         initAbout(queries, db),
 		chReload:      chReload,
 
-		// TODO: Needs to be moved to checking with pocketbase users collection for existence of user records. If no user records, then it's a first time installation and needs user setup.
-		needsUserSetup: false,
+		// First time installation with no user records in the DB.
+		needsUserSetup: !hasUser,
 	}
+	evStream.SetPublishHook(app.publishRealtimeEvent)
 
 	// Star the update checker.
 	if ko.Bool("app.check_updates") {
@@ -328,4 +343,57 @@ func main() {
 		// Signal the close.
 		closerWait <- true
 	})
+}
+
+func ensureSuperAdminRolePermissions(core *core.Core, cfg *Config) error {
+	roles, err := core.GetRoles()
+	if err != nil {
+		return err
+	}
+
+	perms := make([]string, 0, len(cfg.Permissions))
+	for p := range cfg.Permissions {
+		perms = append(perms, p)
+	}
+
+	for _, role := range roles {
+		if role.ID != auth.SuperAdminRoleID && (!role.Name.Valid || role.Name.String != "Super Admin") {
+			continue
+		}
+
+		if sameStringSetMain([]string(role.Permissions), perms) {
+			return nil
+		}
+
+		role.Permissions = perms
+		_, err := core.UpdateUserRole(role.ID, role)
+		return err
+	}
+
+	return nil
+}
+
+func sameStringSetMain(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	if len(a) == 0 {
+		return true
+	}
+
+	seen := make(map[string]int, len(a))
+	for _, v := range a {
+		seen[v]++
+	}
+
+	for _, v := range b {
+		n, ok := seen[v]
+		if !ok || n == 0 {
+			return false
+		}
+		seen[v]--
+	}
+
+	return true
 }

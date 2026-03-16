@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/models"
 )
 
 // AWS signature/validation logic borrowed from @cavnit's contrib:

@@ -12,8 +12,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/knadh/listmonk/internal/messenger/email"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/messenger/email"
+	"github.com/compdani/list_pocket/models"
 )
 
 const (

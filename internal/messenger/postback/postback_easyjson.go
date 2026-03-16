@@ -4,7 +4,7 @@ package postback
 
 import (
 	json "encoding/json"
-	models "github.com/knadh/listmonk/models"
+	models "github.com/compdani/list_pocket/models"
 	easyjson "github.com/zerodha/easyjson"
 	jlexer "github.com/zerodha/easyjson/jlexer"
 	jwriter "github.com/zerodha/easyjson/jwriter"

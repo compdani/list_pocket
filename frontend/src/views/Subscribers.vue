@@ -186,7 +186,7 @@
 
     <!-- Add / edit form modal -->
     <b-modal scroll="keep" :aria-modal="true" :active.sync="isFormVisible" :width="850" @close="onFormClose">
-      <subscriber-form :data="curItem" :is-editing="isEditing" @finished="querySubscribers" />
+      <subscriber-form :key="subscriberFormKey" :data="curItem" :is-editing="isEditing" @finished="querySubscribers" />
     </b-modal>
   </section>
 </template>
@@ -513,6 +513,14 @@ export default Vue.extend({
         return this.subscribers.total;
       }
       return this.bulk.checked.length;
+    },
+
+    subscriberFormKey() {
+      if (!this.isFormVisible) {
+        return 'subscriber-form-hidden';
+      }
+
+      return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.id ?? 'new'}`;
     },
 
     // Returns the list that the subscribers are being filtered by in.

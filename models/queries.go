@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
-	"github.com/knadh/listmonk/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/lib/pq"
 )
 
