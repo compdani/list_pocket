@@ -16,8 +16,8 @@ import (
 // Enum values for various statuses.
 const (
 	// Headers attached to e-mails for bounce tracking.
-	EmailHeaderSubscriberUUID = "X-Listmonk-Subscriber"
-	EmailHeaderCampaignUUID   = "X-Listmonk-Campaign"
+	EmailHeaderSubscriberUUID = "X-Listpocket-Subscriber"
+	EmailHeaderCampaignUUID   = "X-Listpocket-Campaign"
 
 	// Standard e-mail headers.
 	EmailHeaderDate        = "Date"
@@ -142,6 +142,9 @@ func (s StringIntMap) Scan(src any) error {
 
 	if data, ok := src.([]byte); ok {
 		return json.Unmarshal(data, &s)
+	}
+	if data, ok := src.(string); ok {
+		return json.Unmarshal([]byte(data), &s)
 	}
 	return fmt.Errorf("could not not decode type %T -> %T", src, s)
 }

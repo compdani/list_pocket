@@ -27,15 +27,20 @@ router.beforeEach((to, from, next) => {
 router.afterEach((to) => {
   Vue.nextTick(() => {
     const t = to.meta.title && i18n.te(to.meta.title) ? `${i18n.tc(to.meta.title, 0)} /` : '';
-    document.title = `${t} listmonk`;
+    document.title = `${t} listpocket`;
   });
 });
 
 async function initConfig(app) {
-  // Load logged in user profile, server side config, and the language file before mounting the app.
-  // If user is not authenticated (no valid PocketBase token), the API call will fail and
-  // the backend middleware will redirect to the login page.
-  const [profile, cfg] = await Promise.all([api.getUserProfile(), api.getServerConfig()]);
+  const profile = api.getStoredUserProfile();
+  if (!api.isAuthenticated() || !profile) {
+    const unauthorized = new Error('missing auth profile');
+    unauthorized.status = 401;
+    throw unauthorized;
+  }
+
+  // Load server side config and the language file before mounting the app.
+  const cfg = await api.getServerConfig();
 
   const lang = await api.getLang(cfg.lang);
   i18n.locale = cfg.lang;
@@ -82,13 +87,19 @@ async function initConfig(app) {
   // Set the page title after i18n has loaded.
   const to = router.history.current;
   const title = to.meta.title ? `${i18n.tc(to.meta.title, 0)} /` : '';
-  document.title = `${title} listmonk`;
+  document.title = `${title} listpocket`;
 
   if (app) {
     const mountedApp = app;
     mountedApp.$mount('#app');
     mountedApp.isLoaded = true;
   }
+}
+
+function redirectToLogin() {
+  const adminBase = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.href = `${adminBase}/login?next=${encodeURIComponent(next || '/admin')}`;
 }
 
 const v = new Vue({
@@ -135,6 +146,11 @@ const v = new Vue({
 });
 
 initConfig(v).catch((err) => {
+  if (err && (err.status === 401 || (err.response && err.response.status === 401))) {
+    redirectToLogin();
+    return;
+  }
+
   // Keep the loading screen visible on bootstrap failures.
   // The request helpers already surface the actual backend error toast.
   // eslint-disable-next-line no-console

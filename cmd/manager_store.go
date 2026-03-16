@@ -3,15 +3,18 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"strings"
+	"time"
 
+	"github.com/compdani/list_pocket/internal/core"
+	"github.com/compdani/list_pocket/internal/manager"
+	"github.com/compdani/list_pocket/internal/media"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	"github.com/knadh/listmonk/internal/core"
-	"github.com/knadh/listmonk/internal/manager"
-	"github.com/knadh/listmonk/internal/media"
-	"github.com/knadh/listmonk/internal/pbdb"
-	"github.com/knadh/listmonk/models"
 	"github.com/lib/pq"
+	null "gopkg.in/volatiletech/null.v6"
 )
 
 // store implements DataSource over the primary
@@ -22,6 +25,7 @@ type store struct {
 	sqlite  bool
 	core    *core.Core
 	media   media.Store
+	log     *log.Logger
 }
 
 type runningCamp struct {
@@ -32,14 +36,83 @@ type runningCamp struct {
 	ListID           int    `db:"list_id"`
 }
 
-func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store) *store {
+type sqliteStoreSubscriberRow struct {
+	ID        int    `db:"id"`
+	CreatedAt string `db:"created_at"`
+	UpdatedAt string `db:"updated_at"`
+	UUID      string `db:"uuid"`
+	Email     string `db:"email"`
+	Name      string `db:"name"`
+	Attribs   []byte `db:"attribs"`
+	Status    string `db:"status"`
+}
+
+func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger) *store {
 	return &store{
 		queries: q,
 		db:      db,
 		sqlite:  isSQLiteDB(db),
 		core:    c,
 		media:   m,
+		log:     l,
 	}
+}
+
+func parseStoreNullTime(value string) null.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return null.Time{}
+	}
+
+	t, err := time.Parse("2006-01-02 15:04:05.000Z", value)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, value)
+		if err != nil {
+			return null.Time{}
+		}
+	}
+
+	return null.NewTime(t, true)
+}
+
+func sqliteStoreSubscriberRowsToModels(rows []sqliteStoreSubscriberRow) []models.Subscriber {
+	out := make([]models.Subscriber, 0, len(rows))
+	for _, row := range rows {
+		attribs := models.JSON{}
+		if len(row.Attribs) > 0 && string(row.Attribs) != "null" {
+			_ = json.Unmarshal(row.Attribs, &attribs)
+		}
+
+		out = append(out, models.Subscriber{
+			Base: models.Base{
+				ID:        row.ID,
+				CreatedAt: parseStoreNullTime(row.CreatedAt),
+				UpdatedAt: parseStoreNullTime(row.UpdatedAt),
+			},
+			UUID:    row.UUID,
+			Email:   row.Email,
+			Name:    row.Name,
+			Attribs: attribs,
+			Status:  row.Status,
+		})
+	}
+	return out
+}
+
+func (s *store) sqliteCampaignRecordID(campID int) (string, error) {
+	var recID string
+	if err := s.db.Get(&recID, `SELECT id FROM campaigns WHERE rowid = ?`, campID); err != nil {
+		return "", err
+	}
+	return recID, nil
+}
+
+func (s *store) sqliteSubscriberRecordID(subID int64) (string, error) {
+	var recID string
+	if err := s.db.Get(&recID, `SELECT id FROM subscribers WHERE rowid = ?`, subID); err != nil {
+		return "", err
+	}
+	return recID, nil
 }
 
 // NextCampaigns retrieves active campaigns ready to be processed excluding
@@ -47,6 +120,7 @@ func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store
 // of campaigns that are being processed and updates them in the DB.
 func (s *store) NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models.Campaign, error) {
 	if s.sqlite {
+		s.log.Printf("manager store sqlite: next campaigns current_ids=%v sent_counts=%v", currentIDs, sentCounts)
 		return s.nextCampaignsSQLite(currentIDs, sentCounts)
 	}
 
@@ -103,9 +177,9 @@ func (s *store) UpdateCampaignStatus(campID int, status string) error {
 	if s.sqlite {
 		_, err := s.db.Exec(`
 			UPDATE campaigns
-			SET status=(CASE WHEN send_at IS NOT NULL AND ? = 'running' THEN 'scheduled' ELSE ? END),
-			    updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id = ?`,
+			SET status=(CASE WHEN send_at IS NOT NULL AND send_at != '' AND ? = 'running' THEN 'scheduled' ELSE ? END),
+			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE rowid = ?`,
 			status, status, campID)
 		return err
 	}
@@ -122,8 +196,8 @@ func (s *store) UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID
 				to_send=(CASE WHEN ? != 0 THEN ? ELSE to_send END),
 				sent=sent+?,
 				last_subscriber_id=(CASE WHEN ? > 0 THEN ? ELSE to_send END),
-				updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id=?`,
+				updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE rowid=?`,
 			toSend, toSend, sent, lastSubID, lastSubID, campID)
 		return err
 	}
@@ -141,46 +215,61 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 		if _, err := s.db.Exec(`
 			UPDATE campaigns
 			SET sent = sent + ?,
-			    updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id = ?`,
+			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE rowid = ?`,
 			sentCounts[i], id); err != nil {
 			return nil, err
 		}
 	}
 
 	base := `
-		SELECT c.*,
-		       COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body
+		SELECT c.rowid
 		FROM campaigns c
-		LEFT JOIN templates t ON t.id = c.template_id
 		WHERE (
 			c.status='running' OR
-			(c.status='scheduled' AND c.send_at IS NOT NULL AND datetime('now') >= datetime(c.send_at))
+			(c.status='scheduled' AND c.send_at IS NOT NULL AND c.send_at != '' AND datetime('now') >= datetime(c.send_at))
 		)
 	`
 
 	args := make([]any, 0, len(currentIDs))
 	if len(currentIDs) > 0 {
-		base += " AND c.id NOT IN (" + placeholders(len(currentIDs)) + ")"
+		base += " AND c.rowid NOT IN (" + placeholders(len(currentIDs)) + ")"
 		for _, id := range currentIDs {
 			args = append(args, id)
 		}
 	}
 
-	var campaigns []*models.Campaign
-	if err := s.db.Select(&campaigns, base, args...); err != nil {
+	base += " ORDER BY c.rowid"
+
+	var rowIDs []int
+	if err := s.db.Select(&rowIDs, base, args...); err != nil {
 		return nil, err
+	}
+	s.log.Printf("manager store sqlite: runnable campaign rowids=%v", rowIDs)
+
+	campaigns := make([]*models.Campaign, 0, len(rowIDs))
+	for _, rowID := range rowIDs {
+		campaign, err := s.core.GetCampaign(rowID, "", "")
+		if err != nil {
+			return nil, err
+		}
+		campaigns = append(campaigns, &campaign)
 	}
 
 	for _, c := range campaigns {
+		campaignRecID, err := s.sqliteCampaignRecordID(c.ID)
+		if err != nil {
+			return nil, err
+		}
+
 		var meta struct {
 			ToSend int `db:"to_send"`
 			MaxID  int `db:"max_subscriber_id"`
 		}
 		if err := s.db.Get(&meta, `
 			SELECT
-				COUNT(DISTINCT sl.subscriber_id) AS to_send,
-				COALESCE(MAX(sl.subscriber_id), 0) AS max_subscriber_id
+				COUNT(DISTINCT s.rowid) AS to_send,
+				COALESCE(MAX(s.rowid), 0) AS max_subscriber_id
 			FROM campaign_lists cl
 			JOIN lists l ON l.id = cl.list_id
 			JOIN subscriber_lists sl ON sl.list_id = cl.list_id
@@ -194,9 +283,10 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			      (l.optin != 'double' AND sl.status != 'unsubscribed')
 			    ))
 			  )
-		`, c.ID, c.Type, c.Type); err != nil {
+		`, campaignRecID, c.Type, c.Type); err != nil {
 			return nil, err
 		}
+		s.log.Printf("manager store sqlite: campaign rowid=%d record_id=%q type=%q to_send=%d max_subscriber_id=%d", c.ID, campaignRecID, c.Type, meta.ToSend, meta.MaxID)
 
 		if _, err := s.db.Exec(`
 			UPDATE campaigns
@@ -204,8 +294,8 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			    status = (CASE WHEN status != 'running' THEN 'running' ELSE status END),
 			    max_subscriber_id = ?,
 			    started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
-			    updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id = ?`,
+			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE rowid = ?`,
 			meta.ToSend, meta.MaxID, c.ID); err != nil {
 			return nil, err
 		}
@@ -213,10 +303,11 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 
 		var mediaIDs []int64
 		if err := s.db.Select(&mediaIDs, `
-			SELECT media_id
-			FROM campaign_media
-			WHERE campaign_id = ? AND media_id IS NOT NULL
-			ORDER BY media_id`, c.ID); err != nil {
+			SELECT m.rowid
+			FROM campaign_media cm
+			JOIN media m ON m.id = cm.media_id
+			WHERE cm.campaign_id = ? AND cm.media_id IS NOT NULL
+			ORDER BY m.rowid`, campaignRecID); err != nil {
 			return nil, err
 		}
 		c.MediaIDs = mediaIDs
@@ -228,15 +319,15 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, error) {
 	var camps []runningCamp
 	if err := s.db.Select(&camps, `
-		SELECT campaigns.id AS campaign_id,
+		SELECT campaigns.rowid AS campaign_id,
 		       campaigns.type AS campaign_type,
 		       campaigns.last_subscriber_id AS last_subscriber_id,
 		       campaigns.max_subscriber_id AS max_subscriber_id,
-		       lists.id AS list_id
+		       lists.rowid AS list_id
 		FROM campaigns
 		LEFT JOIN campaign_lists ON campaign_lists.campaign_id = campaigns.id
 		LEFT JOIN lists ON lists.id = campaign_lists.list_id
-		WHERE campaigns.id = ? AND campaigns.status='running'
+		WHERE campaigns.rowid = ? AND campaigns.status='running'
 	`, campID); err != nil {
 		return nil, err
 	}
@@ -248,6 +339,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 		}
 	}
 	if len(listIDs) == 0 {
+		s.log.Printf("manager store sqlite: next subscribers campaign_id=%d has no lists", campID)
 		return nil, nil
 	}
 
@@ -258,27 +350,6 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 	}
 	args = append(args, limit)
 
-	q := `
-		SELECT s.*
-		FROM subscribers s
-		JOIN subscriber_lists sl ON sl.subscriber_id = s.id
-		JOIN lists l ON l.id = sl.list_id
-		WHERE s.id > ?
-		  AND s.id <= ?
-		  AND s.status != 'blocklisted'
-		  AND sl.list_id IN (` + placeholders(len(listIDs)) + `)
-		  AND (
-		    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-		    (? != 'optin' AND (
-		      (l.optin = 'double' AND sl.status = 'confirmed') OR
-		      (l.optin != 'double' AND sl.status != 'unsubscribed')
-		    ))
-		  )
-		GROUP BY s.id
-		ORDER BY s.id
-		LIMIT ?
-	`
-
 	// Reorder args for placeholders in query.
 	args = []any{c.LastSubscriberID, c.MaxSubscriberID}
 	for _, id := range listIDs {
@@ -286,10 +357,38 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 	}
 	args = append(args, c.CampaignType, c.CampaignType, limit)
 
-	var out []models.Subscriber
-	if err := s.db.Select(&out, q, args...); err != nil {
+	var rows []sqliteStoreSubscriberRow
+	if err := s.db.Select(&rows, `
+		SELECT s.rowid AS id,
+		       s.created AS created_at,
+		       s.updated AS updated_at,
+		       s.uuid,
+		       s.email,
+		       s.name,
+		       s.attribs,
+		       s.status
+		FROM subscribers s
+		JOIN subscriber_lists sl ON sl.subscriber_id = s.id
+		JOIN lists l ON l.id = sl.list_id
+		WHERE s.rowid > ?
+		  AND s.rowid <= ?
+		  AND s.status != 'blocklisted'
+		  AND l.rowid IN (`+placeholders(len(listIDs))+`)
+		  AND (
+		    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
+		    (? != 'optin' AND (
+		      (l.optin = 'double' AND sl.status = 'confirmed') OR
+		      (l.optin != 'double' AND sl.status != 'unsubscribed')
+		    ))
+		  )
+		GROUP BY s.rowid
+		ORDER BY s.rowid
+		LIMIT ?
+	`, args...); err != nil {
 		return nil, err
 	}
+	out := sqliteStoreSubscriberRowsToModels(rows)
+	s.log.Printf("manager store sqlite: next subscribers campaign_id=%d list_ids=%v fetched=%d limit=%d", campID, listIDs, len(out), limit)
 	if len(out) == 0 {
 		return nil, nil
 	}
@@ -298,8 +397,8 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 	if _, err := s.db.Exec(`
 		UPDATE campaigns
 		SET last_subscriber_id = ?,
-		    updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-		WHERE id = ?`, lastID, campID); err != nil {
+		    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE rowid = ?`, lastID, campID); err != nil {
 		return nil, err
 	}
 
@@ -430,17 +529,25 @@ func (s *store) RecordBounce(b models.Bounce) (int64, int, error) {
 // BlocklistSubscriber blocklists a subscriber permanently.
 func (s *store) BlocklistSubscriber(id int64) error {
 	if s.sqlite {
-		if _, err := s.db.Exec(`
-			UPDATE subscribers
-			SET status='blocklisted', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id = ?`, id); err != nil {
+		recID, err := s.sqliteSubscriberRecordID(id)
+		if err != nil {
 			return err
 		}
 
-		_, err := s.db.Exec(`
+		pb := s.db.PocketBase()
+		rec, err := pb.FindRecordById("subscribers", recID)
+		if err != nil {
+			return err
+		}
+		rec.Set("status", "blocklisted")
+		if err := pb.Save(rec); err != nil {
+			return err
+		}
+
+		_, err = s.db.Exec(`
 			UPDATE subscriber_lists
-			SET status='unsubscribed', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE subscriber_id = ?`, id)
+			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE subscriber_id = ?`, recID)
 		return err
 	}
 
@@ -451,8 +558,16 @@ func (s *store) BlocklistSubscriber(id int64) error {
 // DeleteSubscriber deletes a subscriber from the DB.
 func (s *store) DeleteSubscriber(id int64) error {
 	if s.sqlite {
-		_, err := s.db.Exec(`DELETE FROM subscribers WHERE id = ?`, id)
-		return err
+		recID, err := s.sqliteSubscriberRecordID(id)
+		if err != nil {
+			return err
+		}
+		pb := s.db.PocketBase()
+		rec, err := pb.FindRecordById("subscribers", recID)
+		if err != nil {
+			return err
+		}
+		return pb.Delete(rec)
 	}
 
 	_, err := s.queries.DeleteSubscribers.Exec(pq.Int64Array{id})

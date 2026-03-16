@@ -1,5 +1,5 @@
 <template>
-  <form @submit.prevent="onSubmit">
+  <form novalidate @submit.prevent="onSubmit">
     <section class="settings">
       <b-loading :is-full-page="true" v-if="loading.settings || isLoading" active />
       <header class="columns page-header">
@@ -106,8 +106,76 @@ export default Vue.extend({
   },
 
   methods: {
+    normalizeSettings(data) {
+      const d = data || {};
+
+      d.smtp = Array.isArray(d.smtp) ? d.smtp : [];
+      if (d.smtp.length === 0) {
+        d.smtp = [{
+          enabled: true,
+          host: '',
+          hello_hostname: '',
+          port: 25,
+          auth_protocol: 'login',
+          username: '',
+          password: '',
+          email_headers: [],
+          max_conns: 10,
+          max_msg_retries: 2,
+          idle_timeout: '15s',
+          wait_timeout: '5s',
+          tls_type: 'none',
+          tls_skip_verify: false,
+          name: '',
+        }];
+      }
+      d.messengers = Array.isArray(d.messengers) ? d.messengers : [];
+      d['bounce.mailboxes'] = Array.isArray(d['bounce.mailboxes']) ? d['bounce.mailboxes'] : [{
+        enabled: false,
+        type: 'pop',
+        host: '',
+        port: 110,
+        auth_protocol: 'userpass',
+        username: '',
+        password: '',
+        tls_enabled: false,
+        tls_skip_verify: false,
+        scan_interval: '15m',
+      }];
+
+      d['privacy.domain_blocklist'] = Array.isArray(d['privacy.domain_blocklist'])
+        ? d['privacy.domain_blocklist']
+        : [];
+      d['privacy.domain_allowlist'] = Array.isArray(d['privacy.domain_allowlist'])
+        ? d['privacy.domain_allowlist']
+        : [];
+
+      d['bounce.actions'] = d['bounce.actions'] || {};
+      ['soft', 'hard', 'complaint'].forEach((typ) => {
+        d['bounce.actions'][typ] = d['bounce.actions'][typ] || { count: 1, action: 'none' };
+      });
+
+      d['bounce.postmark'] = d['bounce.postmark'] || {
+        enabled: false,
+        username: '',
+        password: '',
+      };
+
+      d['bounce.forwardemail'] = d['bounce.forwardemail'] || {
+        enabled: false,
+        key: '',
+      };
+
+      d['security.captcha'] = d['security.captcha'] || {};
+      d['security.captcha'].hcaptcha = d['security.captcha'].hcaptcha || { secret: '' };
+
+      d['security.oidc'] = d['security.oidc'] || { client_secret: '' };
+
+      return d;
+    },
+
     async onSubmit() {
-      const form = JSON.parse(JSON.stringify(this.form));
+      const form = this.normalizeSettings(JSON.parse(JSON.stringify(this.form)));
 
       // SMTP boxes.
       let hasDummy = '';
@@ -193,8 +261,16 @@ export default Vue.extend({
       }
 
       // Domain blocklist array from multi-line strings.
-      form['privacy.domain_blocklist'] = form['privacy.domain_blocklist'].split('\n').map((v) => v.trim().toLowerCase()).filter((v) => v !== '');
-      form['privacy.domain_allowlist'] = form['privacy.domain_allowlist'].split('\n').map((v) => v.trim().toLowerCase()).filter((v) => v !== '');
+      form['privacy.domain_blocklist'] = (Array.isArray(form['privacy.domain_blocklist'])
+        ? form['privacy.domain_blocklist']
+        : String(form['privacy.domain_blocklist'] || '').split('\n'))
+        .map((v) => String(v).trim().toLowerCase())
+        .filter((v) => v !== '');
+      form['privacy.domain_allowlist'] = (Array.isArray(form['privacy.domain_allowlist'])
+        ? form['privacy.domain_allowlist']
+        : String(form['privacy.domain_allowlist'] || '').split('\n'))
+        .map((v) => String(v).trim().toLowerCase())
+        .filter((v) => v !== '');
 
       this.isLoading = true;
       try {
@@ -219,8 +295,11 @@ export default Vue.extend({
           return;
         }
 
+        d = this.normalizeSettings(d);
+
         // Serialize the `email_headers` array map to display on the form.
         for (let i = 0; i < d.smtp.length; i += 1) {
+          d.smtp[i].email_headers = Array.isArray(d.smtp[i].email_headers) ? d.smtp[i].email_headers : [];
           d.smtp[i].strEmailHeaders = JSON.stringify(d.smtp[i].email_headers, null, 4);
         }
 

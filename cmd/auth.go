@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"image/png"
 	"net/http"
 	"net/mail"
@@ -13,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/i18n"
-	"github.com/knadh/listmonk/internal/notifs"
-	"github.com/knadh/listmonk/internal/tmptokens"
-	"github.com/knadh/listmonk/internal/utils"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/internal/tmptokens"
+	"github.com/compdani/list_pocket/internal/utils"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/pquerna/otp/totp"
 	"gopkg.in/volatiletech/null.v6"
@@ -69,6 +70,13 @@ type twofaTpl struct {
 	Token       string
 	NextURI     string
 	Error       string
+}
+
+type authBridgeTpl struct {
+	Title       string
+	Description string
+	NextURI     string
+	PayloadJSON template.JS
 }
 
 var (
@@ -259,13 +267,11 @@ func (a *App) OIDCFinish(c echo.Context) error {
 		return a.renderLoginPage(c, err)
 	}
 
-	// Set the session in the DB and cookie.
-	if err := a.auth.SaveSession(user, oidcToken, c); err != nil {
+	if err := a.completeAuth(c, user, oidcToken, utils.SanitizeURI(state.Next)); err != nil {
 		return a.renderLoginPage(c, err)
 	}
 
-	// Redirect to the next page.
-	return c.Redirect(http.StatusFound, utils.SanitizeURI(state.Next))
+	return nil
 }
 
 // ForgotPage renders the forgot password page and handles the forgot password form.
@@ -488,12 +494,7 @@ func (a *App) doLogin(c echo.Context) error {
 		return c.Redirect(http.StatusFound, fmt.Sprintf("%s/login/twofa?token=%s&next=%s", uriAdmin, token, url.QueryEscape(next)))
 	}
 
-	// Set the session in the DB and cookie.
-	if err := a.auth.SaveSession(user, "", c); err != nil {
-		return err
-	}
-
-	return nil
+	return a.completeAuth(c, user, "", utils.SanitizeURI(c.FormValue("next")))
 }
 
 // doFirstTimeSetup sets a user up for the first time.
@@ -504,6 +505,7 @@ func (a *App) doFirstTimeSetup(c echo.Context) error {
 		password  = strings.TrimSpace(c.FormValue("password"))
 		password2 = strings.TrimSpace(c.FormValue("password2"))
 	)
+	a.log.Printf("first-time setup: starting for username=%q email=%q", username, email)
 	if !utils.ValidateEmail(email) {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
 	}
@@ -517,21 +519,21 @@ func (a *App) doFirstTimeSetup(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.passwordMismatch"))
 	}
 
-	// Create the default "Super Admin" with all permissions if it doesn't exist.
-	if _, err := a.core.GetRole(auth.SuperAdminRoleID); err != nil {
-		r := auth.Role{
-			Type: auth.RoleTypeUser,
-			Name: null.NewString("Super Admin", true),
-		}
-		for p := range a.cfg.Permissions {
-			r.Permissions = append(r.Permissions, p)
-		}
-
-		// Create the role in the DB.
-		if _, err := a.core.CreateRole(r); err != nil {
-			return err
-		}
+	// Resolve or create the default "Super Admin" role in an idempotent way.
+	r := auth.Role{
+		Type: auth.RoleTypeUser,
+		Name: null.NewString("Super Admin", true),
 	}
+	for p := range a.cfg.Permissions {
+		r.Permissions = append(r.Permissions, p)
+	}
+
+	role, err := a.core.CreateRole(r)
+	if err != nil {
+		a.log.Printf("first-time setup: create role failed for username=%q email=%q: %v", username, email, err)
+		return err
+	}
+	a.log.Printf("first-time setup: resolved super admin role id=%d for username=%q", role.ID, username)
 
 	// Create the super admin user in the DB.
 	u := auth.User{
@@ -542,23 +544,45 @@ func (a *App) doFirstTimeSetup(c echo.Context) error {
 		Name:          username,
 		Password:      null.NewString(password, true),
 		Email:         null.NewString(email, true),
-		UserRoleID:    auth.SuperAdminRoleID,
+		UserRoleID:    role.ID,
 		Status:        auth.UserStatusEnabled,
 	}
-	if _, err := a.core.CreateUser(u); err != nil {
-		return err
-	}
-
-	// Log the user in directly.
-	user, err := a.auth.LoginUser(username, password)
+	authRec, err := a.auth.UpsertUserAuthRecord(u, "")
 	if err != nil {
+		a.log.Printf("first-time setup: create auth record failed for username=%q email=%q role_id=%d: %v", username, email, role.ID, err)
 		return err
 	}
+	a.log.Printf("first-time setup: created auth record for username=%q", username)
 
-	// Set the session in the DB and cookie.
-	if err := a.auth.SaveSession(user, "", c); err != nil {
+	user, err := a.core.CreateUser(u)
+	if err != nil {
+		if authRec != nil {
+			_ = a.pb.Delete(authRec)
+		}
+		a.log.Printf("first-time setup: create user failed for username=%q email=%q role_id=%d: %v", username, email, role.ID, err)
 		return err
 	}
+	a.log.Printf("first-time setup: created user id=%d username=%q role_id=%d", user.ID, user.Username, role.ID)
+
+	if _, err := refreshAuthCache(a.auth); err != nil {
+		a.log.Printf("first-time setup: refresh auth cache failed for username=%q user_id=%d: %v", user.Username, user.ID, err)
+		return err
+	}
+	a.log.Printf("first-time setup: refreshed auth cache for username=%q user_id=%d", user.Username, user.ID)
+
+	authUser, err := a.auth.UpsertUserAuthRecord(user, u.Username)
+	if err != nil {
+		a.log.Printf("first-time setup: finalize auth record failed for username=%q user_id=%d: %v", user.Username, user.ID, err)
+		return err
+	}
+	_ = authUser
+	a.log.Printf("first-time setup: finalized auth record for username=%q user_id=%d", user.Username, user.ID)
+
+	if err := a.completeAuth(c, user, "", utils.SanitizeURI(c.FormValue("next"))); err != nil {
+		a.log.Printf("first-time setup: save session failed for username=%q user_id=%d: %v", user.Username, user.ID, err)
+		return err
+	}
+	a.log.Printf("first-time setup: completed for username=%q user_id=%d", user.Username, user.ID)
 
 	return nil
 }
@@ -684,13 +708,7 @@ func (a *App) doResetPassword(c echo.Context, token, email string) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
 	}
 
-	// Log the user in directly without forcing a manual login right after password change.
-	if err := a.auth.SaveSession(user, "", c); err != nil {
-		return err
-	}
-
-	// Redirect to the admin page.
-	return c.Redirect(http.StatusFound, uriAdmin)
+	return a.completeAuth(c, user, "", uriAdmin)
 }
 
 // renderTwofaPage renders the 2FA verification page.
@@ -734,13 +752,41 @@ func (a *App) doTwofaVerify(c echo.Context, token string, userID int, next strin
 	// Invalidate the token.
 	tmptokens.Delete(token)
 
-	// Set the session.
-	if err := a.auth.SaveSession(user, "", c); err != nil {
-		return err
+	return a.completeAuth(c, user, "", next)
+}
+
+func (a *App) completeAuth(c echo.Context, user auth.User, oidcToken, next string) error {
+	if next == "" || next == "/" {
+		next = uriAdmin
 	}
 
-	// Redirect to the next page.
-	return c.Redirect(http.StatusFound, next)
+	a.log.Printf("auth bridge: issuing PocketBase auth for username=%q user_id=%d next=%q", user.Username, user.ID, next)
+	clientAuth, err := a.auth.IssueClientAuth(user)
+	if err != nil {
+		a.log.Printf("auth bridge: failed issuing PocketBase auth for username=%q user_id=%d: %v", user.Username, user.ID, err)
+		return err
+	}
+	a.log.Printf("auth bridge: issued PocketBase auth for username=%q user_id=%d token_len=%d", user.Username, user.ID, len(clientAuth.Token))
+
+	user.Password = null.String{}
+	clientAuth.Record["profile"] = user
+
+	payloadJSON, err := json.Marshal(map[string]any{
+		"token":  clientAuth.Token,
+		"record": clientAuth.Record,
+	})
+	if err != nil {
+		a.log.Printf("auth bridge: failed marshaling auth payload for username=%q user_id=%d: %v", user.Username, user.ID, err)
+		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+	}
+	a.log.Printf("auth bridge: rendering bridge page for username=%q user_id=%d", user.Username, user.ID)
+
+	return c.Render(http.StatusOK, "admin-auth-bridge", authBridgeTpl{
+		Title:       a.i18n.T("users.login"),
+		Description: "",
+		NextURI:     next,
+		PayloadJSON: template.JS(string(payloadJSON)),
+	})
 }
 
 // GenerateTOTPQR generates a TOTP QR code for a user to scan with their authenticator app.

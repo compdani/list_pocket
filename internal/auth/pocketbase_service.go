@@ -44,12 +44,25 @@ func (s *PocketBaseAuthService) UpsertUser(u User, lookupUsername string) (*pbco
 		email = fmt.Sprintf("%s@api.local", strings.ToLower(u.Username))
 	}
 
+	roleID := u.UserRoleID
+	if roleID < 1 {
+		roleID = u.UserRole.ID
+	}
+
 	rec.SetEmail(email)
 	rec.Set("username", u.Username)
 	rec.Set("legacy_user_id", u.ID)
 	rec.Set("user_type", u.Type)
 	rec.Set("status", u.Status)
-	rec.Set("role", strconv.Itoa(u.UserRoleID))
+	rec.Set("role", strconv.Itoa(roleID))
+	rec.Set("password_login", u.PasswordLogin)
+	if u.ListRoleID != nil {
+		rec.Set("list_role_id", *u.ListRoleID)
+	} else {
+		rec.Set("list_role_id", 0)
+	}
+	rec.Set("twofa_type", u.TwofaType)
+	rec.Set("twofa_key", u.TwofaKey.String)
 	rec.SetVerified(true)
 
 	if u.Password.String != "" {

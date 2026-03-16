@@ -24,7 +24,8 @@ type Event struct {
 }
 
 type Events struct {
-	subs map[string]chan Event
+	subs        map[string]chan Event
+	publishHook func(Event) error
 	sync.RWMutex
 }
 
@@ -62,6 +63,7 @@ func (ev *Events) Unsubscribe(id string) {
 // Publish publishes an event to all subscribers.
 func (ev *Events) Publish(e Event) error {
 	ev.Lock()
+	hook := ev.publishHook
 	defer ev.Unlock()
 
 	for _, ch := range ev.subs {
@@ -72,7 +74,23 @@ func (ev *Events) Publish(e Event) error {
 		}
 	}
 
+	if hook != nil {
+		if err := hook(e); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (ev *Events) SetPublishHook(fn func(Event) error) {
+	ev.Lock()
+	defer ev.Unlock()
+	if fn == nil {
+		ev.publishHook = nil
+		return
+	}
+	ev.publishHook = fn
 }
 
 // This implements an io.Writer specifically for receiving error messages

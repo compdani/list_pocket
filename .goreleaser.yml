@@ -2,14 +2,14 @@ env:
   - GO111MODULE=on
   - CGO_ENABLED=0
   - GITHUB_ORG=knadh
-  - DOCKER_ORG=listmonk
+  - DOCKER_ORG=listpocket
 
 before:
   hooks:
     - make build-frontend
 
 builds:
-  - binary: listmonk
+  - binary: listpocket
     main: .
     goos:
       - linux
@@ -26,7 +26,7 @@ builds:
       - 6
       - 7
     ldflags:
-      - -s -w -X "github.com/knadh/listmonk/cmd.buildString={{ .Tag }} ({{ .ShortCommit }} {{ .Date }}, {{ .Os }}/{{ .Arch }})" -X "github.com/knadh/listmonk/cmd.versionString={{ .Tag }}"
+      - -s -w -X "github.com/compdani/list_pocket/cmd.buildString={{ .Tag }} ({{ .ShortCommit }} {{ .Date }}, {{ .Os }}/{{ .Arch }})" -X "github.com/compdani/list_pocket/cmd.versionString={{ .Tag }}"
 
     hooks:
       # stuff executables with static assets.
@@ -43,7 +43,7 @@ dockers:
     goos: linux
     goarch: amd64
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:latest-amd64"
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:{{ .Tag }}-amd64"
@@ -67,7 +67,7 @@ dockers:
     goos: linux
     goarch: arm64
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:latest-arm64v8"
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:{{ .Tag }}-arm64v8"
@@ -92,7 +92,7 @@ dockers:
     goarch: arm
     goarm: 6
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:latest-armv6"
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:{{ .Tag }}-armv6"
@@ -117,7 +117,7 @@ dockers:
     goarch: arm
     goarm: 7
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:latest-armv7"
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:{{ .Tag }}-armv7"

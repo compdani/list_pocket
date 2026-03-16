@@ -1,6 +1,6 @@
 # Static website and docs
 
-This repository contains the source for the static website https://listmonk.app
+This repository contains the source for the static website for listpocket
 
 - The website is in `site` and is built with hugo (run `hugo serve` inside `site` to preview).
 

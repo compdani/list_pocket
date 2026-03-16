@@ -5,10 +5,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/core"
-	"github.com/knadh/listmonk/internal/utils"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/utils"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/pquerna/otp/totp"
 	"gopkg.in/volatiletech/null.v6"
@@ -105,7 +104,7 @@ func (a *App) CreateUser(c echo.Context) error {
 	}
 
 	// Cache the API token for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 
@@ -198,7 +197,7 @@ func (a *App) UpdateUser(c echo.Context) error {
 	user.Password = null.String{}
 
 	// Cache the API token for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 
@@ -218,7 +217,7 @@ func (a *App) DeleteUser(c echo.Context) error {
 	}
 
 	// Cache the API token for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 
@@ -242,7 +241,7 @@ func (a *App) DeleteUsers(c echo.Context) error {
 	}
 
 	// Cache the API token for in-memory, off-DB /api/* request auth.
-	if _, err := cacheUsers(a.core, a.auth); err != nil {
+	if _, err := refreshAuthCache(a.auth); err != nil {
 		return err
 	}
 
@@ -375,31 +374,8 @@ func (a *App) DisableTOTP(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{true})
 }
 
-// cacheUsers fetches (API) users and caches them in the auth module.
-// It also returns a bool indicating whether there are any actual users in the DB at all,
-// which if there aren't, the first time user setup needs to be run.
-func cacheUsers(co *core.Core, a *auth.Auth) (bool, error) {
-	users, err := co.GetUsers()
-	if err != nil {
-		return false, err
-	}
-
-	if err := a.SyncUsers(users); err != nil {
-		return false, err
-	}
-
-	hasUser := false
-	apiUsers := make([]auth.User, 0, len(users))
-	for _, u := range users {
-		if u.Type == auth.UserTypeAPI && u.Status == auth.UserStatusEnabled {
-			apiUsers = append(apiUsers, u)
-		}
-
-		if u.Type == auth.UserTypeUser {
-			hasUser = true
-		}
-	}
-
-	a.CacheAPIUsers(apiUsers)
-	return hasUser, nil
+// refreshAuthCache reloads startup-critical auth state from PocketBase records.
+// It returns whether any enabled non-API user exists, which drives first-run setup.
+func refreshAuthCache(a *auth.Auth) (bool, error) {
+	return a.LoadCachedUsersFromPocketBase()
 }

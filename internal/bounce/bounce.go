@@ -5,10 +5,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/knadh/listmonk/internal/bounce/mailbox"
-	"github.com/knadh/listmonk/internal/bounce/webhooks"
-	"github.com/knadh/listmonk/internal/pbdb"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/bounce/mailbox"
+	"github.com/compdani/list_pocket/internal/bounce/webhooks"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/models"
 )
 
 // Mailbox represents a POP/IMAP mailbox client that can scan messages and pass

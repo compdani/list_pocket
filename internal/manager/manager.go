@@ -13,9 +13,9 @@ import (
 	"maps"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/knadh/listmonk/internal/i18n"
-	"github.com/knadh/listmonk/internal/notifs"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/models"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -304,6 +304,32 @@ func (m *Manager) Run() {
 	}
 }
 
+// ScanCampaignsOnce scans the store for campaigns ready to run and queues them.
+func (m *Manager) ScanCampaignsOnce() {
+	ids, counts := m.getCurrentCampaigns()
+	m.log.Printf("campaign scheduler: scan current_ids=%v sent_counts=%v", ids, counts)
+	campaigns, err := m.store.NextCampaigns(ids, counts)
+	if err != nil {
+		m.log.Printf("error fetching campaigns: %v", err)
+		return
+	}
+	m.log.Printf("campaign scheduler: found %d runnable campaigns", len(campaigns))
+
+	for _, c := range campaigns {
+		p, err := m.newPipe(c)
+		if err != nil {
+			m.log.Printf("error processing campaign (%s): %v", c.Name, err)
+			continue
+		}
+		m.log.Printf("start processing campaign (%s)", c.Name)
+
+		select {
+		case m.nextPipes <- p:
+		default:
+		}
+	}
+}
+
 // CacheTpl caches a template for ad-hoc use. This is currently only used by tx templates.
 func (m *Manager) CacheTpl(id int, tpl *models.Template) {
 	m.tplsMut.Lock()
@@ -415,30 +441,7 @@ func (m *Manager) scanCampaigns(tick time.Duration) {
 
 	// Periodically scan the data source for campaigns to process.
 	for range t.C {
-		ids, counts := m.getCurrentCampaigns()
-		campaigns, err := m.store.NextCampaigns(ids, counts)
-		if err != nil {
-			m.log.Printf("error fetching campaigns: %v", err)
-			continue
-		}
-
-		for _, c := range campaigns {
-			// Create a new pipe that'll handle this campaign's states.
-			p, err := m.newPipe(c)
-			if err != nil {
-				m.log.Printf("error processing campaign (%s): %v", c.Name, err)
-				continue
-			}
-			m.log.Printf("start processing campaign (%s)", c.Name)
-
-			// If subscriber processing is busy, move on. Blocking and waiting
-			// can end up in a race condition where the waiting campaign's
-			// state in the data source has changed.
-			select {
-			case m.nextPipes <- p:
-			default:
-			}
-		}
+		m.ScanCampaignsOnce()
 	}
 }
 

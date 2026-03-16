@@ -20,19 +20,19 @@ export default defineConfig(({ _, mode }) => {
       assetsDir: 'static',
     },
     server: {
-      port: env.LISTMONK_FRONTEND_PORT || 8080,
+      port: env.LISTPOCKET_FRONTEND_PORT || 8080,
       proxy: {
         '^/$': {
-          target: env.LISTMONK_API_URL || 'http://127.0.0.1:9000',
+          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
         },
         '^/(api|webhooks|subscription|public|health)': {
-          target: env.LISTMONK_API_URL || 'http://127.0.0.1:9000',
+          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
         },
         '^/admin/login': {
-          target: env.LISTMONK_API_URL || 'http://127.0.0.1:9000',
+          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
         },
         '^/(admin\/custom\.(css|js))': {
-          target: env.LISTMONK_API_URL || 'http://127.0.0.1:9000',
+          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
         },
       },
     },
