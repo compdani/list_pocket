@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 )
@@ -192,15 +192,15 @@ func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order stri
 	}
 
 	sortCol := map[string]string{
-		"email":         "email",
-		"campaign_name": "campaign_name",
-		"source":        "source",
-		"created_at":    "created_at",
-		"type":          "type",
-		"id":            "id",
+		"email":         "s.email",
+		"campaign_name": "c.name",
+		"source":        "b.source",
+		"created_at":    "b.created",
+		"type":          "b.type",
+		"id":            "b.id",
 	}[orderBy]
 	if sortCol == "" {
-		sortCol = "created_at"
+		sortCol = "b.created"
 	}
 
 	q := `
@@ -209,7 +209,7 @@ func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order stri
 			b.type,
 			b.source,
 			b.meta,
-			b.created_at,
+			b.created AS created_at,
 			b.subscriber_id,
 			s.uuid AS subscriber_uuid,
 			s.email AS email,
@@ -333,7 +333,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 		}
 
 		if _, err := tx.Exec(`
-			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created_at)
+			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
 			VALUES (?, NULLIF(?, 0), ?, ?, ?, ?)`,
 			sub.ID, campID, b.Type, b.Source, meta, createdAt.UTC().Format("2006-01-02 15:04:05")); err != nil {
 			c.log.Printf("error recording bounce: %v", err)

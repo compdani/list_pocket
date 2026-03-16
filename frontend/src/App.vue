@@ -113,6 +113,7 @@
 import Vue from 'vue';
 import { mapState } from 'vuex';
 import { uris } from './constants';
+import { pb } from './api';
 
 import Navigation from './components/Navigation.vue';
 
@@ -127,6 +128,7 @@ export default Vue.extend({
     return {
       activeItem: {},
       activeGroup: {},
+      eventsTopic: 'events/error',
       windowWidth: window.innerWidth,
     };
   },
@@ -176,28 +178,26 @@ export default Vue.extend({
       });
     },
 
-    listenEvents() {
-      const token = this.$api.getAuthToken();
-      if (!token) {
-        return;
-      }
-
+    async listenEvents() {
       const reMatchLog = /(.+?)\.go:\d+:(.+?)$/im;
-      const delim = uris.errorEvents.includes('?') ? '&' : '?';
-      const evtSource = new EventSource(`${uris.errorEvents}${delim}access_token=${encodeURIComponent(token)}`);
       let numEv = 0;
-      evtSource.onmessage = (e) => {
-        if (numEv > 50) {
-          return;
-        }
-        numEv += 1;
+      try {
+        await pb.realtime.subscribe(this.eventsTopic, (e) => {
+          if (numEv > 50) {
+            return;
+          }
+          numEv += 1;
 
-        const d = JSON.parse(e.data);
-        if (d && d.type === 'error') {
-          const msg = reMatchLog.exec(d.message.trim());
-          this.$utils.toast(msg[2], 'is-danger', null, true);
-        }
-      };
+          const d = e && e.data ? e.data : e;
+          if (d && d.type === 'error' && d.message) {
+            const msg = reMatchLog.exec(d.message.trim());
+            this.$utils.toast(msg ? msg[2] : d.message.trim(), 'is-danger', null, true);
+          }
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(err);
+      }
     },
   },
 
@@ -231,6 +231,10 @@ export default Vue.extend({
     });
 
     this.listenEvents();
+  },
+
+  beforeDestroy() {
+    pb.realtime.unsubscribe(this.eventsTopic);
   },
 });
 </script>

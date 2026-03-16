@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/notifs"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	"gopkg.in/volatiletech/null.v6"
@@ -256,10 +256,13 @@ func (a *App) CreateCampaign(c echo.Context) error {
 	if err := c.Bind(&o); err != nil {
 		return err
 	}
+	a.log.Printf("create campaign: received name=%q type=%q content_type=%q list_ids=%v media_ids=%v messenger=%q archive=%v template_id_valid=%v archive_template_id_valid=%v",
+		o.Name, o.Type, o.ContentType, o.ListIDs, o.MediaIDs, o.Messenger, o.Archive, o.TemplateID.Valid, o.ArchiveTemplateID.Valid)
 
 	// Filter lists against the current user's permitted lists.
 	user := auth.GetUser(c)
 	o.ListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListIDs)
+	a.log.Printf("create campaign: filtered lists username=%q role_id=%d permitted_list_ids=%v", user.Username, user.UserRoleID, o.ListIDs)
 
 	// If the campaign's 'opt-in', prepare a default message.
 	switch o.Type {
@@ -279,10 +282,13 @@ func (a *App) CreateCampaign(c echo.Context) error {
 
 	// Validate.
 	if c, err := a.validateCampaignFields(o); err != nil {
+		a.log.Printf("create campaign: validation failed name=%q error=%v", o.Name, err)
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	} else {
 		o = c
 	}
+	a.log.Printf("create campaign: validated name=%q type=%q content_type=%q archive=%v altbody_valid=%v archive_slug_valid=%v send_at_valid=%v",
+		o.Name, o.Type, o.ContentType, o.Archive, o.AltBody.Valid, o.ArchiveSlug.Valid, o.SendAt.Valid)
 
 	if o.ArchiveTemplateID.Valid && o.ArchiveTemplateID.Int != 0 {
 		o.ArchiveTemplateID = o.TemplateID
@@ -290,8 +296,10 @@ func (a *App) CreateCampaign(c echo.Context) error {
 
 	out, err := a.core.CreateCampaign(o.Campaign, o.ListIDs, o.MediaIDs)
 	if err != nil {
+		a.log.Printf("create campaign: core create failed name=%q error=%v", o.Name, err)
 		return err
 	}
+	a.log.Printf("create campaign: success name=%q campaign_id=%d uuid=%q", out.Name, out.ID, out.UUID)
 
 	return c.JSON(http.StatusOK, okResp{out})
 }
@@ -329,6 +337,8 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	if err := c.Bind(&o); err != nil {
 		return err
 	}
+	a.log.Printf("update campaign: received id=%d name=%q status=%q content_type=%q list_ids=%v media_ids=%v archive=%v",
+		id, o.Name, cm.Status, o.ContentType, o.ListIDs, o.MediaIDs, o.Archive)
 
 	if c, err := a.validateCampaignFields(o); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -362,13 +372,17 @@ func (a *App) UpdateCampaignStatus(c echo.Context) error {
 	}
 
 	// Update the campaign status in the DB.
+	a.log.Printf("change campaign status: request id=%d target_status=%q", id, req.Status)
 	out, err := a.core.UpdateCampaignStatus(id, req.Status)
 	if err != nil {
+		a.log.Printf("change campaign status: failed id=%d target_status=%q error=%v", id, req.Status, err)
 		return err
 	}
+	a.log.Printf("change campaign status: success id=%d new_status=%q", id, out.Status)
 
 	// If the campaign is being stopped, send the signal to the manager to stop it in flight.
 	if req.Status == models.CampaignStatusPaused || req.Status == models.CampaignStatusCancelled {
+		a.log.Printf("change campaign status: stop signal id=%d target_status=%q", id, req.Status)
 		a.manager.StopCampaign(id)
 	}
 

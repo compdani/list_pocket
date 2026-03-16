@@ -3,50 +3,73 @@ package core
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
-	"github.com/knadh/listmonk/internal/auth"
-	"github.com/knadh/listmonk/internal/utils"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/labstack/echo/v4"
-	"github.com/lib/pq"
+	"github.com/pocketbase/dbx"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"gopkg.in/volatiletech/null.v6"
 )
 
 func (c *Core) GetUsers() ([]auth.User, error) {
-	out := []auth.User{}
-	if err := c.q.GetUsers.Select(&out); err != nil {
+	pb := c.db.PocketBase()
+	if pb == nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", "pocketbase unavailable"))
 	}
 
-	return c.setupUserFields(out), nil
+	recs, err := pb.FindRecordsByFilter("users", "", "created", 0, 0)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", err.Error()))
+	}
+
+	out := make([]auth.User, 0, len(recs))
+	for _, rec := range recs {
+		out = append(out, userFromAuthRecord(rec))
+	}
+
+	return c.hydrateUsers(out)
 }
 
 // GetUser retrieves a specific user based on any one given identifier.
 func (c *Core) GetUser(id int, username, email string) (auth.User, error) {
-	var out auth.User
-	if err := c.q.GetUser.Get(&out, id, username, email); err != nil {
+	rec, err := c.findAuthUserRecord(id, username, email)
+	if err != nil {
 		if err == sql.ErrNoRows {
-			return out, echo.NewHTTPError(http.StatusNotFound,
+			return auth.User{}, echo.NewHTTPError(http.StatusNotFound,
 				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
-
 		}
 
-		return out, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", pqErrMsg(err)))
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", err.Error()))
 	}
 
-	return c.setupUserFields([]auth.User{out})[0], nil
+	users, err := c.hydrateUsers([]auth.User{userFromAuthRecord(rec)})
+	if err != nil {
+		return auth.User{}, err
+	}
+
+	return users[0], nil
 }
 
 // CreateUser creates a new user.
 func (c *Core) CreateUser(u auth.User) (auth.User, error) {
-	var id int
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", "pocketbase unavailable"))
+	}
 
 	// If it's an API user, generate a random token for password
 	// and set the e-mail to default.
 	if u.Type == auth.UserTypeAPI {
-		// Generate a random admin password.
 		tk, err := utils.GenerateRandomString(32)
 		if err != nil {
 			return auth.User{}, err
@@ -57,56 +80,122 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 		u.Password = null.String{String: tk, Valid: true}
 	}
 
-	if err := c.q.CreateUser.Get(&id, u.Username, u.PasswordLogin, u.Password, u.Email, u.Name, u.Type, u.UserRoleID, u.ListRoleID, u.Status); err != nil {
+	rec, err := c.findAuthUserRecord(0, u.Username, "")
+	if err != nil && err != sql.ErrNoRows {
 		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+	}
+	if err == sql.ErrNoRows || rec == nil {
+		col, colErr := pb.FindCollectionByNameOrId("users")
+		if colErr != nil {
+			return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", colErr.Error()))
+		}
+		rec = pbcore.NewRecord(col)
 	}
 
-	// Hide the password field in the response except for when the user type is an API token,
-	// where the frontend shows the token on the UI just once.
-	if u.Type != auth.UserTypeAPI {
-		u.Password = null.String{Valid: false}
+	if rec.GetInt("legacy_user_id") <= 0 {
+		nextID, err := c.nextLegacyUserID()
+		if err != nil {
+			return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+		}
+		rec.Set("legacy_user_id", nextID)
 	}
 
-	out, err := c.GetUser(id, "", "")
-	return out, err
+	if err := c.applyUserToRecord(rec, u, true); err != nil {
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+	}
+
+	if err := pb.Save(rec); err != nil {
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+	}
+
+	out, err := c.GetUser(rec.GetInt("legacy_user_id"), "", "")
+	if err != nil {
+		return auth.User{}, err
+	}
+
+	// Expose the generated API token once on creation.
+	if u.Type == auth.UserTypeAPI {
+		out.Password = u.Password
+	} else {
+		out.Password = null.String{}
+	}
+
+	return out, nil
 }
 
 // UpdateUser updates a given user.
 func (c *Core) UpdateUser(id int, u auth.User) (auth.User, error) {
-	listRoleID := 0
-	if u.ListRoleID == nil {
-		listRoleID = -1
-	} else {
-		listRoleID = *u.ListRoleID
-	}
-
-	res, err := c.q.UpdateUser.Exec(id, u.Username, u.PasswordLogin, u.Password, u.Email, u.Name, u.Type, u.UserRoleID, listRoleID, u.Status)
+	rec, err := c.findAuthUserRecord(id, "", "")
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
+				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
+		}
 		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
-	if n, _ := res.RowsAffected(); n == 0 {
-		return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
+	oldUser, err := c.GetUser(id, "", "")
+	if err != nil {
+		return auth.User{}, err
 	}
 
-	out, err := c.GetUser(id, "", "")
+	if oldUser.Type == auth.UserTypeUser && oldUser.Status == auth.UserStatusEnabled &&
+		oldUser.UserRole.ID == auth.SuperAdminRoleID &&
+		(u.UserRoleID != auth.SuperAdminRoleID || u.Status != auth.UserStatusEnabled) {
+		num, err := c.countOtherEnabledSuperAdmins(id)
+		if err != nil {
+			return auth.User{}, err
+		}
+		if num == 0 {
+			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
+		}
+	}
 
-	return out, err
+	if err := c.applyUserToRecord(rec, u, false); err != nil {
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+	}
+
+	if err := c.db.PocketBase().Save(rec); err != nil {
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+	}
+
+	return c.GetUser(id, "", "")
 }
 
-// UpdateUserProfile updates the basic fields of a given uesr (name, email, password).
+// UpdateUserProfile updates the basic fields of a given user (name, email, password).
 func (c *Core) UpdateUserProfile(id int, u auth.User) (auth.User, error) {
-	res, err := c.q.UpdateUserProfile.Exec(id, u.Name, u.Email, u.PasswordLogin, u.Password)
+	rec, err := c.findAuthUserRecord(id, "", "")
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
+				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
+		}
 		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
-	if n, _ := res.RowsAffected(); n == 0 {
-		return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
+	if strings.TrimSpace(u.Name) != "" {
+		rec.Set("name", u.Name)
+	}
+	if u.Email.Valid {
+		rec.SetEmail(u.Email.String)
+	}
+	if u.Password.String != "" {
+		rec.Set(pbcore.FieldNamePassword, u.Password.String)
+		rec.Set("passwordConfirm", u.Password.String)
+	}
+
+	if err := c.db.PocketBase().Save(rec); err != nil {
+		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return c.GetUser(id, "", "")
@@ -114,9 +203,20 @@ func (c *Core) UpdateUserProfile(id int, u auth.User) (auth.User, error) {
 
 // UpdateUserLogin updates a user's record post-login.
 func (c *Core) UpdateUserLogin(id int, avatar string) error {
-	if _, err := c.q.UpdateUserLogin.Exec(id, avatar); err != nil {
+	rec, err := c.findAuthUserRecord(id, "", "")
+	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+	}
+
+	rec.Set("loggedin_at", time.Now().UTC().Format("2006-01-02 15:04:05.000Z"))
+	if strings.TrimSpace(avatar) != "" {
+		rec.Set("avatar", avatar)
+	}
+
+	if err := c.db.PocketBase().Save(rec); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return nil
@@ -124,41 +224,267 @@ func (c *Core) UpdateUserLogin(id int, avatar string) error {
 
 // SetTwoFA sets or clears the 2FA configuration for a user.
 func (c *Core) SetTwoFA(id int, twofaType, twofaKey string) error {
-	if _, err := c.q.SetUserTwoFA.Exec(id, twofaType, twofaKey); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", pqErrMsg(err)))
-	}
-
-	return nil
-}
-
-// DeleteUsers deletes a given user.
-func (c *Core) DeleteUsers(ids []int) error {
-	res, err := c.q.DeleteUsers.Exec(pq.Array(ids))
+	rec, err := c.findAuthUserRecord(id, "", "")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.user}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
-	if num, err := res.RowsAffected(); err != nil || num == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
+
+	rec.Set("twofa_type", twofaType)
+	rec.Set("twofa_key", twofaKey)
+
+	if err := c.db.PocketBase().Save(rec); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return nil
 }
 
-// LoginUser attempts to log the given user_id in by matching the password.
-func (c *Core) LoginUser(username, password string) (auth.User, error) {
-	var out auth.User
-	if err := c.q.LoginUser.Get(&out, username, password); err != nil {
-		if err == sql.ErrNoRows {
-			return out, echo.NewHTTPError(http.StatusForbidden, c.i18n.T("users.invalidLogin"))
-		}
-
-		return out, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", pqErrMsg(err)))
+// DeleteUsers validates deletion of a given user set. The actual auth record
+// removal is handled by the auth module so it can stay the single deleter.
+func (c *Core) DeleteUsers(ids []int) error {
+	users, err := c.GetUsers()
+	if err != nil {
+		return err
 	}
 
-	return out, nil
+	deleting := make(map[int]struct{}, len(ids))
+	for _, id := range ids {
+		deleting[id] = struct{}{}
+	}
+
+	numEnabledSupers := 0
+	for _, u := range users {
+		if _, ok := deleting[u.ID]; ok {
+			continue
+		}
+		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID {
+			numEnabledSupers++
+		}
+	}
+
+	for _, u := range users {
+		if _, ok := deleting[u.ID]; !ok {
+			continue
+		}
+		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID && numEnabledSupers == 0 {
+			return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
+		}
+	}
+
+	return nil
+}
+
+// LoginUser attempts to log the given user in by matching the password.
+func (c *Core) LoginUser(username, password string) (auth.User, error) {
+	rec, err := c.findAuthUserRecord(0, username, "")
+	if err != nil || rec == nil || !rec.ValidatePassword(password) {
+		return auth.User{}, echo.NewHTTPError(http.StatusForbidden, c.i18n.T("users.invalidLogin"))
+	}
+
+	return c.GetUser(0, username, "")
+}
+
+func (c *Core) findAuthUserRecord(id int, username, email string) (*pbcore.Record, error) {
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return nil, fmt.Errorf("pocketbase unavailable")
+	}
+
+	switch {
+	case id > 0:
+		return pb.FindFirstRecordByFilter("users", "legacy_user_id={:id}", dbx.Params{"id": id})
+	case strings.TrimSpace(username) != "":
+		return pb.FindFirstRecordByData("users", "username", strings.TrimSpace(username))
+	case strings.TrimSpace(email) != "":
+		return pb.FindFirstRecordByData("users", "email", strings.TrimSpace(email))
+	default:
+		return nil, sql.ErrNoRows
+	}
+}
+
+func (c *Core) nextLegacyUserID() (int, error) {
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return 0, fmt.Errorf("pocketbase unavailable")
+	}
+
+	recs, err := pb.FindRecordsByFilter("users", "", "-legacy_user_id", 1, 0)
+	if err != nil || len(recs) == 0 {
+		return 1, nil
+	}
+
+	return recs[0].GetInt("legacy_user_id") + 1, nil
+}
+
+func (c *Core) applyUserToRecord(rec *pbcore.Record, u auth.User, create bool) error {
+	email := strings.TrimSpace(u.Email.String)
+	if email == "" {
+		email = fmt.Sprintf("%s@api.local", strings.ToLower(u.Username))
+	}
+
+	roleID := u.UserRoleID
+	if roleID < 1 {
+		roleID = u.UserRole.ID
+	}
+
+	rec.SetEmail(email)
+	rec.Set("username", u.Username)
+	rec.Set("name", u.Name)
+	rec.Set("user_type", u.Type)
+	rec.Set("status", u.Status)
+	rec.Set("role", strconv.Itoa(roleID))
+	rec.Set("password_login", u.PasswordLogin)
+	rec.SetVerified(true)
+
+	if u.ListRoleID != nil {
+		rec.Set("list_role_id", *u.ListRoleID)
+	} else {
+		rec.Set("list_role_id", 0)
+	}
+
+	rec.Set("twofa_type", u.TwofaType)
+	rec.Set("twofa_key", u.TwofaKey.String)
+
+	if create && rec.GetInt("legacy_user_id") <= 0 {
+		nextID, err := c.nextLegacyUserID()
+		if err != nil {
+			return err
+		}
+		rec.Set("legacy_user_id", nextID)
+	}
+
+	if u.Password.String != "" {
+		rec.Set(pbcore.FieldNamePassword, u.Password.String)
+		rec.Set("passwordConfirm", u.Password.String)
+	} else if create {
+		placeholder := fmt.Sprintf("lm-disabled-%d-%d", rec.GetInt("legacy_user_id"), time.Now().UnixNano())
+		rec.Set(pbcore.FieldNamePassword, placeholder)
+		rec.Set("passwordConfirm", placeholder)
+	}
+
+	return nil
+}
+
+func userFromAuthRecord(rec *pbcore.Record) auth.User {
+	out := auth.User{
+		Base: auth.Base{
+			ID:        rec.GetInt("legacy_user_id"),
+			CreatedAt: parseNullTime(rec.GetString("created")),
+			UpdatedAt: parseNullTime(rec.GetString("updated")),
+		},
+		Username:      rec.GetString("username"),
+		Email:         null.NewString(rec.Email(), strings.TrimSpace(rec.Email()) != ""),
+		Name:          rec.GetString("name"),
+		Type:          strings.TrimSpace(rec.GetString("user_type")),
+		Status:        strings.TrimSpace(rec.GetString("status")),
+		Avatar:        null.NewString(rec.GetString("avatar"), strings.TrimSpace(rec.GetString("avatar")) != ""),
+		TwofaType:     rec.GetString("twofa_type"),
+		TwofaKey:      null.NewString(rec.GetString("twofa_key"), strings.TrimSpace(rec.GetString("twofa_key")) != ""),
+		LoggedInAt:    parseNullTime(rec.GetString("loggedin_at")),
+		UserRoleID:    auth.ExtractRoleIDFromRecord(rec),
+		PasswordLogin: rec.GetBool("password_login"),
+	}
+
+	if out.Type == "" {
+		out.Type = auth.UserTypeUser
+	}
+	if out.Status == "" {
+		out.Status = auth.UserStatusEnabled
+	}
+	if !out.PasswordLogin && out.Type == auth.UserTypeUser && strings.TrimSpace(rec.GetString("password:hash")) != "" {
+		out.PasswordLogin = true
+	}
+
+	if listRoleID := rec.GetInt("list_role_id"); listRoleID > 0 {
+		out.ListRoleID = &listRoleID
+	}
+
+	if strings.TrimSpace(rec.GetString("password:hash")) != "" {
+		out.HasPassword = true
+	}
+
+	return out
+}
+
+func parseNullTime(value string) null.Time {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return null.Time{}
+	}
+
+	t, err := time.Parse("2006-01-02 15:04:05.000Z", value)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, value)
+		if err != nil {
+			return null.Time{}
+		}
+	}
+
+	return null.NewTime(t, true)
+}
+
+func (c *Core) hydrateUsers(users []auth.User) ([]auth.User, error) {
+	userRoles, err := c.GetRoles()
+	if err != nil {
+		return nil, err
+	}
+
+	listRoles, err := c.GetListRoles()
+	if err != nil {
+		return nil, err
+	}
+
+	userRoleMap := make(map[int]auth.Role, len(userRoles))
+	for _, role := range userRoles {
+		userRoleMap[role.ID] = role
+	}
+
+	listRoleMap := make(map[int]auth.ListRole, len(listRoles))
+	for _, role := range listRoles {
+		listRoleMap[role.ID] = role
+	}
+
+	for i := range users {
+		u := &users[i]
+
+		if role, ok := userRoleMap[u.UserRoleID]; ok {
+			u.UserRoleName = role.Name.String
+			u.UserRolePerms = role.Permissions
+		}
+
+		if u.ListRoleID != nil {
+			if role, ok := listRoleMap[*u.ListRoleID]; ok {
+				u.ListRoleName = role.Name
+				if b, err := json.Marshal(role.Lists); err == nil {
+					raw := json.RawMessage(b)
+					u.ListsPermsRaw = &raw
+				}
+			}
+		}
+	}
+
+	return c.setupUserFields(users), nil
+}
+
+func (c *Core) countOtherEnabledSuperAdmins(excludeID int) (int, error) {
+	users, err := c.GetUsers()
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, u := range users {
+		if u.ID == excludeID {
+			continue
+		}
+		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID {
+			count++
+		}
+	}
+
+	return count, nil
 }
 
 // setupUserFields prepares and sets up various user fields.
@@ -166,8 +492,7 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 	for n, u := range users {
 		u := u
 
-		if u.Password.String != "" {
-			u.HasPassword = true
+		if u.HasPassword {
 			u.PasswordLogin = true
 		}
 
@@ -178,7 +503,6 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 		u.UserRole.ID = u.UserRoleID
 		u.UserRole.Name = u.UserRoleName
 		u.UserRole.Permissions = u.UserRolePerms
-		u.UserRoleID = 0
 
 		// Prepare lookup maps.
 		u.ListPermissionsMap = make(map[int]map[string]struct{})
@@ -188,7 +512,6 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 		}
 
 		if u.ListRoleID != nil {
-			// Unmarshall the raw list perms map.
 			var listPerms []auth.ListPermission
 			if u.ListsPermsRaw != nil {
 				if err := json.Unmarshal(*u.ListsPermsRaw, &listPerms); err != nil {
@@ -198,14 +521,12 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 
 			u.ListRole = &auth.ListRolePermissions{ID: *u.ListRoleID, Name: u.ListRoleName.String, Lists: listPerms}
 
-			// Iterate each list in the list permissions and setup get/manage list IDs.
 			for _, p := range listPerms {
 				u.ListPermissionsMap[p.ID] = make(map[string]struct{})
 
 				for _, perm := range p.Permissions {
 					u.ListPermissionsMap[p.ID][perm] = struct{}{}
 
-					// List IDs with get / manage permissions.
 					if perm == auth.PermListGet {
 						u.GetListIDs = append(u.GetListIDs, p.ID)
 					}

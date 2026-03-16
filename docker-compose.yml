@@ -1,70 +1,70 @@
-# All LISTMONK_* env variables also support the LISTMONK_*_FILE pattern for loading secrets from files with Docker secrets and Podman
-# eg: LISTMONK_ADMIN_USER -> LISTMONK_ADMIN_USER_FILE=/path/to/file_with_value
+# All LISTPOCKET_* env variables also support the LISTPOCKET_*_FILE pattern for loading secrets from files with Docker secrets and Podman
+# eg: LISTPOCKET_ADMIN_USER -> LISTPOCKET_ADMIN_USER_FILE=/path/to/file_with_value
 
-x-db-credentials: &db-credentials                             # Use the default POSTGRES_ credentials if they're available or simply default to "listmonk"
-  POSTGRES_USER: &db-user listmonk                            # for database user, password, and database name
-  POSTGRES_PASSWORD: &db-password listmonk
-  POSTGRES_DB: &db-name listmonk
+x-db-credentials: &db-credentials                             # Use the default POSTGRES_ credentials if they're available or simply default to "listpocket"
+  POSTGRES_USER: &db-user listpocket                          # for database user, password, and database name
+  POSTGRES_PASSWORD: &db-password listpocket
+  POSTGRES_DB: &db-name listpocket
 
 services:
-  # listmonk app
+  # listpocket app
   app:
-    image: listmonk/listmonk:latest
-    container_name: listmonk_app
+    image: listpocket/list_pocket:latest
+    container_name: listpocket_app
     restart: unless-stopped
     ports:
       - "9000:9000"                                           # To change the externally exposed port, change to: $custom_port:9000
     networks:
-      - listmonk
-    hostname: listmonk.example.com                            # Recommend using FQDN for hostname
+      - listpocket
+    hostname: listpocket.example.com                          # Recommend using FQDN for hostname
     depends_on:
       - db
-    command: [sh, -c, "./listmonk --install --idempotent --yes --config '' && ./listmonk --upgrade --yes --config '' && ./listmonk --config ''"]
-                                                              # --config (file) param is set to empty so that listmonk only uses the env vars (below) for config.
+    command: [sh, -c, "./listpocket --install --idempotent --yes --config '' && ./listpocket --upgrade --yes --config '' && ./listpocket --config ''"]
+                                                              # --config (file) param is set to empty so that listpocket only uses the env vars (below) for config.
                                                               # --install --idempotent ensures that DB installation happens only once on an empty DB, on the first ever start.
                                                               # --upgrade automatically runs any DB migrations when a new image is pulled.
 
     environment:                                              # The same params as in config.toml are passed as env vars here.
-      LISTMONK_app__address: 0.0.0.0:9000
-      LISTMONK_db__user: *db-user
-      LISTMONK_db__password: *db-password
-      LISTMONK_db__database: *db-name
-      LISTMONK_db__host: db
-      LISTMONK_db__port: 5432
-      LISTMONK_db__ssl_mode: disable
-      LISTMONK_db__max_open: 25
-      LISTMONK_db__max_idle: 25
-      LISTMONK_db__max_lifetime: 300s
+      LISTPOCKET_app__address: 0.0.0.0:9000
+      LISTPOCKET_db__user: *db-user
+      LISTPOCKET_db__password: *db-password
+      LISTPOCKET_db__database: *db-name
+      LISTPOCKET_db__host: db
+      LISTPOCKET_db__port: 5432
+      LISTPOCKET_db__ssl_mode: disable
+      LISTPOCKET_db__max_open: 25
+      LISTPOCKET_db__max_idle: 25
+      LISTPOCKET_db__max_lifetime: 300s
       TZ: Etc/UTC
-      LISTMONK_ADMIN_USER: ${LISTMONK_ADMIN_USER:-}           # If these (optional) are set during the first `docker compose up`, then the Super Admin user is automatically created.
-      LISTMONK_ADMIN_PASSWORD: ${LISTMONK_ADMIN_PASSWORD:-}   # Otherwise, the user can be setup on the web app after the first visit to http://localhost:9000
+      LISTPOCKET_ADMIN_USER: ${LISTPOCKET_ADMIN_USER:-}       # If these (optional) are set during the first `docker compose up`, then the Super Admin user is automatically created.
+      LISTPOCKET_ADMIN_PASSWORD: ${LISTPOCKET_ADMIN_PASSWORD:-} # Otherwise, the user can be setup on the web app after the first visit to http://localhost:9000
     volumes:
-      - ./uploads:/listmonk/uploads:rw                        # Mount an uploads directory on the host to /listmonk/uploads inside the container.
-                                                              # To use this, change directory path in Admin -> Settings -> Media to /listmonk/uploads
+      - ./uploads:/listpocket/uploads:rw                      # Mount an uploads directory on the host to /listpocket/uploads inside the container.
+                                                              # To use this, change directory path in Admin -> Settings -> Media to /listpocket/uploads
 
   # Postgres database
   db:
     image: postgres:17-alpine
-    container_name: listmonk_db
+    container_name: listpocket_db
     restart: unless-stopped
     ports:
       - "127.0.0.1:5432:5432"                                 # Only bind on the local interface. To connect to Postgres externally, change this to 0.0.0.0
     networks:
-      - listmonk
+      - listpocket
     environment:
       <<: *db-credentials
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U listmonk"]
+      test: ["CMD-SHELL", "pg_isready -U listpocket"]
       interval: 10s
       timeout: 5s
       retries: 6
     volumes:
       - type: volume
-        source: listmonk-data
+        source: listpocket-data
         target: /var/lib/postgresql/data
 
 networks:
-  listmonk:
+  listpocket:
 
 volumes:
-  listmonk-data:
+  listpocket-data:

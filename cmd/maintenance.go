@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/knadh/listmonk/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/labstack/echo/v4"
 )
 

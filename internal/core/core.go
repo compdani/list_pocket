@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx/types"
-	"github.com/knadh/listmonk/internal/i18n"
-	"github.com/knadh/listmonk/internal/pbdb"
-	"github.com/knadh/listmonk/models"
+	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 )
@@ -103,6 +103,10 @@ func New(o *Opt, h *Hooks) *Core {
 
 // RefreshMatViews refreshes all materialized views.
 func (c *Core) RefreshMatViews(concurrent bool) error {
+	if c.isSQLite() {
+		return nil
+	}
+
 	for _, v := range []string{matDashboardCharts, matDashboardCounts, matListSubStats} {
 		_ = c.RefreshMatView(v, true)
 	}
@@ -111,6 +115,10 @@ func (c *Core) RefreshMatViews(concurrent bool) error {
 
 // RefreshMatView refreshes a Postgres materialized view.
 func (c *Core) RefreshMatView(name string, concurrent bool) error {
+	if c.isSQLite() {
+		return nil
+	}
+
 	q := "REFRESH MATERIALIZED VIEW %s %s"
 	if concurrent {
 		q = fmt.Sprintf(q, "CONCURRENTLY", name)

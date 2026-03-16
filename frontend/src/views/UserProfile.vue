@@ -214,7 +214,7 @@ export default Vue.extend({
         this.onCancelTOTPSetup();
 
         // Reload user profile
-        this.$api.getUserProfile().then((data) => {
+        this.$api.refreshUserProfile().then((data) => {
           this.data = { ...data };
           this.twofaEnabled = data.twofaType === 'totp';
         });
@@ -252,7 +252,7 @@ export default Vue.extend({
         this.showDisableTOTP = false;
         this.disableTOTPPassword = '';
         // Reload user profile
-        this.$api.getUserProfile().then((data) => {
+        this.$api.refreshUserProfile().then((data) => {
           this.data = { ...data };
           this.twofaEnabled = data.twofaType === 'totp';
         });
@@ -263,7 +263,7 @@ export default Vue.extend({
   },
 
   mounted() {
-    this.$api.getUserProfile().then((data) => {
+    this.$api.refreshUserProfile().then((data) => {
       this.data = { ...data };
       this.form = { name: data.name, email: data.email };
       this.twofaEnabled = data.twofaType === 'totp';

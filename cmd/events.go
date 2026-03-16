@@ -6,7 +6,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/events"
 	"github.com/labstack/echo/v4"
+	"github.com/pocketbase/pocketbase/tools/subscriptions"
 )
 
 // EventStream serves an endpoint that never closes and pushes a
@@ -44,4 +46,28 @@ func (a *App) EventStream(c echo.Context) error {
 		}
 	}
 
+}
+
+func (a *App) publishRealtimeEvent(event events.Event) error {
+	if a.pb == nil {
+		return nil
+	}
+
+	rawData, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	msg := subscriptions.Message{
+		Name: "events/" + event.Type,
+		Data: rawData,
+	}
+
+	for _, client := range a.pb.SubscriptionsBroker().Clients() {
+		if client.HasSubscription(msg.Name) {
+			client.Send(msg)
+		}
+	}
+
+	return nil
 }

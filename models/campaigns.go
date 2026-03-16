@@ -10,7 +10,7 @@ import (
 	txttpl "text/template"
 
 	"github.com/jmoiron/sqlx/types"
-	"github.com/knadh/listmonk/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )

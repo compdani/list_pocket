@@ -1,6 +1,6 @@
 #!/bin/bash
 
-pkill -9 listmonk
+pkill -9 listpocket
  cd ../
-./listmonk --install --yes
-./listmonk > /dev/null 2>/dev/null &
+./listpocket --install --yes
+./listpocket > /dev/null 2>/dev/null &

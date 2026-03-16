@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/knadh/listmonk/internal/auth"
+	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -34,10 +34,22 @@ var (
 // registerHandlers registers HTTP handlers on the PocketBase router.
 func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig) {
 	admin := se.Group("")
+	admin.GET(path.Join(uriAdmin, "/login"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginPage))
+	admin.POST(path.Join(uriAdmin, "/login"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginPage))
+	admin.GET(path.Join(uriAdmin, "/login/twofa"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.TwofaPage))
+	admin.POST(path.Join(uriAdmin, "/login/twofa"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.TwofaPage))
+	admin.GET(path.Join(uriAdmin, "/forgot"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ForgotPage))
+	admin.POST(path.Join(uriAdmin, "/forgot"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ForgotPage))
+	admin.GET(path.Join(uriAdmin, "/reset"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ResetPage))
+	admin.POST(path.Join(uriAdmin, "/reset"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ResetPage))
 	admin.GET(path.Join(uriAdmin, ""), wrapEcho(a, tpl, cfg, urlCfg, nil, a.AdminPage))
 	admin.GET(path.Join(uriAdmin, "/custom.css"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_css")))
 	admin.GET(path.Join(uriAdmin, "/custom.js"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
 	admin.GET(path.Join(uriAdmin, "/{path...}"), wrapEcho(a, tpl, cfg, urlCfg, []string{"path"}, a.AdminPage))
+
+	publicAuth := se.Group("")
+	publicAuth.POST("/auth/oidc", wrapEcho(a, tpl, cfg, urlCfg, nil, a.OIDCLogin))
+	publicAuth.GET("/auth/oidc/callback", wrapEcho(a, tpl, cfg, urlCfg, nil, a.OIDCFinish))
 
 	pm := a.auth.Perm
 	api := se.Group("/mailapi").Bind(apis.RequireAuth())
@@ -54,7 +66,6 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.POST("/settings/smtp/test", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.TestSMTPSettings, "settings:manage")))
 	api.POST("/admin/reload", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ReloadApp, "settings:manage")))
 	api.GET("/logs", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetLogs, "settings:get")))
-	api.GET("/events", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.EventStream, "settings:get")))
 	api.GET("/about", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetAboutInfo))
 
 	api.GET("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get")))
@@ -184,12 +195,13 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	}
 
 	public := se.Group("")
+	public.GET("/mailapi/events", wrapEcho(a, tpl, cfg, urlCfg, nil, a.auth.APIMiddleware(pm(a.EventStream, "settings:get"))))
 	if a.cfg.BounceWebhooksEnabled {
 		public.POST("/webhooks/service/{service}", wrapEcho(a, tpl, cfg, urlCfg, []string{"service"}, a.BounceWebhook))
 	}
 
 	public.GET("/", wrapEcho(a, tpl, cfg, urlCfg, nil, func(c echo.Context) error {
-		return c.Render(http.StatusOK, "home", publicTpl{Title: "listmonk"})
+		return c.Render(http.StatusOK, "home", publicTpl{Title: "listpocket"})
 	}))
 
 	public.GET("/mailapi/public/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetPublicLists))
@@ -225,6 +237,11 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 
 func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, params []string, handler echo.HandlerFunc) func(e *pbcore.RequestEvent) error {
 	return func(e *pbcore.RequestEvent) error {
+		if e.Request.URL.Path == "/mailapi/config" {
+			authHeader := e.Request.Header.Get("Authorization")
+			a.log.Printf("mailapi/config: entered app handler auth_present=%t auth_header_prefix=%q", e.Auth != nil, trimLogPrefix(authHeader))
+		}
+
 		ec := echo.New()
 		ec.HideBanner = true
 		ec.HidePort = true
@@ -259,6 +276,9 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 		}
 
 		if e.Auth != nil {
+			if e.Request.URL.Path == "/mailapi/config" {
+				a.log.Printf("mailapi/config: authenticated record id=%q collection=%q legacy_user_id=%d username=%q", e.Auth.Id, e.Auth.Collection().Name, e.Auth.GetInt("legacy_user_id"), e.Auth.GetString("username"))
+			}
 			c.Set(auth.AuthRecordHTTPCtxKey, e.Auth)
 
 			legacyUserID := e.Auth.GetInt("legacy_user_id")
@@ -281,6 +301,14 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 
 		return handler(c)
 	}
+}
+
+func trimLogPrefix(v string) string {
+	v = regexp.MustCompile(`\s+`).ReplaceAllString(v, " ")
+	if len(v) > 32 {
+		return v[:32]
+	}
+	return v
 }
 
 // AdminPage is the root handler that renders the Javascript admin frontend.

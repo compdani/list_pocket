@@ -14,14 +14,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/zerodha/simplesessions/v3"
 	"golang.org/x/oauth2"
 )
 
@@ -58,10 +56,7 @@ type Config struct {
 	AuthCollection string
 }
 
-// Callbacks takes two callback functions required by simplesessions.
 type Callbacks struct {
-	SetCookie         func(cookie *http.Cookie, w any) error
-	GetCookie         func(name string, r any) (*http.Cookie, error)
 	GetUser           func(id int) (User, error)
 	GetUsers          func() ([]User, error)
 	GetUserByUsername func(username string) (User, error)
@@ -77,11 +72,14 @@ type Auth struct {
 	oauthCfg  oauth2.Config
 	verifier  *oidc.IDTokenVerifier
 	provider  *oidc.Provider
-	sess      *simplesessions.Manager
-	sessStore *memoryStore
 	cb        *Callbacks
 	log       *log.Logger
 	pbAuth    *PocketBaseAuthService
+}
+
+type ClientAuth struct {
+	Token  string
+	Record map[string]any
 }
 
 var regexBcryptHash = regexp.MustCompile(`^\$2[abxy]\$`)
@@ -104,20 +102,6 @@ func New(cfg Config, db *sql.DB, pb *pocketbase.PocketBase, cb *Callbacks, lo *l
 	}
 
 	a.pbAuth = newPocketBaseAuthService(a)
-
-	// Initialize session manager.
-	a.sess = simplesessions.New(simplesessions.Options{
-		EnableAutoCreate: false,
-		SessionIDLength:  64,
-		Cookie: simplesessions.CookieOptions{
-			IsHTTPOnly: true,
-			MaxAge:     time.Hour * 24 * 7,
-		},
-	})
-	st := newMemoryStore()
-	a.sessStore = st
-	a.sess.UseStore(st)
-	a.sess.SetCookieHooks(cb.GetCookie, cb.SetCookie)
 
 	if err := a.ensureAuthCollection(); err != nil {
 		return nil, err
@@ -178,6 +162,31 @@ func (o *Auth) ensureAuthCollection() error {
 
 	if col.Fields.GetByName("role") == nil {
 		col.Fields.Add(&pbcore.TextField{Name: "role"})
+		changed = true
+	}
+
+	if col.Fields.GetByName("password_login") == nil {
+		col.Fields.Add(&pbcore.BoolField{Name: "password_login"})
+		changed = true
+	}
+
+	if col.Fields.GetByName("list_role_id") == nil {
+		col.Fields.Add(&pbcore.NumberField{Name: "list_role_id", OnlyInt: true})
+		changed = true
+	}
+
+	if col.Fields.GetByName("twofa_type") == nil {
+		col.Fields.Add(&pbcore.TextField{Name: "twofa_type"})
+		changed = true
+	}
+
+	if col.Fields.GetByName("twofa_key") == nil {
+		col.Fields.Add(&pbcore.TextField{Name: "twofa_key"})
+		changed = true
+	}
+
+	if col.Fields.GetByName("loggedin_at") == nil {
+		col.Fields.Add(&pbcore.DateField{Name: "loggedin_at"})
 		changed = true
 	}
 
@@ -480,71 +489,43 @@ func (o *Auth) ExchangeOIDCToken(code, nonce string) (string, OIDCclaim, error) 
 }
 
 // Middleware is the HTTP middleware used for wrapping HTTP handlers registered on the echo router.
-// It authorizes token (BasicAuth/token) based and cookie based sessions and on successful auth,
-// sets the authenticated User{} on the echo context on the key UserKey. On failure, it sets an Error{}
-// instead on the same key.
+// It authorizes PocketBase bearer tokens or legacy API key/token pairs and sets the
+// authenticated User{} on the echo context on success.
 func (o *Auth) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// It's an `Authorization` header request.
 		hdr := strings.TrimSpace(c.Request().Header.Get("Authorization"))
-
-		// If cookie is set, ignore BasicAuth. This is to preserve backwards compatibility
-		// in v3 -> v4 upgrade where the user browser sessions would still have old
-		// BasicAuth credentials, which no longer work in the new system which expects
-		// session cookies instead, which causes a redirect loop despite loggin in and session
-		// cookies being set.
-		//
-		// TODO: This should be removed in a future version.
-		if c := strings.TrimSpace(c.Request().Header.Get("Cookie")); strings.Contains(c, "session=") {
-			hdr = ""
+		if hdr == "" {
+			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "missing auth token"))
+			return next(c)
 		}
 
-		if len(hdr) > 0 {
-			// Primary auth path: PocketBase auth token.
-			if strings.HasPrefix(hdr, "Bearer ") {
-				token := strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
-				user, rec, err := o.validatePBToken(token)
-				if err != nil {
-					c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid auth token"))
-					return next(c)
-				}
-				c.Set(UserHTTPCtxKey, user)
-				c.Set(AuthRecordHTTPCtxKey, rec)
-				return next(c)
-			}
-
-			// Backward-compatibility for legacy api_key:token auth header.
-			key, token, err := parseAuthHeader(hdr)
+		// Primary auth path: PocketBase auth token.
+		if strings.HasPrefix(hdr, "Bearer ") {
+			token := strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
+			user, rec, err := o.validatePBToken(token)
 			if err != nil {
-				c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, err.Error()))
+				c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid auth token"))
 				return next(c)
 			}
-
-			// Validate the token.
-			user, ok := o.ValidateAPIToken(key, token)
-			if !ok {
-				c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid API credentials"))
-				return next(c)
-			}
-
-			// Set the user details on the handler context.
 			c.Set(UserHTTPCtxKey, user)
-			return next(c)
-		}
-
-		// Is it a cookie based session?
-		sess, user, err := o.validateSession(c)
-		if err != nil {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid session"))
-			return next(c)
-		}
-
-		// Set the user details on the handler context.
-		c.Set(UserHTTPCtxKey, user)
-		if rec, err := o.findAuthRecordByUserID(user.ID); err == nil && rec != nil {
 			c.Set(AuthRecordHTTPCtxKey, rec)
+			return next(c)
 		}
-		c.Set(SessionKey, sess)
+
+		// Backward-compatibility for legacy api_key:token auth header.
+		key, token, err := parseAuthHeader(hdr)
+		if err != nil {
+			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, err.Error()))
+			return next(c)
+		}
+
+		user, ok := o.ValidateAPIToken(key, token)
+		if !ok {
+			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid API credentials"))
+			return next(c)
+		}
+
+		c.Set(UserHTTPCtxKey, user)
 		return next(c)
 	}
 }
@@ -779,92 +760,30 @@ func ExtractRoleIDFromRecord(rec *pbcore.Record) int {
 	return 0
 }
 
-// SaveSession creates and sets a session (post successful login/auth).
-func (o *Auth) SaveSession(u User, oidcToken string, c echo.Context) error {
-	sess, err := o.sess.NewSession(c, c)
-	if err != nil {
-		o.log.Printf("error creating login session: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
-	}
-
+// IssueClientAuth syncs a user into PocketBase auth, creates an auth token,
+// and returns the payload expected by the JS SDK authStore.
+func (o *Auth) IssueClientAuth(u User) (ClientAuth, error) {
 	if err := o.SyncUser(u); err != nil {
 		o.log.Printf("error syncing auth user: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
+		return ClientAuth{}, echo.NewHTTPError(http.StatusInternalServerError, "error creating auth token")
 	}
 
 	rec, err := o.pbAuth.FindByUsername(u.Username)
 	if err != nil {
 		o.log.Printf("error fetching auth user record: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
+		return ClientAuth{}, echo.NewHTTPError(http.StatusInternalServerError, "error creating auth token")
 	}
 
 	token, err := rec.NewAuthToken()
 	if err != nil {
 		o.log.Printf("error generating auth token: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
+		return ClientAuth{}, echo.NewHTTPError(http.StatusInternalServerError, "error creating auth token")
 	}
 
-	if err := sess.SetMulti(map[string]any{"user_id": u.ID, "username": u.Username, "oidc_token": oidcToken, "auth_token": token}); err != nil {
-		o.log.Printf("error setting login session: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "error creating session")
-	}
-
-	return nil
-}
-
-// validateSession checks if the cookie session is valid (in the DB) and returns the session and user details.
-func (o *Auth) validateSession(c echo.Context) (*simplesessions.Session, User, error) {
-	// Cookie session.
-	sess, err := o.sess.Acquire(context.TODO(), c, c)
-	if err != nil {
-		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, err.Error())
-	}
-
-	// Get the session variables.
-	vars, err := sess.GetMulti("user_id", "username", "oidc_token", "auth_token")
-	if err != nil {
-		return nil, User{}, echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-	}
-
-	// Validate the user ID in the session.
-	userID, err := o.sessStore.Int(vars["user_id"], nil)
-	if err != nil || userID < 1 {
-		o.log.Printf("error fetching session user ID: %v", err)
-		return nil, User{}, echo.NewHTTPError(http.StatusInternalServerError, "invalid session.")
-	}
-
-	authToken, ok := vars["auth_token"].(string)
-	if !ok || authToken == "" {
-		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
-	}
-
-	rec, err := o.pb.FindAuthRecordByToken(authToken, pbcore.TokenTypeAuth)
-	if err != nil || rec == nil {
-		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
-	}
-
-	username := strings.TrimSpace(rec.GetString("username"))
-	if username == "" {
-		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
-	}
-
-	if sessionUsername, ok := vars["username"].(string); ok && strings.TrimSpace(sessionUsername) != "" {
-		if strings.TrimSpace(sessionUsername) != username {
-			return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
-		}
-	}
-
-	if rec.GetString("status") != UserStatusEnabled {
-		return nil, User{}, echo.NewHTTPError(http.StatusForbidden, "invalid session")
-	}
-
-	// Fetch user details from the database.
-	user, err := o.cb.GetUserByUsername(username)
-	if err != nil {
-		o.log.Printf("error fetching session user: %v", err)
-	}
-
-	return sess, user, err
+	return ClientAuth{
+		Token:  token,
+		Record: rec.PublicExport(),
+	}, nil
 }
 
 // GetUser retrieves and returns the User object from an authenticated

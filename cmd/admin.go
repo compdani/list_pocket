@@ -7,7 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/knadh/listmonk/internal/captcha"
+	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/captcha"
 	"github.com/labstack/echo/v4"
 	null "gopkg.in/volatiletech/null.v6"
 )
@@ -39,6 +40,12 @@ type serverConfig struct {
 
 // GetServerConfig returns general server config.
 func (a *App) GetServerConfig(c echo.Context) error {
+	if u, ok := c.Get("auth_user").(auth.User); ok {
+		a.log.Printf("mailapi/config: serving config to username=%q user_id=%d role_id=%d", u.Username, u.ID, u.UserRoleID)
+	} else {
+		a.log.Printf("mailapi/config: serving config without hydrated auth_user")
+	}
+
 	out := serverConfig{
 		RootURL:       a.urlCfg.RootURL,
 		FromEmail:     a.cfg.FromEmail,

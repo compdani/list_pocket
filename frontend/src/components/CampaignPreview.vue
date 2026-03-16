@@ -9,15 +9,7 @@
         </div>
         <section expanded class="modal-card-body preview">
           <b-loading :active="isLoading" :is-full-page="false" />
-          <form v-if="isPost" method="post" :action="previewURL" target="iframe" ref="form">
-            <input v-if="templateId" type="hidden" name="template_id" :value="templateId" />
-            <input v-if="contentType" type="hidden" name="content_type" :value="contentType" />
-            <input v-if="templateType" type="hidden" name="template_type" :value="templateType" />
-            <input v-if="archiveMeta" type="hidden" name="archive_meta" :value="archiveMeta" />
-            <input v-if="body" type="hidden" name="body" :value="body" />
-          </form>
-
-          <iframe id="iframe" name="iframe" ref="iframe" :title="title" :src="isPost ? 'about:blank' : previewURL"
+          <iframe id="iframe" name="iframe" ref="iframe" :title="title" :srcdoc="previewHTML"
             @load="onLoaded" sandbox="allow-scripts" />
         </section>
         <footer class="modal-card-foot has-text-right">
@@ -32,6 +24,7 @@
 
 <script>
 import { uris } from '../constants';
+import { pb } from '../api';
 
 export default {
   name: 'CampaignPreview',
@@ -61,7 +54,8 @@ export default {
     return {
       isVisible: true,
       isLoading: true,
-      formSubmitted: false,
+      previewLoaded: false,
+      previewHTML: '',
     };
   },
 
@@ -73,12 +67,58 @@ export default {
 
     // On iframe load, kill the spinner.
     onLoaded() {
-      if (!this.isPost) {
+      if (this.previewLoaded) {
         this.isLoading = false;
-        return;
+      }
+    },
+
+    async loadPreview() {
+      this.isLoading = true;
+      this.previewLoaded = false;
+
+      const { token } = pb.authStore;
+      const options = {
+        method: this.isPost ? 'POST' : 'GET',
+        headers: {
+          Accept: 'text/html',
+          ...(token ? { Authorization: token } : {}),
+        },
+      };
+
+      if (this.isPost) {
+        const form = new URLSearchParams();
+        if (this.templateId) {
+          form.set('template_id', this.templateId);
+        }
+        if (this.contentType) {
+          form.set('content_type', this.contentType);
+        }
+        if (this.templateType) {
+          form.set('template_type', this.templateType);
+        }
+        if (this.archiveMeta) {
+          form.set('archive_meta', this.archiveMeta);
+        }
+        if (this.body) {
+          form.set('body', this.body);
+        }
+        options.body = form;
       }
 
-      if (this.formSubmitted) {
+      try {
+        const response = await fetch(this.previewURL, {
+          ...options,
+          credentials: 'omit',
+        });
+        const html = await response.text();
+        this.previewHTML = html;
+
+        this.previewLoaded = true;
+        this.isLoading = false;
+      } catch (err) {
+        const message = err && err.response ? JSON.stringify(err.response) : String(err);
+        this.previewHTML = message;
+        this.previewLoaded = true;
         this.isLoading = false;
       }
     },
@@ -103,12 +143,9 @@ export default {
   },
 
   mounted() {
-    if (this.isPost) {
-      setTimeout(() => {
-        this.$refs.form.submit();
-        this.formSubmitted = true;
-      }, 100);
-    }
+    this.$nextTick(() => {
+      this.loadPreview();
+    });
   },
 };
 </script>

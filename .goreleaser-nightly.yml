@@ -1,7 +1,7 @@
 version: 2
 
 snapshot:
-  version_template: "{{ .Env.LISTMONK_VERSION }}"
+  version_template: "{{ .Env.LISTPOCKET_VERSION }}"
 
 # GoReleaser config for nightly builds
 
@@ -9,14 +9,14 @@ env:
   - GO111MODULE=on
   - CGO_ENABLED=0
   - GITHUB_ORG=knadh
-  - DOCKER_ORG=listmonk
+  - DOCKER_ORG=listpocket
 
 before:
   hooks:
     - make build-frontend
 
 builds:
-  - binary: listmonk
+  - binary: listpocket
     main: .
     goos:
       - linux
@@ -33,7 +33,7 @@ builds:
       - 6
       - 7
     ldflags:
-      - -s -w -X "github.com/knadh/listmonk/cmd.buildString=nightly ({{ .ShortCommit }} {{ .Date }}, {{ .Os }}/{{ .Arch }})" -X "github.com/knadh/listmonk/cmd.versionString={{ .Env.LISTMONK_VERSION }}"
+      - -s -w -X "github.com/compdani/list_pocket/cmd.buildString=nightly ({{ .ShortCommit }} {{ .Date }}, {{ .Os }}/{{ .Arch }})" -X "github.com/compdani/list_pocket/cmd.versionString={{ .Env.LISTPOCKET_VERSION }}"
 
     hooks:
       # stuff executables with static assets.
@@ -41,7 +41,7 @@ builds:
 
 archives:
   - format: tar.gz
-    name_template: "listmonk_nightly_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    name_template: "listpocket_nightly_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
     files:
       - README.md
       - LICENSE
@@ -51,7 +51,7 @@ dockers:
     goos: linux
     goarch: amd64
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:nightly-amd64"
       - "ghcr.io/{{ .Env.GITHUB_ORG }}/{{ .ProjectName }}:nightly-amd64"
@@ -73,7 +73,7 @@ dockers:
     goos: linux
     goarch: arm64
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:nightly-arm64v8"
       - "ghcr.io/{{ .Env.GITHUB_ORG }}/{{ .ProjectName }}:nightly-arm64v8"
@@ -96,7 +96,7 @@ dockers:
     goarch: arm
     goarm: 6
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:nightly-armv6"
       - "ghcr.io/{{ .Env.GITHUB_ORG }}/{{ .ProjectName }}:nightly-armv6"
@@ -119,7 +119,7 @@ dockers:
     goarch: arm
     goarm: 7
     ids:
-      - listmonk
+      - listpocket
     image_templates:
       - "{{ .Env.DOCKER_ORG }}/{{ .ProjectName }}:nightly-armv7"
       - "ghcr.io/{{ .Env.GITHUB_ORG }}/{{ .ProjectName }}:nightly-armv7"

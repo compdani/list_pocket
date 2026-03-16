@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/knadh/koanf/v2"
-	"github.com/knadh/listmonk/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/knadh/stuffbin"
 	"github.com/lib/pq"
 )
@@ -89,7 +89,7 @@ func checkUpgrade(db *pbdb.DB) {
 		vers = append(vers, m.version)
 	}
 
-	lo.Fatalf(`there are %d pending database upgrade(s): %v. The last upgrade was %s. Backup the database and run listmonk --upgrade`,
+	lo.Fatalf(`there are %d pending database upgrade(s): %v. The last upgrade was %s. Backup the database and run listpocket --upgrade`,
 		len(toRun), vers, lastVer)
 }
 
