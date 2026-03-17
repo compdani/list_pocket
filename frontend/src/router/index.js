@@ -1,9 +1,5 @@
-import Vue from 'vue';
-import VueRouter from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 
-Vue.use(VueRouter);
-
-// The meta.group param is used in App.vue to expand menu group by name.
 const routes = [
   {
     path: '/404',
@@ -137,19 +133,36 @@ const routes = [
     meta: { title: 'maintenance.title', group: 'settings' },
     component: () => import('../views/Maintenance.vue'),
   },
+  {
+    path: '/workflows',
+    name: 'workflows',
+    meta: { title: 'Workflows', group: 'workflows' },
+    component: () => import('../views/Workflow.vue'),
+  },
+  {
+    path: '/workflows/builder',
+    name: 'workflowBuilder',
+    meta: { title: 'Workflow Builder', group: 'workflows' },
+    component: () => import('../views/WorkflowBuilder.vue'),
+  },
 ];
 
-const router = new VueRouter({
-  mode: 'history',
-  base: import.meta.env.BASE_URL,
+const router = createRouter({
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-
   scrollBehavior(to) {
     if (to.hash) {
-      return { selector: to.hash };
+      return { el: to.hash };
     }
-    return { x: 0, y: 0 };
+    return { top: 0 };
   },
+});
+
+router.beforeEach((to) => {
+  if (to.matched.length === 0) {
+    return '/404';
+  }
+  return true;
 });
 
 export default router;

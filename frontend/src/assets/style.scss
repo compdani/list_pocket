@@ -52,9 +52,8 @@ $modal-background-background-color: rgba(0, 0, 0, .30);
   min-height: 300px;
 }
 
-/* Import full Bulma and Buefy */
+/* Import Bulma */
 @import "bulma";
-@import "buefy/src/scss/buefy";
 
 /* Custom style overrides */
 html, body {
@@ -504,6 +503,10 @@ body.is-noscroll {
 }
 .modal .modal-close.is-large {
   display: none;
+}
+
+.v-overlay-container {
+  z-index: 2400 !important;
 }
 
 

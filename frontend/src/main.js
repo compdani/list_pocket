@@ -1,37 +1,133 @@
-import Vue from 'vue';
-import Buefy from 'buefy';
-import VueI18n from 'vue-i18n';
+import { createApp, h } from 'vue';
+import { createI18n } from 'vue-i18n';
 
 import App from './App.vue';
 import router from './router';
 import store from './store';
 import * as api from './api';
 import Utils from './utils';
+import vuetify from './plugins/vuetify';
+import { installLegacyUIStyles, registerLegacyUI } from './legacy-ui';
 
-// Internationalisation.
-Vue.use(VueI18n);
-const i18n = new VueI18n();
+function createEventBus() {
+  const listeners = new Map();
 
-Vue.use(Buefy, {});
-Vue.config.productionTip = false;
+  return {
+    $on(event, handler) {
+      const handlers = listeners.get(event) || new Set();
+      handlers.add(handler);
+      listeners.set(event, handlers);
+    },
 
-// Setup the router.
-router.beforeEach((to, from, next) => {
-  if (to.matched.length === 0) {
-    next('/404');
-  } else {
-    next();
+    $off(event, handler) {
+      const handlers = listeners.get(event);
+      if (!handlers) {
+        return;
+      }
+
+      if (!handler) {
+        listeners.delete(event);
+        return;
+      }
+
+      handlers.delete(handler);
+      if (handlers.size === 0) {
+        listeners.delete(event);
+      }
+    },
+
+    $emit(event, ...args) {
+      const handlers = listeners.get(event);
+      if (!handlers) {
+        return;
+      }
+
+      handlers.forEach((handler) => {
+        handler(...args);
+      });
+    },
+  };
+}
+
+const i18n = createI18n({
+  legacy: true,
+  locale: 'en',
+  fallbackLocale: 'en',
+  messages: {},
+});
+const eventBus = createEventBus();
+
+function getRawLocaleMessage(messages, key) {
+  if (!messages || !key) {
+    return null;
   }
-});
 
-router.afterEach((to) => {
-  Vue.nextTick(() => {
-    const t = to.meta.title && i18n.te(to.meta.title) ? `${i18n.tc(to.meta.title, 0)} /` : '';
-    document.title = `${t} listpocket`;
-  });
-});
+  if (Object.prototype.hasOwnProperty.call(messages, key)) {
+    return messages[key];
+  }
 
-async function initConfig(app) {
+  return key.split('.').reduce((value, segment) => {
+    if (!value || typeof value !== 'object') {
+      return null;
+    }
+
+    return value[segment];
+  }, messages);
+}
+
+function withI18nFallback(methodName) {
+  const original = i18n.global[methodName].bind(i18n.global);
+
+  return (key, ...args) => {
+    try {
+      return original(key, ...args);
+    } catch (err) {
+      if (!err || !String(err.message || err).includes('Empty placeholder')) {
+        throw err;
+      }
+
+      const { locale } = i18n.global;
+      const localeKey = typeof locale === 'string' ? locale : locale && locale.value;
+      const messages = localeKey ? i18n.global.getLocaleMessage(localeKey) : {};
+      const rawMessage = getRawLocaleMessage(messages, key);
+      return typeof rawMessage === 'string' ? rawMessage : key;
+    }
+  };
+}
+
+i18n.global.t = withI18nFallback('t');
+i18n.global.tc = withI18nFallback('tc');
+
+const sharedUtils = new Utils(i18n.global);
+let vueApp = null;
+
+function getRoleId(profile) {
+  if (!profile) {
+    return 0;
+  }
+
+  if (profile.userRole && Number(profile.userRole.id) > 0) {
+    return Number(profile.userRole.id);
+  }
+
+  if (Number(profile.userRoleId) > 0) {
+    return Number(profile.userRoleId);
+  }
+
+  const authRecord = api.getAuthRecord();
+  if (authRecord && Number(authRecord.role) > 0) {
+    return Number(authRecord.role);
+  }
+
+  return 0;
+}
+
+function isSuperAdmin(profile) {
+  return getRoleId(profile) === 1;
+}
+
+async function initConfig(rootProxy) {
+  const proxy = rootProxy;
   const profile = api.getStoredUserProfile();
   if (!api.isAuthenticated() || !profile) {
     const unauthorized = new Error('missing auth profile');
@@ -39,61 +135,60 @@ async function initConfig(app) {
     throw unauthorized;
   }
 
-  // Load server side config and the language file before mounting the app.
   const cfg = await api.getServerConfig();
-
   const lang = await api.getLang(cfg.lang);
-  i18n.locale = cfg.lang;
-  i18n.setLocaleMessage(i18n.locale, lang);
+  i18n.global.locale = cfg.lang;
+  i18n.global.setLocaleMessage(cfg.lang, lang);
 
-  Vue.prototype.$utils = new Utils(i18n);
-  Vue.prototype.$api = api;
-  Vue.prototype.$events = app;
-
-  // $can('permission:name') is used in the UI to check whether the logged in user
-  // has a certain permission to toggle visibility of UI objects and UI functionality.
-  Vue.prototype.$can = (...perms) => {
-    if (profile.userRole.id === 1) {
+  proxy.$utils = sharedUtils;
+  proxy.$api = api;
+  proxy.$events = eventBus;
+  proxy.$can = (...perms) => {
+    if (isSuperAdmin(profile)) {
       return true;
     }
 
-    // If the perm ends with a wildcard, check whether at least one permission
-    // in the group is present. Eg: campaigns:* will return true if at least
-    // one of campaigns:get, campaigns:manage etc. are present.
+    const userPerms = Array.isArray(profile.userRole && profile.userRole.permissions)
+      ? profile.userRole.permissions
+      : [];
+
     return perms.some((perm) => {
       if (perm.endsWith('*')) {
         const group = `${perm.split(':')[0]}:`;
-        return profile.userRole.permissions.some((p) => p.startsWith(group));
+        return userPerms.some((p) => p.startsWith(group));
       }
-
-      return profile.userRole.permissions.includes(perm);
+      return userPerms.includes(perm);
     });
   };
 
-  Vue.prototype.$canList = (id, perm) => {
-    if (profile.userRole.id === 1) {
+  proxy.$canList = (id, perm) => {
+    if (isSuperAdmin(profile)) {
       return true;
     }
 
-    // If the user role has global list permissions, return true.
-    const can = Vue.prototype.$can('lists:get_all', 'lists:manage_all');
+    const can = proxy.$can('lists:get_all', 'lists:manage_all');
     if (can) {
       return true;
     }
-
-    return profile.listRole.lists.some((list) => list.id === id && list.permissions.includes(perm));
+    const listPerms = Array.isArray(profile.listRole && profile.listRole.lists)
+      ? profile.listRole.lists
+      : [];
+    return listPerms.some((list) => list.id === id && list.permissions.includes(perm));
   };
 
-  // Set the page title after i18n has loaded.
-  const to = router.history.current;
-  const title = to.meta.title ? `${i18n.tc(to.meta.title, 0)} /` : '';
+  if (vueApp) {
+    vueApp.config.globalProperties.$utils = sharedUtils;
+    vueApp.config.globalProperties.$api = api;
+    vueApp.config.globalProperties.$events = eventBus;
+    vueApp.config.globalProperties.$can = proxy.$can;
+    vueApp.config.globalProperties.$canList = proxy.$canList;
+  }
+
+  const to = router.currentRoute.value;
+  const title = to.meta.title && i18n.global.te(to.meta.title) ? `${i18n.global.tc(to.meta.title, 0)} /` : '';
   document.title = `${title} listpocket`;
 
-  if (app) {
-    const mountedApp = app;
-    mountedApp.$mount('#app');
-    mountedApp.isLoaded = true;
-  }
+  proxy.isLoaded = true;
 }
 
 function redirectToLogin() {
@@ -102,36 +197,30 @@ function redirectToLogin() {
   window.location.href = `${adminBase}/login?next=${encodeURIComponent(next || '/admin')}`;
 }
 
-const v = new Vue({
-  router,
-  store,
-  i18n,
-  render: (h) => h(App),
+router.afterEach((to) => {
+  const title = to.meta.title && i18n.global.te(to.meta.title) ? `${i18n.global.tc(to.meta.title, 0)} /` : '';
+  document.title = `${title} listpocket`;
+});
 
-  data: {
-    isLoaded: false,
+const Root = {
+  data() {
+    return {
+      isLoaded: false,
+    };
   },
-
   methods: {
-    loadConfig() {
-      initConfig();
+    async loadConfig() {
+      await initConfig(this);
     },
-
-    // awaitRestart handles app restart polling after settings changes.
-    // Shows a toast and polls until the backend is back up.
-    // Returns a promise that resolves with { needsRestart: boolean }.
     awaitRestart(response) {
       return new Promise((resolve) => {
-        // If there are running campaigns, app won't auto restart.
         if (response && typeof response === 'object' && response.needsRestart) {
           this.loadConfig();
           resolve({ needsRestart: true });
           return;
         }
 
-        Vue.prototype.$utils.toast(i18n.t('settings.messengers.messageSaved'));
-
-        // Poll until backend is back up.
+        this.$utils.toast(i18n.global.t('settings.messengers.messageSaved'));
         const pollId = setInterval(() => {
           api.getHealth().then(() => {
             clearInterval(pollId);
@@ -142,17 +231,31 @@ const v = new Vue({
       });
     },
   },
+  render() {
+    return h(App);
+  },
+};
 
-});
+const app = createApp(Root);
+vueApp = app;
+app.use(router);
+app.use(store);
+app.use(i18n);
+app.use(vuetify);
+registerLegacyUI(app);
+installLegacyUIStyles();
 
-initConfig(v).catch((err) => {
+app.config.globalProperties.$api = api;
+app.config.globalProperties.$utils = sharedUtils;
+app.config.globalProperties.$events = null;
+app.config.globalProperties.$can = () => false;
+app.config.globalProperties.$canList = () => false;
+
+const rootProxy = app.mount('#app');
+initConfig(rootProxy).catch((err) => {
   if (err && (err.status === 401 || (err.response && err.response.status === 401))) {
     redirectToLogin();
     return;
   }
-
-  // Keep the loading screen visible on bootstrap failures.
-  // The request helpers already surface the actual backend error toast.
-  // eslint-disable-next-line no-console
   console.error(err);
 });

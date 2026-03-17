@@ -15,8 +15,15 @@
       </div>
       <div class="column is-10">
         <b-field :label="$t('settings.media.upload.extensions')" label-position="on-border" expanded>
-          <b-taginput v-model="data['upload.extensions']" name="tags" ellipsis icon="tag-outline"
-            placeholder="jpg, png, gif .." />
+          <input
+            :value="extensionsInput"
+            name="tags"
+            class="input"
+            aria-label="Upload extensions"
+            placeholder="jpg, png, gif .."
+            type="text"
+            @input="extensionsInput = $event.target.value"
+          >
         </b-field>
       </div>
     </div>
@@ -114,10 +121,9 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { regDuration } from '../../constants';
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -128,7 +134,6 @@ export default Vue.extend({
     return {
       data: this.form,
       regDuration,
-      extensions: [],
     };
   },
 
@@ -141,5 +146,19 @@ export default Vue.extend({
       this.data['upload.s3.url'] = `https://s3.${this.data['upload.s3.aws_default_region']}.amazonaws.com`;
     },
   },
-});
+
+  computed: {
+    extensionsInput: {
+      get() {
+        return Array.isArray(this.data['upload.extensions']) ? this.data['upload.extensions'].join(', ') : '';
+      },
+      set(value) {
+        this.data['upload.extensions'] = value
+          .split(',')
+          .map((extension) => extension.trim())
+          .filter(Boolean);
+      },
+    },
+  },
+};
 </script>

@@ -105,7 +105,7 @@
     </b-table>
 
     <!-- Add / edit form modal -->
-    <b-modal scroll="keep" :aria-modal="true" :active.sync="isFormVisible" :width="1200" :can-cancel="false"
+    <b-modal scroll="keep" :aria-modal="true" :active="isFormVisible" @update:active="isFormVisible = $event" :width="1200" :can-cancel="false"
       class="template-modal">
       <template-form :data="curItem" :is-editing="isEditing" @finished="formFinished" />
     </b-modal>
@@ -116,14 +116,13 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import CampaignPreview from '../components/CampaignPreview.vue';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
 import TemplateForm from './TemplateForm.vue';
 
-export default Vue.extend({
+export default {
   components: {
     CampaignPreview,
     TemplateForm,
@@ -205,15 +204,15 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.fetchTemplates);
+    this.$events.$on('page.refresh', this.fetchTemplates);
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.fetchTemplates);
+    this.$events.$off('page.refresh', this.fetchTemplates);
   },
 
   mounted() {
     this.$api.getTemplates();
   },
-});
+};
 </script>

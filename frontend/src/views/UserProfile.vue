@@ -124,11 +124,10 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import CopyText from '../components/CopyText.vue';
 
-export default Vue.extend({
+export default {
   name: 'UserProfile',
 
   components: {
@@ -274,5 +273,5 @@ export default Vue.extend({
     ...mapState(['loading']),
   },
 
-});
+};
 </script>

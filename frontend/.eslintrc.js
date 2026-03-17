@@ -14,6 +14,7 @@ module.exports = {
   parser: 'vue-eslint-parser',
   rules: {
     'class-methods-use-this': 'off',
+    'import/no-unresolved': ['error', { ignore: ['^vuetify/styles$'] }],
     'vue/multi-word-component-names': 'off',
     'vue/quote-props': 'off',
     'vue/first-attribute-linebreak': 'off',

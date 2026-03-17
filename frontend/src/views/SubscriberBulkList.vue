@@ -1,13 +1,13 @@
 <template>
   <form @submit.prevent="onSubmit">
-    <div class="modal-card" style="width: auto">
-      <header class="modal-card-head">
+    <div class="admin-dialog-card modal-card">
+      <header class="admin-dialog-head modal-card-head">
         <h4 class="title is-size-5">
           {{ $t('subscribers.manageLists') }}
         </h4>
       </header>
 
-      <section expanded class="modal-card-body">
+      <section expanded class="admin-dialog-body modal-card-body">
         <b-field label="Action">
           <div>
             <b-radio v-model="form.action" name="action" native-value="add" data-cy="check-list-add">
@@ -32,8 +32,8 @@
         </b-field>
       </section>
 
-      <footer class="modal-card-foot has-text-right">
-        <b-button @click="$parent.close()">
+      <footer class="admin-dialog-foot modal-card-foot has-text-right">
+        <b-button @click="$emit('close')">
           {{ $t('globals.buttons.close') }}
         </b-button>
         <b-button native-type="submit" type="is-primary" :disabled="form.lists.length === 0">
@@ -45,11 +45,10 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import ListSelector from '../components/ListSelector.vue';
 
-export default Vue.extend({
+export default {
   components: {
     ListSelector,
   },
@@ -72,7 +71,7 @@ export default Vue.extend({
   methods: {
     onSubmit() {
       this.$emit('finished', this.form.action, this.form.preconfirm, this.form.lists);
-      this.$parent.close();
+      this.$emit('close');
     },
   },
 
@@ -83,5 +82,43 @@ export default Vue.extend({
       return this.form.lists.some((l) => l.optin === 'double');
     },
   },
-});
+};
 </script>
+
+<style scoped>
+.admin-dialog-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  width: min(560px, calc(100vw - 32px));
+}
+
+.admin-dialog-head {
+  border-bottom: 0;
+  display: block;
+  padding: 20px 20px 0;
+}
+
+.admin-dialog-body {
+  overflow: auto;
+  padding: 24px 20px;
+}
+
+.admin-dialog-foot {
+  background: #fff;
+  border-top: 0;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 0 20px 20px;
+}
+
+.admin-dialog-foot button {
+  flex: 1 1 0;
+}
+</style>

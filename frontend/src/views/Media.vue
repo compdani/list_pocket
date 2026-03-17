@@ -59,7 +59,7 @@
 
       <!-- Pagination -->
       <div v-if="media.total > media.perPage" class="pagination-wrapper mt-5">
-        <b-pagination :total="media.total" :current.sync="media.page" :per-page="media.perPage"
+        <b-pagination :total="media.total" :current="media.page" @update:current="media.page = $event" :per-page="media.perPage"
           @change="onPageChange" />
       </div>
 
@@ -101,7 +101,7 @@
 
       <!-- Pagination -->
       <div v-if="media.total > media.perPage" class="pagination-wrapper mt-5">
-        <b-pagination :total="media.total" :current.sync="media.page" :per-page="media.perPage"
+        <b-pagination :total="media.total" :current="media.page" @update:current="media.page = $event" :per-page="media.perPage"
           @change="onPageChange" />
       </div>
     </section>
@@ -109,11 +109,10 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
-export default Vue.extend({
+export default {
   components: {
     EmptyPlaceholder,
   },
@@ -224,11 +223,11 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.getMedia);
+    this.$events.$on('page.refresh', this.getMedia);
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.getMedia);
+    this.$events.$off('page.refresh', this.getMedia);
   },
 
   mounted() {
@@ -238,5 +237,5 @@ export default Vue.extend({
       this.showUploadForm = true;
     }
   },
-});
+};
 </script>

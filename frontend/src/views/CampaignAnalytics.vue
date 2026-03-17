@@ -28,14 +28,22 @@
           <div class="columns">
             <div class="column is-6">
               <b-field data-cy="from" :label="$t('analytics.fromDate')" label-position="on-border">
-                <b-datetimepicker v-model="form.from" icon="calendar-clock" :timepicker="{ hourFormat: '24' }"
-                  :datetime-formatter="formatDateTime" @input="onFromDateChange" />
+                <b-input
+                  :value="toDateTimeLocal(form.from)"
+                  type="datetime-local"
+                  icon="calendar-clock"
+                  @input="onFromInput($event.target.value)"
+                />
               </b-field>
             </div>
             <div class="column is-6">
               <b-field data-cy="to" :label="$t('analytics.toDate')" label-position="on-border">
-                <b-datetimepicker v-model="form.to" icon="calendar-clock" :timepicker="{ hourFormat: '24' }"
-                  :datetime-formatter="formatDateTime" @input="onToDateChange" />
+                <b-input
+                  :value="toDateTimeLocal(form.to)"
+                  type="datetime-local"
+                  icon="calendar-clock"
+                  @input="onToInput($event.target.value)"
+                />
               </b-field>
             </div>
           </div><!-- columns -->
@@ -70,7 +78,6 @@
 
 <script>
 import dayjs from 'dayjs';
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import { colors } from '../constants';
 import Chart from '../components/Chart.vue';
@@ -87,7 +94,7 @@ const chartColors = [
   '#FFC43D',
 ];
 
-export default Vue.extend({
+export default {
   components: {
     Chart,
   },
@@ -155,14 +162,32 @@ export default Vue.extend({
   },
 
   methods: {
+    parseDateTimeLocal(value) {
+      return value ? dayjs(value).toDate() : null;
+    },
+
+    toDateTimeLocal(value) {
+      return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
+    },
+
+    onFromInput(value) {
+      this.form.from = this.parseDateTimeLocal(value);
+      this.onFromDateChange();
+    },
+
+    onToInput(value) {
+      this.form.to = this.parseDateTimeLocal(value);
+      this.onToDateChange();
+    },
+
     onFromDateChange() {
-      if (this.form.from > this.form.to) {
+      if (this.form.from && this.form.to && this.form.from > this.form.to) {
         this.form.to = dayjs(this.form.from).add(7, 'day').toDate();
       }
     },
 
     onToDateChange() {
-      if (this.form.from > this.form.to) {
+      if (this.form.from && this.form.to && this.form.from > this.form.to) {
         this.form.from = dayjs(this.form.to).add(-7, 'day').toDate();
       }
     },
@@ -335,5 +360,5 @@ export default Vue.extend({
       });
     }
   },
-});
+};
 </script>

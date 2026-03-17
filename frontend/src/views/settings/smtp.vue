@@ -26,7 +26,7 @@
               <div class="column">
                 <b-field :label="$t('settings.mailserver.port')" label-position="on-border"
                   :message="$t('settings.mailserver.portHelp')">
-                  <b-numberinput v-model="item.port" name="port" type="is-light" controls-position="compact"
+                  <b-input v-model.number="item.port" name="port" type="number"
                     placeholder="25" min="1" max="65535" />
                 </b-field>
               </div>
@@ -114,15 +114,15 @@
               <div class="column is-3">
                 <b-field :label="$t('settings.mailserver.maxConns')" label-position="on-border"
                   :message="$t('settings.mailserver.maxConnsHelp')">
-                  <b-numberinput v-model="item.max_conns" name="max_conns" type="is-light" controls-position="compact"
+                  <b-input v-model.number="item.max_conns" name="max_conns" type="number"
                     placeholder="25" min="1" max="65535" />
                 </b-field>
               </div>
               <div class="column is-3">
                 <b-field :label="$t('settings.smtp.retries')" label-position="on-border"
                   :message="$t('settings.smtp.retriesHelp')">
-                  <b-numberinput v-model="item.max_msg_retries" name="max_msg_retries" type="is-light"
-                    controls-position="compact" placeholder="2" min="1" max="1000" />
+                  <b-input v-model.number="item.max_msg_retries" name="max_msg_retries" type="number"
+                    placeholder="2" min="1" max="1000" />
                 </b-field>
               </div>
               <div class="column is-3">
@@ -210,7 +210,6 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import { regDuration } from '../../constants';
 
@@ -238,7 +237,7 @@ const smtpTemplates = {
   },
 };
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -362,5 +361,5 @@ export default Vue.extend({
   computed: {
     ...mapState(['settings']),
   },
-});
+};
 </script>

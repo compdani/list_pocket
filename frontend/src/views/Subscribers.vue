@@ -15,11 +15,11 @@
         </h1>
       </div>
       <div class="column has-text-right">
-        <b-field v-if="$can('subscribers:manage')" expanded>
-          <b-button expanded type="is-primary" icon-left="plus" @click="showNewForm" data-cy="btn-new" class="btn-new">
+        <div v-if="$can('subscribers:manage')">
+          <button type="button" @click.stop.prevent="showNewForm" data-cy="btn-new" class="btn-new admin-open-button">
             {{ $t('globals.buttons.new') }}
-          </b-button>
-        </b-field>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -39,7 +39,7 @@
               </b-field>
 
               <div v-if="isSearchAdvanced">
-                <b-input v-model="queryParams.queryExp" @keydown.native.enter="onAdvancedQueryEnter" type="textarea"
+                <b-input v-model="queryParams.queryExp" @keydown.enter="onAdvancedQueryEnter" type="textarea"
                   ref="queryExp" placeholder="subscribers.name LIKE '%user%' or subscribers.status='blocklisted'"
                   data-cy="query" />
                 <span class="is-size-6 has-text-grey">
@@ -72,127 +72,197 @@
     </section><!-- control -->
 
     <br />
-    <b-table :data="subscribers.results ?? []" :loading="loading.subscribers" @check-all="onTableCheck"
-      @check="onTableCheck" :checked-rows.sync="bulk.checked" paginated backend-pagination pagination-position="both"
-      @page-change="onPageChange" :current-page="queryParams.page" :per-page="subscribers.perPage"
-      :total="subscribers.total" hoverable checkable backend-sorting @sort="onSort">
-      <template #top-left>
-        <div class="actions">
-          <a class="a" href="#" @click.prevent="exportSubscribers" data-cy="btn-export-subscribers">
-            <b-icon icon="cloud-download-outline" size="is-small" />
-            {{ $t('subscribers.export') }}
-          </a>
-          <template v-if="bulk.checked.length > 0">
-            <a class="a" href="#" @click.prevent="showBulkListForm" data-cy="btn-manage-lists">
-              <b-icon icon="format-list-bulleted-square" size="is-small" /> Manage lists
-            </a>
-            <a class="a" href="#" @click.prevent="deleteSubscribers" data-cy="btn-delete-subscribers">
-              <b-icon icon="trash-can-outline" size="is-small" /> Delete
-            </a>
-            <a class="a" href="#" @click.prevent="blocklistSubscribers" data-cy="btn-manage-blocklist">
-              <b-icon icon="account-off-outline" size="is-small" /> Blocklist
-            </a>
-            <span class="a">
-              {{ $t('globals.messages.numSelected', { num: numSelectedSubscribers }) }}
-              <span v-if="!bulk.all && subscribers.total > subscribers.perPage">
-                &mdash;
-                <a href="#" @click.prevent="selectAllSubscribers">
-                  {{ $t('globals.messages.selectAll', { num: subscribers.total }) }}
-                </a>
-              </span>
-            </span>
-          </template>
-        </div>
-      </template>
-
-      <b-table-column v-slot="props" field="email" :label="$t('subscribers.email')" header-class="cy-email" sortable
-        :td-attrs="$utils.tdID">
-        <a :href="`/subscribers/${props.row.id}`" @click.prevent="showEditForm(props.row)"
-          :class="{ 'blocklisted': props.row.status === 'blocklisted' }">
-          {{ props.row.email }}
-          <copy-text :text="`${props.row.email}`" hide-text />
+    <div class="actions mb-4">
+      <a class="a" href="#" @click.prevent="exportSubscribers" data-cy="btn-export-subscribers">
+        <b-icon icon="cloud-download-outline" size="is-small" />
+        {{ $t('subscribers.export') }}
+      </a>
+      <template v-if="bulk.checked.length > 0">
+        <a class="a" href="#" @click.prevent="showBulkListForm" data-cy="btn-manage-lists">
+          <b-icon icon="format-list-bulleted-square" size="is-small" /> Manage lists
         </a>
-        <b-tag v-if="props.row.status !== 'enabled'" :class="props.row.status" data-cy="blocklisted">
-          {{ $t(`subscribers.status.${props.row.status}`) }}
-        </b-tag>
-        <b-taglist>
-          <template v-for="l in props.row.lists">
-            <router-link :to="`/subscribers/lists/${l.id}`" :key="l.id" style="padding-right:0.5em;">
-              <b-tag :class="l.subscriptionStatus" size="is-small" :key="l.id">
-                {{ l.name }}
-                <sup v-if="l.optin === 'double' || l.subscriptionStatus == 'unsubscribed'">
-                  {{ $t(`subscribers.status.${l.subscriptionStatus}`) }}
-                </sup>
+        <a class="a" href="#" @click.prevent="deleteSubscribers" data-cy="btn-delete-subscribers">
+          <b-icon icon="trash-can-outline" size="is-small" /> Delete
+        </a>
+        <a class="a" href="#" @click.prevent="blocklistSubscribers" data-cy="btn-manage-blocklist">
+          <b-icon icon="account-off-outline" size="is-small" /> Blocklist
+        </a>
+        <span class="a">
+          {{ $t('globals.messages.numSelected', { num: numSelectedSubscribers }) }}
+          <span v-if="!bulk.all && subscribers.total > subscribers.perPage">
+            &mdash;
+            <a href="#" @click.prevent="selectAllSubscribers">
+              {{ $t('globals.messages.selectAll', { num: subscribers.total }) }}
+            </a>
+          </span>
+        </span>
+      </template>
+    </div>
+
+    <div class="table-pagination" v-if="subscribers.total > 0">
+      <span class="page-indicator">{{ queryParams.page }}</span>
+      <button class="button" type="button" :disabled="queryParams.page <= 1" @click="onPageChange(queryParams.page - 1)">
+        <b-icon icon="chevron-left" size="is-small" />
+      </button>
+      <button class="button" type="button" :disabled="queryParams.page >= subscriberPageCount" @click="onPageChange(queryParams.page + 1)">
+        <b-icon icon="chevron-right" size="is-small" />
+      </button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table is-fullwidth is-hoverable admin-table">
+        <thead>
+          <tr>
+            <th class="checkbox-col">
+              <input
+                type="checkbox"
+                :checked="isAllCurrentPageSubscribersChecked"
+                aria-label="Select current page subscribers"
+                @change="toggleCurrentPageSubscribers($event.target.checked)"
+              />
+            </th>
+            <th>
+              <button type="button" class="sort-button" @click="onSort('email', nextSortDirection('email'))">
+                {{ $t('subscribers.email') }}
+              </button>
+            </th>
+            <th>
+              <button type="button" class="sort-button" @click="onSort('name', nextSortDirection('name'))">
+                {{ $t('globals.fields.name') }}
+              </button>
+            </th>
+            <th>{{ $t('globals.terms.lists') }}</th>
+            <th>
+              <button type="button" class="sort-button" @click="onSort('created_at', nextSortDirection('created_at'))">
+                {{ $t('globals.fields.createdAt') }}
+              </button>
+            </th>
+            <th>
+              <button type="button" class="sort-button" @click="onSort('updated_at', nextSortDirection('updated_at'))">
+                {{ $t('globals.fields.updatedAt') }}
+              </button>
+            </th>
+            <th class="actions-col" />
+          </tr>
+        </thead>
+        <tbody v-if="subscriberRows.length > 0">
+          <tr v-for="row in subscriberRows" :key="row.id">
+            <td class="checkbox-col">
+              <input type="checkbox" :checked="isSubscriberChecked(row.id)" :aria-label="`Select subscriber ${row.email}`" @change="toggleSubscriberSelection(row, $event.target.checked)" />
+            </td>
+            <td>
+              <button type="button" class="link-button" @click.stop.prevent="showEditForm(row)" :class="{ blocklisted: row.status === 'blocklisted' }">
+                {{ row.email }}
+              </button>
+              <copy-text :text="`${row.email}`" hide-text />
+              <b-tag v-if="row.status !== 'enabled'" :class="row.status" data-cy="blocklisted">
+                {{ $t(`subscribers.status.${row.status}`) }}
               </b-tag>
-            </router-link>
-          </template>
-        </b-taglist>
-      </b-table-column>
+              <div class="tag-list">
+                <router-link v-for="l in row.lists" :key="l.id" :to="`/subscribers/lists/${l.id}`">
+                  <b-tag :class="l.subscriptionStatus" size="is-small">
+                    {{ l.name }}
+                    <sup v-if="l.optin === 'double' || l.subscriptionStatus === 'unsubscribed'">
+                      {{ $t(`subscribers.status.${l.subscriptionStatus}`) }}
+                    </sup>
+                  </b-tag>
+                </router-link>
+              </div>
+            </td>
+            <td>
+              <button type="button" class="link-button" @click.stop.prevent="showEditForm(row)" :class="{ blocklisted: row.status === 'blocklisted' }">
+                {{ row.name }}
+              </button>
+              <copy-text :text="`${row.name}`" hide-text />
+            </td>
+            <td>{{ listCount(row.lists) }}</td>
+            <td>{{ $utils.niceDate(row.createdAt) }}</td>
+            <td>{{ $utils.niceDate(row.updatedAt) }}</td>
+            <td class="actions">
+              <div class="action-group">
+              <a
+                :href="`/mailapi/subscribers/${row.id}/export`"
+                class="action-button"
+                data-cy="btn-download"
+                :aria-label="$t('subscribers.downloadData')"
+              >
+                <b-icon icon="cloud-download-outline" size="is-small" />
+              </a>
+              <button
+                v-if="$can('subscribers:manage')"
+                type="button"
+                class="action-button"
+                @click.stop.prevent="showEditForm(row)"
+                data-cy="btn-edit"
+                :aria-label="$t('globals.buttons.edit')"
+              >
+                <b-icon icon="pencil-outline" size="is-small" />
+              </button>
+              <a
+                v-if="$can('subscribers:manage')"
+                href="#"
+                class="action-button action-button-danger"
+                @click.prevent="deleteSubscriber(row)"
+                data-cy="btn-delete"
+                :aria-label="$t('globals.buttons.delete')"
+              >
+                <b-icon icon="trash-can-outline" size="is-small" />
+              </a>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      <b-table-column v-slot="props" field="name" :label="$t('globals.fields.name')" header-class="cy-name" sortable>
-        <a :href="`/subscribers/${props.row.id}`" @click.prevent="showEditForm(props.row)"
-          :class="{ 'blocklisted': props.row.status === 'blocklisted' }">
-          {{ props.row.name }}
-          <copy-text :text="`${props.row.name}`" hide-text />
-        </a>
-      </b-table-column>
+      <empty-placeholder v-if="subscriberRows.length === 0 && !loading.subscribers" />
+    </div>
 
-      <b-table-column v-slot="props" field="lists" :label="$t('globals.terms.lists')" header-class="cy-lists" centered>
-        {{ listCount(props.row.lists) }}
-      </b-table-column>
+    <div class="table-pagination" v-if="subscribers.total > 0">
+      <span class="page-indicator">{{ queryParams.page }}</span>
+      <button class="button" type="button" :disabled="queryParams.page <= 1" @click="onPageChange(queryParams.page - 1)">
+        <b-icon icon="chevron-left" size="is-small" />
+      </button>
+      <button class="button" type="button" :disabled="queryParams.page >= subscriberPageCount" @click="onPageChange(queryParams.page + 1)">
+        <b-icon icon="chevron-right" size="is-small" />
+      </button>
+    </div>
 
-      <b-table-column v-slot="props" field="created_at" :label="$t('globals.fields.createdAt')"
-        header-class="cy-created_at" sortable>
-        {{ $utils.niceDate(props.row.createdAt) }}
-      </b-table-column>
+    <v-overlay
+      :model-value="isBulkListFormVisible"
+      class="admin-overlay align-center justify-center"
+      scrim="rgba(15, 23, 42, 0.45)"
+      @update:model-value="isBulkListFormVisible = $event"
+    >
+      <div class="admin-dialog-frame" style="max-width: 560px; width: calc(100vw - 32px);">
+        <subscriber-bulk-list
+          :num-subscribers="this.numSelectedSubscribers"
+          @finished="bulkChangeLists"
+          @close="isBulkListFormVisible = false"
+        />
+      </div>
+    </v-overlay>
 
-      <b-table-column v-slot="props" field="updated_at" :label="$t('globals.fields.updatedAt')"
-        header-class="cy-updated_at" sortable>
-        {{ $utils.niceDate(props.row.updatedAt) }}
-      </b-table-column>
-
-      <b-table-column v-slot="props" cell-class="actions" align="right">
-        <div>
-          <a :href="`/mailapi/subscribers/${props.row.id}/export`" data-cy="btn-download"
-            :aria-label="$t('subscribers.downloadData')">
-            <b-tooltip :label="$t('subscribers.downloadData')" type="is-dark">
-              <b-icon icon="cloud-download-outline" size="is-small" />
-            </b-tooltip>
-          </a>
-          <a v-if="$can('subscribers:manage')" :href="`/subscribers/${props.row.id}`"
-            @click.prevent="showEditForm(props.row)" data-cy="btn-edit" :aria-label="$t('globals.buttons.edit')">
-            <b-tooltip :label="$t('globals.buttons.edit')" type="is-dark">
-              <b-icon icon="pencil-outline" size="is-small" />
-            </b-tooltip>
-          </a>
-          <a v-if="$can('subscribers:manage')" href="#" @click.prevent="deleteSubscriber(props.row)"
-            data-cy="btn-delete" :aria-label="$t('globals.buttons.delete')">
-            <b-tooltip :label="$t('globals.buttons.delete')" type="is-dark">
-              <b-icon icon="trash-can-outline" size="is-small" />
-            </b-tooltip>
-          </a>
-        </div>
-      </b-table-column>
-
-      <template #empty v-if="!loading.subscribers">
-        <empty-placeholder />
-      </template>
-    </b-table>
-
-    <!-- Manage list modal -->
-    <b-modal scroll="keep" :aria-modal="true" :active.sync="isBulkListFormVisible" :width="500" class="has-overflow">
-      <subscriber-bulk-list :num-subscribers="this.numSelectedSubscribers" @finished="bulkChangeLists" />
-    </b-modal>
-
-    <!-- Add / edit form modal -->
-    <b-modal scroll="keep" :aria-modal="true" :active.sync="isFormVisible" :width="850" @close="onFormClose">
-      <subscriber-form :key="subscriberFormKey" :data="curItem" :is-editing="isEditing" @finished="querySubscribers" />
-    </b-modal>
+    <v-overlay
+      :model-value="isFormVisible"
+      class="admin-overlay align-center justify-center"
+      scrim="rgba(15, 23, 42, 0.45)"
+      @update:model-value="handleDialogModelUpdate"
+    >
+      <div class="admin-dialog-frame" style="max-width: 920px; width: calc(100vw - 32px);">
+        <subscriber-form
+          v-if="isFormVisible"
+          :key="subscriberFormKey"
+          :data="subscriberFormData"
+          :is-editing="isEditing"
+          @finished="querySubscribers"
+          @close="closeForm"
+        />
+      </div>
+    </v-overlay>
   </section>
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 import { uris } from '../constants';
@@ -200,7 +270,7 @@ import SubscriberBulkList from './SubscriberBulkList.vue';
 import SubscriberForm from './SubscriberForm.vue';
 import CopyText from '../components/CopyText.vue';
 
-export default Vue.extend({
+export default {
   components: {
     SubscriberForm,
     SubscriberBulkList,
@@ -257,7 +327,9 @@ export default Vue.extend({
         this.queryParams.queryExp = '';
         this.queryParams.page = 1;
         this.querySubscribers();
-        this.$refs.query.focus();
+        if (this.$refs.query && typeof this.$refs.query.focus === 'function') {
+          this.$refs.query.focus();
+        }
         return;
       }
 
@@ -273,7 +345,9 @@ export default Vue.extend({
 
       // Toggling to advanced search.
       this.$nextTick(() => {
-        this.$refs.queryExp.focus();
+        if (this.$refs.queryExp && typeof this.$refs.queryExp.focus === 'function') {
+          this.$refs.queryExp.focus();
+        }
       });
     },
 
@@ -287,6 +361,35 @@ export default Vue.extend({
       if (this.bulk.checked.length !== this.subscribers.total) {
         this.bulk.all = false;
       }
+    },
+
+    isSubscriberChecked(id) {
+      return this.bulk.checked.some((item) => item.id === id);
+    },
+
+    toggleSubscriberSelection(subscriber, checked) {
+      if (checked) {
+        if (!this.isSubscriberChecked(subscriber.id)) {
+          this.bulk.checked = [...this.bulk.checked, subscriber];
+        }
+      } else {
+        this.bulk.checked = this.bulk.checked.filter((item) => item.id !== subscriber.id);
+      }
+      this.onTableCheck();
+    },
+
+    toggleCurrentPageSubscribers(checked) {
+      if (checked) {
+        const checkedMap = new Map(this.bulk.checked.map((item) => [item.id, item]));
+        this.subscriberRows.forEach((row) => {
+          checkedMap.set(row.id, row);
+        });
+        this.bulk.checked = [...checkedMap.values()];
+      } else {
+        const currentIDs = new Set(this.subscriberRows.map((row) => row.id));
+        this.bulk.checked = this.bulk.checked.filter((item) => !currentIDs.has(item.id));
+      }
+      this.onTableCheck();
     },
 
     // Show the edit list form.
@@ -313,12 +416,28 @@ export default Vue.extend({
       }
     },
 
+    closeForm() {
+      this.isFormVisible = false;
+      this.onFormClose();
+    },
+
+    handleDialogModelUpdate(value) {
+      this.isFormVisible = value;
+      if (!value) {
+        this.onFormClose();
+      }
+    },
+
     onPageChange(p) {
       this.querySubscribers({ page: p });
     },
 
     onSort(field, direction) {
       this.querySubscribers({ orderBy: field, order: direction });
+    },
+
+    nextSortDirection(field) {
+      return this.queryParams.orderBy === field && this.queryParams.order === 'asc' ? 'desc' : 'asc';
     },
 
     // Prepares an SQL expression for simple name search inputs and saves it
@@ -508,6 +627,22 @@ export default Vue.extend({
   computed: {
     ...mapState(['subscribers', 'lists', 'loading']),
 
+    subscriberRows() {
+      return this.subscribers.results ?? [];
+    },
+
+    subscriberPageCount() {
+      if (!this.subscribers.perPage || !this.subscribers.total) {
+        return 1;
+      }
+      return Math.max(1, Math.ceil(this.subscribers.total / this.subscribers.perPage));
+    },
+
+    isAllCurrentPageSubscribersChecked() {
+      return this.subscriberRows.length > 0
+        && this.subscriberRows.every((row) => this.isSubscriberChecked(row.id));
+    },
+
     numSelectedSubscribers() {
       if (this.bulk.all) {
         return this.subscribers.total;
@@ -523,6 +658,14 @@ export default Vue.extend({
       return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.id ?? 'new'}`;
     },
 
+    subscriberFormData() {
+      const item = this.curItem && typeof this.curItem === 'object' ? this.curItem : {};
+      const normalized = { ...item };
+      normalized.lists = Array.isArray(item.lists) ? item.lists : [];
+      normalized.attribs = item.attribs && typeof item.attribs === 'object' ? item.attribs : {};
+      return normalized;
+    },
+
     // Returns the list that the subscribers are being filtered by in.
     currentList() {
       if (!this.queryParams.listID || !this.lists.results) {
@@ -534,11 +677,11 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.querySubscribers);
+    this.$events.$on('page.refresh', this.querySubscribers);
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.querySubscribers);
+    this.$events.$off('page.refresh', this.querySubscribers);
   },
 
   mounted() {
@@ -558,5 +701,137 @@ export default Vue.extend({
       this.querySubscribers();
     }
   },
-});
+};
 </script>
+
+<style scoped>
+.admin-table {
+  background: #fff;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.checkbox-col {
+  width: 44px;
+}
+
+.actions-col,
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.action-group {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.action-button {
+  align-items: center;
+  background: #f5f7fb;
+  border: 1px solid #dbe2ef;
+  border-radius: 10px;
+  color: #0f5bd8;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  width: 34px;
+}
+
+.action-button:hover {
+  background: #e8f0ff;
+  border-color: #bfd1fb;
+  color: #0a47a7;
+}
+
+.action-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(15, 91, 216, 0.18);
+  outline: none;
+}
+
+.action-button-danger {
+  color: #cc3b2f;
+}
+
+.action-button-danger:hover {
+  background: #fff0ee;
+  border-color: #f4c4bc;
+  color: #a92a1f;
+}
+
+.admin-open-button {
+  background: #0f5bd8;
+  border: 1px solid #0f5bd8;
+  border-radius: 10px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  min-width: 96px;
+  padding: 0 18px;
+}
+
+.link-button,
+.icon-button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-button {
+  color: inherit;
+  font: inherit;
+}
+
+.sort-button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.admin-dialog-frame {
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.admin-overlay {
+  padding: 16px;
+  z-index: 2400;
+}
+
+.table-pagination {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.page-indicator {
+  background: #0f5bd7;
+  border-radius: 6px;
+  color: #fff;
+  min-width: 40px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+</style>

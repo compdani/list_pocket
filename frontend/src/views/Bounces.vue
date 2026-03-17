@@ -10,7 +10,7 @@
     </header>
 
     <b-table :data="bounces.results" :hoverable="true" :loading="loading.bounces" default-sort="createdAt" checkable
-      @check-all="onTableCheck" @check="onTableCheck" :checked-rows.sync="bulk.checked" detailed show-detail-icon
+      @check-all="onTableCheck" @check="onTableCheck" :checked-rows="bulk.checked" @update:checked-rows="bulk.checked = $event" detailed show-detail-icon
       paginated backend-pagination pagination-position="both" @page-change="onPageChange"
       :current-page="queryParams.page" :per-page="bounces.perPage" :total="bounces.total" backend-sorting
       @sort="onSort">
@@ -96,11 +96,10 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
-export default Vue.extend({
+export default {
   components: {
     EmptyPlaceholder,
   },
@@ -214,11 +213,11 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.getBounces);
+    this.$events.$on('page.refresh', this.getBounces);
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.getBounces);
+    this.$events.$off('page.refresh', this.getBounces);
   },
 
   mounted() {
@@ -232,5 +231,5 @@ export default Vue.extend({
 
     this.getBounces();
   },
-});
+};
 </script>

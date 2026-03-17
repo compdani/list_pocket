@@ -73,19 +73,18 @@
     </b-table>
 
     <!-- Add / edit form modal -->
-    <b-modal scroll="keep" :aria-modal="true" :active.sync="isFormVisible" :width="700" @close="onFormClose">
+    <b-modal scroll="keep" :aria-modal="true" :active="isFormVisible" @update:active="isFormVisible = $event" :width="700" @close="onFormClose">
       <role-form :data="curItem" :type="curType" :is-editing="isEditing" @finished="formFinished" />
     </b-modal>
   </section>
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 import RoleForm from './RoleForm.vue';
 
-export default Vue.extend({
+export default {
   components: {
     EmptyPlaceholder,
     RoleForm,
@@ -189,5 +188,5 @@ export default Vue.extend({
     this.curType = this.$route.name === 'userRoles' ? 'user' : 'list';
     this.fetchRoles();
   },
-});
+};
 </script>
