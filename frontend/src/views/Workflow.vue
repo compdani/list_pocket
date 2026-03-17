@@ -11,12 +11,9 @@
       </div>
 
       <div class="workflow-hero-actions">
-        <button type="button" class="workflow-primary-button" @click="$router.push({ name: 'workflowBuilder' })">
+        <button type="button" class="workflow-primary-button" @click="openBuilder()">
           Open Builder
         </button>
-        <a class="workflow-secondary-button" href="/workflow" target="_blank" rel="noopener noreferrer">
-          Open Standalone
-        </a>
       </div>
     </header>
 
@@ -92,7 +89,7 @@
             <span class="workflow-eyebrow">Recent Activity</span>
             <h2>Workflow Runs</h2>
           </div>
-          <button type="button" class="workflow-text-button" @click="$router.push({ name: 'workflowBuilder' })">
+          <button type="button" class="workflow-text-button" @click="openBuilder()">
             Open Builder
           </button>
         </div>
@@ -125,9 +122,14 @@
           <span class="workflow-eyebrow">Focus</span>
           <h2>{{ activeWorkflowName }}</h2>
         </div>
-        <button type="button" class="workflow-primary-button workflow-primary-button-small" @click="$router.push({ name: 'workflowBuilder' })">
-          Edit in Builder
-        </button>
+        <div class="workflow-focus-actions">
+          <button type="button" class="workflow-text-button workflow-danger-button" :disabled="!selectedWorkflowId" @click="confirmDeleteWorkflow()">
+            Delete Workflow
+          </button>
+          <button type="button" class="workflow-primary-button workflow-primary-button-small" @click="openBuilder()">
+            Edit in Builder
+          </button>
+        </div>
       </div>
 
       <div class="workflow-focus-grid">
@@ -241,6 +243,39 @@ export default {
       this.selectedWorkflowId = workflowId;
       this.refreshDashboard(workflowId);
     },
+
+    async deleteSelectedWorkflow() {
+      if (!this.selectedWorkflowId) {
+        return;
+      }
+
+      try {
+        const payload = await this.$api.deleteWorkflow(this.selectedWorkflowId);
+        this.dashboard = {
+          workflows: Array.isArray(payload.workflows) ? payload.workflows : [],
+          activeWorkflow: payload.activeWorkflow || null,
+          contacts: Array.isArray(payload.contacts) ? payload.contacts : [],
+          companies: Array.isArray(payload.companies) ? payload.companies : [],
+          runLogs: Array.isArray(payload.runLogs) ? payload.runLogs : [],
+        };
+        this.selectedWorkflowId = this.dashboard.activeWorkflow?.workflow?.id || this.dashboard.workflows[0]?.id || '';
+      } catch (err) {
+        this.$utils.toast(err && err.message ? err.message : 'Failed to delete workflow', 'is-danger');
+      }
+    },
+
+    confirmDeleteWorkflow() {
+      const name = this.dashboard.activeWorkflow?.workflow?.name || 'this workflow';
+      this.$utils.confirm(`Delete ${name}? This also removes its runs and graph history.`, this.deleteSelectedWorkflow);
+    },
+
+    openBuilder(workflowId = this.selectedWorkflowId || this.dashboard.activeWorkflow?.workflow?.id || this.dashboard.workflows[0]?.id) {
+      this.$router.push(
+        workflowId
+          ? { name: 'workflowBuilder', params: { workflowId } }
+          : { name: 'workflowBuilder' },
+      );
+    },
   },
 
   created() {
@@ -348,9 +383,25 @@ export default {
   color: #0f172a;
 }
 
+.workflow-danger-button {
+  background: #fff5f5;
+  border-color: #fecaca;
+  color: #b42318;
+}
+
 .workflow-secondary-button:hover,
 .workflow-text-button:hover {
   background: #eef3fb;
+}
+
+.workflow-danger-button:hover {
+  background: #feeaea;
+}
+
+.workflow-text-button:disabled,
+.workflow-primary-button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .workflow-stats {
@@ -394,6 +445,13 @@ export default {
   display: flex;
   gap: 16px;
   justify-content: space-between;
+}
+
+.workflow-focus-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .workflow-panel-header h2 {

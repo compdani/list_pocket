@@ -166,6 +166,20 @@ func materializeRunExecution(app core.App, runRecord *core.Record) (domain.Workf
 }
 
 func persistNodeRuns(app core.App, runRecord *core.Record, nodeRuns []domain.NodeRun) error {
+	workflowID := runRecord.GetString("workflow")
+	workflowNodes, err := app.FindRecordsByFilter("workflow_nodes", fmt.Sprintf(`workflow="%s" && is_current=true`, workflowID), "", 500, 0)
+	if err != nil {
+		return err
+	}
+
+	nodeRecordIDByStableKey := map[string]string{}
+	nodeStableKeyByRecordID := map[string]string{}
+	for _, node := range workflowNodes {
+		stableKey := stableNodeKey(node)
+		nodeRecordIDByStableKey[stableKey] = node.Id
+		nodeStableKeyByRecordID[node.Id] = stableKey
+	}
+
 	existing, err := app.FindRecordsByFilter("node_runs", fmt.Sprintf(`run="%s"`, runRecord.Id), "", 200, 0)
 	if err != nil {
 		return err
@@ -173,16 +187,26 @@ func persistNodeRuns(app core.App, runRecord *core.Record, nodeRuns []domain.Nod
 
 	existingByNode := map[string]*core.Record{}
 	for _, record := range existing {
-		existingByNode[record.GetString("node")] = record
+		nodeID := record.GetString("node")
+		stableKey := nodeStableKeyByRecordID[nodeID]
+		if stableKey == "" {
+			stableKey = nodeID
+		}
+		existingByNode[stableKey] = record
 	}
 
 	for _, nodeRun := range nodeRuns {
+		nodeRecordID := nodeRecordIDByStableKey[nodeRun.NodeID]
+		if nodeRecordID == "" {
+			return fmt.Errorf("node run references unknown node %q", nodeRun.NodeID)
+		}
+
 		record := existingByNode[nodeRun.NodeID]
 		if record == nil {
 			record = core.NewRecord(mustCollection(app, "node_runs"))
 		}
 		record.Set("run", runRecord.Id)
-		record.Set("node", nodeRun.NodeID)
+		record.Set("node", nodeRecordID)
 		record.Set("status", string(nodeRun.Status))
 		record.Set("input", nodeRun.Input)
 		record.Set("output", nodeRun.Output)

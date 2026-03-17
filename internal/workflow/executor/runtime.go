@@ -138,9 +138,16 @@ func (EventStartExecutor) Execute(ctx context.Context, executionCtx ExecutionCon
 	sourcePath, _ := executionCtx.Node.Config["sourcePath"].(string)
 	fallbackAt, _ := executionCtx.Node.Config["fallbackAt"].(string)
 
-	resolved := fmt.Sprintf("%v", resolveValue(sourcePath, executionCtx))
-	if strings.TrimSpace(resolved) == "" {
-		resolved = fallbackAt
+	rawResolved := resolveValue(sourcePath, executionCtx)
+	resolved := strings.TrimSpace(asString(rawResolved, ""))
+	if resolved == "" || resolved == "<nil>" {
+		resolved = strings.TrimSpace(fallbackAt)
+	}
+	if resolved == "" {
+		return NodeResult{}, fmt.Errorf("event start node could not resolve source path %q", sourcePath)
+	}
+	if parseTime(resolved).IsZero() {
+		return NodeResult{}, fmt.Errorf("event start node resolved invalid time %q", resolved)
 	}
 
 	output := copyMap(executionCtx.Input)
