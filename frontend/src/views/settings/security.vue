@@ -150,7 +150,6 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import CopyText from '../../components/CopyText.vue';
 
@@ -161,7 +160,7 @@ const OIDC_PROVIDERS = {
   apple: 'https://appleid.apple.com',
 };
 
-export default Vue.extend({
+export default {
   components: {
     CopyText,
   },
@@ -249,5 +248,5 @@ export default Vue.extend({
       data: this.form,
     };
   },
-});
+};
 </script>

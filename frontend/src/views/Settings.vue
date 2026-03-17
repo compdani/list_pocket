@@ -21,50 +21,34 @@
       <hr />
 
       <section class="wrap" v-if="form">
-        <b-tabs type="is-boxed" :animated="false" v-model="tab">
-          <b-tab-item :label="$t('settings.general.name')" label-position="on-border">
-            <general-settings :form="form" :key="key" />
-          </b-tab-item><!-- general -->
+        <div class="settings-tabs">
+          <button
+            v-for="(item, index) in settingsTabs"
+            :key="item.key"
+            type="button"
+            class="settings-tab"
+            :class="{ 'is-active': tab === index }"
+            @click="tab = index"
+          >
+            {{ item.label }}
+          </button>
+        </div>
 
-          <b-tab-item :label="$t('settings.performance.name')">
-            <performance-settings :form="form" :key="key" />
-          </b-tab-item><!-- performance -->
-
-          <b-tab-item :label="$t('settings.privacy.name')">
-            <privacy-settings :form="form" :key="key" />
-          </b-tab-item><!-- privacy -->
-
-          <b-tab-item :label="$t('settings.security.name')">
-            <security-settings :form="form" :key="key" />
-          </b-tab-item><!-- security -->
-
-          <b-tab-item :label="$t('settings.media.title')">
-            <media-settings :form="form" :key="key" />
-          </b-tab-item><!-- media -->
-
-          <b-tab-item :label="$t('settings.smtp.name')">
-            <smtp-settings :form="form" :key="key" />
-          </b-tab-item><!-- mail servers -->
-
-          <b-tab-item :label="$t('settings.bounces.name')">
-            <bounce-settings :form="form" :key="key" />
-          </b-tab-item><!-- bounces -->
-
-          <b-tab-item :label="$t('settings.messengers.name')">
-            <messenger-settings :form="form" :key="key" />
-          </b-tab-item><!-- messengers -->
-
-          <b-tab-item :label="$t('settings.appearance.name')">
-            <appearance-settings :form="form" :key="key" />
-          </b-tab-item><!-- appearance -->
-        </b-tabs>
+        <section v-show="tab === 0"><general-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 1"><performance-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 2"><privacy-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 3"><security-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 4"><media-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 5"><smtp-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 6"><bounce-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 7"><messenger-settings :form="form" :key="key" /></section>
+        <section v-show="tab === 8"><appearance-settings :form="form" :key="key" /></section>
       </section>
     </section>
   </form>
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import AppearanceSettings from './settings/appearance.vue';
 import BounceSettings from './settings/bounces.vue';
@@ -76,7 +60,7 @@ import PrivacySettings from './settings/privacy.vue';
 import SecuritySettings from './settings/security.vue';
 import SmtpSettings from './settings/smtp.vue';
 
-export default Vue.extend({
+export default {
   components: {
     GeneralSettings,
     PerformanceSettings,
@@ -329,6 +313,20 @@ export default Vue.extend({
   computed: {
     ...mapState(['serverConfig', 'loading']),
 
+    settingsTabs() {
+      return [
+        { key: 'general', label: this.$t('settings.general.name') },
+        { key: 'performance', label: this.$t('settings.performance.name') },
+        { key: 'privacy', label: this.$t('settings.privacy.name') },
+        { key: 'security', label: this.$t('settings.security.name') },
+        { key: 'media', label: this.$t('settings.media.title') },
+        { key: 'smtp', label: this.$t('settings.smtp.name') },
+        { key: 'bounces', label: this.$t('settings.bounces.name') },
+        { key: 'messengers', label: this.$t('settings.messengers.name') },
+        { key: 'appearance', label: this.$t('settings.appearance.name') },
+      ];
+    },
+
     hasFormChanged() {
       if (!this.formCopy) {
         return false;
@@ -355,5 +353,32 @@ export default Vue.extend({
       this.$utils.setPref('settings.tab', t);
     },
   },
-});
+};
 </script>
+
+<style scoped>
+.settings-tabs {
+  border-bottom: 1px solid #d8dfec;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.settings-tab {
+  background: #fff;
+  border: 1px solid #d8dfec;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  color: #667085;
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 10px 16px;
+}
+
+.settings-tab.is-active {
+  background: #f8fbff;
+  color: #0f5bd8;
+  font-weight: 600;
+}
+</style>

@@ -56,9 +56,26 @@
 
     <b-loading :active="loading.campaigns" />
 
-    <b-tabs type="is-boxed" :animated="false" v-model="activeTab" @input="onTab">
-      <b-tab-item :label="$tc('globals.terms.campaign')" label-position="on-border" value="campaign"
-        icon="rocket-launch-outline">
+    <div class="campaign-tabs">
+      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'campaign' }" @click="onTab('campaign')">
+        <b-icon icon="rocket-launch-outline" size="is-small" />
+        {{ $tc('globals.terms.campaign') }}
+      </button>
+      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'content', 'is-disabled': isNew }" :disabled="isNew" @click="onTab('content')">
+        <b-icon icon="text" size="is-small" />
+        {{ $t('campaigns.content') }}
+      </button>
+      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'attribs', 'is-disabled': isNew }" :disabled="isNew" @click="onTab('attribs')">
+        <b-icon icon="code" size="is-small" />
+        {{ $t('globals.terms.attribs') }}
+      </button>
+      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'archive', 'is-disabled': isNew }" :disabled="isNew" @click="onTab('archive')">
+        <b-icon icon="newspaper-variant-outline" size="is-small" />
+        {{ $t('campaigns.archive') }}
+      </button>
+    </div>
+
+    <section v-show="activeTab === 'campaign'">
         <section class="wrap">
           <div class="columns">
             <div class="column is-7">
@@ -78,8 +95,22 @@
                     :placeholder="$t('campaigns.fromAddressPlaceholder')" required />
                 </b-field>
 
-                <list-selector v-model="form.lists" :selected="form.lists" :all="lists.results" :disabled="!canEdit"
-                  :label="$t('globals.terms.lists')" :placeholder="$t('campaigns.sendToLists')" />
+                <b-field :label="$t('globals.terms.lists')" label-position="on-border">
+                  <div class="select is-multiple is-fullwidth">
+                    <select
+                      :value="selectedListIds"
+                      :aria-label="$t('globals.terms.lists')"
+                      :disabled="!canEdit"
+                      multiple
+                      size="6"
+                      @change="onListsChange($event)"
+                    >
+                      <option v-for="list in availableLists" :key="list.id" :value="String(list.id)">
+                        {{ list.name }}
+                      </option>
+                    </select>
+                  </div>
+                </b-field>
 
                 <div class="columns">
                   <div class="column is-6">
@@ -114,8 +145,15 @@
                 </div>
 
                 <b-field :label="$t('globals.terms.tags')" label-position="on-border">
-                  <b-taginput v-model="form.tags" name="tags" :disabled="!canEdit" ellipsis icon="tag-outline"
-                    :placeholder="$t('globals.terms.tags')" />
+                  <input
+                    :value="tagsInput"
+                    :aria-label="$t('globals.terms.tags')"
+                    class="input"
+                    :disabled="!canEdit"
+                    :placeholder="$t('globals.terms.tags')"
+                    type="text"
+                    @input="tagsInput = $event.target.value"
+                  >
                 </b-field>
                 <hr />
 
@@ -129,10 +167,15 @@
                     <br />
                     <b-field v-if="form.sendLater" data-cy="send_at"
                       :message="form.sendAtDate ? $utils.duration(Date(), form.sendAtDate) : ''">
-                      <b-datetimepicker v-model="form.sendAtDate" :disabled="!canEdit" required editable mobile-native
-                        position="is-top-right" :placeholder="$t('campaigns.dateAndTime')" icon="calendar-clock"
-                        :timepicker="{ hourFormat: '24' }" :datetime-formatter="formatDateTime"
-                        horizontal-time-picker />
+                      <b-input
+                        :value="toDateTimeLocal(form.sendAtDate)"
+                        :disabled="!canEdit"
+                        required
+                        type="datetime-local"
+                        icon="calendar-clock"
+                        :placeholder="$t('campaigns.dateAndTime')"
+                        @input="onSendAtInput($event.target.value)"
+                      />
                     </b-field>
                   </div>
                 </div>
@@ -166,8 +209,15 @@
                   {{ $t('campaigns.sendTest') }}
                 </h3>
                 <b-field :message="$t('campaigns.sendTestHelp')">
-                  <b-taginput v-model="form.testEmails" :before-adding="$utils.validateEmail" :disabled="isNew" ellipsis
-                    icon="email-outline" :placeholder="$t('campaigns.testEmails')" />
+                  <textarea
+                    :value="testEmailsInput"
+                    :aria-label="$t('campaigns.testEmails')"
+                    class="textarea"
+                    :disabled="isNew"
+                    :placeholder="$t('campaigns.testEmails')"
+                    rows="3"
+                    @input="testEmailsInput = $event.target.value"
+                  />
                 </b-field>
                 <b-field>
                   <b-button @click="() => onSubmit('test')" :loading="loading.campaigns" :disabled="isNew"
@@ -179,9 +229,9 @@
             </div>
           </div>
         </section>
-      </b-tab-item><!-- campaign -->
+      </section>
 
-      <b-tab-item :label="$t('campaigns.content')" icon="text" :disabled="isNew" value="content">
+      <section v-show="activeTab === 'content'">
         <editor v-if="data.id" v-model="form.content" :id="data.id" :title="data.name" :disabled="!canEdit"
           :templates="templates" :content-types="contentTypes" />
 
@@ -219,18 +269,18 @@
         <div v-if="canEdit && form.content.contentType !== 'plain'" class="alt-body">
           <b-input v-if="form.altbody !== null" v-model="form.altbody" type="textarea" :disabled="!canEdit" />
         </div>
-      </b-tab-item><!-- content -->
+      </section>
 
-      <b-tab-item :label="$t('globals.terms.attribs')" icon="code" value="attribs" :disabled="isNew">
+      <section v-show="activeTab === 'attribs'">
         <section class="wrap">
           <b-field :label="$t('globals.terms.attribs')" :message="$t('campaigns.attribsHelp')"
             label-position="on-border">
             <b-input v-model="form.attribsStr" type="textarea" :disabled="!canEdit" rows="15" />
           </b-field>
         </section>
-      </b-tab-item><!-- attribs -->
+      </section>
 
-      <b-tab-item :label="$t('campaigns.archive')" icon="newspaper-variant-outline" value="archive" :disabled="isNew">
+      <section v-show="activeTab === 'archive'">
         <section class="wrap">
           <div class="columns">
             <div class="column is-4">
@@ -266,11 +316,13 @@
               <b-field :label="$tc('globals.terms.template')" label-position="on-border">
                 <b-select :placeholder="$tc('globals.terms.template')" v-model="form.archiveTemplateId" name="template"
                   :disabled="!canArchive || !form.archive || form.content.contentType === 'visual'" required>
-                  <template v-for="t in templates">
-                    <option v-if="t.type === 'campaign'" :value="t.id" :key="t.id">
-                      {{ t.name }}
-                    </option>
-                  </template>
+                  <option
+                    v-for="t in archiveTemplates"
+                    :key="t.id"
+                    :value="t.id"
+                  >
+                    {{ t.name }}
+                  </option>
                 </b-select>
               </b-field>
             </div>
@@ -278,7 +330,12 @@
             <div class="column is-6">
               <b-field grouped position="is-right">
                 <b-field v-if="form.archive && (!this.form.archiveMetaStr || this.form.archiveMetaStr === '{}')">
-                  <a class="button is-primary" href="#" @click.prevent="onFillArchiveMeta" aria-label="{}"><b-icon
+                  <a
+                    class="button is-primary"
+                    href="#"
+                    @click.prevent="onFillArchiveMeta"
+                    :aria-label="$t('campaigns.archiveMeta')"
+                  ><b-icon
                       icon="code" /></a>
                 </b-field>
                 <b-field v-if="form.archive">
@@ -303,10 +360,9 @@
               :disabled="!canArchive || !form.archive" rows="20" />
           </b-field>
         </section>
-      </b-tab-item><!-- archive -->
-    </b-tabs>
+      </section>
 
-    <b-modal scroll="keep" :aria-modal="true" :active.sync="isAttachModalOpen" :width="900">
+    <b-modal scroll="keep" :aria-modal="true" :active="isAttachModalOpen" @update:active="isAttachModalOpen = $event" :width="900">
       <div class="modal-card content" style="width: auto">
         <section expanded class="modal-card-body">
           <media is-modal @selected="onAttachSelect" />
@@ -323,18 +379,15 @@
 <script>
 import dayjs from 'dayjs';
 import htmlToPlainText from 'textversionjs';
-import Vue from 'vue';
 import { mapState } from 'vuex';
 
 import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import Editor from '../components/Editor.vue';
-import ListSelector from '../components/ListSelector.vue';
 import Media from './Media.vue';
 
-export default Vue.extend({
+export default {
   components: {
-    ListSelector,
     Editor,
     Media,
     CopyText,
@@ -366,7 +419,7 @@ export default Vue.extend({
 
       // Binds form input values.
       form: {
-        archiveSlug: null,
+        archiveSlug: '',
         name: '',
         subject: '',
         fromEmail: '',
@@ -402,6 +455,22 @@ export default Vue.extend({
       return dayjs(s).format('YYYY-MM-DD HH:mm');
     },
 
+    toDateTimeLocal(value) {
+      return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
+    },
+
+    onSendAtInput(value) {
+      this.form.sendAtDate = value ? dayjs(value).toDate() : null;
+    },
+
+    onListsChange(event) {
+      const selectedIDs = Array.from(event.target.selectedOptions || [], (option) => Number(option.value));
+      const listMap = new Map(this.availableLists.map((list) => [Number(list.id), list]));
+      this.form.lists = selectedIDs
+        .map((id) => listMap.get(id))
+        .filter(Boolean);
+    },
+
     onToggleArchivePreview() {
       this.isPreviewingArchive = !this.isPreviewingArchive;
     },
@@ -421,7 +490,9 @@ export default Vue.extend({
     onShowAttachField() {
       this.isAttachFieldVisible = true;
       this.$nextTick(() => {
-        this.$refs.media.focus();
+        if (this.$refs.media && typeof this.$refs.media.focus === 'function') {
+          this.$refs.media.focus();
+        }
       });
     },
 
@@ -443,9 +514,14 @@ export default Vue.extend({
     },
 
     onTab(tab) {
+      this.activeTab = tab;
+
       if (tab === 'content' && window.tinymce && window.tinymce.editors.length > 0) {
         this.$nextTick(() => {
-          window.tinymce.editors[0].focus();
+          const [editor] = window.tinymce.editors;
+          if (editor && typeof editor.focus === 'function') {
+            editor.focus();
+          }
         });
       }
 
@@ -517,6 +593,7 @@ export default Vue.extend({
         this.form = {
           ...this.form,
           ...data,
+          archiveSlug: data.archiveSlug || '',
           headersStr: JSON.stringify(data.headers, null, 4),
           archiveMetaStr: data.archiveMeta ? JSON.stringify(data.archiveMeta, null, 4) : '{}',
           attribsStr: data.attribs ? JSON.stringify(data.attribs, null, 4) : '{}',
@@ -723,12 +800,49 @@ export default Vue.extend({
       return this.lists.results.filter((l) => this.selListIDs.indexOf(l.id) > -1);
     },
 
+    availableLists() {
+      return Array.isArray(this.lists && this.lists.results) ? this.lists.results : [];
+    },
+
+    selectedListIds() {
+      return Array.isArray(this.form.lists) ? this.form.lists.map((list) => String(list.id)) : [];
+    },
+
+    tagsInput: {
+      get() {
+        return Array.isArray(this.form.tags) ? this.form.tags.join(', ') : '';
+      },
+      set(value) {
+        this.form.tags = value
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean);
+      },
+    },
+
+    testEmailsInput: {
+      get() {
+        return Array.isArray(this.form.testEmails) ? this.form.testEmails.join(', ') : '';
+      },
+      set(value) {
+        this.form.testEmails = value
+          .split(/[\n,]/)
+          .map((email) => email.trim())
+          .filter(Boolean)
+          .filter((email, index, all) => all.indexOf(email) === index);
+      },
+    },
+
     emailMessengers() {
       return ['email', ...this.serverConfig.messengers.filter((m) => m.startsWith('email-'))];
     },
 
     otherMessengers() {
       return this.serverConfig.messengers.filter((m) => m !== 'email' && !m.startsWith('email-'));
+    },
+
+    archiveTemplates() {
+      return this.templates.filter((t) => t.type === 'campaign');
     },
   },
 
@@ -811,7 +925,9 @@ export default Vue.extend({
     }
 
     this.$nextTick(() => {
-      this.$refs.focus.focus();
+      if (this.$refs.focus && typeof this.$refs.focus.focus === 'function') {
+        this.$refs.focus.focus();
+      }
     });
 
     this.$events.$on('campaign.update', () => {
@@ -822,5 +938,38 @@ export default Vue.extend({
   beforeDestroy() {
     this.$events.$off('campaign.update');
   },
-});
+};
 </script>
+
+<style scoped>
+.campaign-tabs {
+  border-bottom: 1px solid #d8dfec;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.campaign-tab {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d8dfec;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  color: #667085;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.campaign-tab.is-active {
+  color: #0f5bd7;
+  font-weight: 600;
+}
+
+.campaign-tab.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+</style>

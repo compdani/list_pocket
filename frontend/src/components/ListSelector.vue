@@ -22,7 +22,7 @@
 </template>
 
 <script>
-import Vue from 'vue';
+import { nextTick } from 'vue';
 
 export default {
   name: 'ListSelector',
@@ -63,7 +63,7 @@ export default {
       this.query = '';
 
       // Propagate the items to the parent's v-model binding.
-      Vue.nextTick(() => {
+      nextTick(() => {
         this.$emit('input', this.selectedItems);
       });
     },
@@ -72,7 +72,7 @@ export default {
       this.selectedItems = this.selectedItems.filter((l) => l.id !== id);
 
       // Propagate the items to the parent's v-model binding.
-      Vue.nextTick(() => {
+      nextTick(() => {
         this.$emit('input', this.selectedItems);
       });
     },

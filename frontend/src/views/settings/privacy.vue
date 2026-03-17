@@ -41,25 +41,31 @@
 
     <hr />
 
-    <b-tabs v-model="tab" type="is-boxed" :animated="false">
-      <b-tab-item :label="`${$t('settings.privacy.domainBlocklist')} (${numBlocked})`">
-        <b-field :message="$t('settings.privacy.domainBlocklistHelp')">
-          <b-input type="textarea" v-model="data['privacy.domain_blocklist']" name="privacy.domain_blocklist" />
-        </b-field>
-      </b-tab-item>
-      <b-tab-item :label="`${$t('settings.privacy.domainAllowlist')} (${numAllowed})`">
-        <b-field :message="$t('settings.privacy.domainAllowlistHelp')">
-          <b-input type="textarea" v-model="data['privacy.domain_allowlist']" name="privacy.domain_allowlist" />
-        </b-field>
-      </b-tab-item>
-    </b-tabs>
+    <div class="settings-tabs">
+      <button type="button" class="settings-tab" :class="{ 'is-active': tab === 0 }" @click="tab = 0">
+        {{ `${$t('settings.privacy.domainBlocklist')} (${numBlocked})` }}
+      </button>
+      <button type="button" class="settings-tab" :class="{ 'is-active': tab === 1 }" @click="tab = 1">
+        {{ `${$t('settings.privacy.domainAllowlist')} (${numAllowed})` }}
+      </button>
+    </div>
+
+    <section v-show="tab === 0">
+      <b-field :message="$t('settings.privacy.domainBlocklistHelp')">
+        <b-input type="textarea" v-model="data['privacy.domain_blocklist']" name="privacy.domain_blocklist" />
+      </b-field>
+    </section>
+    <section v-show="tab === 1">
+      <b-field :message="$t('settings.privacy.domainAllowlistHelp')">
+        <b-input type="textarea" v-model="data['privacy.domain_allowlist']" name="privacy.domain_allowlist" />
+      </b-field>
+    </section>
   </div>
 </template>
 
 <script>
-import Vue from 'vue';
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -97,5 +103,32 @@ export default Vue.extend({
       this.$utils.setPref('settings.privacyDomainTab', t);
     },
   },
-});
+};
 </script>
+
+<style scoped>
+.settings-tabs {
+  border-bottom: 1px solid #d8dfec;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.settings-tab {
+  background: #fff;
+  border: 1px solid #d8dfec;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  color: #667085;
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 10px 16px;
+}
+
+.settings-tab.is-active {
+  background: #f8fbff;
+  color: #0f5bd8;
+  font-weight: 600;
+}
+</style>

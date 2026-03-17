@@ -145,12 +145,11 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import ListSelector from '../components/ListSelector.vue';
 import LogView from '../components/LogView.vue';
 
-export default Vue.extend({
+export default {
   components: {
     ListSelector,
     LogView,
@@ -270,7 +269,7 @@ export default Vue.extend({
     getLogs() {
       this.$api.getImportLogs().then((data) => {
         this.logs = data.split('\n').map((line) => line.replace(/\s+importer\.go:\d+:\s*/, ' *: '));
-        Vue.nextTick(() => {
+        this.$nextTick(() => {
           // vue.$refs doesn't work as the logs textarea is rendered dynamically.
           const ref = document.getElementById('import-log');
           if (ref) {
@@ -368,5 +367,5 @@ export default Vue.extend({
       });
     }
   },
-});
+};
 </script>

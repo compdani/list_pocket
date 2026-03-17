@@ -18,7 +18,7 @@
     </header>
 
     <b-table :data="campaigns.results" :loading="loading.campaigns" :row-class="highlightedRow"
-      @check-all="onTableCheck" @check="onTableCheck" :checked-rows.sync="bulk.checked" paginated backend-pagination
+      @check-all="onTableCheck" @check="onTableCheck" :checked-rows="bulk.checked" @update:checked-rows="bulk.checked = $event" paginated backend-pagination
       pagination-position="both" @page-change="onPageChange" :current-page="queryParams.page"
       :per-page="campaigns.perPage" :total="campaigns.total" hoverable checkable backend-sorting @sort="onSort">
       <template #top-left>
@@ -277,13 +277,12 @@
 
 <script>
 import dayjs from 'dayjs';
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
-export default Vue.extend({
+export default {
   components: {
     CampaignPreview,
     EmptyPlaceholder,
@@ -533,7 +532,7 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.getCampaigns);
+    this.$events.$on('page.refresh', this.getCampaigns);
   },
 
   mounted() {
@@ -542,8 +541,8 @@ export default Vue.extend({
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.getCampaigns);
+    this.$events.$off('page.refresh', this.getCampaigns);
     clearInterval(this.pollID);
   },
-});
+};
 </script>

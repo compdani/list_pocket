@@ -52,15 +52,15 @@
               <div class="column is-4">
                 <b-field :label="$t('settings.messengers.maxConns')" label-position="on-border"
                   :message="$t('settings.messengers.maxConnsHelp')">
-                  <b-numberinput v-model="item.max_conns" name="max_conns" type="is-light" controls-position="compact"
+                  <b-input v-model.number="item.max_conns" name="max_conns" type="number"
                     placeholder="25" min="1" max="65535" />
                 </b-field>
               </div>
               <div class="column is-4">
                 <b-field :label="$t('settings.messengers.retries')" label-position="on-border"
                   :message="$t('settings.messengers.retriesHelp')">
-                  <b-numberinput v-model="item.max_msg_retries" name="max_msg_retries" type="is-light"
-                    controls-position="compact" placeholder="2" min="1" max="1000" />
+                  <b-input v-model.number="item.max_msg_retries" name="max_msg_retries" type="number"
+                    placeholder="2" min="1" max="1000" />
                 </b-field>
               </div>
               <div class="column is-4">
@@ -84,10 +84,9 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { regDuration } from '../../constants';
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -124,5 +123,5 @@ export default Vue.extend({
       this.data.messengers.splice(i, 1);
     },
   },
-});
+};
 </script>

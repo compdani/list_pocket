@@ -16,7 +16,7 @@
       </div>
     </header>
 
-    <b-table :data="users" :loading="loading.users" hoverable checkable :checked-rows.sync="checked"
+    <b-table :data="users" :loading="loading.users" hoverable checkable :checked-rows="checked" @update:checked-rows="checked = $event"
       default-sort="createdAt" backend-sorting @sort="onSort" @check-all="onTableCheck" @check="onTableCheck">
       <template #top-left>
         <div class="columns">
@@ -122,20 +122,19 @@
     </b-table>
 
     <!-- Add / edit form modal -->
-    <b-modal scroll="keep" :aria-modal="true" :active.sync="isFormVisible" :width="600" @close="onFormClose">
+    <b-modal scroll="keep" :aria-modal="true" :active="isFormVisible" @update:active="isFormVisible = $event" :width="600" @close="onFormClose">
       <user-form :data="curItem" :is-editing="isEditing" @finished="formFinished" />
     </b-modal>
   </section>
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
 import UserForm from './UserForm.vue';
 
-export default Vue.extend({
+export default {
   components: {
     EmptyPlaceholder,
     UserForm,
@@ -224,11 +223,11 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.getUsers);
+    this.$events.$on('page.refresh', this.getUsers);
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.getUsers);
+    this.$events.$off('page.refresh', this.getUsers);
   },
 
   mounted() {
@@ -240,5 +239,5 @@ export default Vue.extend({
       this.getUsers();
     }
   },
-});
+};
 </script>

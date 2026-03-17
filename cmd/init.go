@@ -38,6 +38,7 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/internal/subimporter"
+	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
 	"github.com/knadh/goyesql/v2"
@@ -1327,6 +1328,10 @@ func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.Fi
 	}
 
 	app.tpl = tpl
+
+	workflow.Register(pb, workflow.Config{
+		FrontendDir: "../frontend/dist",
+	})
 
 	// Register all routes using PocketBase's router.
 	pb.OnServe().BindFunc(func(se *pbcore.ServeEvent) error {

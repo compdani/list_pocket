@@ -2,25 +2,25 @@
   <div class="items">
     <b-field :label="$t('settings.performance.concurrency')" label-position="on-border"
       :message="$t('settings.performance.concurrencyHelp')">
-      <b-numberinput v-model="data['app.concurrency']" name="app.concurrency" type="is-light" placeholder="5" min="1"
+      <b-input v-model.number="data['app.concurrency']" name="app.concurrency" type="number" placeholder="5" min="1"
         max="10000" />
     </b-field>
 
     <b-field :label="$t('settings.performance.messageRate')" label-position="on-border"
       :message="$t('settings.performance.messageRateHelp')">
-      <b-numberinput v-model="data['app.message_rate']" name="app.message_rate" type="is-light" placeholder="5" min="1"
+      <b-input v-model.number="data['app.message_rate']" name="app.message_rate" type="number" placeholder="5" min="1"
         max="100000" />
     </b-field>
 
     <b-field :label="$t('settings.performance.batchSize')" label-position="on-border"
       :message="$t('settings.performance.batchSizeHelp')">
-      <b-numberinput v-model="data['app.batch_size']" name="app.batch_size" type="is-light" placeholder="1000" min="1"
+      <b-input v-model.number="data['app.batch_size']" name="app.batch_size" type="number" placeholder="1000" min="1"
         max="100000" />
     </b-field>
 
     <b-field :label="$t('settings.performance.maxErrThreshold')" label-position="on-border"
       :message="$t('settings.performance.maxErrThresholdHelp')">
-      <b-numberinput v-model="data['app.max_send_errors']" name="app.max_send_errors" type="is-light" placeholder="1999"
+      <b-input v-model.number="data['app.max_send_errors']" name="app.max_send_errors" type="number" placeholder="1999"
         min="0" max="100000" />
     </b-field>
 
@@ -36,8 +36,8 @@
         <div class="column is-3" :class="{ disabled: !data['app.message_sliding_window'] }">
           <b-field :label="$t('settings.performance.slidingWindowRate')" label-position="on-border"
             :message="$t('settings.performance.slidingWindowRateHelp')">
-            <b-numberinput v-model="data['app.message_sliding_window_rate']" name="sliding_window_rate" type="is-light"
-              controls-position="compact" :disabled="!data['app.message_sliding_window']" placeholder="25" min="1"
+            <b-input v-model.number="data['app.message_sliding_window_rate']" name="sliding_window_rate" type="number"
+              :disabled="!data['app.message_sliding_window']" placeholder="25" min="1"
               max="10000000" />
           </b-field>
         </div>
@@ -79,10 +79,9 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { regDuration } from '../../constants';
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -95,5 +94,5 @@ export default Vue.extend({
       regDuration,
     };
   },
-});
+};
 </script>

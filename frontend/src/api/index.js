@@ -1,4 +1,3 @@
-import { ToastProgrammatic as Toast } from 'buefy';
 import PocketBase from 'pocketbase';
 import qs from 'qs';
 import store from '../store';
@@ -96,13 +95,34 @@ async function send(method, url, data, config = {}) {
     const msg = getErrorMessage(err);
 
     if (!config.disableToast) {
-      Toast.open({
-        message: msg,
-        type: 'is-danger',
-        queue: false,
-        position: 'is-top',
-        pauseOnHover: true,
-      });
+      utils.toast(msg, 'is-danger', 3000, false);
+    }
+
+    return Promise.reject(err);
+  } finally {
+    setLoading(config, false);
+  }
+}
+
+async function sendControlPlane(method, url, data, config = {}) {
+  setLoading(config, true);
+
+  try {
+    const requestConfig = {
+      method,
+    };
+
+    if (data !== undefined) {
+      requestConfig.body = data;
+    }
+
+    const response = await pb.send(url, requestConfig);
+    return transformResponse(response, config);
+  } catch (err) {
+    const msg = getErrorMessage(err);
+
+    if (!config.disableToast) {
+      utils.toast(msg, 'is-danger', 3000, false);
     }
 
     return Promise.reject(err);
@@ -147,6 +167,16 @@ function normalizeAuthProfile(profile) {
   }
   if (!Array.isArray(normalized.listRole.lists)) {
     normalized.listRole.lists = [];
+  }
+
+  if (normalized.role && (!normalized.userRole || !normalized.userRole.id)) {
+    normalized.userRole = {
+      ...normalized.userRole,
+      id: Number(normalized.role) || 0,
+      permissions: Array.isArray(normalized.userRole && normalized.userRole.permissions)
+        ? normalized.userRole.permissions
+        : [],
+    };
   }
 
   return normalized;
@@ -210,6 +240,55 @@ export const getDashboardCounts = () => http.get(
 export const getDashboardCharts = () => http.get(
   '/api/dashboard/charts',
   { loading: models.dashboard },
+);
+
+export const getWorkflowDashboard = (workflowId) => http.get(
+  '/api/control-plane/dashboard',
+  {
+    params: workflowId ? { workflowId } : undefined,
+    disableToast: true,
+  },
+);
+
+export const saveWorkflowGraph = (workflowId, data) => sendControlPlane(
+  'POST',
+  `/api/control-plane/workflows/${workflowId}/save`,
+  data,
+);
+
+export const publishWorkflow = (workflowId) => sendControlPlane(
+  'POST',
+  `/api/control-plane/workflows/${workflowId}/publish`,
+);
+
+export const validateWorkflow = (workflowId) => sendControlPlane(
+  'POST',
+  `/api/control-plane/workflows/${workflowId}/validate`,
+);
+
+export const runWorkflow = (workflowId) => sendControlPlane(
+  'POST',
+  `/api/control-plane/workflows/${workflowId}/run`,
+);
+
+export const armWorkflowWebhookCapture = (workflowId, mode) => sendControlPlane(
+  'POST',
+  `/api/control-plane/workflows/${workflowId}/webhook-capture`,
+  { mode },
+);
+
+export const getWorkflowWebhookCapture = (sessionId) => sendControlPlane(
+  'GET',
+  `/api/control-plane/webhook-captures/${sessionId}`,
+  undefined,
+  { disableToast: true },
+);
+
+export const getWorkflowRunDetail = (runId) => sendControlPlane(
+  'GET',
+  `/api/control-plane/runs/${runId}`,
+  undefined,
+  { disableToast: true },
 );
 
 // Lists.

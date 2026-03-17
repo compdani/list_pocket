@@ -1,123 +1,156 @@
 <template>
-  <div id="app">
-    <b-navbar :fixed-top="true" v-if="$root.isLoaded">
-      <template #brand>
-        <div class="logo">
-          <router-link :to="{ name: 'dashboard' }">
-            <img class="full" src="@/assets/logo.svg" alt="" />
-            <img class="favicon" src="@/assets/favicon.png" alt="" />
-          </router-link>
-        </div>
-      </template>
-      <template #end>
-        <navigation v-if="isMobile" :is-mobile="isMobile" :active-item="activeItem" :active-group="activeGroup"
-          @toggleGroup="toggleGroup" @doLogout="doLogout" />
+  <v-app>
+    <v-navigation-drawer
+      v-if="$root.isLoaded"
+      v-model="drawer"
+      :rail="!isMobile && rail"
+      :temporary="isMobile"
+      :permanent="!isMobile"
+      width="280"
+      color="surface"
+      border="end"
+      class="app-drawer"
+    >
+      <div class="app-drawer-brand">
+        <router-link :to="{ name: 'dashboard' }" class="app-brand-link">
+          <img class="full" src="@/assets/logo.svg" alt="" />
+          <img class="favicon" src="@/assets/favicon.png" alt="" />
+        </router-link>
+      </div>
 
-        <b-navbar-item tag="a" href="#" @click.prevent="emitPageRefresh" data-cy="btn-refresh"
-          :aria-label="$t('globals.buttons.refresh')">
-          <b-tooltip :label="$t('globals.buttons.refresh')" type="is-dark" position="is-bottom">
-            <b-icon icon="refresh" /> <span class="is-hidden-tablet">{{ $t('globals.buttons.refresh') }}</span>
-          </b-tooltip>
-        </b-navbar-item>
+      <navigation
+        :active-item="activeItem"
+        :opened-groups="openedGroups"
+        @updateOpenedGroups="updateOpenedGroups"
+        @navigate="onNavigate"
+      />
+    </v-navigation-drawer>
 
-        <b-navbar-dropdown class="user" tag="div" right>
-          <template v-if="profile.username" #label>
-            <span class="user-avatar">
-              <img v-if="profile.avatar" :src="profile.avatar" alt="" />
-              <span v-else>{{ profile.username[0].toUpperCase() }}</span>
-            </span>
-          </template>
+    <v-app-bar v-if="$root.isLoaded" flat color="surface" border="b" class="app-bar">
+      <v-app-bar-nav-icon v-if="isMobile" @click="drawer = !drawer" />
+      <v-btn v-else icon="mdi-dock-left" variant="text" @click="rail = !rail" />
 
-          <b-navbar-item class="user-name" tag="router-link" to="/user/profile">
-            <strong>{{ profile.username }}</strong>
-            <div class="is-size-7">{{ profile.name }}</div>
-          </b-navbar-item>
+      <v-toolbar-title class="app-title">
+        <span>{{ pageTitle }}</span>
+      </v-toolbar-title>
 
-          <b-navbar-item href="#">
-            <router-link to="/user/profile">
-              <b-icon icon="account-outline" /> {{ $t('users.profile') }}
-            </router-link>
-          </b-navbar-item>
-          <b-navbar-item href="#">
-            <a href="#" @click.prevent="doLogout"><b-icon icon="logout-variant" /> {{ $t('users.logout') }}</a>
-          </b-navbar-item>
-        </b-navbar-dropdown>
-      </template>
-    </b-navbar>
+      <v-spacer />
 
-    <div class="wrapper" v-if="$root.isLoaded">
-      <section class="sidebar">
-        <b-sidebar position="static" mobile="hide" :fullheight="true" :open="true" :can-cancel="false">
-          <div>
-            <b-menu :accordion="false">
-              <navigation v-if="!isMobile" :is-mobile="isMobile" :active-item="activeItem" :active-group="activeGroup"
-                @toggleGroup="toggleGroup" />
-            </b-menu>
-          </div>
-        </b-sidebar>
-      </section>
-      <!-- sidebar-->
+      <v-btn
+        icon="mdi-refresh"
+        variant="text"
+        @click="emitPageRefresh"
+      />
 
-      <!-- body //-->
-      <div class="main">
+      <div class="app-user-menu">
+        <v-btn
+          variant="text"
+          class="app-user-trigger"
+          @click="accountMenuOpen = !accountMenuOpen"
+        >
+          <v-avatar size="32" color="primary" class="mr-2">
+            <img v-if="profile.avatar" :src="profile.avatar" alt="" />
+            <span v-else>{{ userInitial }}</span>
+          </v-avatar>
+          <span class="app-user-name">{{ profile.username }}</span>
+          <v-icon icon="mdi-chevron-down" size="18" class="ml-1" />
+        </v-btn>
+
+        <v-menu
+          v-model="accountMenuOpen"
+          activator="parent"
+          location="bottom end"
+        >
+          <v-list width="240">
+            <v-list-item :title="profile.username" :subtitle="profile.name" />
+            <v-divider />
+            <v-list-item prepend-icon="mdi-account-outline" @click="goToUserProfile">
+              <v-list-item-title>{{ $t('users.profile') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item prepend-icon="mdi-logout" @click="doLogout">
+              <v-list-item-title>{{ $t('users.logout') }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+      </div>
+    </v-app-bar>
+
+    <v-main class="app-main">
+      <div v-if="$root.isLoaded" class="app-shell">
         <div class="global-notices" v-if="isGlobalNotices">
-          <div v-if="serverConfig.needs_restart" class="notification is-danger">
-            {{ $t('settings.needsRestart') }}
-            &mdash;
-            <b-button class="is-primary" size="is-small"
-              @click="$utils.confirm($t('settings.confirmRestart'), reloadApp)">
-              {{ $t('settings.restart') }}
-            </b-button>
-          </div>
+          <v-alert
+            v-if="serverConfig.needs_restart"
+            type="error"
+            variant="tonal"
+            class="mb-4"
+          >
+            <div class="d-flex align-center justify-space-between ga-4 flex-wrap">
+              <span>{{ $t('settings.needsRestart') }}</span>
+              <v-btn color="error" variant="flat" size="small" @click="$utils.confirm($t('settings.confirmRestart'), reloadApp)">
+                {{ $t('settings.restart') }}
+              </v-btn>
+            </div>
+          </v-alert>
 
           <template v-if="serverConfig.update">
-            <div v-if="serverConfig.update.update.is_new" class="notification is-success">
+            <v-alert
+              v-if="serverConfig.update.update.is_new"
+              type="success"
+              variant="tonal"
+              class="mb-4"
+            >
               {{ $t('settings.updateAvailable', {
-                version: `${serverConfig.update.update.release_version}
-              (${$utils.getDate(serverConfig.update.update.release_date).format('DD MMM YY')})`,
+                version: `${serverConfig.update.update.release_version} (${$utils.getDate(serverConfig.update.update.release_date).format('DD MMM YY')})`,
               }) }}
               <a :href="serverConfig.update.update.url" target="_blank" rel="noopener noreferer">View</a>
-            </div>
+            </v-alert>
 
-            <template v-if="serverConfig.update.messages && serverConfig.update.messages.length > 0">
-              <div v-for="m in serverConfig.update.messages" class="notification"
-                :class="{ [m.priority === 'high' ? 'is-danger' : 'is-info']: true }" :key="m.title">
-                <h3 class="is-size-5" v-if="m.title"><strong>{{ m.title }}</strong></h3>
-                <p v-if="m.description">{{ m.description }}</p>
-                <a v-if="m.url" :href="m.url" target="_blank" rel="noopener noreferer">View</a>
-              </div>
-            </template>
+            <v-alert
+              v-for="m in serverConfig.update.messages"
+              :key="m.title"
+              :type="m.priority === 'high' ? 'error' : 'info'"
+              variant="tonal"
+              class="mb-4"
+            >
+              <div class="font-weight-bold" v-if="m.title">{{ m.title }}</div>
+              <p v-if="m.description" class="mb-0">{{ m.description }}</p>
+              <a v-if="m.url" :href="m.url" target="_blank" rel="noopener noreferer">View</a>
+            </v-alert>
           </template>
 
-          <div v-if="serverConfig.has_legacy_user" class="notification is-danger">
-            <b-icon icon="warning-empty" />
-            Remove the <code>admin_username</code> and <code>admin_password</code> fields from the TOML
-            configuration file or environment variables. If you are using APIs, create and use new API credentials
-            before removing them. Visit
-            <router-link :to="{ name: 'users' }">
-              Admin -> Settings -> Users
-            </router-link> dashboard. <a href="https://listmonk.app/docs/upgrade/#upgrading-to-v4xx" target="_blank"
-              rel="noopener noreferer">Learn more.</a>
-          </div>
+          <v-alert
+            v-if="serverConfig.has_legacy_user"
+            type="error"
+            variant="tonal"
+            class="mb-4"
+          >
+            Remove the <code>admin_username</code> and <code>admin_password</code> fields from the TOML configuration file or environment variables.
+            Visit <router-link :to="{ name: 'users' }">Admin -> Settings -> Users</router-link>.
+            <a href="https://listmonk.app/docs/upgrade/#upgrading-to-v4xx" target="_blank" rel="noopener noreferer">Learn more.</a>
+          </v-alert>
         </div>
 
         <router-view :key="$route.fullPath" />
       </div>
-    </div>
 
-    <b-loading v-if="!$root.isLoaded" active />
-  </div>
+      <v-overlay
+        :model-value="!$root.isLoaded"
+        class="align-center justify-center"
+        persistent
+      >
+        <v-progress-circular indeterminate size="56" width="5" color="primary" />
+      </v-overlay>
+    </v-main>
+  </v-app>
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import { uris } from './constants';
 import { pb } from './api';
-
 import Navigation from './components/Navigation.vue';
 
-export default Vue.extend({
+export default {
   name: 'App',
 
   components: {
@@ -127,42 +160,85 @@ export default Vue.extend({
   data() {
     return {
       activeItem: {},
-      activeGroup: {},
+      openedGroups: [],
+      accountMenuOpen: false,
+      drawer: true,
+      rail: false,
       eventsTopic: 'events/error',
       windowWidth: window.innerWidth,
     };
   },
 
-  watch: {
-    $route(to) {
-      // Set the current route name to true for active+expanded keys in the
-      // menu to pick up.
-      this.activeItem = { [to.name]: true };
-      if (to.meta.group) {
-        this.activeGroup = { [to.meta.group]: true };
-      } else {
-        // Reset activeGroup to collapse menu items on navigating
-        // to non group items from sidebar
-        this.activeGroup = {};
+  computed: {
+    ...mapState(['serverConfig', 'profile']),
+
+    isGlobalNotices() {
+      return (this.serverConfig.needs_restart
+        || this.serverConfig.has_legacy_user
+        || (this.serverConfig.update
+          && this.serverConfig.update.messages
+          && this.serverConfig.update.messages.length > 0));
+    },
+
+    isMobile() {
+      return this.windowWidth <= 960;
+    },
+
+    pageTitle() {
+      if (this.$route.name === 'dashboard') {
+        return 'Overview';
       }
+      if (this.$route.meta && typeof this.$route.meta.title === 'string' && this.$route.meta.title.startsWith('Workflow')) {
+        return this.$route.meta.title;
+      }
+      if (this.$route.name === 'workflows') {
+        return 'Workflows';
+      }
+      return typeof this.$route.meta.title === 'string' && this.$route.meta.title
+        ? this.$t(this.$route.meta.title)
+        : 'Admin';
+    },
+
+    userInitial() {
+      return this.profile.username ? this.profile.username[0].toUpperCase() : '?';
+    },
+  },
+
+  watch: {
+    $route: {
+      immediate: true,
+      handler(to) {
+        this.activeItem = { [to.name]: true };
+        if (to.meta.group) {
+          this.openedGroups = [to.meta.group];
+        } else {
+          this.openedGroups = [];
+        }
+        if (this.isMobile) {
+          this.drawer = false;
+        }
+      },
     },
   },
 
   methods: {
-    toggleGroup(group, state) {
-      this.activeGroup = state ? { [group]: true } : {};
+    updateOpenedGroups(groups) {
+      this.openedGroups = groups;
+    },
+
+    onNavigate() {
+      if (this.isMobile) {
+        this.drawer = false;
+      }
     },
 
     emitPageRefresh() {
-      this.$root.$emit('page.refresh');
+      this.$events.$emit('page.refresh');
     },
 
     reloadApp() {
       this.$api.reloadApp().then(() => {
         this.$utils.toast('Reloading app ...');
-
-        // Poll until there's a 200 response, waiting for the app
-        // to restart and come back up.
         const pollId = setInterval(() => {
           this.$api.getHealth().then(() => {
             clearInterval(pollId);
@@ -173,9 +249,15 @@ export default Vue.extend({
     },
 
     doLogout() {
+      this.accountMenuOpen = false;
       this.$api.logout().then(() => {
         document.location.href = uris.root;
       });
+    },
+
+    goToUserProfile() {
+      this.accountMenuOpen = false;
+      this.$router.push({ name: 'userProfile' });
     },
 
     async listenEvents() {
@@ -195,51 +277,93 @@ export default Vue.extend({
           }
         });
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error(err);
       }
     },
   },
 
-  computed: {
-    ...mapState(['serverConfig', 'profile']),
-
-    isGlobalNotices() {
-      return (this.serverConfig.needs_restart
-        || this.serverConfig.has_legacy_user
-        || (this.serverConfig.update
-          && this.serverConfig.update.messages
-          && this.serverConfig.update.messages.length > 0));
-    },
-
-    version() {
-      return import.meta.env.VUE_APP_VERSION;
-    },
-
-    isMobile() {
-      return this.windowWidth <= 768;
-    },
-  },
-
   mounted() {
-    // Lists is required across different views. On app load, fetch the lists
-    // and have them in the store.
     this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
-
-    window.addEventListener('resize', () => {
-      this.windowWidth = window.innerWidth;
-    });
-
+    window.addEventListener('resize', this.onResize);
     this.listenEvents();
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     pb.realtime.unsubscribe(this.eventsTopic);
+    window.removeEventListener('resize', this.onResize);
   },
-});
+
+  created() {
+    this.onResize = () => {
+      this.windowWidth = window.innerWidth;
+      if (!this.isMobile) {
+        this.drawer = true;
+      }
+    };
+  },
+};
 </script>
 
 <style lang="scss">
 @import "assets/style.scss";
 @import "assets/icons/fontello.css";
+
+.app-drawer .v-navigation-drawer__content {
+  padding: 16px 12px;
+}
+
+.app-drawer-brand {
+  padding: 8px 8px 20px;
+}
+
+.app-brand-link {
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-brand-link img.full {
+  height: 26px;
+}
+
+.app-brand-link img.favicon {
+  display: none;
+  height: 28px;
+}
+
+.app-bar {
+  backdrop-filter: blur(14px);
+}
+
+.app-title {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.app-user-trigger {
+  text-transform: none;
+}
+
+.app-user-menu {
+  position: relative;
+}
+
+.app-user-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-main {
+  background: linear-gradient(180deg, #f6f7fb 0%, #eef2f9 100%);
+}
+
+.app-shell {
+  padding: 24px;
+}
+
+@media (max-width: 960px) {
+  .app-shell {
+    padding: 16px;
+  }
+}
 </style>

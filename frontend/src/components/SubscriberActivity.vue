@@ -111,9 +111,8 @@
 </template>
 
 <script>
-import Vue from 'vue';
 
-export default Vue.extend({
+export default {
   props: {
     subscriberId: {
       type: Number,
@@ -147,8 +146,23 @@ export default Vue.extend({
     this.getActivity();
   },
 
+  watch: {
+    subscriberId() {
+      this.getActivity();
+    },
+  },
+
   methods: {
     getActivity() {
+      if (!this.subscriberId) {
+        this.activity = {
+          campaignViews: [],
+          linkClicks: [],
+        };
+        this.isLoading = false;
+        return;
+      }
+
       this.isLoading = true;
       this.$api.getSubscriberActivity(this.subscriberId).then((data) => {
         this.activity = data;
@@ -158,5 +172,5 @@ export default Vue.extend({
       });
     },
   },
-});
+};
 </script>

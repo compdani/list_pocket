@@ -15,8 +15,8 @@
           <div class="column is-4" :class="{ disabled: !data['bounce.enabled'] }">
             <b-field :label="$t('settings.bounces.count')" label-position="on-border"
               :message="$t('settings.bounces.countHelp')" data-cy="btn-bounce-count">
-              <b-numberinput v-model="data['bounce.actions'][typ]['count']" name="bounce.count" type="is-light"
-                controls-position="compact" placeholder="3" min="1" max="1000" />
+              <b-input v-model.number="data['bounce.actions'][typ]['count']" name="bounce.count" type="number"
+                placeholder="3" min="1" max="1000" />
             </b-field>
           </div>
           <div class="column is-4" :class="{ disabled: !data['bounce.enabled'] }">
@@ -144,7 +144,7 @@
               <div class="column is-3">
                 <b-field :label="$t('settings.mailserver.port')" label-position="on-border"
                   :message="$t('settings.mailserver.portHelp')">
-                  <b-numberinput v-model="item.port" name="port" type="is-light" controls-position="compact"
+                  <b-input v-model.number="item.port" name="port" type="number"
                     placeholder="25" min="1" max="65535" />
                 </b-field>
               </div>
@@ -219,10 +219,9 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { regDuration } from '../../constants';
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -242,5 +241,5 @@ export default Vue.extend({
       this.data['bounce.mailboxes'].splice(i, 1);
     },
   },
-});
+};
 </script>

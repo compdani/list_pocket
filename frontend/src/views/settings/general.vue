@@ -37,8 +37,15 @@
     </b-field>
     <b-field :label="$t('settings.general.adminNotifEmails')" label-position="on-border"
       :message="$t('settings.general.adminNotifEmailsHelp')">
-      <b-taginput v-model="data['app.notify_emails']" name="app.notify_emails"
-        :before-adding="(v) => v.match(/(.+?)@(.+?)/)" placeholder="you@yoursite.com" />
+      <textarea
+        :value="notifyEmailsInput"
+        name="app.notify_emails"
+        class="textarea"
+        aria-label="Admin notification emails"
+        placeholder="you@yoursite.com"
+        rows="3"
+        @input="notifyEmailsInput = $event.target.value"
+      />
     </b-field>
 
     <hr />
@@ -106,10 +113,9 @@
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 
-export default Vue.extend({
+export default {
   props: {
     form: {
       type: Object, default: () => { },
@@ -124,7 +130,20 @@ export default Vue.extend({
 
   computed: {
     ...mapState(['serverConfig', 'loading']),
+
+    notifyEmailsInput: {
+      get() {
+        return Array.isArray(this.data['app.notify_emails']) ? this.data['app.notify_emails'].join(', ') : '';
+      },
+      set(value) {
+        this.data['app.notify_emails'] = value
+          .split(/[\n,]/)
+          .map((email) => email.trim())
+          .filter(Boolean)
+          .filter((email, index, all) => all.indexOf(email) === index);
+      },
+    },
   },
 
-});
+};
 </script>

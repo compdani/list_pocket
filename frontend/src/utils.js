@@ -1,7 +1,4 @@
-import {
-  DialogProgrammatic as Dialog,
-  ToastProgrammatic as Toast,
-} from 'buefy';
+/* eslint-disable no-alert */
 import dayjs from 'dayjs';
 import dayDuration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -146,44 +143,46 @@ export default class Utils {
 
   // UI shortcuts.
   confirm = (msg, onConfirm, onCancel) => {
-    Dialog.confirm({
-      scroll: 'keep',
-      message: !msg ? this.i18n.t('globals.messages.confirm') : this.escapeHTML(msg),
-      confirmText: this.i18n.t('globals.buttons.ok'),
-      cancelText: this.i18n.t('globals.buttons.cancel'),
-      onConfirm,
-      onCancel,
-    });
+    const message = !msg ? this.i18n.t('globals.messages.confirm') : msg;
+    if (window.confirm(message)) {
+      if (typeof onConfirm === 'function') {
+        onConfirm();
+      }
+      return;
+    }
+    if (typeof onCancel === 'function') {
+      onCancel();
+    }
   };
 
-  prompt = (msg, inputAttrs, onConfirm, onCancel, params) => {
-    const p = params || {};
-
-    Dialog.prompt({
-      scroll: 'keep',
-      message: this.escapeHTML(msg),
-      confirmText: p.confirmText || this.i18n.t('globals.buttons.ok'),
-      cancelText: p.cancelText || this.i18n.t('globals.buttons.cancel'),
-      inputAttrs: {
-        type: 'string',
-        maxlength: 200,
-        ...inputAttrs,
-      },
-      trapFocus: true,
-      onConfirm,
-      onCancel,
-    });
+  prompt = (msg, inputAttrs, onConfirm, onCancel) => {
+    const value = window.prompt(msg, inputAttrs && inputAttrs.value ? inputAttrs.value : '');
+    if (value !== null) {
+      if (typeof onConfirm === 'function') {
+        onConfirm(value);
+      }
+      return;
+    }
+    if (typeof onCancel === 'function') {
+      onCancel();
+    }
   };
 
-  toast = (msg, typ, duration, queue) => {
-    Toast.open({
-      message: this.escapeHTML(msg),
-      type: !typ ? 'is-success' : typ,
-      queue,
-      duration: duration || 3000,
-      position: 'is-top',
-      pauseOnHover: true,
-    });
+  toast = (msg, typ, duration) => {
+    const type = !typ ? 'is-success' : typ;
+    const toast = document.createElement('div');
+    toast.className = `legacy-programmatic-toast ${type}`;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    window.setTimeout(() => {
+      toast.classList.add('is-visible');
+    }, 0);
+    window.setTimeout(() => {
+      toast.classList.remove('is-visible');
+      window.setTimeout(() => {
+        toast.remove();
+      }, 200);
+    }, duration || 3000);
   };
 
   // Takes a props.row from a Buefy b-column <td> template and

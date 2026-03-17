@@ -1,14 +1,14 @@
 <template>
   <form @submit.prevent="onSubmit">
-    <div class="modal-card content" style="width: auto">
-      <header class="modal-card-head">
+    <div class="admin-dialog-card modal-card content">
+      <header class="admin-dialog-head modal-card-head">
         <p v-if="isEditing" class="has-text-grey-light is-size-7">
           {{ $t('globals.fields.id') }}: <copy-text :text="`${data.id}`" />
           {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
         </p>
-        <b-tag v-if="isEditing" :class="[data.type, 'is-pulled-right']">
+        <span v-if="isEditing" class="type-pill" :class="data.type">
           {{ $t(`lists.types.${data.type}`) }}
-        </b-tag>
+        </span>
         <h4 v-if="isEditing">
           {{ data.name }}
         </h4>
@@ -16,67 +16,104 @@
           {{ $t('lists.newList') }}
         </h4>
       </header>
-      <section expanded class="modal-card-body">
-        <b-field :label="$t('globals.fields.name')" label-position="on-border">
-          <b-input :maxlength="200" :ref="'focus'" v-model="form.name" name="name"
-            :placeholder="$t('globals.fields.name')" required />
-        </b-field>
+      <section expanded class="admin-dialog-body modal-card-body">
+        <div class="form-field">
+          <label class="form-label" for="list-name">{{ $t('globals.fields.name') }}</label>
+          <input
+            id="list-name"
+            ref="focus"
+            v-model="form.name"
+            class="input"
+            maxlength="200"
+            name="name"
+            :placeholder="$t('globals.fields.name')"
+            required
+            type="text"
+          >
+        </div>
 
-        <b-field :label="$t('lists.type')" label-position="on-border" :message="$t('lists.typeHelp')">
-          <b-select v-model="form.type" name="type" :placeholder="$t('lists.typeHelp')" required expanded>
+        <div class="form-field">
+          <label class="form-label" for="list-type">{{ $t('lists.type') }}</label>
+          <select id="list-type" v-model="form.type" class="input" name="type" required>
             <option value="private">
               {{ $t('lists.types.private') }}
             </option>
             <option value="public">
               {{ $t('lists.types.public') }}
             </option>
-          </b-select>
-        </b-field>
+          </select>
+          <p class="form-help">{{ $t('lists.typeHelp') }}</p>
+        </div>
 
-        <b-field :label="$t('lists.optin')" label-position="on-border" :message="$t('lists.optinHelp')">
-          <b-select v-model="form.optin" name="optin" placeholder="Opt-in type" required expanded>
+        <div class="form-field">
+          <label class="form-label" for="list-optin">{{ $t('lists.optin') }}</label>
+          <select id="list-optin" v-model="form.optin" class="input" name="optin" required>
             <option value="single">
               {{ $t('lists.optins.single') }}
             </option>
             <option value="double">
               {{ $t('lists.optins.double') }}
             </option>
-          </b-select>
-        </b-field>
+          </select>
+          <p class="form-help">{{ $t('lists.optinHelp') }}</p>
+        </div>
 
-        <b-field :label="$t('globals.terms.tags')" label-position="on-border">
-          <b-taginput v-model="form.tags" name="tags" ellipsis icon="tag-outline"
-            :placeholder="$t('globals.terms.tags')" />
-        </b-field>
+        <div class="form-field">
+          <label class="form-label" for="list-tags">{{ $t('globals.terms.tags') }}</label>
+          <input
+            id="list-tags"
+            :value="tagsInput"
+            :aria-label="$t('globals.terms.tags')"
+            class="input"
+            :placeholder="$t('globals.terms.tags')"
+            type="text"
+            @input="tagsInput = $event.target.value"
+          >
+        </div>
 
-        <b-field :label="$t('globals.fields.description')" label-position="on-border">
-          <b-input :maxlength="2000" v-model="form.description" name="description" type="textarea"
-            :placeholder="$t('globals.fields.description')" />
-        </b-field>
+        <div class="form-field">
+          <label class="form-label" for="list-description">{{ $t('globals.fields.description') }}</label>
+          <textarea
+            id="list-description"
+            v-model="form.description"
+            class="input textarea-input"
+            maxlength="2000"
+            name="description"
+            :placeholder="$t('globals.fields.description')"
+          />
+        </div>
 
-        <b-field :message="$t('lists.archivedHelp')" :label="$t('lists.archived')">
-          <b-switch v-model="isArchived" name="status" />
-        </b-field>
+        <div class="form-field">
+          <label class="checkbox-row">
+            <input v-model="isArchived" name="status" type="checkbox">
+            <span>{{ $t('lists.archived') }}</span>
+          </label>
+          <p class="form-help">{{ $t('lists.archivedHelp') }}</p>
+        </div>
       </section>
-      <footer class="modal-card-foot has-text-right">
-        <b-button @click="$parent.close()">
+      <footer class="admin-dialog-foot modal-card-foot has-text-right">
+        <button type="button" class="button secondary-button" @click="$emit('close')">
           {{ $t('globals.buttons.close') }}
-        </b-button>
-        <b-button v-if="$can('lists:manage_all') || $canList(data.id, 'list:manage')" native-type="submit"
-          type="is-primary" :loading="loading.lists" data-cy="btn-save">
+        </button>
+        <button
+          v-if="$can('lists:manage_all') || $canList(data.id, 'list:manage')"
+          class="button primary-button"
+          data-cy="btn-save"
+          :disabled="loading.lists"
+          type="submit"
+        >
           {{ $t('globals.buttons.save') }}
-        </b-button>
+        </button>
       </footer>
     </div>
   </form>
 </template>
 
 <script>
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import CopyText from '../components/CopyText.vue';
 
-export default Vue.extend({
+export default {
   name: 'ListForm',
 
   components: {
@@ -114,7 +151,7 @@ export default Vue.extend({
     createList() {
       this.$api.createList(this.form).then((data) => {
         this.$emit('finished');
-        this.$parent.close();
+        this.$emit('close');
         this.$utils.toast(this.$t('globals.messages.created', { name: data.name }));
       });
     },
@@ -122,7 +159,7 @@ export default Vue.extend({
     updateList() {
       this.$api.updateList({ id: this.data.id, ...this.form }).then((data) => {
         this.$emit('finished');
-        this.$parent.close();
+        this.$emit('close');
         this.$utils.toast(this.$t('globals.messages.updated', { name: data.name }));
       });
     },
@@ -130,6 +167,19 @@ export default Vue.extend({
 
   computed: {
     ...mapState(['loading', 'profile']),
+
+    tagsInput: {
+      get() {
+        return Array.isArray(this.form.tags) ? this.form.tags.join(', ') : '';
+      },
+      set(value) {
+        this.form.tags = value
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .filter((tag, index, all) => all.indexOf(tag) === index);
+      },
+    },
 
     isArchived: {
       get() {
@@ -145,8 +195,112 @@ export default Vue.extend({
     this.form = { ...this.form, ...this.$props.data };
 
     this.$nextTick(() => {
-      this.$refs.focus.focus();
+      if (this.$refs.focus && typeof this.$refs.focus.focus === 'function') {
+        this.$refs.focus.focus();
+      }
     });
   },
-});
+};
 </script>
+
+<style scoped>
+.admin-dialog-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  width: min(680px, calc(100vw - 32px));
+}
+
+.admin-dialog-head {
+  border-bottom: 0;
+  display: block;
+  padding: 20px 20px 0;
+}
+
+.admin-dialog-body {
+  overflow: auto;
+  padding: 24px 20px;
+}
+
+.admin-dialog-foot {
+  background: #fff;
+  border-top: 0;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 0 20px 20px;
+}
+
+.admin-dialog-foot button {
+  flex: 1 1 0;
+}
+
+.form-field {
+  margin-bottom: 18px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.form-help {
+  color: #667085;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
+.textarea-input {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.button {
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+.primary-button {
+  background: #0f5bd8;
+  border-color: #0f5bd8;
+  color: #fff;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.secondary-button {
+  background: #fff;
+  color: #1d2939;
+}
+
+.type-pill {
+  background: #eff6ff;
+  border-radius: 999px;
+  color: #0f5bd8;
+  display: inline-block;
+  float: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+</style>

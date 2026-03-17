@@ -150,12 +150,11 @@
 
 <script>
 import dayjs from 'dayjs';
-import Vue from 'vue';
 import { mapState } from 'vuex';
 import { colors } from '../constants';
 import Chart from '../components/Chart.vue';
 
-export default Vue.extend({
+export default {
   components: {
     Chart,
   },
@@ -219,15 +218,15 @@ export default Vue.extend({
   },
 
   created() {
-    this.$root.$on('page.refresh', this.fetchData);
+    this.$events.$on('page.refresh', this.fetchData);
   },
 
   destroyed() {
-    this.$root.$off('page.refresh', this.fetchData);
+    this.$events.$off('page.refresh', this.fetchData);
   },
 
   mounted() {
     this.fetchData();
   },
-});
+};
 </script>
