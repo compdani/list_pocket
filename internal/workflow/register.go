@@ -29,6 +29,8 @@ func Register(pb *pocketbase.PocketBase, cfg Config) {
 
 			authGroup := e.Router.Group("").Bind(apis.RequireAuth())
 			authGroup.GET("/api/control-plane/dashboard", dashboardHandler)
+			authGroup.POST("/api/control-plane/workflows", createWorkflowHandler)
+			authGroup.DELETE("/api/control-plane/workflows/{id}", deleteWorkflowHandler)
 			authGroup.POST("/api/control-plane/workflows/{id}/save", saveWorkflowHandler)
 			authGroup.POST("/api/control-plane/workflows/{id}/validate", validateWorkflowHandler)
 			authGroup.POST("/api/control-plane/workflows/{id}/publish", publishWorkflowHandler)

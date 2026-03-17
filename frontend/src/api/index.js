@@ -242,12 +242,22 @@ export const getDashboardCharts = () => http.get(
   { loading: models.dashboard },
 );
 
-export const getWorkflowDashboard = (workflowId) => http.get(
-  '/api/control-plane/dashboard',
-  {
-    params: workflowId ? { workflowId } : undefined,
-    disableToast: true,
-  },
+export const getWorkflowDashboard = (workflowId) => sendControlPlane(
+  'GET',
+  `/api/control-plane/dashboard${workflowId ? `?${qs.stringify({ workflowId })}` : ''}`,
+  undefined,
+  { disableToast: true },
+);
+
+export const createWorkflow = (data = {}) => sendControlPlane(
+  'POST',
+  '/api/control-plane/workflows',
+  data,
+);
+
+export const deleteWorkflow = (workflowId) => sendControlPlane(
+  'DELETE',
+  `/api/control-plane/workflows/${workflowId}`,
 );
 
 export const saveWorkflowGraph = (workflowId, data) => sendControlPlane(

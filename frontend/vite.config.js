@@ -17,10 +17,10 @@ export default defineConfig(({ _, mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        '@vue-flow/background': path.resolve(__dirname, '../../frontend/node_modules/@vue-flow/background'),
-        '@vue-flow/controls': path.resolve(__dirname, '../../frontend/node_modules/@vue-flow/controls'),
-        '@vue-flow/core': path.resolve(__dirname, '../../frontend/node_modules/@vue-flow/core'),
-        '@vue-flow/minimap': path.resolve(__dirname, '../../frontend/node_modules/@vue-flow/minimap'),
+        '@vue-flow/background': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/background'),
+        '@vue-flow/controls': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/controls'),
+        '@vue-flow/core': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/core'),
+        '@vue-flow/minimap': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/minimap'),
         bulma: require.resolve('bulma/bulma.sass'),
       },
     },

@@ -140,7 +140,7 @@ const routes = [
     component: () => import('../views/Workflow.vue'),
   },
   {
-    path: '/workflows/builder',
+    path: '/workflows/builder/:workflowId?',
     name: 'workflowBuilder',
     meta: { title: 'Workflow Builder', group: 'workflows' },
     component: () => import('../views/WorkflowBuilder.vue'),

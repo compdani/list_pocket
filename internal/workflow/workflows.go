@@ -33,6 +33,110 @@ type workflowFindingDTO struct {
 	TargetType string `json:"targetType"`
 }
 
+type workflowCreateRequest struct {
+	Name string `json:"name"`
+}
+
+func createWorkflowHandler(re *core.RequestEvent) error {
+	collection, err := re.App.FindCollectionByNameOrId("workflows")
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	req := workflowCreateRequest{}
+	_ = re.BindBody(&req)
+
+	workflow := core.NewRecord(collection)
+	workflow.Set("name", defaultWorkflowName(strings.TrimSpace(req.Name)))
+	workflow.Set("description", "")
+	workflow.Set("version", 1)
+	workflow.Set("status", "draft")
+	workflow.Set("trigger_type", "manual")
+	workflow.Set("is_published", false)
+	workflow.Set("compiled_snapshot", map[string]any{})
+
+	if err := re.App.Save(workflow); err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	payload, err := buildDashboardPayload(re.App, workflow.Id)
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return re.JSON(http.StatusOK, payload)
+}
+
+func deleteWorkflowHandler(re *core.RequestEvent) error {
+	workflowID := re.Request.PathValue("id")
+	workflow, err := re.App.FindRecordById("workflows", workflowID)
+	if err != nil {
+		return re.JSON(http.StatusNotFound, map[string]string{"error": "workflow not found"})
+	}
+
+	runs, err := re.App.FindRecordsByFilter("workflow_runs", fmt.Sprintf(`workflow="%s"`, workflowID), "", 1000, 0)
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	for _, run := range runs {
+		activities, findErr := re.App.FindRecordsByFilter("activities", fmt.Sprintf(`workflow_run="%s"`, run.Id), "", 1000, 0)
+		if findErr != nil {
+			return re.JSON(http.StatusInternalServerError, map[string]string{"error": findErr.Error()})
+		}
+		for _, activity := range activities {
+			if deleteErr := re.App.Delete(activity); deleteErr != nil {
+				return re.JSON(http.StatusInternalServerError, map[string]string{"error": deleteErr.Error()})
+			}
+		}
+
+		nodeRuns, findErr := re.App.FindRecordsByFilter("node_runs", fmt.Sprintf(`run="%s"`, run.Id), "", 1000, 0)
+		if findErr != nil {
+			return re.JSON(http.StatusInternalServerError, map[string]string{"error": findErr.Error()})
+		}
+		for _, nodeRun := range nodeRuns {
+			if deleteErr := re.App.Delete(nodeRun); deleteErr != nil {
+				return re.JSON(http.StatusInternalServerError, map[string]string{"error": deleteErr.Error()})
+			}
+		}
+
+		if err := re.App.Delete(run); err != nil {
+			return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
+
+	edges, err := re.App.FindRecordsByFilter("workflow_edges", fmt.Sprintf(`workflow="%s"`, workflowID), "", 1000, 0)
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	for _, edge := range edges {
+		if err := re.App.Delete(edge); err != nil {
+			return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
+
+	nodes, err := re.App.FindRecordsByFilter("workflow_nodes", fmt.Sprintf(`workflow="%s"`, workflowID), "", 1000, 0)
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	for _, node := range nodes {
+		if err := re.App.Delete(node); err != nil {
+			return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+	}
+
+	if err := re.App.Delete(workflow); err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	payload, err := buildDashboardPayload(re.App, "")
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return re.JSON(http.StatusOK, payload)
+}
+
 func saveWorkflowHandler(re *core.RequestEvent) error {
 	workflow, err := re.App.FindRecordById("workflows", re.Request.PathValue("id"))
 	if err != nil {
@@ -52,6 +156,14 @@ func saveWorkflowHandler(re *core.RequestEvent) error {
 		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return re.JSON(http.StatusOK, payload)
+}
+
+func defaultWorkflowName(name string) string {
+	if name != "" {
+		return name
+	}
+
+	return "Untitled Workflow"
 }
 
 func validateWorkflowHandler(re *core.RequestEvent) error {
