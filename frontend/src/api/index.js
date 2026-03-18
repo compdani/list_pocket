@@ -1,5 +1,6 @@
 import PocketBase from 'pocketbase';
 import qs from 'qs';
+import dayjs from 'dayjs';
 import store from '../store';
 import { models } from '../constants';
 import Utils from '../utils';
@@ -102,6 +103,20 @@ async function send(method, url, data, config = {}) {
   } finally {
     setLoading(config, false);
   }
+}
+
+function normalizeAnalyticsParams(params = {}) {
+  const out = { ...params };
+  ['from', 'to'].forEach((key) => {
+    const value = out[key];
+    if (value instanceof Date || (typeof value === 'string' && value.includes('T'))) {
+      const parsed = dayjs(value);
+      if (parsed.isValid()) {
+        out[key] = parsed.format('YYYY-MM-DD');
+      }
+    }
+  });
+  return out;
 }
 
 async function sendControlPlane(method, url, data, config = {}) {
@@ -301,6 +316,11 @@ export const getWorkflowRunDetail = (runId) => sendControlPlane(
   { disableToast: true },
 );
 
+export const cancelWorkflowRun = (runId) => sendControlPlane(
+  'POST',
+  `/api/control-plane/runs/${runId}/cancel`,
+);
+
 // Lists.
 export const getLists = (params) => http.get(
   '/api/lists',
@@ -492,22 +512,22 @@ export const createCampaign = async (data) => http.post(
 
 export const getCampaignViewCounts = async (params) => http.get(
   '/api/campaigns/analytics/views',
-  { params, loading: models.campaigns },
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
 );
 
 export const getCampaignClickCounts = async (params) => http.get(
   '/api/campaigns/analytics/clicks',
-  { params, loading: models.campaigns },
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
 );
 
 export const getCampaignBounceCounts = async (params) => http.get(
   '/api/campaigns/analytics/bounces',
-  { params, loading: models.campaigns },
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
 );
 
 export const getCampaignLinkCounts = async (params) => http.get(
   '/api/campaigns/analytics/links',
-  { params, loading: models.campaigns },
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
 );
 
 export const convertCampaignContent = async (data) => http.post(
@@ -567,6 +587,30 @@ export const deleteMedia = (id) => http.delete(
   `/api/media/${id}`,
   { loading: models.media },
 );
+
+export const listPictures = async ({ page = 1, perPage = 20, query = '' } = {}) => {
+  const options = {
+    sort: '-created',
+  };
+
+  if (query && query.trim()) {
+    options.filter = pb.filter('original_name ~ {:query} || file ~ {:query}', {
+      query: query.trim(),
+    });
+  }
+
+  return pb.collection('pictures').getList(page, perPage, options);
+};
+
+export const uploadPicture = async (file) => {
+  const data = new FormData();
+  data.set('file', file);
+  data.set('original_name', file.name);
+  data.set('content_type', file.type || '');
+  return pb.collection('pictures').create(data);
+};
+
+export const deletePicture = async (id) => pb.collection('pictures').delete(id);
 
 // Templates.
 export const createTemplate = async (data) => http.post(

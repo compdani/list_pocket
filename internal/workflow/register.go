@@ -38,6 +38,7 @@ func Register(pb *pocketbase.PocketBase, cfg Config) {
 			authGroup.POST("/api/control-plane/workflows/{id}/webhook-capture", armWebhookCaptureHandler)
 			authGroup.GET("/api/control-plane/webhook-captures/{sessionId}", getWebhookCaptureHandler)
 			authGroup.GET("/api/control-plane/runs/{id}", getRunDetailHandler)
+			authGroup.POST("/api/control-plane/runs/{id}/cancel", cancelRunHandler)
 
 			e.Router.POST("/api/hooks/{hookPath...}", webhookTriggerHandler)
 			registerFrontendRoutes(e, cfg.FrontendDir)

@@ -21,6 +21,7 @@
       <navigation
         :active-item="activeItem"
         :opened-groups="openedGroups"
+        :rail="!isMobile && rail"
         @updateOpenedGroups="updateOpenedGroups"
         @navigate="onNavigate"
       />
@@ -43,24 +44,25 @@
       />
 
       <div class="app-user-menu">
-        <v-btn
-          variant="text"
-          class="app-user-trigger"
-          @click="accountMenuOpen = !accountMenuOpen"
-        >
-          <v-avatar size="32" color="primary" class="mr-2">
-            <img v-if="profile.avatar" :src="profile.avatar" alt="" />
-            <span v-else>{{ userInitial }}</span>
-          </v-avatar>
-          <span class="app-user-name">{{ profile.username }}</span>
-          <v-icon icon="mdi-chevron-down" size="18" class="ml-1" />
-        </v-btn>
-
         <v-menu
           v-model="accountMenuOpen"
-          activator="parent"
           location="bottom end"
         >
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              variant="text"
+              class="app-user-trigger"
+            >
+              <v-avatar size="32" color="primary" class="mr-2">
+                <img v-if="profile.avatar" :src="profile.avatar" alt="" />
+                <span v-else>{{ userInitial }}</span>
+              </v-avatar>
+              <span class="app-user-name">{{ profile.username }}</span>
+              <v-icon icon="mdi-chevron-down" size="18" class="ml-1" />
+            </v-btn>
+          </template>
+
           <v-list width="240">
             <v-list-item :title="profile.username" :subtitle="profile.name" />
             <v-divider />
@@ -277,7 +279,8 @@ export default {
           }
         });
       } catch (err) {
-        console.error(err);
+        const msg = err?.response?.message || err?.message || 'Realtime connection failed';
+        this.$utils.toast(msg, 'is-danger', 5000, false);
       }
     },
   },
@@ -305,7 +308,7 @@ export default {
 </script>
 
 <style lang="scss">
-@import "assets/style.scss";
+@use "assets/style.scss";
 @import "assets/icons/fontello.css";
 
 .app-drawer .v-navigation-drawer__content {
@@ -328,6 +331,20 @@ export default {
 .app-brand-link img.favicon {
   display: none;
   height: 28px;
+}
+
+.app-drawer.v-navigation-drawer--rail .app-drawer-brand {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 20px;
+}
+
+.app-drawer.v-navigation-drawer--rail .app-brand-link img.full {
+  display: none;
+}
+
+.app-drawer.v-navigation-drawer--rail .app-brand-link img.favicon {
+  display: block;
 }
 
 .app-bar {

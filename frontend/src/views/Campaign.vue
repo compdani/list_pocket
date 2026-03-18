@@ -1,378 +1,571 @@
 <template>
   <section class="campaign">
-    <header class="columns page-header">
-      <div class="column is-6">
-        <p v-if="isEditing && data.status" class="tags">
-          <b-tag v-if="isEditing" :class="data.status">
-            {{ $t(`campaigns.status.${data.status}`) }}
-          </b-tag>
-          <b-tag v-if="data.type === 'optin'" :class="data.type">
-            {{ $t('lists.optin') }}
-          </b-tag>
-          <span v-if="isEditing" class="has-text-grey-light is-size-7" :data-campaign-id="data.id">
-            {{ $t('globals.fields.id') }}: <copy-text :text="`${data.id}`" />
-            {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
-          </span>
-        </p>
-        <h4 v-if="isEditing" class="title is-4">
-          {{ data.name }}
-        </h4>
-        <h4 v-else class="title is-4">
-          {{ $t('campaigns.newCampaign') }}
-        </h4>
-      </div>
-
-      <div class="column is-6">
-        <div v-if="canManage" class="buttons">
-          <b-field grouped v-if="isEditing && canEdit">
-            <b-field expanded>
-              <b-button expanded @click="() => onSubmit('update')" :loading="loading.campaigns" type="is-primary"
-                icon-left="content-save-outline" data-cy="btn-save" aria-keyshortcuts="ctrl+s">
-                <span class="has-kbd">{{ $t('globals.buttons.saveChanges') }} <span class="kbd">Ctrl+S</span></span>
-              </b-button>
-            </b-field>
-            <b-field expanded v-if="canStart">
-              <b-button expanded @click="startCampaign" :loading="loading.campaigns" type="is-primary"
-                icon-left="rocket-launch-outline" data-cy="btn-start">
-                {{ $t('campaigns.start') }}
-              </b-button>
-            </b-field>
-            <b-field expanded v-if="canSchedule">
-              <b-button expanded @click="startCampaign" :loading="loading.campaigns" type="is-primary"
-                icon-left="clock-start" data-cy="btn-schedule">
-                {{ $t('campaigns.schedule') }}
-              </b-button>
-            </b-field>
-            <b-field expanded v-if="canUnSchedule">
-              <b-button expanded @click="$utils.confirm(null, unscheduleCampaign)" :loading="loading.campaigns"
-                type="is-primary" icon-left="clock-start" data-cy="btn-unschedule">
-                {{ $t('campaigns.unSchedule') }}
-              </b-button>
-            </b-field>
-          </b-field>
-        </div>
-      </div>
-    </header>
-
-    <b-loading :active="loading.campaigns" />
-
-    <div class="campaign-tabs">
-      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'campaign' }" @click="onTab('campaign')">
-        <b-icon icon="rocket-launch-outline" size="is-small" />
-        {{ $tc('globals.terms.campaign') }}
-      </button>
-      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'content', 'is-disabled': isNew }" :disabled="isNew" @click="onTab('content')">
-        <b-icon icon="text" size="is-small" />
-        {{ $t('campaigns.content') }}
-      </button>
-      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'attribs', 'is-disabled': isNew }" :disabled="isNew" @click="onTab('attribs')">
-        <b-icon icon="code" size="is-small" />
-        {{ $t('globals.terms.attribs') }}
-      </button>
-      <button type="button" class="campaign-tab" :class="{ 'is-active': activeTab === 'archive', 'is-disabled': isNew }" :disabled="isNew" @click="onTab('archive')">
-        <b-icon icon="newspaper-variant-outline" size="is-small" />
-        {{ $t('campaigns.archive') }}
-      </button>
-    </div>
-
-    <section v-show="activeTab === 'campaign'">
-        <section class="wrap">
-          <div class="columns">
-            <div class="column is-7">
-              <form @submit.prevent="() => onSubmit(isNew ? 'create' : 'update')">
-                <b-field :label="$t('globals.fields.name')" label-position="on-border">
-                  <b-input :maxlength="200" :ref="'focus'" v-model="form.name" name="name" :disabled="!canEdit"
-                    :placeholder="$t('globals.fields.name')" required autofocus />
-                </b-field>
-
-                <b-field :label="$t('campaigns.subject')" label-position="on-border">
-                  <b-input :maxlength="5000" v-model="form.subject" name="subject" :disabled="!canEdit"
-                    :placeholder="$t('campaigns.subject')" required />
-                </b-field>
-
-                <b-field :label="$t('campaigns.fromAddress')" label-position="on-border">
-                  <b-input :maxlength="200" v-model="form.fromEmail" name="from_email" :disabled="!canEdit"
-                    :placeholder="$t('campaigns.fromAddressPlaceholder')" required />
-                </b-field>
-
-                <b-field :label="$t('globals.terms.lists')" label-position="on-border">
-                  <div class="select is-multiple is-fullwidth">
-                    <select
-                      :value="selectedListIds"
-                      :aria-label="$t('globals.terms.lists')"
-                      :disabled="!canEdit"
-                      multiple
-                      size="6"
-                      @change="onListsChange($event)"
-                    >
-                      <option v-for="list in availableLists" :key="list.id" :value="String(list.id)">
-                        {{ list.name }}
-                      </option>
-                    </select>
-                  </div>
-                </b-field>
-
-                <div class="columns">
-                  <div class="column is-6">
-                    <b-field :label="$tc('globals.terms.messenger')" label-position="on-border">
-                      <b-select :placeholder="$tc('globals.terms.messenger')" v-model="form.messenger" name="messenger"
-                        :disabled="!canEdit" required expanded>
-                        <template v-if="emailMessengers.length > 1">
-                          <optgroup label="email">
-                            <option v-for="m in emailMessengers" :value="m" :key="m">
-                              {{ m }}
-                            </option>
-                          </optgroup>
-                        </template>
-                        <template v-else>
-                          <option value="email">email</option>
-                        </template>
-                        <option v-for="m in otherMessengers" :value="m" :key="m">{{ m }}</option>
-                      </b-select>
-                    </b-field>
-                  </div>
-                  <div class="column is-6">
-                    <b-field :label="$t('campaigns.format')" label-position="on-border" class="mr-4 mb-0">
-                      <b-select v-model="form.content.contentType" :disabled="!canEdit || isEditing" value="richtext"
-                        expanded>
-                        <option v-for="(name, f) in contentTypes" :key="f" name="format" :value="f"
-                          :data-cy="`check-${f}`">
-                          {{ name }}
-                        </option>
-                      </b-select>
-                    </b-field>
-                  </div>
-                </div>
-
-                <b-field :label="$t('globals.terms.tags')" label-position="on-border">
-                  <input
-                    :value="tagsInput"
-                    :aria-label="$t('globals.terms.tags')"
-                    class="input"
-                    :disabled="!canEdit"
-                    :placeholder="$t('globals.terms.tags')"
-                    type="text"
-                    @input="tagsInput = $event.target.value"
-                  >
-                </b-field>
-                <hr />
-
-                <div class="columns">
-                  <div class="column is-4">
-                    <b-field :label="$t('campaigns.sendLater')" data-cy="btn-send-later">
-                      <b-switch v-model="form.sendLater" :disabled="!canEdit" />
-                    </b-field>
-                  </div>
-                  <div class="column">
-                    <br />
-                    <b-field v-if="form.sendLater" data-cy="send_at"
-                      :message="form.sendAtDate ? $utils.duration(Date(), form.sendAtDate) : ''">
-                      <b-input
-                        :value="toDateTimeLocal(form.sendAtDate)"
-                        :disabled="!canEdit"
-                        required
-                        type="datetime-local"
-                        icon="calendar-clock"
-                        :placeholder="$t('campaigns.dateAndTime')"
-                        @input="onSendAtInput($event.target.value)"
-                      />
-                    </b-field>
-                  </div>
-                </div>
-
-                <div>
-                  <p class="has-text-right">
-                    <a href="#" @click.prevent="onShowHeaders" data-cy="btn-headers">
-                      <b-icon icon="plus" />{{ $t('settings.smtp.setCustomHeaders') }}
-                    </a>
-                  </p>
-                  <b-field v-if="form.headersStr !== '[]' || isHeadersVisible" label-position="on-border"
-                    :message="$t('campaigns.customHeadersHelp')">
-                    <b-input v-model="form.headersStr" name="headers" type="textarea"
-                      placeholder="[{&quot;X-Custom&quot;: &quot;value&quot;}, {&quot;X-Custom2&quot;: &quot;value&quot;}]"
-                      :disabled="!canEdit" />
-                  </b-field>
-                </div>
-                <hr />
-
-                <b-field v-if="isNew">
-                  <b-button native-type="submit" type="is-primary" :loading="loading.campaigns" data-cy="btn-continue">
-                    {{ $t('campaigns.continue') }}
-                  </b-button>
-                </b-field>
-              </form>
-            </div>
-            <div v-if="canManage" class="column is-4 is-offset-1">
-              <br />
-              <div class="box">
-                <h3 class="title is-size-6">
-                  {{ $t('campaigns.sendTest') }}
-                </h3>
-                <b-field :message="$t('campaigns.sendTestHelp')">
-                  <textarea
-                    :value="testEmailsInput"
-                    :aria-label="$t('campaigns.testEmails')"
-                    class="textarea"
-                    :disabled="isNew"
-                    :placeholder="$t('campaigns.testEmails')"
-                    rows="3"
-                    @input="testEmailsInput = $event.target.value"
-                  />
-                </b-field>
-                <b-field>
-                  <b-button @click="() => onSubmit('test')" :loading="loading.campaigns" :disabled="isNew"
-                    type="is-primary" icon-left="email-outline">
-                    {{ $t('campaigns.send') }}
-                  </b-button>
-                </b-field>
-              </div>
-            </div>
-          </div>
-        </section>
-      </section>
-
-      <section v-show="activeTab === 'content'">
-        <editor v-if="data.id" v-model="form.content" :id="data.id" :title="data.name" :disabled="!canEdit"
-          :templates="templates" :content-types="contentTypes" />
-
-        <div class="columns">
-          <div class="column is-6">
-            <p v-if="!isAttachFieldVisible" class="is-size-6 has-text-grey">
-              <a href="#" @click.prevent="onShowAttachField()" data-cy="btn-attach">
-                <b-icon icon="file-upload-outline" size="is-small" />
-                {{ $t('campaigns.addAttachments') }}
-              </a>
-            </p>
-
-            <b-field v-if="isAttachFieldVisible" :label="$t('campaigns.attachments')" label-position="on-border"
-              expanded data-cy="media">
-              <b-taginput v-model="form.media" name="media" ellipsis icon="tag-outline" ref="media" field="filename"
-                @focus="onOpenAttach" :disabled="!canEdit" />
-            </b-field>
-          </div>
-          <div class="column has-text-right">
-            <a href="https://listmonk.app/docs/templating/#template-expressions" target="_blank"
-              rel="noopener noreferer">
-              <b-icon icon="code" /> {{ $t('campaigns.templatingRef') }}</a>
-            <span v-if="canEdit && form.content.contentType !== 'plain'" class="is-size-6 has-text-grey ml-6">
-              <a v-if="form.altbody === null" href="#" @click.prevent="onAddAltBody">
-                <b-icon icon="text" size="is-small" /> {{ $t('campaigns.addAltText') }}
-              </a>
-              <a v-else href="#" @click.prevent="$utils.confirm(null, onRemoveAltBody)">
-                <b-icon icon="trash-can-outline" size="is-small" />
-                {{ $t('campaigns.removeAltText') }}
-              </a>
+    <header class="campaign-header mb-6">
+      <v-row class="align-center" dense>
+        <v-col cols="12" md="6">
+          <div v-if="isEditing && data.status" class="d-flex flex-wrap align-center ga-2 mb-3">
+            <v-chip :class="data.status" size="small">
+              {{ $t(`campaigns.status.${data.status}`) }}
+            </v-chip>
+            <v-chip v-if="data.type === 'optin'" :class="data.type" size="small">
+              {{ $t('lists.optin') }}
+            </v-chip>
+            <span
+              v-if="isEditing"
+              class="inline-meta"
+              :data-campaign-id="data.id"
+            >
+              {{ $t('globals.fields.id') }}: <copy-text :text="`${data.id}`" />
+              {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
             </span>
           </div>
-        </div>
+          <h1 class="text-h4 font-weight-medium mb-0">
+            {{ isEditing ? data.name : $t('campaigns.newCampaign') }}
+          </h1>
+        </v-col>
 
-        <div v-if="canEdit && form.content.contentType !== 'plain'" class="alt-body">
-          <b-input v-if="form.altbody !== null" v-model="form.altbody" type="textarea" :disabled="!canEdit" />
-        </div>
-      </section>
+        <v-col cols="12" md="6">
+          <div
+            v-if="canManage && isEditing && canEdit"
+            class="campaign-actions d-flex flex-wrap justify-md-end ga-2"
+          >
+            <v-btn
+              type="button"
+              color="primary"
+              class="action-btn"
+              :disabled="loading.campaigns"
+              :loading="loading.campaigns"
+              data-cy="btn-save"
+              aria-keyshortcuts="ctrl+s"
+              @click="onSubmit('update')"
+            >
+              <v-icon start icon="mdi-content-save-outline" />
+              <span class="has-kbd">{{ $t('globals.buttons.saveChanges') }} <span class="kbd">Ctrl+S</span></span>
+            </v-btn>
+            <v-btn
+              v-if="canStart"
+              type="button"
+              color="primary"
+              class="action-btn"
+              :disabled="loading.campaigns"
+              :loading="loading.campaigns"
+              data-cy="btn-start"
+              @click="startCampaign"
+            >
+              <v-icon start icon="mdi-rocket-launch-outline" />
+              <span>{{ $t('campaigns.start') }}</span>
+            </v-btn>
+            <v-btn
+              v-if="canSchedule"
+              type="button"
+              color="primary"
+              class="action-btn"
+              :disabled="loading.campaigns"
+              :loading="loading.campaigns"
+              data-cy="btn-schedule"
+              @click="startCampaign"
+            >
+              <v-icon start icon="mdi-clock-start" />
+              <span>{{ $t('campaigns.schedule') }}</span>
+            </v-btn>
+            <v-btn
+              v-if="canUnSchedule"
+              type="button"
+              color="primary"
+              class="action-btn"
+              :disabled="loading.campaigns"
+              :loading="loading.campaigns"
+              data-cy="btn-unschedule"
+              @click="$utils.confirm(null, unscheduleCampaign)"
+            >
+              <v-icon start icon="mdi-clock-start" />
+              <span>{{ $t('campaigns.unSchedule') }}</span>
+            </v-btn>
+          </div>
+        </v-col>
+      </v-row>
+    </header>
 
-      <section v-show="activeTab === 'attribs'">
-        <section class="wrap">
-          <b-field :label="$t('globals.terms.attribs')" :message="$t('campaigns.attribsHelp')"
-            label-position="on-border">
-            <b-input v-model="form.attribsStr" type="textarea" :disabled="!canEdit" rows="15" />
-          </b-field>
-        </section>
-      </section>
+    <v-progress-linear
+      v-if="loading.campaigns"
+      color="primary"
+      indeterminate
+      class="mb-4"
+    />
 
-      <section v-show="activeTab === 'archive'">
-        <section class="wrap">
-          <div class="columns">
-            <div class="column is-4">
-              <b-field :label="$t('campaigns.archiveEnable')" data-cy="btn-archive"
-                :message="$t('campaigns.archiveHelp')">
-                <div class="columns">
-                  <div class="column">
-                    <b-switch data-cy="btn-archive" v-model="form.archive" :disabled="!canArchive" />
-                  </div>
-                  <div class="column is-12">
-                    <a :href="`${serverConfig.root_url}/archive/${data.uuid}`" target="_blank" rel="noopener noreferer"
-                      :class="{ 'has-text-grey-light': !form.archive }" aria-label="$t('campaigns.archive')">
-                      <b-icon icon="link-variant" />
-                    </a>
-                  </div>
+    <v-tabs
+      v-model="activeTab"
+      class="campaign-tabs mb-6"
+      color="primary"
+      align-tabs="start"
+      show-arrows
+      @update:model-value="onTab"
+    >
+      <v-tab value="campaign" prepend-icon="mdi-rocket-launch-outline">
+        {{ $tc('globals.terms.campaign') }}
+      </v-tab>
+      <v-tab value="content" prepend-icon="mdi-text" :disabled="isNew">
+        {{ $t('campaigns.content') }}
+      </v-tab>
+      <v-tab value="attribs" prepend-icon="mdi-code-tags" :disabled="isNew">
+        {{ $t('globals.terms.attribs') }}
+      </v-tab>
+      <v-tab value="archive" prepend-icon="mdi-newspaper-variant-outline" :disabled="isNew">
+        {{ $t('campaigns.archive') }}
+      </v-tab>
+    </v-tabs>
+
+    <section v-show="activeTab === 'campaign'">
+      <v-row>
+        <v-col cols="12" lg="8">
+          <v-form @submit.prevent="() => onSubmit(isNew ? 'create' : 'update')">
+            <v-text-field
+              ref="focus"
+              v-model="form.name"
+              :label="$t('globals.fields.name')"
+              maxlength="200"
+              name="name"
+              :disabled="!canEdit"
+              :placeholder="$t('globals.fields.name')"
+              required
+              type="text"
+              variant="outlined"
+              density="comfortable"
+              class="mb-4"
+            />
+
+            <v-text-field
+              v-model="form.subject"
+              :label="$t('campaigns.subject')"
+              maxlength="5000"
+              name="subject"
+              :disabled="!canEdit"
+              :placeholder="$t('campaigns.subject')"
+              required
+              type="text"
+              variant="outlined"
+              density="comfortable"
+              class="mb-4"
+            />
+
+            <v-text-field
+              v-model="form.fromEmail"
+              :label="$t('campaigns.fromAddress')"
+              maxlength="200"
+              name="from_email"
+              :disabled="!canEdit"
+              :placeholder="$t('campaigns.fromAddressPlaceholder')"
+              required
+              type="text"
+              variant="outlined"
+              density="comfortable"
+              class="mb-4"
+            />
+
+            <v-select
+              :model-value="selectedListIds"
+              :items="availableLists"
+              :label="$t('globals.terms.lists')"
+              :disabled="!canEdit"
+              multiple
+              chips
+              closable-chips
+              item-title="name"
+              item-value="id"
+              variant="outlined"
+              class="mb-4"
+              @update:model-value="onListsChange"
+            />
+
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="form.messenger"
+                  :items="availableMessengers"
+                  :label="$tc('globals.terms.messenger')"
+                  name="messenger"
+                  :disabled="!canEdit"
+                  required
+                  variant="outlined"
+                  class="mb-4"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-select
+                  v-model="form.content.contentType"
+                  :items="contentTypeOptions"
+                  :label="$t('campaigns.format')"
+                  item-title="title"
+                  item-value="value"
+                  :disabled="!canEdit || isEditing"
+                  name="format"
+                  variant="outlined"
+                  class="mb-4"
+                />
+              </v-col>
+            </v-row>
+
+            <v-text-field
+              v-model="tagsInput"
+              :aria-label="$t('globals.terms.tags')"
+              :label="$t('globals.terms.tags')"
+              :disabled="!canEdit"
+              :placeholder="$t('globals.terms.tags')"
+              type="text"
+              variant="outlined"
+              density="comfortable"
+              class="mb-4"
+            />
+
+            <v-divider class="my-6" />
+
+            <v-row class="align-center">
+              <v-col cols="12" md="4">
+                <div data-cy="btn-send-later">
+                  <v-checkbox
+                    v-model="form.sendLater"
+                    :disabled="!canEdit"
+                    :label="$t('campaigns.sendLater')"
+                    hide-details
+                    density="comfortable"
+                  />
                 </div>
-              </b-field>
-            </div>
-            <div class="column is-8">
-              <b-field grouped position="is-right">
-                <b-field v-if="!canEdit && canArchive">
-                  <b-button @click="onUpdateCampaignArchive" :loading="loading.campaigns" type="is-primary"
-                    icon-left="content-save-outline" data-cy="btn-save">
-                    {{ $t('globals.buttons.saveChanges') }}
-                  </b-button>
-                </b-field>
-              </b-field>
-            </div>
-          </div>
+              </v-col>
+              <v-col cols="12" md="8">
+                <div v-if="form.sendLater" data-cy="send_at">
+                  <v-text-field
+                    :model-value="toDateTimeLocal(form.sendAtDate)"
+                    :disabled="!canEdit"
+                    required
+                    type="datetime-local"
+                    :label="$t('campaigns.dateAndTime')"
+                    variant="outlined"
+                    density="comfortable"
+                    @update:model-value="onSendAtInput"
+                  />
+                  <p v-if="form.sendAtDate" class="form-help">
+                    {{ $utils.duration(Date(), form.sendAtDate) }}
+                  </p>
+                </div>
+              </v-col>
+            </v-row>
 
-          <div class="columns">
-            <div class="column is-6">
-              <b-field :label="$tc('globals.terms.template')" label-position="on-border">
-                <b-select :placeholder="$tc('globals.terms.template')" v-model="form.archiveTemplateId" name="template"
-                  :disabled="!canArchive || !form.archive || form.content.contentType === 'visual'" required>
-                  <option
-                    v-for="t in archiveTemplates"
-                    :key="t.id"
-                    :value="t.id"
+            <div class="d-flex justify-end">
+              <v-btn
+                variant="text"
+                prepend-icon="mdi-plus"
+                data-cy="btn-headers"
+                @click="onShowHeaders"
+              >
+                {{ $t('settings.smtp.setCustomHeaders') }}
+              </v-btn>
+            </div>
+
+            <div v-if="form.headersStr !== '[]' || isHeadersVisible">
+              <v-textarea
+                v-model="form.headersStr"
+                name="headers"
+                variant="outlined"
+                auto-grow
+                rows="4"
+                placeholder="[{&quot;X-Custom&quot;: &quot;value&quot;}, {&quot;X-Custom2&quot;: &quot;value&quot;}]"
+                :disabled="!canEdit"
+              />
+              <p class="form-help">{{ $t('campaigns.customHeadersHelp') }}</p>
+            </div>
+
+            <v-divider class="my-6" />
+
+            <div v-if="isNew">
+              <v-btn
+                type="submit"
+                color="primary"
+                :disabled="loading.campaigns"
+                :loading="loading.campaigns"
+                data-cy="btn-continue"
+              >
+                {{ $t('campaigns.continue') }}
+              </v-btn>
+            </div>
+          </v-form>
+        </v-col>
+
+        <v-col v-if="canManage" cols="12" lg="4">
+          <v-card variant="outlined">
+            <v-card-title class="text-subtitle-1">
+              {{ $t('campaigns.sendTest') }}
+            </v-card-title>
+            <v-card-text>
+              <v-textarea
+                v-model="testEmailsInput"
+                :aria-label="$t('campaigns.testEmails')"
+                :disabled="isNew"
+                :placeholder="$t('campaigns.testEmails')"
+                rows="3"
+                auto-grow
+                variant="outlined"
+              />
+              <p class="form-help">{{ $t('campaigns.sendTestHelp') }}</p>
+              <v-btn
+                type="button"
+                color="primary"
+                :disabled="loading.campaigns || isNew"
+                :loading="loading.campaigns"
+                class="mt-4"
+                @click="onSubmit('test')"
+              >
+                <v-icon start icon="mdi-email-outline" />
+                <span>{{ $t('campaigns.send') }}</span>
+              </v-btn>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
+    </section>
+
+    <section v-show="activeTab === 'content'">
+      <editor
+        v-if="data.id"
+        :key="editorKey"
+        v-model="form.content"
+        :id="data.id"
+        :title="data.name"
+        :disabled="!canEdit"
+        :templates="templates"
+        :content-types="contentTypes"
+      />
+
+      <v-row class="mt-4">
+        <v-col cols="12" md="6">
+          <v-btn
+            v-if="!isAttachFieldVisible"
+            variant="text"
+            prepend-icon="mdi-file-upload-outline"
+            data-cy="btn-attach"
+            @click="onShowAttachField"
+          >
+            {{ $t('campaigns.addAttachments') }}
+          </v-btn>
+
+          <div v-if="isAttachFieldVisible" data-cy="media">
+            <v-card variant="outlined" class="attachment-card">
+              <v-card-text>
+                <div class="text-subtitle-2 mb-2">{{ $t('campaigns.attachments') }}</div>
+                <div class="d-flex flex-wrap ga-2 mb-3">
+                  <v-chip
+                    v-for="(item, index) in form.media"
+                    :key="item.id || index"
+                    closable
+                    size="small"
+                    @click:close="form.media.splice(index, 1)"
                   >
-                    {{ t.name }}
-                  </option>
-                </b-select>
-              </b-field>
-            </div>
-
-            <div class="column is-6">
-              <b-field grouped position="is-right">
-                <b-field v-if="form.archive && (!this.form.archiveMetaStr || this.form.archiveMetaStr === '{}')">
-                  <a
-                    class="button is-primary"
-                    href="#"
-                    @click.prevent="onFillArchiveMeta"
-                    :aria-label="$t('campaigns.archiveMeta')"
-                  ><b-icon
-                      icon="code" /></a>
-                </b-field>
-                <b-field v-if="form.archive">
-                  <b-button @click="onToggleArchivePreview" type="is-primary" icon-left="file-find-outline"
-                    data-cy="btn-preview">
-                    {{ $t('campaigns.preview') }}
-                  </b-button>
-                </b-field>
-              </b-field>
-            </div>
+                    {{ item.filename }}
+                  </v-chip>
+                </div>
+                <v-text-field
+                  ref="media"
+                  :label="$t('campaigns.attachments')"
+                  :disabled="!canEdit"
+                  readonly
+                  variant="outlined"
+                  @focus="onOpenAttach"
+                />
+              </v-card-text>
+            </v-card>
           </div>
-          <b-field>
-            <b-field :label="$t('campaigns.archiveSlug')" label-position="on-border"
-              :message="$t('campaigns.archiveSlugHelp')">
-              <b-input :maxlength="200" :ref="'focus'" v-model="form.archiveSlug" name="archive_slug"
-                data-cy="archive-slug" :disabled="!canArchive || !form.archive" />
-            </b-field>
-          </b-field>
-          <b-field :label="$t('campaigns.archiveMeta')" :message="$t('campaigns.archiveMetaHelp')"
-            label-position="on-border">
-            <b-input v-model="form.archiveMetaStr" name="archive_meta" type="textarea" data-cy="archive-meta"
-              :disabled="!canArchive || !form.archive" rows="20" />
-          </b-field>
-        </section>
-      </section>
+        </v-col>
 
-    <b-modal scroll="keep" :aria-modal="true" :active="isAttachModalOpen" @update:active="isAttachModalOpen = $event" :width="900">
-      <div class="modal-card content" style="width: auto">
-        <section expanded class="modal-card-body">
-          <media is-modal @selected="onAttachSelect" />
-        </section>
+        <v-col cols="12" md="6" class="text-md-right">
+          <a
+            href="https://listmonk.app/docs/templating/#template-expressions"
+            target="_blank"
+            rel="noopener noreferer"
+            class="templating-link"
+          >
+            <v-icon size="small">mdi-code-tags</v-icon> {{ $t('campaigns.templatingRef') }}
+          </a>
+
+          <div v-if="canEdit && form.content.contentType !== 'plain'" class="mt-3">
+            <v-btn
+              v-if="form.altbody === null"
+              variant="text"
+              size="small"
+              prepend-icon="mdi-text"
+              @click="onAddAltBody"
+            >
+              {{ $t('campaigns.addAltText') }}
+            </v-btn>
+            <v-btn
+              v-else
+              variant="text"
+              size="small"
+              prepend-icon="mdi-trash-can-outline"
+              @click="$utils.confirm(null, onRemoveAltBody)"
+            >
+              {{ $t('campaigns.removeAltText') }}
+            </v-btn>
+          </div>
+        </v-col>
+      </v-row>
+
+      <div v-if="canEdit && form.content.contentType !== 'plain' && form.altbody !== null" class="mt-4">
+        <v-textarea
+          v-model="form.altbody"
+          :disabled="!canEdit"
+          variant="outlined"
+          auto-grow
+          rows="6"
+        />
       </div>
-    </b-modal>
+    </section>
 
-    <campaign-preview v-if="isPreviewingArchive" @close="onToggleArchivePreview" type="campaign" :id="data.id"
-      :archive-meta="form.archiveMetaStr" :title="data.title" :content-type="data.contentType"
-      :template-id="form.archiveTemplateId" is-post is-archive />
+    <section v-show="activeTab === 'attribs'">
+      <v-textarea
+        v-model="form.attribsStr"
+        :label="$t('globals.terms.attribs')"
+        variant="outlined"
+        :disabled="!canEdit"
+        rows="15"
+        auto-grow
+      />
+      <p class="form-help">{{ $t('campaigns.attribsHelp') }}</p>
+    </section>
+
+    <section v-show="activeTab === 'archive'">
+      <v-row>
+        <v-col cols="12" md="4">
+          <div data-cy="btn-archive">
+            <v-switch
+              v-model="form.archive"
+              :disabled="!canArchive"
+              :label="$t('campaigns.archiveEnable')"
+              data-cy="btn-archive"
+              hide-details
+            />
+
+            <v-btn
+              :href="`${serverConfig.root_url}/archive/${data.uuid}`"
+              target="_blank"
+              rel="noopener noreferer"
+              variant="text"
+              icon
+              :disabled="!form.archive"
+              :aria-label="$t('campaigns.archive')"
+              class="mb-2"
+            >
+              <v-icon>mdi-link-variant</v-icon>
+            </v-btn>
+
+            <p class="form-help">{{ $t('campaigns.archiveHelp') }}</p>
+          </div>
+        </v-col>
+
+        <v-col cols="12" md="8" class="text-md-right">
+          <v-btn
+            v-if="!canEdit && canArchive"
+            type="button"
+            color="primary"
+            :disabled="loading.campaigns"
+            :loading="loading.campaigns"
+            data-cy="btn-save"
+            @click="onUpdateCampaignArchive"
+          >
+            <v-icon start icon="mdi-content-save-outline" />
+            <span>{{ $t('globals.buttons.saveChanges') }}</span>
+          </v-btn>
+        </v-col>
+      </v-row>
+
+      <v-row class="mt-1">
+        <v-col cols="12" md="6">
+          <v-select
+            v-model="form.archiveTemplateId"
+            :items="archiveTemplates"
+            item-title="name"
+            item-value="id"
+            :label="$tc('globals.terms.template')"
+            name="template"
+            :disabled="!canArchive || !form.archive || form.content.contentType === 'visual'"
+            required
+            variant="outlined"
+          />
+        </v-col>
+
+        <v-col cols="12" md="6" class="text-md-right">
+          <v-btn
+            v-if="form.archive && (!form.archiveMetaStr || form.archiveMetaStr === '{}')"
+            color="primary"
+            variant="outlined"
+            icon="mdi-code-tags"
+            :aria-label="$t('campaigns.archiveMeta')"
+            class="mr-2"
+            @click="onFillArchiveMeta"
+          />
+          <v-btn
+            v-if="form.archive"
+            type="button"
+            color="primary"
+            data-cy="btn-preview"
+            prepend-icon="mdi-file-find-outline"
+            @click="onToggleArchivePreview"
+          >
+            <span>{{ $t('campaigns.preview') }}</span>
+          </v-btn>
+        </v-col>
+      </v-row>
+
+      <v-text-field
+        ref="archiveSlug"
+        v-model="form.archiveSlug"
+        :label="$t('campaigns.archiveSlug')"
+        maxlength="200"
+        name="archive_slug"
+        data-cy="archive-slug"
+        :disabled="!canArchive || !form.archive"
+        type="text"
+        variant="outlined"
+        class="mt-2"
+      />
+      <p class="form-help">{{ $t('campaigns.archiveSlugHelp') }}</p>
+
+      <v-textarea
+        v-model="form.archiveMetaStr"
+        :label="$t('campaigns.archiveMeta')"
+        name="archive_meta"
+        data-cy="archive-meta"
+        :disabled="!canArchive || !form.archive"
+        rows="20"
+        auto-grow
+        variant="outlined"
+      />
+      <p class="form-help">{{ $t('campaigns.archiveMetaHelp') }}</p>
+    </section>
+
+    <v-dialog
+      v-model="isAttachModalOpen"
+      :aria-modal="true"
+      max-width="900"
+      scrollable
+    >
+      <v-card>
+        <v-card-text>
+          <media is-modal type="legacy-attachment" @selected="onAttachSelect" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
+    <campaign-preview
+      v-if="isPreviewingArchive"
+      @close="onToggleArchivePreview"
+      type="campaign"
+      :id="data.id"
+      :archive-meta="form.archiveMetaStr"
+      :title="data.title"
+      :content-type="data.contentType"
+      :template-id="form.archiveTemplateId"
+      is-post
+      is-archive
+    />
   </section>
 </template>
 
@@ -463,10 +656,12 @@ export default {
       this.form.sendAtDate = value ? dayjs(value).toDate() : null;
     },
 
-    onListsChange(event) {
-      const selectedIDs = Array.from(event.target.selectedOptions || [], (option) => Number(option.value));
+    onListsChange(selectedIDs = []) {
+      const normalizedIDs = Array.isArray(selectedIDs)
+        ? selectedIDs.map((id) => Number(id))
+        : [];
       const listMap = new Map(this.availableLists.map((list) => [Number(list.id), list]));
-      this.form.lists = selectedIDs
+      this.form.lists = normalizedIDs
         .map((id) => listMap.get(id))
         .filter(Boolean);
     },
@@ -516,17 +711,29 @@ export default {
     onTab(tab) {
       this.activeTab = tab;
 
-      if (tab === 'content' && window.tinymce && window.tinymce.editors.length > 0) {
+      if (tab === 'content' && window.tinymce?.activeEditor) {
         this.$nextTick(() => {
-          const [editor] = window.tinymce.editors;
-          if (editor && typeof editor.focus === 'function') {
-            editor.focus();
-          }
+          window.tinymce.activeEditor.focus();
         });
       }
 
       // this.$router.replace({ hash: `#${tab}` });
       window.history.replaceState({}, '', `#${tab}`);
+    },
+
+    syncActiveTabWithRouteHash() {
+      const requestedTab = String(this.$route.hash || '').replace('#', '');
+      const validTabs = ['campaign', 'content', 'attribs', 'archive'];
+
+      if (!validTabs.includes(requestedTab)) {
+        return;
+      }
+
+      if (this.isNew && requestedTab !== 'campaign') {
+        return;
+      }
+
+      this.activeTab = requestedTab;
     },
 
     onFillArchiveMeta() {
@@ -589,10 +796,10 @@ export default {
 
     getCampaign(id) {
       return this.$api.getCampaign(id).then((data) => {
-        this.data = data;
-        this.form = {
+        const nextForm = {
           ...this.form,
           ...data,
+          fromEmail: data.fromEmail || this.form.fromEmail || this.serverConfig.from_email,
           archiveSlug: data.archiveSlug || '',
           headersStr: JSON.stringify(data.headers, null, 4),
           archiveMetaStr: data.archiveMeta ? JSON.stringify(data.archiveMeta, null, 4) : '{}',
@@ -606,14 +813,16 @@ export default {
             templateId: data.templateId,
           },
         };
-        this.isAttachFieldVisible = this.form.media.length > 0;
-
-        this.form.media = this.form.media.map((f) => {
+        nextForm.media = nextForm.media.map((f) => {
           if (!f.id) {
             return { ...f, filename: `❌ ${f.filename}` };
           }
           return f;
         });
+
+        this.form = nextForm;
+        this.isAttachFieldVisible = this.form.media.length > 0;
+        this.data = data;
       });
     },
 
@@ -805,7 +1014,19 @@ export default {
     },
 
     selectedListIds() {
-      return Array.isArray(this.form.lists) ? this.form.lists.map((list) => String(list.id)) : [];
+      return Array.isArray(this.form.lists) ? this.form.lists.map((list) => Number(list.id)) : [];
+    },
+
+    availableMessengers() {
+      const messengers = this.serverConfig && Array.isArray(this.serverConfig.messengers)
+        ? this.serverConfig.messengers
+        : [];
+
+      return messengers.length > 0 ? messengers : ['email'];
+    },
+
+    contentTypeOptions() {
+      return Object.entries(this.contentTypes).map(([value, title]) => ({ value, title }));
     },
 
     tagsInput: {
@@ -833,16 +1054,12 @@ export default {
       },
     },
 
-    emailMessengers() {
-      return ['email', ...this.serverConfig.messengers.filter((m) => m.startsWith('email-'))];
-    },
-
-    otherMessengers() {
-      return this.serverConfig.messengers.filter((m) => m !== 'email' && !m.startsWith('email-'));
-    },
-
     archiveTemplates() {
       return this.templates.filter((t) => t.type === 'campaign');
+    },
+
+    editorKey() {
+      return `${this.data.id || 'new'}-${this.form.content.contentType}-${this.form.content.templateId || 'none'}`;
     },
   },
 
@@ -906,19 +1123,20 @@ export default {
     // Get templates list.
     this.$api.getTemplates().then((data) => {
       if (data.length > 0) {
-        if (!this.form.templateId) {
+        if (!this.form.content.templateId) {
           const tpl = data.find((i) => i.isDefault === true);
-          this.form.templateId = tpl.id;
+          if (tpl) {
+            this.form.content.templateId = tpl.id;
+          }
         }
       }
     });
 
     // Fetch campaign.
     if (this.isEditing) {
+      this.syncActiveTabWithRouteHash();
       this.getCampaign(id).then(() => {
-        if (this.$route.hash !== '') {
-          this.activeTab = this.$route.hash.replace('#', '');
-        }
+        this.syncActiveTabWithRouteHash();
       });
     } else {
       this.form.messenger = 'email';
@@ -935,41 +1153,58 @@ export default {
     });
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     this.$events.$off('campaign.update');
   },
 };
 </script>
 
 <style scoped>
+
+.campaign-header {
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  padding-bottom: 16px;
+}
+
+.action-btn {
+  min-width: 170px;
+}
+
 .campaign-tabs {
-  border-bottom: 1px solid #d8dfec;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
-.campaign-tab {
-  align-items: center;
-  background: #fff;
-  border: 1px solid #d8dfec;
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  color: #667085;
-  cursor: pointer;
-  display: inline-flex;
-  gap: 8px;
-  padding: 12px 16px;
+.inline-meta {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-size: 0.8rem;
 }
 
-.campaign-tab.is-active {
-  color: #0f5bd7;
-  font-weight: 600;
+.form-help {
+  color: rgba(var(--v-theme-on-surface), 0.68);
+  font-size: 0.875rem;
+  margin-top: 6px;
 }
 
-.campaign-tab.is-disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.attachment-card {
+  border-style: dashed;
+}
+
+.templating-link {
+  color: rgb(var(--v-theme-primary));
+  text-decoration: none;
+}
+
+.templating-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 959px) {
+  .campaign-actions {
+    margin-top: 12px;
+  }
+
+  .action-btn {
+    width: 100%;
+  }
 }
 </style>

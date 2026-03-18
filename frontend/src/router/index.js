@@ -152,7 +152,17 @@ const router = createRouter({
   routes,
   scrollBehavior(to) {
     if (to.hash) {
-      return { el: to.hash };
+      const campaignTabHashes = new Set(['#campaign', '#content', '#attribs', '#archive']);
+
+      if (to.name === 'campaign' && campaignTabHashes.has(to.hash)) {
+        return false;
+      }
+
+      if (typeof document !== 'undefined' && document.querySelector(to.hash)) {
+        return { el: to.hash };
+      }
+
+      return false;
     }
     return { top: 0 };
   },

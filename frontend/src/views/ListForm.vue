@@ -1,112 +1,134 @@
 <template>
-  <form @submit.prevent="onSubmit">
+  <v-form @submit.prevent="onSubmit">
     <div class="admin-dialog-card modal-card content">
       <header class="admin-dialog-head modal-card-head">
-        <p v-if="isEditing" class="has-text-grey-light is-size-7">
-          {{ $t('globals.fields.id') }}: <copy-text :text="`${data.id}`" />
-          {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
-        </p>
-        <span v-if="isEditing" class="type-pill" :class="data.type">
-          {{ $t(`lists.types.${data.type}`) }}
-        </span>
-        <h4 v-if="isEditing">
+        <div class="dialog-meta-row">
+          <p v-if="isEditing" class="entity-meta has-text-grey-light is-size-7">
+            {{ $t('globals.fields.id') }}: <copy-text :text="`${data.id}`" />
+            {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
+          </p>
+          <span v-if="isEditing" class="type-pill" :class="data.type">
+            {{ $t(`lists.types.${data.type}`) }}
+          </span>
+        </div>
+
+        <h4 v-if="isEditing" class="dialog-title">
           {{ data.name }}
         </h4>
-        <h4 v-else>
+        <h4 v-else class="dialog-title">
           {{ $t('lists.newList') }}
         </h4>
       </header>
-      <section expanded class="admin-dialog-body modal-card-body">
-        <div class="form-field">
-          <label class="form-label" for="list-name">{{ $t('globals.fields.name') }}</label>
-          <input
-            id="list-name"
-            ref="focus"
-            v-model="form.name"
-            class="input"
-            maxlength="200"
-            name="name"
-            :placeholder="$t('globals.fields.name')"
-            required
-            type="text"
-          >
-        </div>
 
-        <div class="form-field">
-          <label class="form-label" for="list-type">{{ $t('lists.type') }}</label>
-          <select id="list-type" v-model="form.type" class="input" name="type" required>
-            <option value="private">
-              {{ $t('lists.types.private') }}
-            </option>
-            <option value="public">
-              {{ $t('lists.types.public') }}
-            </option>
-          </select>
-          <p class="form-help">{{ $t('lists.typeHelp') }}</p>
-        </div>
+      <section class="admin-dialog-body modal-card-body">
+        <v-text-field
+          ref="focus"
+          v-model="form.name"
+          :label="$t('globals.fields.name')"
+          maxlength="200"
+          name="name"
+          :placeholder="$t('globals.fields.name')"
+          required
+          type="text"
+          variant="outlined"
+          density="comfortable"
+          class="mb-2"
+        />
 
-        <div class="form-field">
-          <label class="form-label" for="list-optin">{{ $t('lists.optin') }}</label>
-          <select id="list-optin" v-model="form.optin" class="input" name="optin" required>
-            <option value="single">
-              {{ $t('lists.optins.single') }}
-            </option>
-            <option value="double">
-              {{ $t('lists.optins.double') }}
-            </option>
-          </select>
-          <p class="form-help">{{ $t('lists.optinHelp') }}</p>
-        </div>
+        <v-row class="mb-1">
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="form.type"
+              :items="listTypeOptions"
+              item-title="title"
+              item-value="value"
+              :label="$t('lists.type')"
+              name="type"
+              required
+              variant="outlined"
+              density="comfortable"
+            />
+            <p class="form-help">{{ $t('lists.typeHelp') }}</p>
+          </v-col>
 
-        <div class="form-field">
-          <label class="form-label" for="list-tags">{{ $t('globals.terms.tags') }}</label>
-          <input
-            id="list-tags"
-            :value="tagsInput"
-            :aria-label="$t('globals.terms.tags')"
-            class="input"
-            :placeholder="$t('globals.terms.tags')"
-            type="text"
-            @input="tagsInput = $event.target.value"
-          >
-        </div>
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="form.optin"
+              :items="optinOptions"
+              item-title="title"
+              item-value="value"
+              :label="$t('lists.optin')"
+              name="optin"
+              required
+              variant="outlined"
+              density="comfortable"
+            />
+            <p class="form-help">{{ $t('lists.optinHelp') }}</p>
+          </v-col>
+        </v-row>
 
-        <div class="form-field">
-          <label class="form-label" for="list-description">{{ $t('globals.fields.description') }}</label>
-          <textarea
-            id="list-description"
-            v-model="form.description"
-            class="input textarea-input"
-            maxlength="2000"
-            name="description"
-            :placeholder="$t('globals.fields.description')"
-          />
-        </div>
+        <v-text-field
+          v-model="tagsInput"
+          :aria-label="$t('globals.terms.tags')"
+          :label="$t('globals.terms.tags')"
+          :placeholder="$t('globals.terms.tags')"
+          type="text"
+          variant="outlined"
+          density="comfortable"
+          class="mb-2"
+        />
 
-        <div class="form-field">
-          <label class="checkbox-row">
-            <input v-model="isArchived" name="status" type="checkbox">
-            <span>{{ $t('lists.archived') }}</span>
-          </label>
-          <p class="form-help">{{ $t('lists.archivedHelp') }}</p>
-        </div>
+        <v-textarea
+          v-model="form.description"
+          :label="$t('globals.fields.description')"
+          maxlength="2000"
+          name="description"
+          :placeholder="$t('globals.fields.description')"
+          variant="outlined"
+          auto-grow
+          rows="4"
+          class="mb-2"
+        />
+
+        <v-card class="settings-box mt-2" variant="tonal">
+          <v-card-text class="pa-4">
+            <v-checkbox
+              v-model="isArchived"
+              :label="$t('lists.archived')"
+              name="status"
+              density="comfortable"
+              hide-details
+              class="mb-1"
+            />
+            <p class="form-help">{{ $t('lists.archivedHelp') }}</p>
+          </v-card-text>
+        </v-card>
       </section>
-      <footer class="admin-dialog-foot modal-card-foot has-text-right">
-        <button type="button" class="button secondary-button" @click="$emit('close')">
+
+      <footer class="admin-dialog-foot modal-card-foot">
+        <v-btn
+          type="button"
+          variant="outlined"
+          class="dialog-action"
+          @click="$emit('close')"
+        >
           {{ $t('globals.buttons.close') }}
-        </button>
-        <button
+        </v-btn>
+        <v-btn
           v-if="$can('lists:manage_all') || $canList(data.id, 'list:manage')"
-          class="button primary-button"
+          color="primary"
+          variant="flat"
+          class="dialog-action"
           data-cy="btn-save"
           :disabled="loading.lists"
+          :loading="loading.lists"
           type="submit"
         >
           {{ $t('globals.buttons.save') }}
-        </button>
+        </v-btn>
       </footer>
     </div>
-  </form>
+  </v-form>
 </template>
 
 <script>
@@ -132,6 +154,7 @@ export default {
         name: '',
         type: 'private',
         optin: 'single',
+        description: '',
         status: 'active',
         tags: [],
       },
@@ -167,6 +190,20 @@ export default {
 
   computed: {
     ...mapState(['loading', 'profile']),
+
+    listTypeOptions() {
+      return [
+        { title: this.$t('lists.types.private'), value: 'private' },
+        { title: this.$t('lists.types.public'), value: 'public' },
+      ];
+    },
+
+    optinOptions() {
+      return [
+        { title: this.$t('lists.optins.single'), value: 'single' },
+        { title: this.$t('lists.optins.double'), value: 'double' },
+      ];
+    },
 
     tagsInput: {
       get() {
@@ -206,8 +243,8 @@ export default {
 <style scoped>
 .admin-dialog-card {
   background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 12px;
+  border: 1px solid #dce5f2;
+  border-radius: 16px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   display: flex;
   flex-direction: column;
@@ -217,9 +254,10 @@ export default {
 }
 
 .admin-dialog-head {
-  border-bottom: 0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-bottom: 1px solid #ebf1fb;
   display: block;
-  padding: 20px 20px 0;
+  padding: 18px 20px;
 }
 
 .admin-dialog-body {
@@ -229,68 +267,50 @@ export default {
 
 .admin-dialog-foot {
   background: #fff;
-  border-top: 0;
+  border-top: 1px solid #ebf1fb;
   display: flex;
   gap: 12px;
   justify-content: flex-end;
-  padding: 0 20px 20px;
+  padding: 16px 20px 20px;
 }
 
-.admin-dialog-foot button {
-  flex: 1 1 0;
+.dialog-meta-row {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.entity-meta {
+  margin: 0;
+}
+
+.dialog-title {
+  margin: 8px 0 0;
 }
 
 .form-field {
   margin-bottom: 18px;
 }
 
-.form-label {
-  display: block;
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
 .form-help {
   color: #667085;
   font-size: 0.9rem;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
-.textarea-input {
-  min-height: 120px;
-  resize: vertical;
+.settings-box {
+  background: #f8fbff;
+  border: 1px solid #e7eefb;
+  border-radius: 12px;
 }
 
-.checkbox-row {
-  align-items: center;
-  display: flex;
-  gap: 10px;
+:deep(.v-field) {
+  border-radius: 12px;
 }
 
-.button {
-  border: 1px solid #d0d5dd;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  min-height: 44px;
-  padding: 0 16px;
-}
-
-.primary-button {
-  background: #0f5bd8;
-  border-color: #0f5bd8;
-  color: #fff;
-}
-
-.primary-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.secondary-button {
-  background: #fff;
-  color: #1d2939;
+.dialog-action {
+  height: 44px;
+  min-width: 120px;
 }
 
 .type-pill {
@@ -302,5 +322,30 @@ export default {
   font-size: 0.85rem;
   font-weight: 600;
   padding: 6px 10px;
+}
+
+@media (max-width: 640px) {
+  .admin-dialog-head {
+    padding: 16px;
+  }
+
+  .admin-dialog-body {
+    padding: 16px;
+  }
+
+  .admin-dialog-foot {
+    flex-direction: column-reverse;
+    padding: 12px 16px 16px;
+  }
+
+  .dialog-action {
+    min-width: 100%;
+  }
+
+  .dialog-meta-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
 }
 </style>

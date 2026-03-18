@@ -57,6 +57,134 @@ const i18n = createI18n({
 });
 const eventBus = createEventBus();
 
+const NAMED_PLACEHOLDER_RE = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
+const SIMPLE_PLACEHOLDER_RE = /\{([^{}]+)\}/g;
+const PLACEHOLDER_TOKEN_PREFIX = '__LISTPOCKET_I18N_PLACEHOLDER_';
+
+function isNamedPlaceholderName(value) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+}
+
+function isPlaceholderCandidate(value) {
+  return /^[^"'`:[\].,{}\s]+$/.test(value);
+}
+
+function extractNamedPlaceholders(message) {
+  const placeholders = [];
+  if (typeof message !== 'string') {
+    return placeholders;
+  }
+
+  message.replace(NAMED_PLACEHOLDER_RE, (_, name) => {
+    placeholders.push(name);
+    return _;
+  });
+
+  return placeholders;
+}
+
+function normalizeLocaleMessage(message, referenceMessage) {
+  if (typeof message !== 'string' || message.length === 0) {
+    return message;
+  }
+
+  const referencePlaceholders = extractNamedPlaceholders(referenceMessage);
+  let placeholderIndex = 0;
+
+  let normalized = message.replace(SIMPLE_PLACEHOLDER_RE, (match, inner) => {
+    const token = inner.trim();
+    const expected = referencePlaceholders[placeholderIndex];
+
+    if (isNamedPlaceholderName(token)) {
+      placeholderIndex += 1;
+      if (expected && !referencePlaceholders.includes(token)) {
+        return `{${expected}}`;
+      }
+      return match;
+    }
+
+    if (!expected || !isPlaceholderCandidate(token)) {
+      return match;
+    }
+
+    placeholderIndex += 1;
+    return `{${expected}}`;
+  });
+
+  const protectedPlaceholders = [];
+  normalized = normalized.replace(NAMED_PLACEHOLDER_RE, (match) => {
+    const token = `${PLACEHOLDER_TOKEN_PREFIX}${protectedPlaceholders.length}__`;
+    protectedPlaceholders.push(match);
+    return token;
+  });
+
+  normalized = normalized
+    .replace(/\{/g, "{'{'}")
+    .replace(/\}/g, "{'}'}")
+    .replace(/@/g, "{'@'}");
+
+  protectedPlaceholders.forEach((placeholder, index) => {
+    normalized = normalized.replace(`${PLACEHOLDER_TOKEN_PREFIX}${index}__`, placeholder);
+  });
+
+  return normalized;
+}
+
+function normalizeLocaleMessages(messages, referenceMessages = {}) {
+  if (Array.isArray(messages)) {
+    return messages.map((value, index) => normalizeLocaleMessages(
+      value,
+      Array.isArray(referenceMessages) ? referenceMessages[index] : undefined,
+    ));
+  }
+
+  if (!messages || typeof messages !== 'object') {
+    return messages;
+  }
+
+  return Object.fromEntries(Object.entries(messages).map(([key, value]) => {
+    const referenceValue = referenceMessages && typeof referenceMessages === 'object'
+      ? referenceMessages[key]
+      : undefined;
+
+    if (typeof value === 'string') {
+      return [
+        key,
+        normalizeLocaleMessage(value, typeof referenceValue === 'string' ? referenceValue : ''),
+      ];
+    }
+
+    if (value && typeof value === 'object') {
+      return [key, normalizeLocaleMessages(value, referenceValue)];
+    }
+
+    return [key, value];
+  }));
+}
+
+async function loadLocaleMessages(locale) {
+  const [localeResult, defaultLocaleResult] = await Promise.allSettled([
+    api.getLang(locale),
+    locale === 'en' ? Promise.resolve(null) : api.getLang('en'),
+  ]);
+
+  if (localeResult.status !== 'fulfilled') {
+    throw localeResult.reason;
+  }
+
+  const rawLocaleMessages = localeResult.value;
+  const rawDefaultMessages = locale === 'en' || defaultLocaleResult.status !== 'fulfilled'
+    ? rawLocaleMessages
+    : defaultLocaleResult.value;
+
+  const defaultMessages = normalizeLocaleMessages(rawDefaultMessages, rawDefaultMessages);
+  const localeMessages = locale === 'en'
+    ? defaultMessages
+    : normalizeLocaleMessages(rawLocaleMessages, defaultMessages);
+
+  return { defaultMessages, localeMessages };
+}
+
 function getRawLocaleMessage(messages, key) {
   if (!messages || !key) {
     return null;
@@ -75,14 +203,58 @@ function getRawLocaleMessage(messages, key) {
   }, messages);
 }
 
+function renderRawLocaleMessage(rawMessage, methodName, args) {
+  if (typeof rawMessage !== 'string') {
+    return rawMessage;
+  }
+
+  let namedValues = {};
+  if (methodName === 'tc') {
+    namedValues = args.find((arg, index) => index > 0 && arg && typeof arg === 'object' && !Array.isArray(arg)) || {};
+  } else {
+    namedValues = args.find((arg) => arg && typeof arg === 'object' && !Array.isArray(arg)) || {};
+  }
+
+  return rawMessage
+    .replace(NAMED_PLACEHOLDER_RE, (match, name) => (
+      Object.prototype.hasOwnProperty.call(namedValues, name) ? String(namedValues[name]) : match
+    ))
+    .replace(/\{'@'\}/g, '@')
+    .replace(/\{'\{'\}/g, '{')
+    .replace(/\{'\}'\}/g, '}');
+}
+
+function isI18nSyntaxError(err) {
+  if (!err) {
+    return false;
+  }
+
+  const message = String(err.message || err);
+  return err.name === 'SyntaxError'
+    || message.includes('placeholder')
+    || message.includes('linked format')
+    || message.includes('lexical')
+    || message.includes('Unexpected');
+}
+
 function withI18nFallback(methodName) {
-  const original = i18n.global[methodName].bind(i18n.global);
+  const target = i18n.global[methodName];
+  const fallbackTarget = methodName === 'tc' ? i18n.global.t : null;
+  let original = (key) => key;
+  if (typeof target === 'function') {
+    original = target.bind(i18n.global);
+  } else if (typeof fallbackTarget === 'function') {
+    original = fallbackTarget.bind(i18n.global);
+  }
 
   return (key, ...args) => {
     try {
+      if (methodName === 'tc' && typeof target !== 'function') {
+        return original(key);
+      }
       return original(key, ...args);
     } catch (err) {
-      if (!err || !String(err.message || err).includes('Empty placeholder')) {
+      if (!isI18nSyntaxError(err)) {
         throw err;
       }
 
@@ -90,7 +262,9 @@ function withI18nFallback(methodName) {
       const localeKey = typeof locale === 'string' ? locale : locale && locale.value;
       const messages = localeKey ? i18n.global.getLocaleMessage(localeKey) : {};
       const rawMessage = getRawLocaleMessage(messages, key);
-      return typeof rawMessage === 'string' ? rawMessage : key;
+      return typeof rawMessage === 'string'
+        ? renderRawLocaleMessage(rawMessage, methodName, args)
+        : key;
     }
   };
 }
@@ -136,13 +310,16 @@ async function initConfig(rootProxy) {
   }
 
   const cfg = await api.getServerConfig();
-  const lang = await api.getLang(cfg.lang);
+  const { defaultMessages, localeMessages } = await loadLocaleMessages(cfg.lang);
+  i18n.global.setLocaleMessage('en', defaultMessages);
   i18n.global.locale = cfg.lang;
-  i18n.global.setLocaleMessage(cfg.lang, lang);
+  i18n.global.setLocaleMessage(cfg.lang, localeMessages);
 
   proxy.$utils = sharedUtils;
   proxy.$api = api;
   proxy.$events = eventBus;
+  proxy.$t = i18n.global.t;
+  proxy.$tc = i18n.global.tc;
   proxy.$can = (...perms) => {
     if (isSuperAdmin(profile)) {
       return true;
@@ -180,6 +357,8 @@ async function initConfig(rootProxy) {
     vueApp.config.globalProperties.$utils = sharedUtils;
     vueApp.config.globalProperties.$api = api;
     vueApp.config.globalProperties.$events = eventBus;
+    vueApp.config.globalProperties.$t = i18n.global.t;
+    vueApp.config.globalProperties.$tc = i18n.global.tc;
     vueApp.config.globalProperties.$can = proxy.$can;
     vueApp.config.globalProperties.$canList = proxy.$canList;
   }
@@ -248,6 +427,8 @@ installLegacyUIStyles();
 app.config.globalProperties.$api = api;
 app.config.globalProperties.$utils = sharedUtils;
 app.config.globalProperties.$events = null;
+app.config.globalProperties.$t = i18n.global.t;
+app.config.globalProperties.$tc = i18n.global.tc;
 app.config.globalProperties.$can = () => false;
 app.config.globalProperties.$canList = () => false;
 
@@ -257,5 +438,7 @@ initConfig(rootProxy).catch((err) => {
     redirectToLogin();
     return;
   }
-  console.error(err);
+  const msg = (err && err.response && err.response.message) || (err && err.message)
+    || 'Failed to initialize the app';
+  sharedUtils.toast(msg, 'is-danger', 5000, false);
 });

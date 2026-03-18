@@ -256,7 +256,7 @@ func (c *Core) unsubscribeSubscriptionsSQLite(subIDs, listIDs []int) error {
 
 		q := `UPDATE subscriber_lists
 			SET status='unsubscribed',
-			    updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id IN (` + sqlitePlaceholders(len(chunk)) + `)
 			  AND list_id IN (` + sqlitePlaceholders(len(listIDs)) + `)`
 

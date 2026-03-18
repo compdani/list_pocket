@@ -1,43 +1,64 @@
 <template>
   <section class="lists">
-    <header class="columns page-header">
-      <div class="column is-10">
-        <h1 class="title is-4 mb-2">
+    <header class="page-header">
+      <v-row align="center" class="ma-0">
+        <v-col cols="12" md="9" class="px-0">
+          <h1 class="text-h5 font-weight-semibold mb-2">
           {{ $t('globals.terms.lists') }}
-          <span v-if="queryParams.status === 'archived'" class="has-text-grey-light">/ {{ queryParams.status }} </span>
+          <span v-if="queryParams.status === 'archived'" class="text-medium-emphasis">/ {{ queryParams.status }} </span>
           <span v-if="!isNaN(lists.total)">({{ lists.total }})</span>
-        </h1>
+          </h1>
 
-        <div class="is-size-7">
-          <router-link v-if="queryParams.status !== 'archived'" :to="{ name: 'lists', query: { status: 'archived' } }">
-            {{ $t('globals.buttons.view') }} {{ $t('lists.archived').toLowerCase() }} &rarr;
-          </router-link>
-          <router-link v-else :to="{ name: 'lists' }">
-            {{ $t('globals.buttons.view') }} {{ $t('menu.allLists').toLowerCase() }} &rarr;
-          </router-link>
-        </div>
-      </div>
-      <div class="column has-text-right">
-        <div v-if="$can('lists:manage_all')">
-          <button type="button" class="btn-new admin-open-button" @click.stop.prevent="showNewForm" data-cy="btn-new">
+          <div class="text-caption">
+            <router-link v-if="queryParams.status !== 'archived'" :to="{ name: 'lists', query: { status: 'archived' } }">
+              {{ $t('globals.buttons.view') }} {{ $t('lists.archived').toLowerCase() }} &rarr;
+            </router-link>
+            <router-link v-else :to="{ name: 'lists' }">
+              {{ $t('globals.buttons.view') }} {{ $t('menu.allLists').toLowerCase() }} &rarr;
+            </router-link>
+          </div>
+        </v-col>
+        <v-col cols="12" md="3" class="px-0 d-flex justify-end justify-md-end">
+          <v-btn
+            v-if="$can('lists:manage_all')"
+            type="button"
+            color="primary"
+            variant="flat"
+            class="text-none"
+            @click.stop.prevent="showNewForm"
+            data-cy="btn-new"
+          >
             {{ $t('globals.buttons.new') }}
-          </button>
-        </div>
-      </div>
+          </v-btn>
+        </v-col>
+      </v-row>
     </header>
 
-    <div class="columns">
-      <div class="column is-6">
-        <form @submit.prevent="getLists">
-          <b-field>
-            <b-input v-model="queryParams.query" name="query" expanded icon="magnify" ref="query" data-cy="query" />
-            <p class="controls">
-              <b-button native-type="submit" type="is-primary" icon-left="magnify" data-cy="btn-query" />
-            </p>
-          </b-field>
+    <v-card class="mb-4 query-card" elevation="0">
+      <v-card-text class="query-card-body">
+        <form class="query-form" @submit.prevent="onSearchSubmit">
+          <v-text-field
+            v-model="queryParams.query"
+            class="query-input"
+            name="query"
+            :placeholder="$t('globals.fields.name')"
+            prepend-inner-icon="mdi-magnify"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            ref="query"
+            data-cy="query"
+          />
+          <v-btn
+            type="submit"
+            class="query-submit"
+            color="primary"
+            icon="mdi-magnify"
+            data-cy="btn-query"
+          />
         </form>
-      </div>
-    </div>
+      </v-card-text>
+    </v-card>
 
     <div class="actions mb-4" v-if="bulk.checked.length > 0">
       <a class="a" href="#" @click.prevent="deleteLists" data-cy="btn-delete-lists">
@@ -54,136 +75,136 @@
       </span>
     </div>
 
-    <div class="table-pagination" v-if="lists.total > 0">
-      <span class="page-indicator">{{ queryParams.page }}</span>
-      <button class="button" type="button" :disabled="queryParams.page <= 1" @click="onPageChange(queryParams.page - 1)">
-        <b-icon icon="chevron-left" size="is-small" />
-      </button>
-      <button class="button" type="button" :disabled="queryParams.page >= listPageCount" @click="onPageChange(queryParams.page + 1)">
-        <b-icon icon="chevron-right" size="is-small" />
-      </button>
-    </div>
-
     <div class="table-wrap">
-      <table class="table is-fullwidth is-hoverable admin-table">
-        <thead>
-          <tr>
-            <th class="checkbox-col">
-              <input type="checkbox" :checked="isAllCurrentPageListsChecked" aria-label="Select current page lists" @change="toggleCurrentPageLists($event.target.checked)" />
-            </th>
-            <th><button type="button" class="sort-button" @click="onSort('name', nextSortDirection('name'))">{{ $t('globals.fields.name') }}</button></th>
-            <th><button type="button" class="sort-button" @click="onSort('type', nextSortDirection('type'))">{{ $t('globals.fields.type') }}</button></th>
-            <th><button type="button" class="sort-button" @click="onSort('subscriber_count', nextSortDirection('subscriber_count'))">{{ $t('globals.terms.subscribers') }}</button></th>
-            <th>{{ $t('globals.terms.subscribers') }} {{ $t('globals.terms.all').toLowerCase() }}</th>
-            <th><button type="button" class="sort-button" @click="onSort('created_at', nextSortDirection('created_at'))">{{ $t('globals.fields.createdAt') }}</button></th>
-            <th><button type="button" class="sort-button" @click="onSort('updated_at', nextSortDirection('updated_at'))">{{ $t('globals.fields.updatedAt') }}</button></th>
-            <th class="actions-col" />
-          </tr>
-        </thead>
-        <tbody v-if="listRows.length > 0">
-          <tr v-for="row in listRows" :key="row.id">
-            <td class="checkbox-col">
-              <input type="checkbox" :checked="isListChecked(row.id)" :aria-label="`Select list ${row.name}`" @change="toggleListSelection(row, $event.target.checked)" />
-            </td>
-            <td>
-              <button type="button" class="link-button" @click.stop.prevent="showEditForm(row)">{{ row.name }}</button>
-              <div class="tag-list">
-                <b-tag class="is-small" v-for="t in row.tags" :key="t">{{ t }}</b-tag>
-              </div>
-            </td>
-            <td>
-              <div class="tags">
-                <b-tag :class="row.type" :data-cy="`type-${row.type}`">{{ $t(`lists.types.${row.type}`) }}</b-tag>
-                <b-tag :class="row.optin" :data-cy="`optin-${row.optin}`">
-                  <b-icon :icon="row.optin === 'double' ? 'account-check-outline' : 'account-off-outline'" size="is-small" />
-                  {{ $t(`lists.optins.${row.optin}`) }}
-                </b-tag>
-                <a v-if="row.optin === 'double'" class="is-size-7 send-optin" href="#" @click.prevent="$utils.confirm(null, () => createOptinCampaign(row))" data-cy="btn-send-optin-campaign">
-                  <b-icon icon="rocket-launch-outline" size="is-small" />
-                  {{ $t('lists.sendOptinCampaign') }}
-                </a>
-              </div>
-            </td>
-            <td>
-              <template v-if="$can('subscribers:get_all', 'subscribers:get')">
-                <router-link :to="`/subscribers/lists/${row.id}`">
-                  {{ $utils.formatNumber(row.subscriberCount) }}
-                  <span class="is-size-7 view">{{ $t('globals.buttons.view') }}</span>
-                </router-link>
-              </template>
-              <template v-else>
-                {{ $utils.formatNumber(row.subscriberCount) }}
-              </template>
-            </td>
-            <td>
-              <div class="fields stats">
-                <p v-for="(count, status) in filterStatuses(row)" :key="status">
-                  <label for="#">{{ $tc(`subscribers.status.${status}`, count) }}</label>
-                  <router-link :to="`/subscribers/lists/${row.id}?subscription_status=${status}`" :class="status">
-                    {{ $utils.formatNumber(count) }}
-                  </router-link>
-                </p>
-              </div>
-            </td>
-            <td>{{ $utils.niceDate(row.createdAt) }}</td>
-            <td>{{ $utils.niceDate(row.updatedAt) }}</td>
-            <td class="actions">
-              <div class="action-group">
-              <router-link
-                v-if="$can('campaigns:manage')"
-                :to="`/campaigns/new?list_id=${row.id}`"
-                class="action-button"
-                data-cy="btn-campaign"
-                :aria-label="$t('campaigns.new')"
-              >
-                <b-icon icon="rocket-launch-outline" size="is-small" />
-              </router-link>
-              <button
-                v-if="$can('lists:manage') || $canList(row.id, 'list:manage')"
-                type="button"
-                class="action-button"
-                @click.stop.prevent="showEditForm(row)"
-                data-cy="btn-edit"
-                :aria-label="$t('globals.buttons.edit')"
-              >
-                <b-icon icon="pencil-outline" size="is-small" />
-              </button>
-              <router-link
-                v-if="$can('subscribers:import')"
-                :to="{ name: 'import', query: { list_id: row.id } }"
-                class="action-button"
-                data-cy="btn-import"
-                :aria-label="$t('globals.buttons.import')"
-              >
-                <b-icon icon="file-upload-outline" size="is-small" />
-              </router-link>
-              <a
-                v-if="$can('lists:manage') || $canList(row.id, 'list:manage')"
-                href="#"
-                class="action-button action-button-danger"
-                @click.prevent="deleteList(row)"
-                data-cy="btn-delete"
-                :aria-label="$t('globals.buttons.delete')"
-              >
-                <b-icon icon="trash-can-outline" size="is-small" />
-              </a>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <v-data-table-server
+        :headers="tableHeaders"
+        :items="listRows"
+        :items-length="lists.total || 0"
+        :loading="loading.listsFull"
+        :page="queryParams.page"
+        :items-per-page="lists.perPage || 20"
+        :sort-by="tableSortBy"
+        :model-value="bulk.checked"
+        class="admin-data-table lists-table"
+        item-value="id"
+        return-object
+        show-select
+        select-strategy="page"
+        hide-default-footer
+        @update:model-value="updateCheckedLists"
+        @update:options="onTableOptionsChange"
+      >
+        <template #[`item.name`]="{ item }">
+          <div>
+            <button type="button" class="link-button" @click.stop.prevent="showEditForm(item)">{{ item.name }}</button>
+            <div class="tag-list">
+              <b-tag class="is-small" v-for="t in item.tags" :key="t">{{ t }}</b-tag>
+            </div>
+          </div>
+        </template>
 
-      <empty-placeholder v-if="listRows.length === 0 && !loading.listsFull" />
+        <template #[`item.type`]="{ item }">
+          <div class="tags">
+            <b-tag :class="item.type" :data-cy="`type-${item.type}`">{{ $t(`lists.types.${item.type}`) }}</b-tag>
+            <b-tag :class="item.optin" :data-cy="`optin-${item.optin}`">
+              <b-icon :icon="item.optin === 'double' ? 'account-check-outline' : 'account-off-outline'" size="is-small" />
+              {{ $t(`lists.optins.${item.optin}`) }}
+            </b-tag>
+            <a v-if="item.optin === 'double'" class="text-caption send-optin" href="#" @click.prevent="$utils.confirm(null, () => createOptinCampaign(item))" data-cy="btn-send-optin-campaign">
+              <b-icon icon="rocket-launch-outline" size="is-small" />
+              {{ $t('lists.sendOptinCampaign') }}
+            </a>
+          </div>
+        </template>
+
+        <template #[`item.subscriber_count`]="{ item }">
+          <template v-if="$can('subscribers:get_all', 'subscribers:get')">
+            <router-link :to="`/subscribers/lists/${item.id}`">
+              {{ $utils.formatNumber(item.subscriberCount) }}
+              <span class="text-caption view">{{ $t('globals.buttons.view') }}</span>
+            </router-link>
+          </template>
+          <template v-else>
+            {{ $utils.formatNumber(item.subscriberCount) }}
+          </template>
+        </template>
+
+        <template #[`item.subscriber_statuses`]="{ item }">
+          <div class="fields stats">
+            <p v-for="(count, status) in filterStatuses(item)" :key="status">
+              <label for="#">{{ $tc(`subscribers.status.${status}`, count) }}</label>
+              <router-link :to="`/subscribers/lists/${item.id}?subscription_status=${status}`" :class="status">
+                {{ $utils.formatNumber(count) }}
+              </router-link>
+            </p>
+          </div>
+        </template>
+
+        <template #[`item.created_at`]="{ item }">
+          {{ $utils.niceDate(item.createdAt) }}
+        </template>
+
+        <template #[`item.updated_at`]="{ item }">
+          {{ $utils.niceDate(item.updatedAt) }}
+        </template>
+
+        <template #[`item.actions`]="{ item }">
+          <div class="action-group">
+            <router-link
+              v-if="$can('campaigns:manage')"
+              :to="`/campaigns/new?list_id=${item.id}`"
+              class="action-button"
+              data-cy="btn-campaign"
+              :aria-label="$t('campaigns.new')"
+            >
+              <b-icon icon="rocket-launch-outline" size="is-small" />
+            </router-link>
+            <button
+              v-if="$can('lists:manage') || $canList(item.id, 'list:manage')"
+              type="button"
+              class="action-button"
+              @click.stop.prevent="showEditForm(item)"
+              data-cy="btn-edit"
+              :aria-label="$t('globals.buttons.edit')"
+            >
+              <b-icon icon="pencil-outline" size="is-small" />
+            </button>
+            <router-link
+              v-if="$can('subscribers:import')"
+              :to="{ name: 'import', query: { list_id: item.id } }"
+              class="action-button"
+              data-cy="btn-import"
+              :aria-label="$t('globals.buttons.import')"
+            >
+              <b-icon icon="file-upload-outline" size="is-small" />
+            </router-link>
+            <a
+              v-if="$can('lists:manage') || $canList(item.id, 'list:manage')"
+              href="#"
+              class="action-button action-button-danger"
+              @click.prevent="deleteList(item)"
+              data-cy="btn-delete"
+              :aria-label="$t('globals.buttons.delete')"
+            >
+              <b-icon icon="trash-can-outline" size="is-small" />
+            </a>
+          </div>
+        </template>
+
+        <template #no-data>
+          <empty-placeholder v-if="!loading.listsFull" />
+        </template>
+      </v-data-table-server>
     </div>
 
     <div class="table-pagination" v-if="lists.total > 0">
-      <span class="page-indicator">{{ queryParams.page }}</span>
-      <button class="button" type="button" :disabled="queryParams.page <= 1" @click="onPageChange(queryParams.page - 1)">
-        <b-icon icon="chevron-left" size="is-small" />
-      </button>
-      <button class="button" type="button" :disabled="queryParams.page >= listPageCount" @click="onPageChange(queryParams.page + 1)">
-        <b-icon icon="chevron-right" size="is-small" />
-      </button>
+      <v-pagination
+        :length="listPageCount"
+        :model-value="queryParams.page"
+        rounded="circle"
+        total-visible="7"
+        @update:model-value="onPageChange"
+      />
     </div>
 
     <v-overlay
@@ -203,10 +224,10 @@
       </div>
     </v-overlay>
 
-    <p v-if="settings['app.cache_slow_queries']" class="has-text-grey">
+    <p v-if="settings['app.cache_slow_queries']" class="text-medium-emphasis">
       *{{ $t('globals.messages.slowQueriesCached') }}
       <a href="https://listmonk.app/docs/maintenance/performance/" target="_blank" rel="noopener noreferer"
-        class="has-text-grey">
+        class="text-medium-emphasis">
         <b-icon icon="link-variant" /> {{ $t('globals.buttons.learnMore') }}
       </a>
     </p>
@@ -253,6 +274,11 @@ export default {
       this.getLists();
     },
 
+    onSearchSubmit() {
+      this.queryParams.page = 1;
+      this.getLists();
+    },
+
     onSort(field, direction) {
       this.queryParams.orderBy = field;
       this.queryParams.order = direction;
@@ -261,6 +287,31 @@ export default {
 
     nextSortDirection(field) {
       return this.queryParams.orderBy === field && this.queryParams.order === 'asc' ? 'desc' : 'asc';
+    },
+
+    onTableOptionsChange(options) {
+      const [sort] = options.sortBy || [];
+      const nextPage = options.page || 1;
+      const nextOrderBy = sort?.key || this.queryParams.orderBy;
+      const nextOrder = sort?.order || this.queryParams.order;
+
+      if (
+        nextPage === this.queryParams.page
+        && nextOrderBy === this.queryParams.orderBy
+        && nextOrder === this.queryParams.order
+      ) {
+        return;
+      }
+
+      this.queryParams.page = nextPage;
+      this.queryParams.orderBy = nextOrderBy;
+      this.queryParams.order = nextOrder;
+      this.getLists();
+    },
+
+    updateCheckedLists(rows) {
+      this.bulk.checked = rows;
+      this.onTableCheck();
     },
 
     // Show the edit list form.
@@ -435,16 +486,35 @@ export default {
       return this.lists.results ?? [];
     },
 
+    tableHeaders() {
+      return [
+        { title: this.$t('globals.fields.name'), key: 'name', sortable: true },
+        { title: this.$t('globals.fields.type'), key: 'type', sortable: true },
+        { title: this.$t('globals.terms.subscribers'), key: 'subscriber_count', sortable: true },
+        { title: `${this.$t('globals.terms.subscribers')} ${this.$t('globals.terms.all').toLowerCase()}`, key: 'subscriber_statuses', sortable: false },
+        { title: this.$t('globals.fields.createdAt'), key: 'created_at', sortable: true },
+        { title: this.$t('globals.fields.updatedAt'), key: 'updated_at', sortable: true },
+        {
+          title: '',
+          key: 'actions',
+          sortable: false,
+          align: 'end',
+        },
+      ];
+    },
+
+    tableSortBy() {
+      return [{
+        key: this.queryParams.orderBy,
+        order: this.queryParams.order,
+      }];
+    },
+
     listPageCount() {
       if (!this.lists.perPage || !this.lists.total) {
         return 1;
       }
       return Math.max(1, Math.ceil(this.lists.total / this.lists.perPage));
-    },
-
-    isAllCurrentPageListsChecked() {
-      return this.listRows.length > 0
-        && this.listRows.every((row) => this.isListChecked(row.id));
     },
 
     numSelectedLists() {
@@ -480,6 +550,74 @@ export default {
 </script>
 
 <style scoped>
+.lists {
+  --lists-border: #dce5f2;
+  --lists-border-strong: #c7d5ea;
+  --lists-surface-soft: #f6f9ff;
+}
+
+.page-header {
+  margin-bottom: 12px;
+}
+
+.query-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  border: 1px solid var(--lists-border);
+  border-radius: 16px;
+}
+
+.query-card-body {
+  padding: 16px;
+}
+
+.query-form {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.query-input {
+  flex: 1;
+}
+
+.query-input :deep(.v-field) {
+  border-radius: 12px;
+}
+
+.query-submit {
+  border-radius: 12px;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.lists-table {
+  background: #fff;
+  border: 1px solid var(--lists-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.lists-table :deep(thead th) {
+  background: var(--lists-surface-soft);
+  border-bottom: 1px solid var(--lists-border-strong) !important;
+  color: #334155;
+  font-weight: 600;
+}
+
+.lists-table :deep(tbody td) {
+  padding-bottom: 14px !important;
+  padding-top: 14px !important;
+  vertical-align: top;
+}
+
+.lists-table :deep(tbody tr:hover) {
+  background: #f8fbff;
+}
+
+.lists-table :deep(.v-data-table__tr--selected) {
+  background: #edf5ff;
+}
+
 .admin-table {
   background: #fff;
   border-radius: 16px;
@@ -585,18 +723,6 @@ export default {
   margin-top: 8px;
 }
 
-.admin-open-button {
-  background: #0f5bd8;
-  border: 1px solid #0f5bd8;
-  border-radius: 10px;
-  color: #fff;
-  cursor: pointer;
-  font-weight: 600;
-  min-height: 44px;
-  min-width: 96px;
-  padding: 0 18px;
-}
-
 .link-button,
 .icon-button {
   background: none;
@@ -608,5 +734,16 @@ export default {
 .link-button {
   color: inherit;
   font: inherit;
+}
+
+@media (max-width: 960px) {
+  .query-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .query-submit {
+    width: 100%;
+  }
 }
 </style>

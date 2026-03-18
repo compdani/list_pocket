@@ -1,5 +1,18 @@
-/* Import Bulma to set variables */
-@import "../node_modules/bulma/sass/utilities/_all";
+@use "sass:color";
+
+/* Core design tokens kept locally while Bulma is deprecated */
+$white: #ffffff;
+$white-bis: #f7f7f7;
+$white-ter: #f0f0f0;
+$black: #0a0a0a;
+$grey: #7a7a7a;
+$grey-dark: #4a4a4a;
+$grey-light: #b5b5b5;
+$grey-lighter: #dbdbdb;
+$size-6: 1rem;
+$size-7: 0.875rem;
+$weight-semibold: 600;
+$color: $grey-dark;
 
 /* import inter-regular */
 @font-face {
@@ -20,40 +33,15 @@
 }
 
 $body-family: "Inter", "Helvetica Neue", sans-serif;
-$body-size: 15px;
-$background: $white-bis;
-$body-background-color: $white-bis;
 $primary: #0055d4;
 $green: #36995b;
-$turquoise: $green;
 $red: #FF5722;
 
-$link: $primary;
-$input-placeholder-color: $grey-light;
 $grey-lightest: #eaeaea;
-
-$colors: map-merge($colors, (
-    "turquoise": ($green, $green-invert),
-    "green": ($green, $green-invert),
-    "success": ($green, $green-invert),
-    "danger": ($red, $green-invert),
-));
-
-$sidebar-box-shadow: none;
-$sidebar-width: 240px;
-$menu-item-active-background-color: $white-bis;
-$menu-item-active-color: $primary;
-
-
-/* Buefy */
-$modal-background-background-color: rgba(0, 0, 0, .30);
 
 .line-chart {
   min-height: 300px;
 }
-
-/* Import Bulma */
-@import "bulma";
 
 /* Custom style overrides */
 html, body {
@@ -528,7 +516,7 @@ body.is-noscroll {
     background: $primary;
 
     &:hover, &:active {
-      background: darken($primary, 15%);
+      background: color.adjust($primary, $lightness: -15%);
     }
     &:disabled {
       background: $grey-light;
@@ -556,10 +544,10 @@ body.is-noscroll {
   }
 
   &.is-light.is-outlined {
-    background: lighten($primary, 55%);
+    background: color.adjust($primary, $lightness: 55%);
 
     &.is-focused {
-      background: lighten($primary, 55%);
+      background: color.adjust($primary, $lightness: 55%);
     }
 
     &.is-selected {
@@ -713,11 +701,11 @@ body.is-noscroll {
   &.private, &.scheduled, &.paused, &.tx, &.api {
     $color: #ed7b00;
     color: $color;
-    background: lighten($color, 47);
+    background: color.adjust($color, $lightness: 47%);
   }
   &.public, &.running, &.list, &.campaign, &.user, &.primary {
     $color: $primary;
-    color: lighten($color, 20%);
+    color: color.adjust($color, $lightness: 20%);
     background: #e6f7ff;
   }
   &.finished, &.enabled, &.status-confirmed {
@@ -891,15 +879,15 @@ section.campaigns {
     .spinner {
       margin-left: 10px;
       .loading-overlay .loading-icon::after {
-        border-bottom-color: lighten(#1890ff, 30%);
-        border-left-color: lighten(#1890ff, 30%);
+        border-bottom-color: color.adjust(#1890ff, $lightness: 30%);
+        border-left-color: color.adjust(#1890ff, $lightness: 30%);
       }
     }
 
     tr.running {
-      background: lighten(#1890ff, 43%);
+      background: color.adjust(#1890ff, $lightness: 43%);
       td {
-        border-bottom: 1px solid lighten(#1890ff, 30%);
+        border-bottom: 1px solid color.adjust(#1890ff, $lightness: 30%);
       }
     }
 

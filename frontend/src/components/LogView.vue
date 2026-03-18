@@ -1,6 +1,6 @@
 <template>
-  <section class="log-view">
-    <b-loading :active="loading" :is-full-page="false" />
+  <div class="log-view">
+    <v-progress-linear v-if="loading" indeterminate />
     <div class="lines" ref="lines">
       <span
         v-for="(l, i) in lines.filter(Boolean)"
@@ -13,7 +13,7 @@
         <span class="log-message">{{ line.message }}</span>
       </span>
     </div>
-  </section>
+  </div>
 </template>
 
 <script>

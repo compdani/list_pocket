@@ -1,53 +1,55 @@
 <template>
   <div class="richtext-editor" v-if="isRichtextReady">
-    <tiny-mce v-model="computedValue" :disabled="disabled" :init="richtextConf" />
+    <tiny-mce v-model="computedValue" :disabled="disabled" :init="richtextConf" license-key="gpl" />
 
-    <b-modal scroll="keep" :width="1200" :aria-modal="true" :active="isRichtextSourceVisible" @update:active="isRichtextSourceVisible = $event">
-      <div>
-        <section expanded class="modal-card-body preview">
+    <!-- Source code editor modal -->
+    <v-dialog v-model="isRichtextSourceVisible" max-width="1200">
+      <v-card>
+        <v-card-text class="pt-0 preview">
           <code-editor lang="html" v-model="richTextSourceBody" key="richtext-source" />
-        </section>
-        <footer class="modal-card-foot has-text-right">
-          <b-button @click="onFormatRichtextHTML">
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn @click="onFormatRichtextHTML" variant="text">
             {{ $t('campaigns.formatHTML') }}
-          </b-button>
-          <b-button @click="() => { this.isRichtextSourceVisible = false; }">
+          </v-btn>
+          <v-btn @click="() => { this.isRichtextSourceVisible = false; }" variant="text">
             {{ $t('globals.buttons.close') }}
-          </b-button>
-          <b-button @click="onSaveRichTextSource" class="is-primary">
+          </v-btn>
+          <v-btn @click="onSaveRichTextSource" color="primary">
             {{ $t('globals.buttons.save') }}
-          </b-button>
-        </footer>
-      </div>
-    </b-modal>
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-    <b-modal scroll="keep" :width="750" :aria-modal="true" :active="isInsertHTMLVisible" @update:active="isInsertHTMLVisible = $event">
-      <div>
-        <section expanded class="modal-card-body preview">
+    <!-- Insert HTML snippet modal -->
+    <v-dialog v-model="isInsertHTMLVisible" max-width="750">
+      <v-card>
+        <v-card-text class="pt-0 preview">
           <code-editor lang="html" v-model="insertHTMLSnippet" key="richtext-snippet" />
-        </section>
-        <footer class="modal-card-foot has-text-right">
-          <b-button @click="onFormatRichtextHTMLSnippet">
+        </v-card-text>
+        <v-card-actions class="justify-end">
+          <v-btn @click="onFormatRichtextHTMLSnippet" variant="text">
             {{ $t('campaigns.formatHTML') }}
-          </b-button>
-          <b-button @click="() => { this.isInsertHTMLVisible = false; }">
+          </v-btn>
+          <v-btn @click="() => { this.isInsertHTMLVisible = false; }" variant="text">
             {{ $t('globals.buttons.close') }}
-          </b-button>
-          <b-button @click="onInsertHTML" class="is-primary">
+          </v-btn>
+          <v-btn @click="onInsertHTML" color="primary">
             {{ $t('globals.buttons.insert') }}
-          </b-button>
-        </footer>
-      </div>
-    </b-modal>
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
-    <!-- image picker -->
-    <b-modal scroll="keep" :aria-modal="true" :active="isMediaVisible" @update:active="isMediaVisible = $event" :width="900">
-      <div class="modal-card content" style="width: auto">
-        <section expanded class="modal-card-body">
-          <media is-modal @selected="onMediaSelect" />
-        </section>
-      </div>
-    </b-modal>
+    <!-- image picker modal -->
+    <v-dialog v-model="isMediaVisible" max-width="900">
+      <v-card>
+        <v-card-text class="pt-0">
+          <media is-modal type="pictures" @selected="onMediaSelect" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -57,26 +59,21 @@ import { mapState } from 'vuex';
 
 import TinyMce from '@tinymce/tinymce-vue';
 import 'tinymce';
+import 'tinymce/models/dom';
 import 'tinymce/icons/default';
 import 'tinymce/plugins/anchor';
 import 'tinymce/plugins/autolink';
 import 'tinymce/plugins/autoresize';
 import 'tinymce/plugins/charmap';
-import 'tinymce/plugins/colorpicker';
-import 'tinymce/plugins/contextmenu';
 import 'tinymce/plugins/emoticons';
 import 'tinymce/plugins/emoticons/js/emojis';
 import 'tinymce/plugins/fullscreen';
 import 'tinymce/plugins/help';
-import 'tinymce/plugins/hr';
 import 'tinymce/plugins/image';
-import 'tinymce/plugins/imagetools';
 import 'tinymce/plugins/link';
 import 'tinymce/plugins/lists';
-import 'tinymce/plugins/paste';
 import 'tinymce/plugins/searchreplace';
 import 'tinymce/plugins/table';
-import 'tinymce/plugins/textcolor';
 import 'tinymce/plugins/visualblocks';
 import 'tinymce/plugins/visualchars';
 import 'tinymce/plugins/wordcount';
@@ -108,9 +105,11 @@ export default {
     'code-editor': CodeEditor,
   },
 
+  emits: ['update:modelValue'],
+
   props: {
     disabled: { type: Boolean, default: false },
-    value: {
+    modelValue: {
       type: String,
       default: '',
     },
@@ -150,7 +149,6 @@ export default {
 
           editor.on('init', () => {
             editor.focus();
-            this.onEditorDialogOpen(editor);
           });
 
           // Custom HTML editor.
@@ -171,6 +169,7 @@ export default {
           });
         },
 
+        license_key: 'gpl',
         browser_spellcheck: true,
         min_height: 500,
         toolbar_sticky: true,
@@ -178,13 +177,13 @@ export default {
         convert_urls: true,
         plugins: [
           'anchor', 'autoresize', 'autolink', 'charmap', 'emoticons', 'fullscreen',
-          'help', 'hr', 'image', 'imagetools', 'link', 'lists', 'paste', 'searchreplace',
+          'help', 'image', 'link', 'lists', 'searchreplace',
           'table', 'visualblocks', 'visualchars', 'wordcount',
         ],
         toolbar: `undo redo | formatselect styleselect fontsizeselect |
                   bold italic underline strikethrough forecolor backcolor subscript superscript |
                   alignleft aligncenter alignright alignjustify |
-                  bullist numlist table image insert-html | outdent indent | link hr removeformat |
+                  bullist numlist table image insert-html | outdent indent | link removeformat |
                   html fullscreen help`,
         fontsize_formats: '10px 11px 12px 14px 15px 16px 18px 24px 36px',
         skin: false,
@@ -239,7 +238,7 @@ export default {
 
     onInsertHTML() {
       this.isInsertHTMLVisible = false;
-      window.tinymce.editors[0].execCommand('mceInsertContent', false, this.insertHTMLSnippet);
+      window.tinymce.activeEditor?.execCommand('mceInsertContent', false, this.insertHTMLSnippet);
       this.insertHTMLSnippet = '';
     },
 
@@ -253,76 +252,9 @@ export default {
 
     onSaveRichTextSource() {
       this.computedValue = this.richTextSourceBody;
-      window.tinymce.editors[0].setContent(this.computedValue);
+      window.tinymce.activeEditor?.setContent(this.computedValue);
       this.richTextSourceBody = '';
       this.isRichtextSourceVisible = false;
-    },
-
-    onEditorDialogOpen(editor) {
-      const ed = editor;
-      const oldEd = ed.windowManager.open;
-      const self = this;
-
-      ed.windowManager.open = (t, r) => {
-        const isOK = t.initialData && 'url' in t.initialData && 'anchor' in t.initialData;
-
-        // Not the link modal.
-        if (!isOK) {
-          return oldEd.apply(this, [t, r]);
-        }
-
-        // If an existing link is being edited, check for the tracking flag `@TrackLink` at the end
-        // of the url. Remove that from the URL and instead check the checkbox.
-        // Default to true for new links (better UX - tracking enabled by default).
-        let checked = true;
-
-        // Check if this is an existing link being edited
-        if (t.initialData.url && t.initialData.url.value && t.initialData.url.value !== '') {
-          const t2 = t;
-          const url = t2.initialData.url.value.replace(/@TrackLink$/, '');
-
-          if (t2.initialData.url.value !== url) {
-            // Link has @TrackLink suffix - keep it checked
-            t2.initialData.url.value = url;
-            checked = true;
-          } else {
-            // Link doesn't have @TrackLink suffix - uncheck it
-            checked = false;
-          }
-        }
-
-        // Execute the modal.
-        const modal = oldEd.apply(this, [t, r]);
-
-        // Is it the link dialog?
-        if (isOK) {
-          // Insert tracking checkbox.
-          const c = document.createElement('input');
-          c.setAttribute('type', 'checkbox');
-
-          if (checked) {
-            c.setAttribute('checked', checked);
-            // CRITICAL FIX: Sync the Vue instance state with the checkbox state
-            // This ensures that when the checkbox appears checked, the tracking
-            // will actually work when the user saves without manually toggling.
-            self.isTrackLink = true;
-          }
-
-          // Store the checkbox's state in the Vue instance to pick up from
-          // the TinyMCE link conversion callback.
-          c.onchange = (e) => {
-            self.isTrackLink = e.target.checked;
-          };
-
-          const l = document.createElement('label');
-          l.appendChild(c);
-          l.appendChild(document.createTextNode('Track link?'));
-          l.classList.add('tox-label', 'tox-track-link');
-
-          document.querySelector('.tox-form__controls-h-stack .tox-control-wrap').appendChild(l);
-        }
-        return modal;
-      };
     },
 
     onMediaSelect(media) {
@@ -369,10 +301,10 @@ export default {
 
     computedValue: {
       get() {
-        return this.value;
+        return this.modelValue;
       },
       set(newValue) {
-        this.$emit('input', newValue);
+        this.$emit('update:modelValue', newValue);
       },
     },
   },

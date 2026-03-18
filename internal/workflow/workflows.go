@@ -15,6 +15,7 @@ import (
 )
 
 type workflowMutationRequest struct {
+	Name  string            `json:"name"`
 	Nodes []workflowNodeDTO `json:"nodes"`
 	Edges []workflowEdgeDTO `json:"edges"`
 }
@@ -323,6 +324,35 @@ func runWorkflowHandler(re *core.RequestEvent) error {
 	return re.JSON(http.StatusOK, payload)
 }
 
+func cancelRunHandler(re *core.RequestEvent) error {
+	run, err := re.App.FindRecordById("workflow_runs", re.Request.PathValue("id"))
+	if err != nil {
+		return re.JSON(http.StatusNotFound, map[string]string{"error": "run not found"})
+	}
+
+	status := run.GetString("status")
+	if status != "queued" && status != "waiting" {
+		return re.JSON(http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("run cannot be cancelled from status %q", status)})
+	}
+
+	now := time.Now().UTC()
+	run.Set("status", "cancelled")
+	run.Set("summary", "Workflow run was cancelled from the admin.")
+	run.Set("resume_from_node", "")
+	run.Set("wake_at", nil)
+	run.Set("ended_at", now)
+	if err := re.App.Save(run); err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	detail, err := buildRunDetail(re.App, run.Id)
+	if err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return re.JSON(http.StatusOK, detail)
+}
+
 func webhookTriggerHandler(re *core.RequestEvent) error {
 	hookPath := normalizeWebhookPath(re.Request.PathValue("hookPath"))
 	if capture := captureStore.findWaiting(hookPath); capture != nil {
@@ -503,6 +533,7 @@ func applyWorkflowMutation(app core.App, workflow *core.Record, req workflowMuta
 		"nodeKeys":     collectNodeKeys(req.Nodes),
 		"edgeKeys":     collectEdgeKeys(req.Edges),
 	})
+	workflow.Set("name", defaultWorkflowName(strings.TrimSpace(req.Name)))
 	workflow.Set("trigger_type", triggerTypeFromNodes(req.Nodes))
 	return app.Save(workflow)
 }

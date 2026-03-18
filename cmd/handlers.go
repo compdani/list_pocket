@@ -45,6 +45,8 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	admin.GET(path.Join(uriAdmin, ""), wrapEcho(a, tpl, cfg, urlCfg, nil, a.AdminPage))
 	admin.GET(path.Join(uriAdmin, "/custom.css"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_css")))
 	admin.GET(path.Join(uriAdmin, "/custom.js"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
+	admin.GET("/custom.css", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_css")))
+	admin.GET("/custom.js", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
 	admin.GET(path.Join(uriAdmin, "/{path...}"), wrapEcho(a, tpl, cfg, urlCfg, []string{"path"}, a.AdminPage))
 
 	publicAuth := se.Group("")

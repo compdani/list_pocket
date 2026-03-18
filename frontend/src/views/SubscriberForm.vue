@@ -1,582 +1,670 @@
 <template>
-  <form @submit.prevent="onSubmit">
+  <v-form @submit.prevent="onSubmit">
     <div class="admin-dialog-card modal-card content">
       <header class="admin-dialog-head modal-card-head">
-        <span v-if="isEditing" class="status-pill" :class="data.status">
-          {{ $t(`subscribers.status.${data.status}`) }}
-        </span>
-        <h4 v-if="isEditing">
+        <div class="dialog-meta-row">
+          <p v-if="isEditing" class="entity-meta has-text-grey is-size-7">
+            {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.id}`" /></span>
+            {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
+          </p>
+          <span v-if="isEditing" class="status-pill" :class="data.status">
+            {{ $t(`subscribers.status.${data.status}`) }}
+          </span>
+        </div>
+
+        <h4 v-if="isEditing" class="dialog-title">
           {{ data.name }}
         </h4>
-        <h4 v-else>
+        <h4 v-else class="dialog-title">
           {{ $t('subscribers.newSubscriber') }}
         </h4>
-
-        <p v-if="isEditing" class="has-text-grey is-size-7">
-          {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.id}`" /></span>
-          {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
-        </p>
       </header>
 
-      <section expanded class="admin-dialog-body modal-card-body">
-        <div class="form-field">
-          <label class="form-label" for="subscriber-email">{{ $t('subscribers.email') }}</label>
-          <input
-            id="subscriber-email"
-            ref="focus"
-            v-model="form.email"
-            class="input"
-            maxlength="200"
-            name="email"
-            :placeholder="$t('subscribers.email')"
-            required
-            type="email"
-          >
-        </div>
+      <section class="admin-dialog-body modal-card-body">
+        <v-row class="mb-1">
+          <v-col cols="12" md="8">
+            <v-text-field
+              ref="focus"
+              v-model="form.email"
+              :label="$t('subscribers.email')"
+              maxlength="200"
+              name="email"
+              :placeholder="$t('subscribers.email')"
+              required
+              type="email"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
 
-        <div class="columns">
-          <div class="column is-8">
-            <div class="form-field">
-              <label class="form-label" for="subscriber-name">{{ $t('globals.fields.name') }}</label>
-              <input
-                id="subscriber-name"
-                v-model="form.name"
-                class="input"
-                maxlength="200"
-                name="name"
-                :placeholder="$t('globals.fields.name')"
-                type="text"
-              >
-            </div>
-          </div>
-          <div class="column is-4">
-            <div class="form-field">
-              <label class="form-label" for="subscriber-status">{{ $t('globals.fields.status') }}</label>
-              <select
-                id="subscriber-status"
-                v-model="form.status"
-                class="input"
-                name="status"
-                required
-              >
-                <option value="enabled">
-                  {{ $t('subscribers.status.enabled') }}
-                </option>
-                <option value="blocklisted">
-                  {{ $t('subscribers.status.blocklisted') }}
-                </option>
-              </select>
-              <p class="form-help">{{ $t('subscribers.blocklistedHelp') }}</p>
-            </div>
-          </div>
-        </div>
+          <v-col cols="12" md="4">
+            <v-select
+              v-model="form.status"
+              :items="statusOptions"
+              item-title="title"
+              item-value="value"
+              :label="$t('globals.fields.status')"
+              name="status"
+              required
+              variant="outlined"
+              density="comfortable"
+            />
+            <p class="form-help">{{ $t('subscribers.blocklistedHelp') }}</p>
+          </v-col>
+        </v-row>
 
-        <div class="settings-tabs">
-          <button type="button" class="settings-tab" :class="{ 'is-active': activeTab === 'lists' }" @click="activeTab = 'lists'">
+        <v-text-field
+          v-model="form.name"
+          :label="$t('globals.fields.name')"
+          maxlength="200"
+          name="name"
+          :placeholder="$t('globals.fields.name')"
+          type="text"
+          variant="outlined"
+          density="comfortable"
+          class="mb-2"
+        />
+
+        <v-tabs
+          v-model="activeTab"
+          color="primary"
+          density="comfortable"
+          class="settings-tabs mb-4"
+          grow
+        >
+          <v-tab value="lists">
             {{ $t('globals.terms.lists') }}
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            :class="{ 'is-active': activeTab === 'subscriptions' }"
-            :disabled="!data.lists || data.lists.length === 0"
-            @click="activeTab = 'subscriptions'"
-          >
+          </v-tab>
+          <v-tab value="subscriptions" :disabled="!data.lists || data.lists.length === 0">
             {{ `${$tc('globals.terms.subscriptions', 2)} (${data.lists ? data.lists.length : 0})` }}
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            :class="{ 'is-active': activeTab === 'bounces' }"
-            :disabled="bounces.length === 0"
-            @click="activeTab = 'bounces'"
-          >
+          </v-tab>
+          <v-tab value="bounces" :disabled="bounces.length === 0">
             {{ `${$t('globals.terms.bounces')} (${bounces.length})` }}
-          </button>
-          <button
-            type="button"
-            class="settings-tab"
-            :class="{ 'is-active': activeTab === 'activity' }"
-            :disabled="!isEditing"
-            @click="activeTab = 'activity'"
-          >
+          </v-tab>
+          <v-tab value="activity" :disabled="!isEditing">
             {{ $t('subscribers.activity') }}
-          </button>
-        </div>
+          </v-tab>
+        </v-tabs>
 
-        <section v-if="activeTab === 'lists'">
-          <div class="form-field">
-            <label class="form-label" for="subscriber-lists">{{ $t('subscribers.lists') }}</label>
-            <div class="select is-multiple is-fullwidth">
-              <select
-                id="subscriber-lists"
-                :value="selectedListIds"
-                :aria-label="$t('subscribers.lists')"
-                class="multi-select"
+        <v-window v-model="activeTab" :touch="false" class="tab-window">
+          <v-window-item value="lists">
+            <section class="tab-panel">
+              <v-select
+                :model-value="selectedListIds"
+                :items="availableLists"
+                :label="$t('subscribers.lists')"
+                item-title="name"
+                item-value="id"
                 multiple
-                size="6"
-                @change="onListsChange($event)"
-              >
-                <option v-for="list in availableLists" :key="list.id" :value="String(list.id)">
-                  {{ list.name }}
-                </option>
-              </select>
-            </div>
-            <p class="form-help">{{ $t('subscribers.listsHelp') }}</p>
-          </div>
-            <div class="columns">
-              <div class="column is-7">
-                <div class="form-field">
-                  <label class="checkbox-row">
-                    <input v-model="form.preconfirm" :disabled="!hasOptinList" type="checkbox">
-                    <span>{{ $t('subscribers.preconfirm') }}</span>
-                  </label>
-                  <p class="form-help">{{ $t('subscribers.preconfirmHelp') }}</p>
+                chips
+                closable-chips
+                variant="outlined"
+                density="comfortable"
+                @update:model-value="onListsChange"
+              />
+              <p class="form-help">{{ $t('subscribers.listsHelp') }}</p>
+
+              <div class="lists-actions">
+                <div class="lists-actions-main">
+                  <v-checkbox
+                    v-model="form.preconfirm"
+                    :disabled="!hasOptinList"
+                    :label="$t('subscribers.preconfirm')"
+                    density="comfortable"
+                    hide-details
+                  />
+                  <p class="form-help mt-1">{{ $t('subscribers.preconfirmHelp') }}</p>
                 </div>
+
+                <v-btn
+                  v-if="$can('subscribers:manage') && isEditing"
+                  type="button"
+                  color="primary"
+                  variant="text"
+                  prepend-icon="mdi-email-outline"
+                  :disabled="!hasOptinList"
+                  class="optin-action"
+                  @click.prevent="sendOptinConfirmation"
+                >
+                  {{ $t('subscribers.sendOptinConfirm') }}
+                </v-btn>
               </div>
-              <div v-if="$can('subscribers:manage') && isEditing" class="column is-5 has-text-right">
-                <a href="#" @click.prevent="sendOptinConfirmation" :class="{ 'is-disabled': !hasOptinList }">
-                  <b-icon icon="email-outline" size="is-small" />
-                  {{ $t('subscribers.sendOptinConfirm') }}</a>
+            </section>
+          </v-window-item>
+
+          <v-window-item value="subscriptions">
+            <section v-if="data.lists && data.lists.length > 0" class="tab-panel">
+              <h5 class="mb-3">{{ `${$tc('globals.terms.subscriptions', 2)} (${data.lists.length})` }}</h5>
+              <div class="table-wrap">
+                <table class="dialog-table">
+                  <thead>
+                    <tr>
+                      <th>{{ $tc('globals.terms.list', 1) }}</th>
+                      <th>{{ $t('globals.fields.status') }}</th>
+                      <th>{{ $t('globals.fields.createdAt') }}</th>
+                      <th>{{ $t('globals.fields.updatedAt') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in data.lists" :key="item.id">
+                      <td>
+                        <router-link :to="`/lists/${item.id}`">
+                          {{ item.name }}
+                        </router-link>
+                        <div class="subtle-row">
+                          <span class="status-pill neutral">
+                            {{ $t(`lists.optins.${item.optin}`) }}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span class="status-pill neutral">
+                          {{ $t(`subscribers.status.${item.subscriptionStatus}`) }}
+                        </span>
+                        <div v-if="item.optin === 'double' && item.subscriptionMeta.optinIp" class="subtle-row">
+                          {{ item.subscriptionMeta.optinIp }}
+                        </div>
+                      </td>
+                      <td>{{ $utils.niceDate(item.subscriptionCreatedAt, true) }}</td>
+                      <td>{{ $utils.niceDate(item.subscriptionCreatedAt, true) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
-            </div>
-        </section>
+            </section>
+          </v-window-item>
 
-        <section v-if="activeTab === 'subscriptions' && data.lists && data.lists.length > 0" class="mt-5">
-          <h5 class="mb-3">{{ `${$tc('globals.terms.subscriptions', 2)} (${data.lists.length})` }}</h5>
-          <div class="table-wrap">
-            <table class="dialog-table">
-              <thead>
-                <tr>
-                  <th>{{ $tc('globals.terms.list', 1) }}</th>
-                  <th>{{ $t('globals.fields.status') }}</th>
-                  <th>{{ $t('globals.fields.createdAt') }}</th>
-                  <th>{{ $t('globals.fields.updatedAt') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="item in data.lists" :key="item.id">
-                  <td>
-                    <router-link :to="`/lists/${item.id}`">
-                      {{ item.name }}
-                    </router-link>
-                    <div class="subtle-row">
-                      <span class="status-pill neutral">
-                        {{ $t(`lists.optins.${item.optin}`) }}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span class="status-pill neutral">
-                      {{ $t(`subscribers.status.${item.subscriptionStatus}`) }}
-                    </span>
-                    <div v-if="item.optin === 'double' && item.subscriptionMeta.optinIp" class="subtle-row">
-                      {{ item.subscriptionMeta.optinIp }}
-                    </div>
-                  </td>
-                  <td>{{ $utils.niceDate(item.subscriptionCreatedAt, true) }}</td>
-                  <td>{{ $utils.niceDate(item.subscriptionCreatedAt, true) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+          <v-window-item value="bounces">
+            <section v-if="bounces.length > 0" class="tab-panel bounces">
+              <div class="panel-head">
+                <h5>{{ `${$t('globals.terms.bounces')} (${bounces.length})` }}</h5>
+                <v-btn
+                  v-if="isBounceVisible"
+                  type="button"
+                  color="error"
+                  variant="text"
+                  class="danger-action"
+                  @click.prevent="deleteBounces"
+                >
+                  {{ $t('globals.buttons.delete') }}
+                </v-btn>
+              </div>
 
-        <section v-if="activeTab === 'bounces' && bounces.length > 0" class="bounces mt-5">
-            <h5 class="mb-3">{{ `${$t('globals.terms.bounces')} (${bounces.length})` }}</h5>
-            <a href="#" class="is-size-6 is-pulled-right" disabed="true" @click.prevent="deleteBounces"
-              v-if="isBounceVisible">
-              {{ $t('globals.buttons.delete') }}
-            </a>
+              <div class="table-wrap">
+                <table class="dialog-table">
+                  <thead>
+                    <tr>
+                      <th>{{ $tc('globals.terms.campaign', 1) }}</th>
+                      <th>{{ $t('globals.fields.createdAt') }}</th>
+                      <th>{{ $t('globals.fields.type') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="bounce in bounces" :key="bounce.id">
+                      <td>
+                        <router-link
+                          v-if="bounce.campaign"
+                          :to="{ name: 'bounces', query: { campaign_id: bounce.campaign.id } }"
+                        >
+                          {{ bounce.campaign.name }}
+                        </router-link>
+                      </td>
+                      <td>{{ $utils.niceDate(bounce.createdAt, true) }}</td>
+                      <td>
+                        <a href="#" @click.prevent="toggleMeta(bounce.id)">
+                          {{ bounce.source }}
+                        </a>
+                        <pre v-if="visibleMeta[bounce.id]" class="meta-block">{{ bounce.meta }}</pre>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </v-window-item>
 
-            <div class="table-wrap">
-              <table class="dialog-table">
-                <thead>
-                  <tr>
-                    <th>{{ $tc('globals.terms.campaign', 1) }}</th>
-                    <th>{{ $t('globals.fields.createdAt') }}</th>
-                    <th>{{ $t('globals.fields.type') }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="bounce in bounces" :key="bounce.id">
-                    <td>
-                      <router-link
-                        v-if="bounce.campaign"
-                        :to="{ name: 'bounces', query: { campaign_id: bounce.campaign.id } }"
-                      >
-                        {{ bounce.campaign.name }}
-                      </router-link>
-                    </td>
-                    <td>{{ $utils.niceDate(bounce.createdAt, true) }}</td>
-                    <td>
-                      <a href="#" @click.prevent="toggleMeta(bounce.id)">
-                        {{ bounce.source }}
-                      </a>
-                      <pre v-if="visibleMeta[bounce.id]" class="meta-block">{{ bounce.meta }}</pre>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-        </section>
+          <v-window-item value="activity">
+            <section v-if="isEditing && data.id" class="tab-panel activity">
+              <h5 class="mb-3">{{ $t('subscribers.activity') }}</h5>
+              <subscriber-activity :subscriber-id="data.id" />
+            </section>
+          </v-window-item>
+        </v-window>
 
-        <section v-if="activeTab === 'activity' && isEditing && data.id" class="activity mt-5">
-          <h5 class="mb-3">{{ $t('subscribers.activity') }}</h5>
-          <subscriber-activity :subscriber-id="data.id" />
-        </section>
+        <v-text-field
+          v-model="tagsInput"
+          :aria-label="$t('globals.terms.tags')"
+          :label="$t('globals.terms.tags')"
+          :placeholder="$t('globals.terms.tags')"
+          type="text"
+          variant="outlined"
+          density="comfortable"
+          class="mt-6 mb-2"
+        />
 
-        <div class="form-field mt-6">
-          <label class="form-label" for="subscriber-tags">{{ $t('globals.terms.tags') }}</label>
-          <input
-            id="subscriber-tags"
-            :value="tagsInput"
-            :aria-label="$t('globals.terms.tags')"
-            class="input"
-            :placeholder="$t('globals.terms.tags')"
-            type="text"
-            @input="tagsInput = $event.target.value"
-          >
-        </div>
-
-        <div class="form-field mt-6">
-          <label class="form-label" for="subscriber-attribs">{{ $t('globals.terms.attribs') }}</label>
-          <textarea id="subscriber-attribs" v-model="form.strAttribs" class="input textarea-input" name="attribs" />
-          <p class="form-help">{{ $t('subscribers.attribsHelp') }} {{ egAttribs }}</p>
-          <a href="https://listmonk.app/docs/concepts" target="_blank" rel="noopener noreferrer" class="is-size-7">
-            {{ $t('globals.buttons.learnMore') }}
-          </a>
-        </div>
+        <v-textarea
+          v-model="form.strAttribs"
+          :label="$t('globals.terms.attribs')"
+          name="attribs"
+          variant="outlined"
+          auto-grow
+          rows="5"
+          class="mb-1"
+        />
+        <p class="form-help">{{ $t('subscribers.attribsHelp') }} {{ egAttribs }}</p>
+        <a href="https://listmonk.app/docs/concepts" target="_blank" rel="noopener noreferrer" class="is-size-7">
+          {{ $t('globals.buttons.learnMore') }}
+        </a>
       </section>
-      <footer class="admin-dialog-foot modal-card-foot has-text-right">
-        <button type="button" class="button secondary-button" @click="$emit('close')">
+
+      <footer class="admin-dialog-foot modal-card-foot">
+        <v-btn type="button" variant="outlined" class="dialog-action" @click="$emit('close')">
           {{ $t('globals.buttons.close') }}
-        </button>
-        <button
+        </v-btn>
+        <v-btn
           v-if="$can('subscribers:manage')"
-          class="button primary-button"
+          color="primary"
+          variant="flat"
+          class="dialog-action"
           :disabled="loading.subscribers"
+          :loading="loading.subscribers"
           type="submit"
         >
           {{ $t('globals.buttons.save') }}
-        </button>
+        </v-btn>
       </footer>
     </div>
-  </form>
+  </v-form>
 </template>
 
-<script>
-import { mapState } from 'vuex';
+<script setup>
+import {
+  computed,
+  getCurrentInstance,
+  nextTick,
+  onMounted,
+  ref,
+  toRef,
+  watch,
+} from 'vue';
+import { useStore } from 'vuex';
 import CopyText from '../components/CopyText.vue';
 import SubscriberActivity from '../components/SubscriberActivity.vue';
 
-export default {
-  components: {
-    CopyText,
-    SubscriberActivity,
+const props = defineProps({
+  data: {
+    type: Object,
+    default: () => ({ lists: [] }),
   },
+  isEditing: Boolean,
+});
 
-  props: {
-    data: {
-      type: Object,
-      default: () => ({ lists: [] }),
-    },
-    isEditing: Boolean,
+const emit = defineEmits(['finished', 'close']);
+const { proxy } = getCurrentInstance();
+const store = useStore();
+
+const data = toRef(props, 'data');
+const isEditing = toRef(props, 'isEditing');
+
+const form = ref({
+  lists: [],
+  strAttribs: '{}',
+  status: 'enabled',
+  preconfirm: false,
+  tags: [],
+});
+
+const focus = ref(null);
+const isBounceVisible = ref(false);
+const bounces = ref([]);
+const visibleMeta = ref({});
+const activeTab = ref('lists');
+
+const egAttribs = '{"job": "developer", "location": "Mars", "has_rocket": true}';
+
+const lists = computed(() => store.state.lists);
+const loading = computed(() => store.state.loading);
+
+const statusOptions = computed(() => [
+  { title: proxy.$t('subscribers.status.enabled'), value: 'enabled' },
+  { title: proxy.$t('subscribers.status.blocklisted'), value: 'blocklisted' },
+]);
+
+const availableLists = computed(() => (
+  Array.isArray(lists.value && lists.value.results) ? lists.value.results : []
+));
+
+const selectedListIds = computed(() => (
+  Array.isArray(form.value.lists)
+    ? form.value.lists.map((list) => Number(list.id)).filter((id) => !Number.isNaN(id))
+    : []
+));
+
+const tagsInput = computed({
+  get() {
+    return Array.isArray(form.value.tags) ? form.value.tags.join(', ') : '';
   },
-
-  data() {
-    return {
-      // Binds form input values. This is populated by subscriber props passed
-      // from the parent component in mounted().
-      form: {
-        lists: [],
-        strAttribs: '{}',
-        status: 'enabled',
-        preconfirm: false,
-        tags: [],
-      },
-      isBounceVisible: false,
-      bounces: [],
-      visibleMeta: {},
-      activeTab: 'lists',
-
-      egAttribs: '{"job": "developer", "location": "Mars", "has_rocket": true}',
-    };
+  set(value) {
+    form.value.tags = value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .filter((tag, index, all) => all.indexOf(tag) === index);
   },
+});
 
-  methods: {
-    initForm() {
-      const baseForm = {
-        id: null,
-        email: '',
-        name: '',
-        lists: [],
-        strAttribs: '{}',
-        status: 'enabled',
-        preconfirm: false,
-        tags: [],
-      };
+const hasOptinList = computed(() => (
+  Array.isArray(form.value.lists) && form.value.lists.some((l) => l.optin === 'double')
+));
 
-      if (!this.$props.isEditing) {
-        this.form = baseForm;
-        this.bounces = [];
-        this.visibleMeta = {};
-        return;
-      }
+function initForm() {
+  const baseForm = {
+    id: null,
+    email: '',
+    name: '',
+    lists: [],
+    strAttribs: '{}',
+    status: 'enabled',
+    preconfirm: false,
+    tags: [],
+  };
 
-      this.form = {
-        ...baseForm,
-        ...this.$props.data,
-        email: this.$props.data.email || '',
-        name: this.$props.data.name || '',
-        status: this.$props.data.status || 'enabled',
-        lists: Array.isArray(this.$props.data.lists) ? [...this.$props.data.lists] : [],
-        strAttribs: JSON.stringify(this.$props.data.attribs || {}, null, 4),
-        tags: Array.isArray((this.$props.data.attribs || {}).tags) ? [...this.$props.data.attribs.tags] : [],
-      };
-      this.bounces = [];
-      this.visibleMeta = {};
-      this.activeTab = 'lists';
+  if (!props.isEditing) {
+    form.value = baseForm;
+    bounces.value = [];
+    visibleMeta.value = {};
+    return;
+  }
 
-      if (this.form.id) {
-        this.getBounces();
-      }
-    },
+  const source = props.data || {};
+  form.value = {
+    ...baseForm,
+    ...source,
+    email: source.email || '',
+    name: source.name || '',
+    status: source.status || 'enabled',
+    lists: Array.isArray(source.lists) ? [...source.lists] : [],
+    strAttribs: JSON.stringify(source.attribs || {}, null, 4),
+    tags: Array.isArray((source.attribs || {}).tags) ? [...source.attribs.tags] : [],
+  };
+  bounces.value = [];
+  visibleMeta.value = {};
+  activeTab.value = 'lists';
 
-    toggleBounces() {
-      this.isBounceVisible = !this.isBounceVisible;
-    },
+  if (form.value.id) {
+    getBounces();
+  }
+}
 
-    toggleMeta(id) {
-      this.visibleMeta = {
-        ...this.visibleMeta,
-        [id]: !this.visibleMeta[id],
-      };
-    },
+function toggleMeta(id) {
+  visibleMeta.value = {
+    ...visibleMeta.value,
+    [id]: !visibleMeta.value[id],
+  };
+}
 
-    onListsChange(event) {
-      const selectedIDs = Array.from(event.target.selectedOptions || [], (option) => Number(option.value));
-      const listMap = new Map(this.availableLists.map((list) => [Number(list.id), list]));
-      this.form.lists = selectedIDs
-        .map((id) => listMap.get(id))
-        .filter(Boolean);
-    },
+function onListsChange(selectedIDs) {
+  const normalizedIDs = Array.isArray(selectedIDs) ? selectedIDs.map((id) => Number(id)) : [];
+  const listMap = new Map(availableLists.value.map((list) => [Number(list.id), list]));
+  form.value.lists = normalizedIDs
+    .map((id) => listMap.get(id))
+    .filter(Boolean);
+}
 
-    deleteBounces(sub) {
-      this.$utils.confirm(
-        null,
-        () => {
-          this.$api.deleteSubscriberBounces(this.form.id).then(() => {
-            this.getBounces();
-            this.$utils.toast(this.$t('globals.messages.deleted', { name: sub.name }));
-          });
-        },
-      );
-    },
-
-    getBounces() {
-      this.$api.getSubscriberBounces(this.form.id).then((data) => {
-        this.bounces = data;
+function deleteBounces() {
+  proxy.$utils.confirm(
+    null,
+    () => {
+      proxy.$api.deleteSubscriberBounces(form.value.id).then(() => {
+        getBounces();
+        const subscriberName = form.value.name || form.value.email;
+        proxy.$utils.toast(proxy.$t('globals.messages.deleted', { name: subscriberName }));
       });
     },
+  );
+}
 
-    onSubmit() {
-      if (this.isEditing) {
-        this.updateSubscriber();
-        return;
-      }
+function getBounces() {
+  proxy.$api.getSubscriberBounces(form.value.id).then((response) => {
+    bounces.value = response;
+  });
+}
 
-      this.createSubscriber();
-    },
+function onSubmit() {
+  if (isEditing.value) {
+    updateSubscriber();
+    return;
+  }
 
-    createSubscriber() {
-      let attribs = {};
-      if (this.form.strAttribs) {
-        attribs = this.validateAttribs(this.form.strAttribs);
-        if (!attribs) {
-          return;
-        }
-      }
+  createSubscriber();
+}
 
-      if (this.form.tags.length > 0) {
-        attribs.tags = [...this.form.tags];
-      } else {
-        delete attribs.tags;
-      }
+function createSubscriber() {
+  let attribs = {};
+  if (form.value.strAttribs) {
+    attribs = validateAttribs(form.value.strAttribs);
+    if (!attribs) {
+      return;
+    }
+  }
 
-      const data = {
-        email: this.form.email,
-        name: this.form.name,
-        status: this.form.status,
-        attribs,
-        preconfirm_subscriptions: this.form.preconfirm,
+  if (form.value.tags.length > 0) {
+    attribs.tags = [...form.value.tags];
+  } else {
+    delete attribs.tags;
+  }
 
-        // List IDs.
-        lists: this.form.lists.map((l) => l.id),
-      };
+  const payload = {
+    email: form.value.email,
+    name: form.value.name,
+    status: form.value.status,
+    attribs,
+    preconfirm_subscriptions: form.value.preconfirm,
 
-      this.$api.createSubscriber(data).then((d) => {
-        this.$emit('finished');
-        this.$emit('close');
-        this.$utils.toast(this.$t('globals.messages.created', { name: d.name }));
-      });
-    },
+    // List IDs.
+    lists: form.value.lists.map((l) => l.id),
+  };
 
-    updateSubscriber() {
-      let attribs = {};
-      if (this.form.strAttribs) {
-        attribs = this.validateAttribs(this.form.strAttribs);
-        if (!attribs) {
-          return;
-        }
-      }
+  proxy.$api.createSubscriber(payload).then((response) => {
+    emit('finished');
+    emit('close');
+    proxy.$utils.toast(proxy.$t('globals.messages.created', { name: response.name }));
+  });
+}
 
-      if (this.form.tags.length > 0) {
-        attribs.tags = [...this.form.tags];
-      } else {
-        delete attribs.tags;
-      }
+function updateSubscriber() {
+  let attribs = {};
+  if (form.value.strAttribs) {
+    attribs = validateAttribs(form.value.strAttribs);
+    if (!attribs) {
+      return;
+    }
+  }
 
-      const data = {
-        id: this.form.id,
-        email: this.form.email,
-        name: this.form.name,
-        status: this.form.status,
-        preconfirm_subscriptions: this.form.preconfirm,
-        attribs,
+  if (form.value.tags.length > 0) {
+    attribs.tags = [...form.value.tags];
+  } else {
+    delete attribs.tags;
+  }
 
-        // List IDs.
-        lists: this.form.lists.map((l) => l.id),
-      };
+  const payload = {
+    id: form.value.id,
+    email: form.value.email,
+    name: form.value.name,
+    status: form.value.status,
+    preconfirm_subscriptions: form.value.preconfirm,
+    attribs,
 
-      this.$api.updateSubscriber(data).then((d) => {
-        this.$emit('finished');
-        this.$emit('close');
-        this.$utils.toast(this.$t('globals.messages.updated', { name: d.name }));
-      });
-    },
+    // List IDs.
+    lists: form.value.lists.map((l) => l.id),
+  };
 
-    sendOptinConfirmation() {
-      this.$api.sendSubscriberOptin(this.form.id).then(() => {
-        this.$utils.toast(this.$t('subscribers.sentOptinConfirm'));
-      });
-    },
+  proxy.$api.updateSubscriber(payload).then((response) => {
+    emit('finished');
+    emit('close');
+    proxy.$utils.toast(proxy.$t('globals.messages.updated', { name: response.name }));
+  });
+}
 
-    validateAttribs(str) {
-      // Parse and validate attributes JSON.
-      let attribs = {};
-      try {
-        attribs = JSON.parse(str);
-      } catch (e) {
-        this.$utils.toast(
-          `${this.$t('subscribers.invalidJSON')}: ${e.toString()}`,
-          'is-danger',
+function sendOptinConfirmation() {
+  proxy.$api.sendSubscriberOptin(form.value.id).then(() => {
+    proxy.$utils.toast(proxy.$t('subscribers.sentOptinConfirm'));
+  });
+}
 
-          3000,
-        );
-        return null;
-      }
-      if (attribs instanceof Array) {
-        this.$utils.toast('Attributes should be a map {} and not an array []', 'is-danger', 3000);
-        return null;
-      }
+function validateAttribs(str) {
+  // Parse and validate attributes JSON.
+  let attribs = {};
+  try {
+    attribs = JSON.parse(str);
+  } catch (e) {
+    proxy.$utils.toast(
+      `${proxy.$t('subscribers.invalidJSON')}: ${e.toString()}`,
+      'is-danger',
+      3000,
+    );
+    return null;
+  }
 
-      return attribs;
-    },
-  },
+  if (attribs instanceof Array) {
+    proxy.$utils.toast('Attributes should be a map {} and not an array []', 'is-danger', 3000);
+    return null;
+  }
 
-  computed: {
-    ...mapState(['lists', 'loading']),
+  return attribs;
+}
 
-    availableLists() {
-      return Array.isArray(this.lists && this.lists.results) ? this.lists.results : [];
-    },
+watch(data, () => {
+  initForm();
+}, { deep: true });
 
-    selectedListIds() {
-      return Array.isArray(this.form.lists) ? this.form.lists.map((list) => String(list.id)) : [];
-    },
+watch(isEditing, () => {
+  initForm();
+});
 
-    tagsInput: {
-      get() {
-        return Array.isArray(this.form.tags) ? this.form.tags.join(', ') : '';
-      },
-      set(value) {
-        this.form.tags = value
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean)
-          .filter((tag, index, all) => all.indexOf(tag) === index);
-      },
-    },
+onMounted(() => {
+  initForm();
 
-    hasOptinList() {
-      return this.form.lists.some((l) => l.optin === 'double');
-    },
-  },
-
-  watch: {
-    data: {
-      deep: true,
-      handler() {
-        this.initForm();
-      },
-    },
-
-    isEditing() {
-      this.initForm();
-    },
-  },
-
-  mounted() {
-    this.initForm();
-
-    this.$nextTick(() => {
-      if (this.$refs.focus && typeof this.$refs.focus.focus === 'function') {
-        this.$refs.focus.focus();
-      }
-    });
-  },
-};
+  nextTick(() => {
+    if (focus.value && typeof focus.value.focus === 'function') {
+      focus.value.focus();
+    }
+  });
+});
 </script>
 
 <style scoped>
-.form-field {
-  margin-bottom: 18px;
+.admin-dialog-card {
+  background: #fff;
+  border: 1px solid #dce5f2;
+  border-radius: 16px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  width: min(920px, calc(100vw - 32px));
 }
 
-.form-label {
+.admin-dialog-head {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border-bottom: 1px solid #ebf1fb;
   display: block;
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 8px;
+  padding: 18px 20px;
+}
+
+.dialog-meta-row {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+
+.entity-meta {
+  margin: 0;
+}
+
+.dialog-title {
+  margin: 8px 0 0;
+}
+
+.admin-dialog-body {
+  overflow: auto;
+  padding: 24px 20px;
+}
+
+.admin-dialog-foot {
+  background: #fff;
+  border-top: 1px solid #ebf1fb;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 20px 20px;
+}
+
+.form-field {
+  margin-bottom: 18px;
 }
 
 .form-help {
   color: #667085;
   font-size: 0.9rem;
+  margin-top: 4px;
+}
+
+.tab-panel {
+  background: #f8fbff;
+  border: 1px solid #e7eefb;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.tab-window {
+  overflow: visible;
+}
+
+.lists-actions {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
   margin-top: 8px;
 }
 
-.textarea-input {
-  min-height: 120px;
-  resize: vertical;
+.lists-actions-main {
+  flex: 1;
+  min-width: 0;
 }
 
-.multi-select {
-  min-height: 180px;
-  padding: 10px;
-  width: 100%;
+.optin-action {
+  align-self: flex-start;
 }
 
-.checkbox-row {
+.panel-head {
   align-items: center;
   display: flex;
-  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.panel-head h5 {
+  margin: 0;
+}
+
+.table-wrap {
+  border: 1px solid #e4ebf7;
+  border-radius: 12px;
+  overflow-x: auto;
 }
 
 .dialog-table {
   border-collapse: collapse;
   width: 100%;
+}
+
+.dialog-table th {
+  background: #f8fbff;
+  color: #334155;
+  font-weight: 600;
 }
 
 .dialog-table th,
@@ -607,99 +695,96 @@ export default {
   border-radius: 999px;
   color: #0f5bd8;
   display: inline-block;
-  float: right;
   font-size: 0.85rem;
   font-weight: 600;
   padding: 6px 10px;
 }
 
+.status-pill.enabled {
+  background: #eaf8ef;
+  color: #177245;
+}
+
+.status-pill.blocklisted {
+  background: #fff1f0;
+  color: #c2413a;
+}
+
 .status-pill.neutral {
-  float: none;
+  background: #f5f7fb;
+  color: #475467;
 }
 
-.button {
-  border: 1px solid #d0d5dd;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  min-height: 44px;
-  padding: 0 16px;
-}
-
-.primary-button {
-  background: #0f5bd8;
-  border-color: #0f5bd8;
-  color: #fff;
-}
-
-.primary-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.secondary-button {
-  background: #fff;
-  color: #1d2939;
-}
-
-.admin-dialog-card {
-  background: #fff;
-  border: 1px solid #ddd;
+:deep(.v-field) {
   border-radius: 12px;
-  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 48px);
-  overflow: hidden;
-  width: min(920px, calc(100vw - 32px));
 }
 
-.admin-dialog-head {
-  border-bottom: 0;
-  display: block;
-  padding: 20px 20px 0;
-}
-
-.admin-dialog-body {
-  overflow: auto;
-  padding: 24px 20px;
-}
-
-.admin-dialog-foot {
-  background: #fff;
-  border-top: 0;
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  padding: 0 20px 20px;
-}
-
-.admin-dialog-foot button {
-  flex: 1 1 0;
+.dialog-action {
+  height: 44px;
+  min-width: 120px;
 }
 
 .settings-tabs {
-  border-bottom: 1px solid #d8dfec;
+  background: #f8fbff;
+  border: 1px solid #d8dfec;
+  border-radius: 12px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
+  padding: 6px;
+  min-height: fit-content;
 }
 
-.settings-tab {
-  background: #fff;
-  border: 1px solid #d8dfec;
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
+:deep(.settings-tabs .v-slide-group__content) {
+  gap: 8px;
+}
+
+:deep(.settings-tabs .v-tab) {
+  border-radius: 10px;
   color: #667085;
-  cursor: pointer;
   font-size: 0.95rem;
-  padding: 10px 16px;
+  font-weight: 500;
+  text-transform: none;
 }
 
-.settings-tab.is-active {
-  background: #f8fbff;
+:deep(.settings-tabs .v-tab.v-tab--selected) {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
   color: #0f5bd8;
   font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .admin-dialog-head {
+    padding: 16px;
+  }
+
+  .admin-dialog-body {
+    padding: 16px;
+  }
+
+  .admin-dialog-foot {
+    flex-direction: column-reverse;
+    padding: 12px 16px 16px;
+  }
+
+  .dialog-action {
+    min-width: 100%;
+  }
+
+  .dialog-meta-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .lists-actions {
+    flex-direction: column;
+  }
+
+  .optin-action {
+    width: 100%;
+  }
 }
 </style>

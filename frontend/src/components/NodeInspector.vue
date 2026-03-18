@@ -6,7 +6,7 @@ const props = defineProps({
   node: { type: Object, default: null },
 });
 
-const emit = defineEmits(["captureSchema", "remove", "save"]);
+const emit = defineEmits(["captureSchema", "remove", "save", "saveLabel"]);
 
 const triggerMode = computed(() => String(configValue("mode") ?? "manual"));
 const fields = computed(() => {
@@ -30,6 +30,10 @@ const canCaptureSchema = computed(() => props.node?.data?.type === "trigger" && 
 
 function saveValue(key, event) {
   emit("save", key, event.target?.value ?? "");
+}
+
+function saveLabel(event) {
+  emit("saveLabel", event.target?.value ?? "");
 }
 
 function configValue(key) {
@@ -118,6 +122,19 @@ function describeContextTokens(type, mode) {
     </div>
 
     <div v-if="node" class="inspector-fields">
+      <div class="form-field-card">
+        <div class="form-field-header">
+          <label class="form-field-label" for="node-field-label">Nickname</label>
+          <p class="field-help">This is the display name shown on the canvas and in run logs.</p>
+        </div>
+        <input
+          id="node-field-label"
+          :value="node.data?.label ?? ''"
+          placeholder="Set Event Start"
+          @input="saveLabel($event)"
+        />
+      </div>
+
       <div
         v-for="field in fields"
         :key="field.key"

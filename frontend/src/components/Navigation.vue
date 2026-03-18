@@ -1,48 +1,98 @@
 <template>
   <v-list
-    :opened="openedGroups"
+    :opened="rail ? [] : openedGroups"
     nav
     density="comfortable"
     class="workflow-nav"
     @update:opened="updateOpenedGroups"
   >
-    <template v-for="item in navItems">
-      <v-list-item
-        v-if="!item.children"
-        :key="`item-${item.key}`"
-        :active="Boolean(activeItem[item.key])"
-        :prepend-icon="item.icon"
-        :title="item.label"
-        rounded="lg"
-        @click="navigate(item)"
-      />
+    <template v-if="rail">
+      <template v-for="item in navItems">
+        <v-tooltip v-if="!item.children" :key="`rail-${item.key}`" location="right">
+          <template #activator="{ props: tooltipProps }">
+            <v-list-item
+              v-bind="tooltipProps"
+              :active="Boolean(activeItem[item.key])"
+              :prepend-icon="item.icon"
+              rounded="lg"
+              class="workflow-nav-rail-item"
+              @click="navigate(item)"
+            />
+          </template>
+          <span>{{ item.label }}</span>
+        </v-tooltip>
 
-      <v-list-group
-        v-else
-        :key="`group-${item.key}`"
-        :value="item.key"
-      >
-        <template #activator="{ props }">
-          <v-list-item
-            v-bind="props"
-            :active="openedGroups.includes(item.key)"
-            :prepend-icon="item.icon"
-            :title="item.label"
-            rounded="lg"
-          />
-        </template>
+        <v-menu
+          v-else
+          :key="`rail-${item.key}`"
+          location="right start"
+          offset="8"
+        >
+          <template #activator="{ props: menuProps }">
+            <v-list-item
+              v-bind="menuProps"
+              :active="item.children.some((child) => Boolean(activeItem[child.key]))"
+              :prepend-icon="item.icon"
+              rounded="lg"
+              class="workflow-nav-rail-item"
+            />
+          </template>
 
+          <v-list min-width="220" density="comfortable">
+            <v-list-subheader>{{ item.label }}</v-list-subheader>
+            <v-list-item
+              v-for="child in item.children"
+              :key="`rail-child-${child.key}`"
+              :active="Boolean(activeItem[child.key])"
+              :prepend-icon="child.icon"
+              :title="child.label"
+              rounded="lg"
+              @click="navigate(child)"
+            />
+          </v-list>
+        </v-menu>
+      </template>
+    </template>
+
+    <template v-else>
+      <template v-for="item in navItems">
         <v-list-item
-          v-for="child in item.children"
-          :key="child.key"
-          :active="Boolean(activeItem[child.key])"
-          :prepend-icon="child.icon"
-          :title="child.label"
+          v-if="!item.children"
+          :key="`item-${item.key}`"
+          :active="Boolean(activeItem[item.key])"
+          :prepend-icon="item.icon"
+          :title="item.label"
           rounded="lg"
-          class="workflow-nav-child"
-          @click="navigate(child)"
+          @click="navigate(item)"
         />
-      </v-list-group>
+
+        <v-list-group
+          v-else
+          :key="`group-${item.key}`"
+          :value="item.key"
+        >
+          <template #activator="{ props: activatorProps }">
+            <v-list-item
+              v-bind="activatorProps"
+              :active="openedGroups.includes(item.key)"
+              :prepend-icon="item.icon"
+              :title="item.label"
+              rounded="lg"
+            />
+          </template>
+
+          <v-list-item
+            v-for="child in item.children"
+            :key="child.key"
+            :active="Boolean(activeItem[child.key])"
+            :prepend-icon="child.icon"
+            :title="child.label"
+            rounded="lg"
+            class="workflow-nav-child"
+            @click="navigate(child)"
+          />
+        </v-list-group>
+      </template>
     </template>
   </v-list>
 </template>
@@ -54,6 +104,7 @@ import { useRouter } from 'vue-router';
 defineProps({
   activeItem: { type: Object, default: () => ({}) },
   openedGroups: { type: Array, default: () => [] },
+  rail: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['updateOpenedGroups', 'navigate']);
@@ -272,5 +323,20 @@ function navigate(item) {
 
 .workflow-nav-child {
   margin-left: 12px;
+}
+
+.workflow-nav-rail-item {
+  justify-content: center;
+  margin-inline: 4px;
+}
+
+:deep(.workflow-nav-rail-item .v-list-item__prepend) {
+  width: auto;
+}
+
+:deep(.workflow-nav-rail-item .v-list-item__spacer),
+:deep(.workflow-nav-rail-item .v-list-item__content),
+:deep(.workflow-nav-rail-item .v-list-item__append) {
+  display: none;
 }
 </style>

@@ -1,73 +1,102 @@
 <template>
   <section class="media-files">
-    <h1 class="title is-4">
-      {{ $t('media.title') }}
-      <span v-if="media.results && media.results.length > 0">({{ media.results.length }})</span>
-      <span class="has-text-grey-light"> / {{ serverConfig.media_provider }}</span>
+    <h1 class="text-h6">
+      {{ heading }}
+      <span v-if="items.length > 0">({{ items.length }})</span>
+      <span class="text-medium-emphasis"> / {{ providerLabel }}</span>
     </h1>
 
-    <b-loading :active="isProcessing || loading.media" />
+    <v-progress-linear
+      v-if="isProcessing || isLoading"
+      indeterminate
+      color="primary"
+      class="my-3"
+    />
 
     <section class="wrap gallery mt-6">
-      <div class="columns mb-4">
-        <div class="column">
-          <form @submit.prevent="onQueryMedia" class="search">
-            <div>
-              <b-field>
-                <b-input v-model="queryParams.query" name="query" expanded icon="magnify" ref="query" data-cy="query" />
-                <p class="controls">
-                  <b-button native-type="submit" type="is-primary" icon-left="magnify" data-cy="btn-query" />
-                </p>
-              </b-field>
+      <v-row class="mb-2" dense>
+        <v-col cols="12" md="8">
+          <v-form @submit.prevent="onQueryMedia" class="search">
+            <div class="d-flex ga-2">
+              <v-text-field
+                v-model="queryParams.query"
+                name="query"
+                prepend-inner-icon="mdi-magnify"
+                variant="outlined"
+                density="comfortable"
+                hide-details
+                ref="query"
+                data-cy="query"
+              />
+              <v-btn type="submit" color="primary" icon="mdi-magnify" data-cy="btn-query" />
             </div>
-          </form>
-        </div>
-        <div v-if="$can('media:manage')" class="column is-narrow">
-          <b-button @click="onToggleForm" icon-left="file-upload-outline" data-cy="btn-toggle-upload">
+          </v-form>
+        </v-col>
+        <v-col v-if="$can('media:manage')" cols="12" md="auto">
+          <v-btn @click="onToggleForm" prepend-icon="mdi-file-upload-outline" data-cy="btn-toggle-upload">
             {{ $t('media.upload') }}
-          </b-button>
-        </div>
-      </div>
+          </v-btn>
+        </v-col>
+      </v-row>
 
-      <b-collapse v-if="$can('media:manage')" v-model="showUploadForm" animation="">
-        <form @submit.prevent="onSubmit" class="mb-6" data-cy="upload">
-          <div>
-            <b-field :label="$t('media.upload')">
-              <b-upload v-model="form.files" drag-drop multiple xaccept=".png,.jpg,.jpeg,.gif,.svg" expanded>
-                <div class="has-text-centered section">
-                  <p>
-                    <b-icon icon="file-upload-outline" size="is-large" />
-                  </p>
-                  <p>{{ $t('media.uploadHelp') }}</p>
-                </div>
-              </b-upload>
-            </b-field>
-            <div class="tags" v-if="form.files.length > 0">
-              <b-tag v-for="(f, i) in form.files" :key="i" size="is-medium" closable @close="removeUploadFile(i)">
+      <v-expand-transition>
+        <div v-if="$can('media:manage') && showUploadForm">
+          <v-form @submit.prevent="onSubmit" class="mb-6" data-cy="upload">
+            <v-file-input
+              v-model="form.files"
+              :label="$t('media.upload')"
+              :hint="$t('media.uploadHelp')"
+              persistent-hint
+              variant="outlined"
+              density="comfortable"
+              prepend-icon="mdi-file-upload-outline"
+              accept=".png,.jpg,.jpeg,.gif,.svg"
+              multiple
+              show-size
+            />
+
+            <div class="mb-4" v-if="uploadFiles.length > 0">
+              <v-chip
+                v-for="(f, i) in uploadFiles"
+                :key="`${f.name}-${i}`"
+                size="small"
+                class="ma-1"
+                closable
+                @click:close="removeUploadFile(i)"
+              >
                 {{ f.name }}
-              </b-tag>
+              </v-chip>
             </div>
-            <div class="buttons">
-              <b-button native-type="submit" type="is-primary" icon-left="file-upload-outline"
-                :disabled="form.files.length === 0" :loading="isProcessing">
-                {{ $tc('media.upload') }}
-              </b-button>
-            </div>
-          </div>
-        </form>
-      </b-collapse>
+
+            <v-btn
+              type="submit"
+              color="primary"
+              prepend-icon="mdi-file-upload-outline"
+              :disabled="uploadFiles.length === 0"
+              :loading="isProcessing"
+            >
+              {{ $tc('media.upload') }}
+            </v-btn>
+          </v-form>
+        </div>
+      </v-expand-transition>
 
       <!-- Pagination -->
-      <div v-if="media.total > media.perPage" class="pagination-wrapper mt-5">
-        <b-pagination :total="media.total" :current="media.page" @update:current="media.page = $event" :per-page="media.perPage"
-          @change="onPageChange" />
+      <div v-if="total > perPage" class="pagination-wrapper mt-5">
+        <v-pagination
+          :length="pageCount"
+          :model-value="queryParams.page"
+          rounded="circle"
+          total-visible="7"
+          @update:model-value="onPageChange"
+        />
       </div>
 
-      <div v-if="loading.media" class="has-text-centered py-6">
-        <b-loading :active="loading.media" />
+      <div v-if="isLoading" class="text-center py-6">
+        <v-progress-circular indeterminate color="primary" />
       </div>
-      <div v-else-if="media.results && media.results.length > 0" class="grid">
-        <div v-for="item in media.results" :key="item.id" class="item">
+      <div v-else-if="items.length > 0" class="grid">
+        <div v-for="item in items" :key="item.id" class="item">
           <div class="thumb">
             <a @click="(e) => onMediaSelect(item, e)" :href="item.url" target="_blank" rel="noopener noreferer"
               class="thumb-link">
@@ -83,7 +112,7 @@
             <div class="actions">
               <a href="#" @click.prevent="$utils.confirm(null, () => onDeleteMedia(item.id))" data-cy="btn-delete"
                 :aria-label="$t('globals.buttons.delete')" class="delete-btn">
-                <b-icon icon="trash-can-outline" size="is-small" />
+                <v-icon icon="mdi-trash-can-outline" size="small" />
               </a>
             </div>
           </div>
@@ -95,14 +124,19 @@
       </div>
 
       <!-- Empty State -->
-      <div v-else-if="!loading.media">
+      <div v-else-if="!isLoading">
         <empty-placeholder />
       </div>
 
       <!-- Pagination -->
-      <div v-if="media.total > media.perPage" class="pagination-wrapper mt-5">
-        <b-pagination :total="media.total" :current="media.page" @update:current="media.page = $event" :per-page="media.perPage"
-          @change="onPageChange" />
+      <div v-if="total > perPage" class="pagination-wrapper mt-5">
+        <v-pagination
+          :length="pageCount"
+          :model-value="queryParams.page"
+          rounded="circle"
+          total-visible="7"
+          @update:model-value="onPageChange"
+        />
       </div>
     </section>
   </section>
@@ -132,6 +166,10 @@ export default {
       toUpload: 0,
       uploaded: 0,
       showUploadForm: false,
+      isPictureLoading: false,
+      pictureResults: [],
+      pictureTotal: 0,
+      picturePerPage: 20,
 
       queryParams: {
         page: 1,
@@ -141,15 +179,49 @@ export default {
   },
 
   methods: {
+    mapPictureRecord(record) {
+      const fileName = Array.isArray(record.file) ? record.file[0] : record.file;
+      const isImage = /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(fileName || '');
+
+      return {
+        id: record.id,
+        filename: record.original_name || fileName,
+        createdAt: record.created,
+        url: this.$api.pb.files.getURL(record, fileName),
+        thumbUrl: isImage ? this.$api.pb.files.getURL(record, fileName, { thumb: '300x0' }) : '',
+      };
+    },
+
     removeUploadFile(i) {
+      if (!Array.isArray(this.form.files)) {
+        this.form.files = this.uploadFiles;
+      }
+
       this.form.files.splice(i, 1);
     },
 
-    getMedia() {
-      this.$api.getMedia({
-        page: this.queryParams.page,
-        query: this.queryParams.query,
-      });
+    async getMedia() {
+      if (this.isLegacyMode) {
+        await this.$api.getMedia({
+          page: this.queryParams.page,
+          query: this.queryParams.query,
+        });
+        return;
+      }
+
+      this.isPictureLoading = true;
+      try {
+        const res = await this.$api.listPictures({
+          page: this.queryParams.page,
+          perPage: this.picturePerPage,
+          query: this.queryParams.query,
+        });
+        this.pictureResults = (res.items || []).map((item) => this.mapPictureRecord(item));
+        this.pictureTotal = res.totalItems || 0;
+        this.picturePerPage = res.perPage || this.picturePerPage;
+      } finally {
+        this.isPictureLoading = false;
+      }
     },
 
     onToggleForm() {
@@ -173,23 +245,36 @@ export default {
       }
     },
 
-    onSubmit() {
-      this.toUpload = this.form.files.length;
+    async onSubmit() {
+      const files = this.uploadFiles;
+      this.toUpload = files.length;
 
-      // Upload N files with N requests.
-      for (let i = 0; i < this.toUpload; i += 1) {
-        const params = new FormData();
-        params.set('file', this.form.files[i]);
-        this.$api.uploadMedia(params).then(() => {
-          this.onUploaded();
-        }, () => {
-          this.onUploaded();
-        });
+      if (this.isLegacyMode) {
+        for (let i = 0; i < this.toUpload; i += 1) {
+          const params = new FormData();
+          params.set('file', files[i]);
+          this.$api.uploadMedia(params).then(() => {
+            this.onUploaded();
+          }, () => {
+            this.onUploaded();
+          });
+        }
+        return;
+      }
+
+      try {
+        await Promise.allSettled(files.map((file) => this.$api.uploadPicture(file)));
+      } finally {
+        this.toUpload = 0;
+        this.uploaded = 0;
+        this.form.files = [];
+        this.getMedia();
       }
     },
 
     onDeleteMedia(id) {
-      this.$api.deleteMedia(id).then(() => {
+      const promise = this.isLegacyMode ? this.$api.deleteMedia(id) : this.$api.deletePicture(id);
+      promise.then(() => {
         this.getMedia();
       });
     },
@@ -214,6 +299,48 @@ export default {
   computed: {
     ...mapState(['loading', 'media', 'serverConfig']),
 
+    uploadFiles() {
+      if (Array.isArray(this.form.files)) {
+        return this.form.files;
+      }
+
+      return this.form.files ? [this.form.files] : [];
+    },
+
+    isLegacyMode() {
+      return this.type === 'legacy-attachment';
+    },
+
+    heading() {
+      return this.isLegacyMode ? this.$t('media.title') : 'Pictures';
+    },
+
+    providerLabel() {
+      return this.isLegacyMode ? this.serverConfig.media_provider : 'PocketBase';
+    },
+
+    items() {
+      return this.isLegacyMode ? (this.media.results || []) : this.pictureResults;
+    },
+
+    total() {
+      return this.isLegacyMode ? this.media.total : this.pictureTotal;
+    },
+
+    perPage() {
+      return this.isLegacyMode ? this.media.perPage : this.picturePerPage;
+    },
+
+    pageCount() {
+      const total = Number(this.total) || 0;
+      const perPage = Number(this.perPage) || 1;
+      return Math.max(1, Math.ceil(total / perPage));
+    },
+
+    isLoading() {
+      return this.isLegacyMode ? this.loading.media : this.isPictureLoading;
+    },
+
     isProcessing() {
       if (this.toUpload > 0 && this.uploaded < this.toUpload) {
         return true;
@@ -231,7 +358,7 @@ export default {
   },
 
   mounted() {
-    this.$api.getMedia();
+    this.getMedia();
 
     if (this.$utils.getPref('media.upload')) {
       this.showUploadForm = true;

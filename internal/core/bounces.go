@@ -114,7 +114,7 @@ func (c *Core) BlocklistBouncedSubscribers() error {
 	if c.isSQLite() {
 		if _, err := c.db.Exec(`
 			UPDATE subscribers
-			SET status='blocklisted', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id IN (SELECT DISTINCT subscriber_id FROM bounces)
 		`); err != nil {
 			c.log.Printf("error blocklisting bounced subscribers: %v", err)
@@ -123,7 +123,7 @@ func (c *Core) BlocklistBouncedSubscribers() error {
 
 		if _, err := c.db.Exec(`
 			UPDATE subscriber_lists
-			SET status='unsubscribed', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id IN (SELECT DISTINCT subscriber_id FROM bounces)
 		`); err != nil {
 			c.log.Printf("error unsubscribing bounced subscriber lists: %v", err)
@@ -307,11 +307,11 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 	if sub.Status != models.SubscriberStatusBlockListed && num >= action.Count {
 		switch action.Action {
 		case "blocklist":
-			if _, err := tx.Exec(`UPDATE subscribers SET status='blocklisted', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ')) WHERE id = ?`, sub.ID); err != nil {
+			if _, err := tx.Exec(`UPDATE subscribers SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ')) WHERE id = ?`, sub.ID); err != nil {
 				return err
 			}
 		case "unsubscribe":
-			if _, err := tx.Exec(`UPDATE subscriber_lists SET status='unsubscribed', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ')) WHERE subscriber_id = ?`, sub.ID); err != nil {
+			if _, err := tx.Exec(`UPDATE subscriber_lists SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ')) WHERE subscriber_id = ?`, sub.ID); err != nil {
 				return err
 			}
 		case "delete":

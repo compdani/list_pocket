@@ -1,12 +1,15 @@
 <template>
-  <section class="section">
-    <div class="content has-text-grey has-text-centered">
-      <p>
-        <b-icon :icon="!icon ? 'plus' : icon" size="is-large" />
-      </p>
-      <p>{{ !label ? $t('globals.messages.emptyState') : label }}</p>
-    </div>
-  </section>
+  <v-container class="d-flex align-center justify-center flex-column py-12">
+    <v-icon
+      :icon="!icon ? 'mdi-plus' : icon"
+      size="x-large"
+      class="mb-4"
+      color="grey"
+    />
+    <p class="text-center text-grey">
+      {{ !label ? $t('globals.messages.emptyState') : label }}
+    </p>
+  </v-container>
 </template>
 
 <script>
