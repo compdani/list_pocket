@@ -1,230 +1,320 @@
 <template>
-  <div>
-    <div class="columns mb-6">
-      <div class="column is-3">
-        <b-field :label="$t('settings.bounces.enable')" data-cy="btn-enable-bounce">
-          <b-switch v-model="data['bounce.enabled']" name="bounce.enabled" />
-        </b-field>
+  <div class="settings-section">
+    <v-card variant="outlined" class="pa-5">
+      <div class="toggle-field">
+        <div>
+          <div class="text-subtitle-2">{{ $t('settings.bounces.enable') }}</div>
+        </div>
+        <v-switch
+          v-model="data['bounce.enabled']"
+          color="primary"
+          hide-details
+          inset
+          name="bounce.enabled"
+          data-cy="btn-enable-bounce"
+        />
       </div>
-      <div class="column">
-        <div v-for="typ in bounceTypes" :key="typ" class="columns">
-          <div class="column is-2" :class="{ disabled: !data['bounce.enabled'] }" :label="$t('settings.bounces.count')"
-            label-position="on-border">
-            {{ $t(`bounces.${typ}`) }}
-          </div>
-          <div class="column is-4" :class="{ disabled: !data['bounce.enabled'] }">
-            <b-field :label="$t('settings.bounces.count')" label-position="on-border"
-              :message="$t('settings.bounces.countHelp')" data-cy="btn-bounce-count">
-              <b-input v-model.number="data['bounce.actions'][typ]['count']" name="bounce.count" type="number"
-                placeholder="3" min="1" max="1000" />
-            </b-field>
-          </div>
-          <div class="column is-4" :class="{ disabled: !data['bounce.enabled'] }">
-            <b-field :label="$t('settings.bounces.action')" label-position="on-border">
-              <b-select name="bounce.action" v-model="data['bounce.actions'][typ]['action']" expanded>
-                <option value="none">
-                  {{ $t('globals.terms.none') }}
-                </option>
-                <option value="unsubscribe">
-                  {{ $t('email.unsub') }}
-                </option>
-                <option value="blocklist">
-                  {{ $t('settings.bounces.blocklist') }}
-                </option>
-                <option value="delete">
-                  {{ $t('globals.buttons.delete') }}
-                </option>
-              </b-select>
-            </b-field>
-          </div>
+
+      <v-row class="mt-4" v-for="typ in bounceTypes" :key="typ">
+        <v-col cols="12" md="2" class="d-flex align-center text-subtitle-2" :class="{ 'section-disabled': !data['bounce.enabled'] }">
+          {{ $t(`bounces.${typ}`) }}
+        </v-col>
+        <v-col cols="12" md="5">
+          <v-text-field
+            v-model.number="data['bounce.actions'][typ].count"
+            :disabled="!data['bounce.enabled']"
+            :hint="$t('settings.bounces.countHelp')"
+            :label="$t('settings.bounces.count')"
+            max="1000"
+            min="1"
+            name="bounce.count"
+            persistent-hint
+            placeholder="3"
+            type="number"
+            data-cy="btn-bounce-count"
+          />
+        </v-col>
+        <v-col cols="12" md="5">
+          <v-select
+            v-model="data['bounce.actions'][typ].action"
+            :disabled="!data['bounce.enabled']"
+            :items="bounceActionOptions"
+            :label="$t('settings.bounces.action')"
+            item-title="label"
+            item-value="value"
+            name="bounce.action"
+          />
+        </v-col>
+      </v-row>
+    </v-card>
+
+    <v-card variant="outlined" class="pa-5">
+      <div class="toggle-field">
+        <div>
+          <div class="text-subtitle-2">{{ $t('settings.bounces.enableWebhooks') }}</div>
+          <a href="https://listmonk.app/docs/bounces" target="_blank" rel="noopener noreferrer">
+            {{ $t('globals.buttons.learnMore') }}
+          </a>
         </div>
+        <v-switch
+          v-model="data['bounce.webhooks_enabled']"
+          :disabled="!data['bounce.enabled']"
+          color="primary"
+          hide-details
+          inset
+          name="webhooks_enabled"
+          data-cy="btn-enable-bounce-webhook"
+        />
       </div>
-    </div><!-- columns -->
 
-    <div class="mb-6">
-      <b-field :label="$t('settings.bounces.enableWebhooks')" data-cy="btn-enable-bounce-webhook">
-        <b-switch v-model="data['bounce.webhooks_enabled']" :disabled="!data['bounce.enabled']" name="webhooks_enabled"
-          :native-value="true" data-cy="btn-enable-bounce-webhook" />
-        <p class="has-text-grey">
-          <a href="https://listmonk.app/docs/bounces" target="_blank" rel="noopener noreferer">{{
-            $t('globals.buttons.learnMore') }} &rarr;</a>
-        </p>
-      </b-field>
-      <div class="box" v-if="data['bounce.webhooks_enabled']">
-        <div class="columns">
-          <div class="column">
-            <b-field :label="$t('settings.bounces.enableSES')">
-              <b-switch v-model="data['bounce.ses_enabled']" name="ses_enabled" :native-value="true"
-                data-cy="btn-enable-bounce-ses" />
-            </b-field>
-          </div>
+      <div v-if="data['bounce.webhooks_enabled']" class="settings-section compact mt-4">
+        <div class="toggle-field compact">
+          <div class="text-subtitle-2">{{ $t('settings.bounces.enableSES') }}</div>
+          <v-switch
+            v-model="data['bounce.ses_enabled']"
+            color="primary"
+            hide-details
+            inset
+            name="ses_enabled"
+            data-cy="btn-enable-bounce-ses"
+          />
         </div>
-        <div class="columns">
-          <div class="column is-3">
-            <b-field :label="$t('settings.bounces.enableSendgrid')">
-              <b-switch v-model="data['bounce.sendgrid_enabled']" name="sendgrid_enabled" :native-value="true"
-                data-cy="btn-enable-bounce-sendgrid" />
-            </b-field>
-          </div>
-          <div class="column">
-            <b-field :label="$t('settings.bounces.sendgridKey')" :message="$t('globals.messages.passwordChange')">
-              <b-input v-model="data['bounce.sendgrid_key']" type="password"
-                :disabled="!data['bounce.sendgrid_enabled']" name="sendgrid_enabled" :native-value="true"
-                data-cy="btn-enable-bounce-sendgrid" />
-            </b-field>
-          </div>
-        </div>
-        <div class="columns">
-          <div class="column is-3">
-            <b-field :label="$t('settings.bounces.enablePostmark')">
-              <b-switch v-model="data['bounce.postmark'].enabled" name="postmark_enabled" :native-value="true"
-                data-cy="btn-enable-bounce-postmark" />
-            </b-field>
-          </div>
-          <div class="column">
-            <b-field :label="$t('settings.bounces.postmarkUsername')"
-              :message="$t('settings.bounces.postmarkUsernameHelp')">
-              <b-input v-model="data['bounce.postmark'].username" type="text"
-                :disabled="!data['bounce.postmark'].enabled" name="postmark_username"
-                data-cy="btn-enable-bounce-postmark" />
-            </b-field>
-          </div>
-          <div class="column">
-            <b-field :label="$t('settings.bounces.postmarkPassword')" :message="$t('globals.messages.passwordChange')">
-              <b-input v-model="data['bounce.postmark'].password" type="password"
-                :disabled="!data['bounce.postmark'].enabled" name="postmark_password"
-                data-cy="btn-enable-bounce-postmark" />
-            </b-field>
-          </div>
-        </div>
-        <div class="columns">
-          <div class="column is-3">
-            <b-field :label="$t('settings.bounces.enableForwardemail')">
-              <b-switch v-model="data['bounce.forwardemail'].enabled" name="forwardemail_enabled" :native-value="true"
-                data-cy="btn-enable-bounce-forwardemail" />
-            </b-field>
-          </div>
-          <div class="column">
-            <b-field :label="$t('settings.bounces.forwardemailKey')" :message="$t('globals.messages.passwordChange')">
-              <b-input v-model="data['bounce.forwardemail'].key" type="password"
-                :disabled="!data['bounce.forwardemail'].enabled" name="forwardemail_enabled" :native-value="true"
-                data-cy="btn-enable-bounce-forwardemail" />
-            </b-field>
-          </div>
-        </div>
+
+        <v-row>
+          <v-col cols="12" md="3">
+            <div class="toggle-field compact">
+              <div class="text-subtitle-2">{{ $t('settings.bounces.enableSendgrid') }}</div>
+              <v-switch
+                v-model="data['bounce.sendgrid_enabled']"
+                color="primary"
+                hide-details
+                inset
+                name="sendgrid_enabled"
+                data-cy="btn-enable-bounce-sendgrid"
+              />
+            </div>
+          </v-col>
+          <v-col cols="12" md="9">
+            <v-text-field
+              v-model="data['bounce.sendgrid_key']"
+              :disabled="!data['bounce.sendgrid_enabled']"
+              :hint="$t('globals.messages.passwordChange')"
+              :label="$t('settings.bounces.sendgridKey')"
+              name="sendgrid_enabled"
+              persistent-hint
+              type="password"
+            />
+          </v-col>
+        </v-row>
+
+        <v-row>
+          <v-col cols="12" md="3">
+            <div class="toggle-field compact">
+              <div class="text-subtitle-2">{{ $t('settings.bounces.enablePostmark') }}</div>
+              <v-switch
+                v-model="data['bounce.postmark'].enabled"
+                color="primary"
+                hide-details
+                inset
+                name="postmark_enabled"
+                data-cy="btn-enable-bounce-postmark"
+              />
+            </div>
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model="data['bounce.postmark'].username"
+              :disabled="!data['bounce.postmark'].enabled"
+              :hint="$t('settings.bounces.postmarkUsernameHelp')"
+              :label="$t('settings.bounces.postmarkUsername')"
+              name="postmark_username"
+              persistent-hint
+            />
+          </v-col>
+          <v-col cols="12" md="5">
+            <v-text-field
+              v-model="data['bounce.postmark'].password"
+              :disabled="!data['bounce.postmark'].enabled"
+              :hint="$t('globals.messages.passwordChange')"
+              :label="$t('settings.bounces.postmarkPassword')"
+              name="postmark_password"
+              persistent-hint
+              type="password"
+            />
+          </v-col>
+        </v-row>
+
+        <v-row>
+          <v-col cols="12" md="3">
+            <div class="toggle-field compact">
+              <div class="text-subtitle-2">{{ $t('settings.bounces.enableForwardemail') }}</div>
+              <v-switch
+                v-model="data['bounce.forwardemail'].enabled"
+                color="primary"
+                hide-details
+                inset
+                name="forwardemail_enabled"
+                data-cy="btn-enable-bounce-forwardemail"
+              />
+            </div>
+          </v-col>
+          <v-col cols="12" md="9">
+            <v-text-field
+              v-model="data['bounce.forwardemail'].key"
+              :disabled="!data['bounce.forwardemail'].enabled"
+              :hint="$t('globals.messages.passwordChange')"
+              :label="$t('settings.bounces.forwardemailKey')"
+              name="forwardemail_enabled"
+              persistent-hint
+              type="password"
+            />
+          </v-col>
+        </v-row>
       </div>
-    </div>
+    </v-card>
 
-    <!-- bounce mailbox -->
-    <b-field :label="$t('settings.bounces.enableMailbox')">
-      <b-switch v-if="data['bounce.mailboxes']" v-model="data['bounce.mailboxes'][0].enabled"
-        :disabled="!data['bounce.enabled']" name="enabled" :native-value="true" data-cy="btn-enable-bounce-mailbox" />
-    </b-field>
+    <v-card variant="outlined" class="pa-5">
+      <div class="toggle-field">
+        <div class="text-subtitle-2">{{ $t('settings.bounces.enableMailbox') }}</div>
+        <v-switch
+          v-if="data['bounce.mailboxes']"
+          v-model="data['bounce.mailboxes'][0].enabled"
+          :disabled="!data['bounce.enabled']"
+          color="primary"
+          hide-details
+          inset
+          name="enabled"
+          data-cy="btn-enable-bounce-mailbox"
+        />
+      </div>
 
-    <template v-if="data['bounce.enabled'] && data['bounce.mailboxes'][0].enabled">
-      <div class="block box" v-for="(item, n) in data['bounce.mailboxes']" :key="n">
-        <div class="columns">
-          <div class="column" :class="{ disabled: !item.enabled }">
-            <div class="columns">
-              <div class="column is-3">
-                <b-field :label="$t('settings.bounces.type')" label-position="on-border">
-                  <b-select v-model="item.type" name="type">
-                    <option value="pop">
-                      POP
-                    </option>
-                  </b-select>
-                </b-field>
-              </div>
-              <div class="column is-6">
-                <b-field :label="$t('settings.mailserver.host')" label-position="on-border"
-                  :message="$t('settings.mailserver.hostHelp')">
-                  <b-input v-model="item.host" name="host" placeholder="bounce.yourmailserver.net" :maxlength="200" />
-                </b-field>
-              </div>
-              <div class="column is-3">
-                <b-field :label="$t('settings.mailserver.port')" label-position="on-border"
-                  :message="$t('settings.mailserver.portHelp')">
-                  <b-input v-model.number="item.port" name="port" type="number"
-                    placeholder="25" min="1" max="65535" />
-                </b-field>
-              </div>
-            </div><!-- host -->
+      <template v-if="data['bounce.enabled'] && data['bounce.mailboxes'][0].enabled">
+        <v-card
+          v-for="(item, n) in data['bounce.mailboxes']"
+          :key="n"
+          variant="tonal"
+          class="mailbox-card mt-4"
+        >
+          <div :class="{ 'section-disabled': !item.enabled }">
+            <v-row>
+              <v-col cols="12" md="3">
+                <v-select
+                  v-model="item.type"
+                  :items="mailboxTypeOptions"
+                  :label="$t('settings.bounces.type')"
+                  name="type"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="item.host"
+                  :hint="$t('settings.mailserver.hostHelp')"
+                  :label="$t('settings.mailserver.host')"
+                  maxlength="200"
+                  name="host"
+                  persistent-hint
+                  placeholder="bounce.yourmailserver.net"
+                />
+              </v-col>
+              <v-col cols="12" md="3">
+                <v-text-field
+                  v-model.number="item.port"
+                  :hint="$t('settings.mailserver.portHelp')"
+                  :label="$t('settings.mailserver.port')"
+                  max="65535"
+                  min="1"
+                  name="port"
+                  persistent-hint
+                  placeholder="25"
+                  type="number"
+                />
+              </v-col>
+            </v-row>
 
-            <div class="columns">
-              <div class="column is-3">
-                <b-field :label="$t('settings.mailserver.authProtocol')" label-position="on-border">
-                  <b-select v-model="item.auth_protocol" name="auth_protocol">
-                    <option value="none">
-                      none
-                    </option>
-                    <option v-if="item.type === 'pop'" value="userpass">
-                      userpass
-                    </option>
-                    <template v-else>
-                      <option value="cram">
-                        cram
-                      </option>
-                      <option value="plain">
-                        plain
-                      </option>
-                      <option value="login">
-                        login
-                      </option>
-                    </template>
-                  </b-select>
-                </b-field>
-              </div>
-              <div class="column">
-                <b-field grouped>
-                  <b-field :label="$t('settings.mailserver.username')" label-position="on-border" expanded>
-                    <b-input v-model="item.username" :disabled="item.auth_protocol === 'none'" name="username"
-                      placeholder="mysmtp" :maxlength="200" />
-                  </b-field>
-                  <b-field :label="$t('settings.mailserver.password')" label-position="on-border" expanded
-                    :message="$t('settings.mailserver.passwordHelp')">
-                    <b-input v-model="item.password" :disabled="item.auth_protocol === 'none'" name="password"
-                      type="password" :placeholder="$t('settings.mailserver.passwordHelp')" :maxlength="200" />
-                  </b-field>
-                </b-field>
-              </div>
-            </div><!-- auth -->
+            <v-row>
+              <v-col cols="12" md="3">
+                <v-select
+                  v-model="item.auth_protocol"
+                  :items="getMailboxAuthOptions(item.type)"
+                  :label="$t('settings.mailserver.authProtocol')"
+                  name="auth_protocol"
+                />
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="item.username"
+                  :disabled="item.auth_protocol === 'none'"
+                  :label="$t('settings.mailserver.username')"
+                  maxlength="200"
+                  name="username"
+                  placeholder="mysmtp"
+                />
+              </v-col>
+              <v-col cols="12" md="5">
+                <v-text-field
+                  v-model="item.password"
+                  :disabled="item.auth_protocol === 'none'"
+                  :hint="$t('settings.mailserver.passwordHelp')"
+                  :label="$t('settings.mailserver.password')"
+                  maxlength="200"
+                  name="password"
+                  persistent-hint
+                  :placeholder="$t('settings.mailserver.passwordHelp')"
+                  type="password"
+                />
+              </v-col>
+            </v-row>
 
-            <div class="columns">
-              <div class="column is-6">
-                <b-field grouped>
-                  <b-field :label="$t('settings.mailserver.tls')" expanded :message="$t('settings.mailserver.tlsHelp')">
-                    <b-switch v-model="item.tls_enabled" name="item.tls_enabled" />
-                  </b-field>
-                  <b-field :label="$t('settings.mailserver.skipTLS')" expanded
-                    :message="$t('settings.mailserver.skipTLSHelp')">
-                    <b-switch v-model="item.tls_skip_verify" :disabled="!item.tls_enabled"
-                      name="item.tls_skip_verify" />
-                  </b-field>
-                </b-field>
-              </div>
-              <div class="column" />
-              <div class="column is-4">
-                <b-field :label="$t('settings.bounces.scanInterval')" expanded label-position="on-border"
-                  :message="$t('settings.bounces.scanIntervalHelp')">
-                  <b-input v-model="item.scan_interval" name="scan_interval" placeholder="15m" :pattern="regDuration"
-                    :maxlength="10" />
-                </b-field>
-              </div>
-            </div><!-- TLS -->
+            <v-row>
+              <v-col cols="12" md="4">
+                <div class="toggle-field compact">
+                  <div>
+                    <div class="text-subtitle-2">{{ $t('settings.mailserver.tls') }}</div>
+                    <div class="text-body-2 text-medium-emphasis">{{ $t('settings.mailserver.tlsHelp') }}</div>
+                  </div>
+                  <v-switch v-model="item.tls_enabled" color="primary" hide-details inset name="item.tls_enabled" />
+                </div>
+              </v-col>
+              <v-col cols="12" md="4">
+                <div class="toggle-field compact">
+                  <div>
+                    <div class="text-subtitle-2">{{ $t('settings.mailserver.skipTLS') }}</div>
+                    <div class="text-body-2 text-medium-emphasis">{{ $t('settings.mailserver.skipTLSHelp') }}</div>
+                  </div>
+                  <v-switch
+                    v-model="item.tls_skip_verify"
+                    :disabled="!item.tls_enabled"
+                    color="primary"
+                    hide-details
+                    inset
+                    name="item.tls_skip_verify"
+                  />
+                </div>
+              </v-col>
+              <v-col cols="12" md="4">
+                <v-text-field
+                  v-model="item.scan_interval"
+                  :hint="$t('settings.bounces.scanIntervalHelp')"
+                  :label="$t('settings.bounces.scanInterval')"
+                  :maxlength="10"
+                  name="scan_interval"
+                  persistent-hint
+                  placeholder="15m"
+                />
+              </v-col>
+            </v-row>
           </div>
-        </div><!-- second container column -->
-      </div><!-- block -->
-    </template>
+        </v-card>
+      </template>
+    </v-card>
   </div>
 </template>
 
 <script>
-import { regDuration } from '../../constants';
-
 export default {
   props: {
     form: {
-      type: Object, default: () => { },
+      type: Object, default: () => {},
     },
   },
 
@@ -232,14 +322,64 @@ export default {
     return {
       bounceTypes: ['soft', 'hard', 'complaint'],
       data: this.form,
-      regDuration,
     };
   },
 
+  computed: {
+    bounceActionOptions() {
+      return [
+        { label: this.$t('globals.terms.none'), value: 'none' },
+        { label: this.$t('email.unsub'), value: 'unsubscribe' },
+        { label: this.$t('settings.bounces.blocklist'), value: 'blocklist' },
+        { label: this.$t('globals.buttons.delete'), value: 'delete' },
+      ];
+    },
+
+    mailboxTypeOptions() {
+      return ['pop'];
+    },
+  },
+
   methods: {
-    removeBounceBox(i) {
-      this.data['bounce.mailboxes'].splice(i, 1);
+    getMailboxAuthOptions(type) {
+      if (type === 'pop') {
+        return ['none', 'userpass'];
+      }
+      return ['none', 'cram', 'plain', 'login'];
     },
   },
 };
 </script>
+
+<style scoped>
+.settings-section {
+  display: grid;
+  gap: 20px;
+}
+
+.toggle-field {
+  align-items: start;
+  border: 1px solid rgba(15, 76, 129, 0.14);
+  border-radius: 16px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px 20px;
+}
+
+.toggle-field.compact {
+  padding: 14px 16px;
+}
+
+.settings-section.compact {
+  gap: 16px;
+}
+
+.mailbox-card {
+  padding: 16px;
+}
+
+.section-disabled {
+  opacity: 0.65;
+}
+</style>

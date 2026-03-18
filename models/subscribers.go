@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/jmoiron/sqlx/types"
 	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/jmoiron/sqlx/types"
 	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
@@ -28,12 +28,14 @@ type Subscribers []Subscriber
 type Subscriber struct {
 	Base
 
-	UUID    string         `db:"uuid" json:"uuid"`
-	Email   string         `db:"email" json:"email" form:"email"`
-	Name    string         `db:"name" json:"name" form:"name"`
-	Attribs JSON           `db:"attribs" json:"attribs"`
-	Status  string         `db:"status" json:"status"`
-	Lists   types.JSONText `db:"lists" json:"lists"`
+	UUID      string         `db:"uuid" json:"uuid"`
+	Email     string         `db:"email" json:"email" form:"email"`
+	FirstName string         `db:"first_name" json:"first_name" form:"first_name"`
+	LastName  string         `db:"last_name" json:"last_name" form:"last_name"`
+	Name      string         `db:"name" json:"name" form:"name"`
+	Attribs   JSON           `db:"attribs" json:"attribs"`
+	Status    string         `db:"status" json:"status"`
+	Lists     types.JSONText `db:"lists" json:"lists"`
 }
 
 type subLists struct {
@@ -73,32 +75,35 @@ func (subs Subscribers) LoadLists(stmt *pbdb.Query) error {
 	return nil
 }
 
-// FirstName splits the name by spaces and returns the first chunk
-// of the name that's greater than 2 characters in length, assuming
-// that it is the subscriber's first name.
-func (s Subscriber) FirstName() string {
-	for _, s := range strings.Split(s.Name, " ") {
-		if len(s) > 2 {
-			return s
-		}
-	}
-
-	return s.Name
+// JoinSubscriberName returns the display name built from the individual fields.
+func JoinSubscriberName(firstName, lastName string) string {
+	return strings.TrimSpace(strings.TrimSpace(firstName) + " " + strings.TrimSpace(lastName))
 }
 
-// LastName splits the name by spaces and returns the last chunk
-// of the name that's greater than 2 characters in length, assuming
-// that it is the subscriber's last name.
-func (s Subscriber) LastName() string {
-	chunks := strings.Split(s.Name, " ")
-	for i := len(chunks) - 1; i >= 0; i-- {
-		chunk := chunks[i]
-		if len(chunk) > 2 {
-			return chunk
-		}
+// SplitSubscriberName splits a full name into first and last parts.
+func SplitSubscriberName(name string) (string, string) {
+	parts := strings.Fields(strings.TrimSpace(name))
+	switch len(parts) {
+	case 0:
+		return "", ""
+	case 1:
+		return parts[0], ""
+	default:
+		return parts[0], strings.Join(parts[1:], " ")
+	}
+}
+
+// NormalizeName keeps the split fields and the full display name in sync.
+func (s *Subscriber) NormalizeName() {
+	s.FirstName = strings.TrimSpace(s.FirstName)
+	s.LastName = strings.TrimSpace(s.LastName)
+	s.Name = strings.TrimSpace(s.Name)
+
+	if s.FirstName == "" && s.LastName == "" && s.Name != "" {
+		s.FirstName, s.LastName = SplitSubscriberName(s.Name)
 	}
 
-	return s.Name
+	s.Name = JoinSubscriberName(s.FirstName, s.LastName)
 }
 
 // Subscription represents a list attached to a subscriber.
@@ -113,11 +118,13 @@ type Subscription struct {
 type SubscriberExport struct {
 	Base
 
-	UUID    string `db:"uuid" json:"uuid"`
-	Email   string `db:"email" json:"email"`
-	Name    string `db:"name" json:"name"`
-	Attribs string `db:"attribs" json:"attribs"`
-	Status  string `db:"status" json:"status"`
+	UUID      string `db:"uuid" json:"uuid"`
+	Email     string `db:"email" json:"email"`
+	FirstName string `db:"first_name" json:"first_name"`
+	LastName  string `db:"last_name" json:"last_name"`
+	Name      string `db:"name" json:"name"`
+	Attribs   string `db:"attribs" json:"attribs"`
+	Status    string `db:"status" json:"status"`
 }
 
 // SubscriberExportProfile represents a subscriber's collated data in JSON for export.

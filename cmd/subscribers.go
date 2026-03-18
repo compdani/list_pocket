@@ -49,10 +49,12 @@ type subOptin struct {
 
 var (
 	dummySubscriber = models.Subscriber{
-		Email:   "demo@listpocket.app",
-		Name:    "Demo Subscriber",
-		UUID:    dummyUUID,
-		Attribs: models.JSON{"city": "Bengaluru"},
+		Email:     "demo@listpocket.app",
+		FirstName: "Demo",
+		LastName:  "Subscriber",
+		Name:      "Demo Subscriber",
+		UUID:      dummyUUID,
+		Attribs:   models.JSON{"city": "Bengaluru"},
 	}
 )
 
@@ -239,8 +241,8 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 
 	// Filter lists against the current user's permitted lists.
 	listIDs := user.FilterListsByPerm(auth.PermTypeManage, req.Lists)
-	a.log.Printf("create subscriber: email=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
-		req.Email, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
+	a.log.Printf("create subscriber: email=%q first_name=%q last_name=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
+		req.Email, req.FirstName, req.LastName, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
 
 	// Insert the subscriber into the DB.
 	sub, _, err := a.core.InsertSubscriber(req.Subscriber, listIDs, nil, req.PreconfirmSubs, false)
@@ -275,6 +277,13 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 		req.Email = em
 	}
 
+	req.Subscriber.NormalizeName()
+	if req.FirstName != "" && !strHasLen(req.FirstName, 1, stdInputMaxLen) {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+	}
+	if req.LastName != "" && !strHasLen(req.LastName, 1, stdInputMaxLen) {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+	}
 	if req.Name != "" && !strHasLen(req.Name, 1, stdInputMaxLen) {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
 	}

@@ -39,7 +39,8 @@ describe('Forms', () => {
       for (let j = 0; j < 2; j++) {
         cy.loginAndVisit(`${apiUrl}/subscription/form`);
         cy.get('input[name=email]').clear().type(`test${i}@test.com`);
-        cy.get('input[name=name]').clear().type(`test${i}`);
+        cy.get('input[name=first_name]').clear().type(`test${i}`);
+        cy.get('input[name=last_name]').clear().type('tester');
         cy.get('input[type=checkbox]').eq(j).click();
         cy.get('button').click();
         cy.wait(250);
@@ -113,13 +114,14 @@ describe('Forms', () => {
     });
 
     // Change name and unsubscribe from one list.
-    cy.get('input[name=name]').clear().type('new-name');
+    cy.get('input[name=first_name]').clear().type('new');
+    cy.get('input[name=last_name]').clear().type('name');
     cy.get('ul.lists input:first').click();
     cy.get('button:first').click();
 
     cy.request('GET', `${apiUrl}/mailapi/subscribers`).then((response) => {
       const { data } = response.body;
-      expect(data.results[1].name).to.equal('new-name');
+      expect(data.results[1].name).to.equal('new name');
       expect(data.results[1].lists.find((s) => s.id === 2).subscription_status).to.equal('unsubscribed');
       expect(data.results[1].lists.find((s) => s.id === 3).subscription_status).to.equal('unconfirmed');
     });

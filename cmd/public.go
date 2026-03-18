@@ -254,6 +254,8 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	// Read the form.
 	var req struct {
 		Name      string   `form:"name" json:"name"`
+		FirstName string   `form:"first_name" json:"first_name"`
+		LastName  string   `form:"last_name" json:"last_name"`
 		ListUUIDs []string `form:"l" json:"list_uuids"`
 		Blocklist bool     `form:"blocklist" json:"blocklist"`
 		Manage    bool     `form:"manage" json:"manage"`
@@ -286,8 +288,13 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	}
 
 	// Manage preferences.
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" || len(req.Name) > 256 {
+	subUpdate := models.Subscriber{
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Name:      req.Name,
+	}
+	subUpdate.NormalizeName()
+	if subUpdate.Name == "" || len(subUpdate.Name) > 256 {
 		return c.Render(http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("subscribers.invalidName")))
 	}
@@ -299,7 +306,9 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("globals.messages.pFound",
 				"name", a.i18n.T("globals.terms.subscriber"))))
 	}
-	sub.Name = req.Name
+	sub.FirstName = subUpdate.FirstName
+	sub.LastName = subUpdate.LastName
+	sub.Name = subUpdate.Name
 
 	// Update the subscriber properties in the DB.
 	if _, err := a.core.UpdateSubscriber(sub.ID, sub); err != nil {
@@ -707,6 +716,8 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	// Get and validate fields.
 	var req struct {
 		Name          string   `form:"name" json:"name"`
+		FirstName     string   `form:"first_name" json:"first_name"`
+		LastName      string   `form:"last_name" json:"last_name"`
 		Email         string   `form:"email" json:"email"`
 		FormListUUIDs []string `form:"l" json:"list_uuids"`
 	}
@@ -729,11 +740,18 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	}
 	req.Email = em
 
-	req.Name = strings.TrimSpace(req.Name)
-	if len(req.Name) == 0 {
+	subReq := models.Subscriber{
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Name:      req.Name,
+		Email:     req.Email,
+	}
+	subReq.NormalizeName()
+	if len(subReq.Name) == 0 {
 		// If there's no name, use the name bit from the e-mail.
-		req.Name = strings.Split(req.Email, "@")[0]
-	} else if len(req.Name) > stdInputMaxLen {
+		subReq.FirstName, subReq.LastName = models.SplitSubscriberName(strings.Split(req.Email, "@")[0])
+		subReq.NormalizeName()
+	} else if len(subReq.Name) > stdInputMaxLen {
 		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
 	}
 
@@ -753,9 +771,11 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 
 	// Insert the subscriber into the DB.
 	_, hasOptin, err := a.core.InsertSubscriber(models.Subscriber{
-		Name:   req.Name,
-		Email:  req.Email,
-		Status: models.SubscriberStatusEnabled,
+		FirstName: subReq.FirstName,
+		LastName:  subReq.LastName,
+		Name:      subReq.Name,
+		Email:     req.Email,
+		Status:    models.SubscriberStatusEnabled,
 	}, nil, listUUIDs, false, true)
 	if err == nil {
 		return hasOptin, nil

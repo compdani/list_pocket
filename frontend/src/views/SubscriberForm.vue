@@ -53,17 +53,32 @@
           </v-col>
         </v-row>
 
-        <v-text-field
-          v-model="form.name"
-          :label="$t('globals.fields.name')"
-          maxlength="200"
-          name="name"
-          :placeholder="$t('globals.fields.name')"
-          type="text"
-          variant="outlined"
-          density="comfortable"
-          class="mb-2"
-        />
+        <v-row class="mb-2">
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="form.firstName"
+              label="First name"
+              maxlength="200"
+              name="first_name"
+              placeholder="First name"
+              type="text"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="form.lastName"
+              label="Last name"
+              maxlength="200"
+              name="last_name"
+              placeholder="Last name"
+              type="text"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+        </v-row>
 
         <v-tabs
           v-model="activeTab"
@@ -361,7 +376,8 @@ function initForm() {
   const baseForm = {
     id: null,
     email: '',
-    name: '',
+    firstName: '',
+    lastName: '',
     lists: [],
     strAttribs: '{}',
     status: 'enabled',
@@ -381,7 +397,8 @@ function initForm() {
     ...baseForm,
     ...source,
     email: source.email || '',
-    name: source.name || '',
+    firstName: source.firstName || '',
+    lastName: source.lastName || '',
     status: source.status || 'enabled',
     lists: Array.isArray(source.lists) ? [...source.lists] : [],
     strAttribs: JSON.stringify(source.attribs || {}, null, 4),
@@ -417,7 +434,7 @@ function deleteBounces() {
     () => {
       proxy.$api.deleteSubscriberBounces(form.value.id).then(() => {
         getBounces();
-        const subscriberName = form.value.name || form.value.email;
+        const subscriberName = [form.value.firstName, form.value.lastName].filter(Boolean).join(' ') || form.value.email;
         proxy.$utils.toast(proxy.$t('globals.messages.deleted', { name: subscriberName }));
       });
     },
@@ -456,7 +473,8 @@ function createSubscriber() {
 
   const payload = {
     email: form.value.email,
-    name: form.value.name,
+    first_name: form.value.firstName,
+    last_name: form.value.lastName,
     status: form.value.status,
     attribs,
     preconfirm_subscriptions: form.value.preconfirm,
@@ -490,7 +508,8 @@ function updateSubscriber() {
   const payload = {
     id: form.value.id,
     email: form.value.email,
-    name: form.value.name,
+    first_name: form.value.firstName,
+    last_name: form.value.lastName,
     status: form.value.status,
     preconfirm_subscriptions: form.value.preconfirm,
     attribs,

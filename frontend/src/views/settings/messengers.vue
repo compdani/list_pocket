@@ -1,102 +1,138 @@
 <template>
-  <div>
-    <div class="items messengers">
-      <div class="block box" v-for="(item, n) in data.messengers" :key="n">
-        <div class="columns">
-          <div class="column is-2">
-            <b-field :label="$t('globals.buttons.enabled')">
-              <b-switch v-model="item.enabled" name="enabled" :native-value="true" />
-            </b-field>
-            <b-field>
-              <a @click.prevent="$utils.confirm(null, () => removeMessenger(n))" href="#" class="is-size-7">
-                <b-icon icon="trash-can-outline" size="is-small" />
-                {{ $t('globals.buttons.delete') }}
-              </a>
-            </b-field>
-          </div><!-- first column -->
+  <div class="settings-section">
+    <v-card
+      v-for="(item, n) in data.messengers"
+      :key="n"
+      variant="outlined"
+      class="messenger-card"
+    >
+      <div class="card-head">
+        <div class="toggle-field">
+          <div class="text-subtitle-2">{{ $t('globals.buttons.enabled') }}</div>
+          <v-switch v-model="item.enabled" color="primary" hide-details inset name="enabled" />
+        </div>
+        <v-btn
+          variant="text"
+          color="error"
+          prepend-icon="mdi-trash-can-outline"
+          @click.prevent="$utils.confirm(null, () => removeMessenger(n))"
+        >
+          {{ $t('globals.buttons.delete') }}
+        </v-btn>
+      </div>
 
-          <div class="column" :class="{ disabled: !item.enabled }">
-            <div class="columns">
-              <div class="column is-4">
-                <b-field :label="$t('globals.fields.name')" label-position="on-border"
-                  :message="$t('settings.messengers.nameHelp')">
-                  <b-input v-model="item.name" name="name" placeholder="mymessenger" :maxlength="200" />
-                </b-field>
-              </div>
-              <div class="column is-8">
-                <b-field :label="$t('settings.messengers.url')" label-position="on-border"
-                  :message="$t('settings.messengers.urlHelp')">
-                  <b-input v-model="item.root_url" name="root_url" placeholder="https://postback.messenger.net/path"
-                    :maxlength="200" expanded type="url" pattern="https?://.*" />
-                </b-field>
-              </div>
-            </div><!-- host -->
+      <div :class="{ 'section-disabled': !item.enabled }">
+        <v-row>
+          <v-col cols="12" md="4">
+            <v-text-field
+              :ref="`messengerName${n}`"
+              v-model="item.name"
+              :hint="$t('settings.messengers.nameHelp')"
+              :label="$t('globals.fields.name')"
+              maxlength="200"
+              name="name"
+              persistent-hint
+              placeholder="mymessenger"
+            />
+          </v-col>
+          <v-col cols="12" md="8">
+            <v-text-field
+              v-model="item.root_url"
+              :hint="$t('settings.messengers.urlHelp')"
+              :label="$t('settings.messengers.url')"
+              maxlength="200"
+              name="root_url"
+              persistent-hint
+              placeholder="https://postback.messenger.net/path"
+              type="url"
+            />
+          </v-col>
+        </v-row>
 
-            <div class="columns">
-              <div class="column">
-                <b-field grouped>
-                  <b-field :label="$t('settings.messengers.username')" label-position="on-border" expanded>
-                    <b-input v-model="item.username" name="username" :maxlength="200" />
-                  </b-field>
-                  <b-field :label="$t('settings.messengers.password')" label-position="on-border" expanded
-                    :message="$t('globals.messages.passwordChange')">
-                    <b-input v-model="item.password" name="password" type="password"
-                      :placeholder="$t('globals.messages.passwordChange')" :maxlength="200" />
-                  </b-field>
-                </b-field>
-              </div>
-            </div><!-- auth -->
-            <hr />
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="item.username"
+              :label="$t('settings.messengers.username')"
+              maxlength="200"
+              name="username"
+            />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="item.password"
+              :hint="$t('globals.messages.passwordChange')"
+              :label="$t('settings.messengers.password')"
+              maxlength="200"
+              name="password"
+              persistent-hint
+              :placeholder="$t('globals.messages.passwordChange')"
+              type="password"
+            />
+          </v-col>
+        </v-row>
 
-            <div class="columns">
-              <div class="column is-4">
-                <b-field :label="$t('settings.messengers.maxConns')" label-position="on-border"
-                  :message="$t('settings.messengers.maxConnsHelp')">
-                  <b-input v-model.number="item.max_conns" name="max_conns" type="number"
-                    placeholder="25" min="1" max="65535" />
-                </b-field>
-              </div>
-              <div class="column is-4">
-                <b-field :label="$t('settings.messengers.retries')" label-position="on-border"
-                  :message="$t('settings.messengers.retriesHelp')">
-                  <b-input v-model.number="item.max_msg_retries" name="max_msg_retries" type="number"
-                    placeholder="2" min="1" max="1000" />
-                </b-field>
-              </div>
-              <div class="column is-4">
-                <b-field :label="$t('settings.messengers.timeout')" label-position="on-border"
-                  :message="$t('settings.messengers.timeoutHelp')">
-                  <b-input v-model="item.timeout" name="timeout" placeholder="5s" :pattern="regDuration"
-                    :maxlength="10" />
-                </b-field>
-              </div>
-            </div>
-            <hr />
-          </div>
-        </div><!-- second container column -->
-      </div><!-- block -->
-    </div><!-- mail-servers -->
+        <v-divider class="my-4" />
 
-    <b-button @click="addMessenger" icon-left="plus" type="is-primary">
+        <v-row>
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model.number="item.max_conns"
+              :hint="$t('settings.messengers.maxConnsHelp')"
+              :label="$t('settings.messengers.maxConns')"
+              max="65535"
+              min="1"
+              name="max_conns"
+              persistent-hint
+              placeholder="25"
+              type="number"
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model.number="item.max_msg_retries"
+              :hint="$t('settings.messengers.retriesHelp')"
+              :label="$t('settings.messengers.retries')"
+              max="1000"
+              min="1"
+              name="max_msg_retries"
+              persistent-hint
+              placeholder="2"
+              type="number"
+            />
+          </v-col>
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model="item.timeout"
+              :hint="$t('settings.messengers.timeoutHelp')"
+              :label="$t('settings.messengers.timeout')"
+              :maxlength="10"
+              name="timeout"
+              persistent-hint
+              placeholder="5s"
+            />
+          </v-col>
+        </v-row>
+      </div>
+    </v-card>
+
+    <v-btn color="primary" prepend-icon="mdi-plus" @click="addMessenger">
       {{ $t('globals.buttons.addNew') }}
-    </b-button>
+    </v-btn>
   </div>
 </template>
 
 <script>
-import { regDuration } from '../../constants';
-
 export default {
   props: {
     form: {
-      type: Object, default: () => { },
+      type: Object, default: () => {},
     },
   },
 
   data() {
     return {
       data: this.form,
-      regDuration,
     };
   },
 
@@ -114,8 +150,8 @@ export default {
       });
 
       this.$nextTick(() => {
-        const items = document.querySelectorAll('.messengers input[name="name"]');
-        items[items.length - 1].focus();
+        const latest = this.$refs[`messengerName${this.data.messengers.length - 1}`];
+        latest?.focus?.();
       });
     },
 
@@ -125,3 +161,33 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.settings-section {
+  display: grid;
+  gap: 20px;
+}
+
+.messenger-card {
+  padding: 20px;
+}
+
+.card-head,
+.toggle-field {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.section-disabled {
+  opacity: 0.65;
+}
+
+@media (max-width: 768px) {
+  .card-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+</style>

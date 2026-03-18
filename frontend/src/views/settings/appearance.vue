@@ -1,48 +1,71 @@
 <template>
-  <div class="items">
-    <div class="settings-tabs">
-      <button type="button" class="settings-tab" :class="{ 'is-active': tab === 0 }" @click="tab = 0">
+  <div class="settings-section">
+    <v-tabs
+      v-model="tab"
+      color="primary"
+      density="comfortable"
+      align-tabs="start"
+      class="mb-4"
+    >
+      <v-tab value="admin">
         {{ $t('settings.appearance.adminName') }}
-      </button>
-      <button type="button" class="settings-tab" :class="{ 'is-active': tab === 1 }" @click="tab = 1">
+      </v-tab>
+      <v-tab value="public">
         {{ $t('settings.appearance.publicName') }}
-      </button>
-    </div>
+      </v-tab>
+    </v-tabs>
 
-    <section v-show="tab === 0">
-      <div class="block">
-        {{ $t('settings.appearance.adminHelp') }}
-      </div>
+    <v-window v-model="tab" :touch="false">
+      <v-window-item value="admin">
+        <section class="tab-panel">
+          <p class="text-body-1 text-medium-emphasis mb-4">
+            {{ $t('settings.appearance.adminHelp') }}
+          </p>
 
-      <b-field :label="$t('settings.appearance.customCSS')" label-position="on-border">
-        <code-editor lang="css" v-model="data['appearance.admin.custom_css']" name="body" key="editor-admin-css" />
-      </b-field>
+          <div class="editor-field">
+            <label class="text-subtitle-2 mb-2 d-block">{{ $t('settings.appearance.customCSS') }}</label>
+            <code-editor v-model="data['appearance.admin.custom_css']" lang="css" name="body" key="editor-admin-css" />
+          </div>
 
-      <b-field :label="$t('settings.appearance.customJS')" label-position="on-border">
-        <code-editor lang="javascript" v-model="data['appearance.admin.custom_js']" name="body"
-          key="editor-admin-js" />
-      </b-field>
-    </section>
+          <div class="editor-field">
+            <label class="text-subtitle-2 mb-2 d-block">{{ $t('settings.appearance.customJS') }}</label>
+            <code-editor
+              v-model="data['appearance.admin.custom_js']"
+              lang="javascript"
+              name="body"
+              key="editor-admin-js"
+            />
+          </div>
+        </section>
+      </v-window-item>
 
-    <section v-show="tab === 1">
-      <div class="block">
-        {{ $t('settings.appearance.publicHelp') }}
-      </div>
+      <v-window-item value="public">
+        <section class="tab-panel">
+          <p class="text-body-1 text-medium-emphasis mb-4">
+            {{ $t('settings.appearance.publicHelp') }}
+          </p>
 
-      <b-field :label="$t('settings.appearance.customCSS')" label-position="on-border">
-        <code-editor lang="css" v-model="data['appearance.public.custom_css']" name="body" key="editor-public-css" />
-      </b-field>
+          <div class="editor-field">
+            <label class="text-subtitle-2 mb-2 d-block">{{ $t('settings.appearance.customCSS') }}</label>
+            <code-editor v-model="data['appearance.public.custom_css']" lang="css" name="body" key="editor-public-css" />
+          </div>
 
-      <b-field :label="$t('settings.appearance.customJS')" label-position="on-border">
-        <code-editor lang="javascript" v-model="data['appearance.public.custom_js']" name="body"
-          key="editor-public-js" />
-      </b-field>
-    </section>
+          <div class="editor-field">
+            <label class="text-subtitle-2 mb-2 d-block">{{ $t('settings.appearance.customJS') }}</label>
+            <code-editor
+              v-model="data['appearance.public.custom_js']"
+              lang="javascript"
+              name="body"
+              key="editor-public-js"
+            />
+          </div>
+        </section>
+      </v-window-item>
+    </v-window>
   </div>
 </template>
 
 <script>
-import { mapState } from 'vuex';
 import CodeEditor from '../../components/CodeEditor.vue';
 
 export default {
@@ -52,19 +75,19 @@ export default {
 
   props: {
     form: {
-      type: Object, default: () => { },
+      type: Object, default: () => {},
     },
   },
 
   data() {
     return {
       data: this.form,
-      tab: 0,
+      tab: 'admin',
     };
   },
 
   mounted() {
-    this.tab = this.$utils.getPref('settings.apperanceTab') || 0;
+    this.tab = this.$utils.getPref('settings.apperanceTab') || 'admin';
   },
 
   watch: {
@@ -72,37 +95,18 @@ export default {
       this.$utils.setPref('settings.apperanceTab', t);
     },
   },
-
-  computed: {
-    ...mapState(['settings']),
-  },
 };
-
 </script>
 
 <style scoped>
-.settings-tabs {
-  border-bottom: 1px solid #d8dfec;
-  display: flex;
-  flex-wrap: wrap;
+.settings-section,
+.tab-panel {
+  display: grid;
+  gap: 24px;
+}
+
+.editor-field {
+  display: grid;
   gap: 8px;
-  margin-bottom: 20px;
-}
-
-.settings-tab {
-  background: #fff;
-  border: 1px solid #d8dfec;
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  color: #667085;
-  cursor: pointer;
-  font-size: 0.95rem;
-  padding: 10px 16px;
-}
-
-.settings-tab.is-active {
-  background: #f8fbff;
-  color: #0f5bd8;
-  font-weight: 600;
 }
 </style>
