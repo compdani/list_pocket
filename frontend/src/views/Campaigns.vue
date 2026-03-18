@@ -234,7 +234,7 @@
       <template #[`item.actions`]="{ item }">
         <div class="actions">
           <template v-if="$can('campaigns:manage')">
-            <v-tooltip v-if="canStart(item)" text="$t('campaigns.start')" location="top">
+            <v-tooltip v-if="canStart(item)" :text="$t('campaigns.start')" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -247,7 +247,7 @@
               </template>
             </v-tooltip>
 
-            <v-tooltip v-if="canPause(item)" text="$t('campaigns.pause')" location="top">
+            <v-tooltip v-if="canPause(item)" :text="$t('campaigns.pause')" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -260,7 +260,7 @@
               </template>
             </v-tooltip>
 
-            <v-tooltip v-if="canResume(item)" text="$t('campaigns.send')" location="top">
+            <v-tooltip v-if="canResume(item)" :text="$t('campaigns.send')" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -273,7 +273,7 @@
               </template>
             </v-tooltip>
 
-            <v-tooltip v-if="canSchedule(item)" text="$t('campaigns.schedule')" location="top">
+            <v-tooltip v-if="canSchedule(item)" :text="$t('campaigns.schedule')" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -294,7 +294,7 @@
               disabled
             />
 
-            <v-tooltip v-if="canCancel(item)" text="$t('globals.buttons.cancel')" location="top">
+            <v-tooltip v-if="canCancel(item)" :text="$t('globals.buttons.cancel')" location="top">
               <template #activator="{ props }">
                 <v-btn
                   v-bind="props"
@@ -309,7 +309,7 @@
             <v-btn v-else icon="mdi-cancel" size="x-small" variant="text" disabled />
           </template>
 
-          <v-tooltip text="$t('campaigns.preview')" location="top">
+          <v-tooltip :text="$t('campaigns.preview')" location="top">
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"
@@ -322,7 +322,7 @@
             </template>
           </v-tooltip>
 
-          <v-tooltip v-if="$can('campaigns:manage')" text="$t('globals.buttons.clone')" location="top">
+          <v-tooltip v-if="$can('campaigns:manage')" :text="$t('globals.buttons.clone')" location="top">
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"
@@ -336,14 +336,14 @@
           </v-tooltip>
 
           <router-link v-if="$can('campaigns:get_analytics')" :to="{ name: 'campaignAnalytics', query: { id: item.id } }">
-            <v-tooltip text="$t('globals.terms.analytics')" location="top">
+            <v-tooltip :text="$t('globals.terms.analytics')" location="top">
               <template #activator="{ props }">
                 <v-btn v-bind="props" icon="mdi-chart-bar" size="x-small" variant="text" />
               </template>
             </v-tooltip>
           </router-link>
 
-          <v-tooltip v-if="$can('campaigns:manage')" text="$t('globals.buttons.delete')" location="top">
+          <v-tooltip v-if="$can('campaigns:manage')" :text="$t('globals.buttons.delete')" location="top">
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"
