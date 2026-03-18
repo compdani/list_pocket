@@ -28,6 +28,8 @@
                 <input type="hidden" name="manage" value="true" />
 
                 <h2>{{ L.T "public.managePrefs" }}</h2>
+                <label for="phone">Phone</label>
+                <input id="phone" type="tel" name="phone" value="{{ .Data.Subscriber.Phone }}" maxlength="64" />
                 <label for="first_name">First name</label>
                 <input id="first_name" type="text" name="first_name" value="{{ .Data.Subscriber.FirstName }}" maxlength="256" required />
                 <label for="last_name">Last name</label>
@@ -105,9 +107,11 @@
 
     function unsubAll(e) {
         if (e.target.checked) {
+            document.querySelector("input[name=phone]").disabled = "disabled";
             document.querySelector("input[name=first_name]").disabled = "disabled";
             document.querySelector("input[name=last_name]").disabled = "disabled";
         } else {
+            document.querySelector("input[name=phone]").removeAttribute("disabled");
             document.querySelector("input[name=first_name]").removeAttribute("disabled");
             document.querySelector("input[name=last_name]").removeAttribute("disabled");
         }

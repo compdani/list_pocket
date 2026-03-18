@@ -20,6 +20,10 @@ func init() {
 				Required: true,
 			},
 			&core.TextField{
+				Name:     "phone",
+				Required: false,
+			},
+			&core.TextField{
 				Name:     "first_name",
 				Required: false,
 			},

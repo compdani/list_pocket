@@ -254,6 +254,7 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	// Read the form.
 	var req struct {
 		Name      string   `form:"name" json:"name"`
+		Phone     string   `form:"phone" json:"phone"`
 		FirstName string   `form:"first_name" json:"first_name"`
 		LastName  string   `form:"last_name" json:"last_name"`
 		ListUUIDs []string `form:"l" json:"list_uuids"`
@@ -289,6 +290,7 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 
 	// Manage preferences.
 	subUpdate := models.Subscriber{
+		Phone:     req.Phone,
 		FirstName: req.FirstName,
 		LastName:  req.LastName,
 		Name:      req.Name,
@@ -297,6 +299,10 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	if subUpdate.Name == "" || len(subUpdate.Name) > 256 {
 		return c.Render(http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("subscribers.invalidName")))
+	}
+	if subUpdate.Phone != "" && len(strings.TrimSpace(subUpdate.Phone)) > 64 {
+		return c.Render(http.StatusBadRequest, tplMessage,
+			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("globals.messages.invalidData")))
 	}
 
 	// Get the subscriber from the DB.
@@ -309,6 +315,7 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	sub.FirstName = subUpdate.FirstName
 	sub.LastName = subUpdate.LastName
 	sub.Name = subUpdate.Name
+	sub.Phone = strings.TrimSpace(subUpdate.Phone)
 
 	// Update the subscriber properties in the DB.
 	if _, err := a.core.UpdateSubscriber(sub.ID, sub); err != nil {
@@ -716,6 +723,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	// Get and validate fields.
 	var req struct {
 		Name          string   `form:"name" json:"name"`
+		Phone         string   `form:"phone" json:"phone"`
 		FirstName     string   `form:"first_name" json:"first_name"`
 		LastName      string   `form:"last_name" json:"last_name"`
 		Email         string   `form:"email" json:"email"`
@@ -741,6 +749,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	req.Email = em
 
 	subReq := models.Subscriber{
+		Phone:     req.Phone,
 		FirstName: req.FirstName,
 		LastName:  req.LastName,
 		Name:      req.Name,
@@ -753,6 +762,9 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		subReq.NormalizeName()
 	} else if len(subReq.Name) > stdInputMaxLen {
 		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+	}
+	if subReq.Phone != "" && len(strings.TrimSpace(subReq.Phone)) > 64 {
+		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 	}
 
 	listUUIDs := pq.StringArray(req.FormListUUIDs)
@@ -775,6 +787,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		LastName:  subReq.LastName,
 		Name:      subReq.Name,
 		Email:     req.Email,
+		Phone:     strings.TrimSpace(subReq.Phone),
 		Status:    models.SubscriberStatusEnabled,
 	}, nil, listUUIDs, false, true)
 	if err == nil {

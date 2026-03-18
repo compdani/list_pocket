@@ -44,6 +44,11 @@ func SanitizeURI(u string) string {
 		return "/"
 	}
 
+	u = strings.Trim(u, `"'`)
+	if u == "" {
+		return "/"
+	}
+
 	p, err := url.Parse(u)
 	if err != nil || strings.Contains(p.Path, "..") {
 		return "/"

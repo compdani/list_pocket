@@ -756,6 +756,7 @@ func (a *App) doTwofaVerify(c echo.Context, token string, userID int, next strin
 }
 
 func (a *App) completeAuth(c echo.Context, user auth.User, oidcToken, next string) error {
+	next = utils.SanitizeURI(next)
 	if next == "" || next == "/" {
 		next = uriAdmin
 	}

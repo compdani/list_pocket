@@ -177,6 +177,7 @@ const formHTML = computed(() => {
     + `    <h3>${proxy.$t('public.sub')}</h3>\n`
     + '    <input type="hidden" name="nonce" />\n\n'
     + `    <p><input type="email" name="email" required placeholder="${proxy.$t('subscribers.email')}" /></p>\n`
+    + '    <p><input type="tel" name="phone" placeholder="Phone" /></p>\n'
     + '    <p><input type="text" name="first_name" placeholder="First name" /></p>\n'
     + '    <p><input type="text" name="last_name" placeholder="Last name" /></p>\n\n';
 

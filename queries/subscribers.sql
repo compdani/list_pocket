@@ -85,28 +85,28 @@ SELECT lists.*,
 
 -- name: insert-subscriber
 WITH sub AS (
-    INSERT INTO subscribers (uuid, email, first_name, last_name, name, status, attribs)
-    VALUES($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, status, attribs)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING id, status
 ),
 listIDs AS (
     SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($8[]) > 0 THEN id=ANY($8)
-              ELSE uuid=ANY($9[]) END)
+        (CASE WHEN CARDINALITY($9[]) > 0 THEN id=ANY($9)
+              ELSE uuid=ANY($10[]) END)
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
     VALUES(
         (SELECT id FROM sub),
         UNNEST(ARRAY(SELECT id FROM listIDs)),
-        (CASE WHEN $6='blocklisted' THEN 'unsubscribed' ELSE $10 END)
+        (CASE WHEN $7='blocklisted' THEN 'unsubscribed' ELSE $11 END)
     )
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
         SET updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
             status=(
-                CASE WHEN $6='blocklisted' OR (SELECT status FROM sub)='blocklisted'
+                CASE WHEN $7='blocklisted' OR (SELECT status FROM sub)='blocklisted'
                 THEN 'unsubscribed'
-                ELSE $10 END
+                ELSE $11 END
             )
 )
 SELECT id from sub;
@@ -115,24 +115,25 @@ SELECT id from sub;
 -- Upserts a subscriber where existing subscribers get their names and attributes overwritten.
 -- If $7 = true, update name/attribs. If $8 = true, update subscription status.
 WITH sub AS (
-    INSERT INTO subscribers as s (uuid, email, first_name, last_name, name, attribs, status)
-    VALUES($1, $2, $3, $4, $5, $6, 'enabled')
+    INSERT INTO subscribers as s (uuid, email, phone, first_name, last_name, name, attribs, status)
+    VALUES($1, $2, $3, $4, $5, $6, $7, 'enabled')
     ON CONFLICT (email)
     DO UPDATE SET
-        first_name=(CASE WHEN $8 THEN $3 ELSE s.first_name END),
-        last_name=(CASE WHEN $8 THEN $4 ELSE s.last_name END),
-        name=(CASE WHEN $8 THEN $5 ELSE s.name END),
-        attribs=(CASE WHEN $8 THEN $6 ELSE s.attribs END),
+        phone=(CASE WHEN $9 THEN $3 ELSE s.phone END),
+        first_name=(CASE WHEN $9 THEN $4 ELSE s.first_name END),
+        last_name=(CASE WHEN $9 THEN $5 ELSE s.last_name END),
+        name=(CASE WHEN $9 THEN $6 ELSE s.name END),
+        attribs=(CASE WHEN $9 THEN $7 ELSE s.attribs END),
         updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     RETURNING uuid, id, status
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $7 END
-    FROM sub, UNNEST($6[]) AS listID
+    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $8 END
+    FROM sub, UNNEST($7[]) AS listID
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET updated = strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
-        status = CASE WHEN $9 THEN EXCLUDED.status ELSE subscriber_lists.status END
+        status = CASE WHEN $10 THEN EXCLUDED.status ELSE subscriber_lists.status END
 )
 SELECT uuid, id from sub;
 
@@ -142,8 +143,8 @@ SELECT uuid, id from sub;
 -- existing subscriptions are marked as 'unsubscribed'.
 -- This is used in the bulk importer.
 WITH sub AS (
-    INSERT INTO subscribers (uuid, email, first_name, last_name, name, attribs, status)
-    VALUES($1, $2, $3, $4, $5, $6, 'blocklisted')
+    INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status)
+    VALUES($1, $2, $3, $4, $5, $6, $7, 'blocklisted')
     ON CONFLICT (email) DO UPDATE SET status='blocklisted', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     RETURNING id
 )
@@ -153,11 +154,12 @@ UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H
 -- name: update-subscriber
 UPDATE subscribers SET
     email=(CASE WHEN $2 != '' THEN $2 ELSE email END),
-    first_name=(CASE WHEN $3 != '' THEN $3 ELSE first_name END),
-    last_name=(CASE WHEN $4 != '' THEN $4 ELSE last_name END),
-    name=(CASE WHEN $5 != '' THEN $5 ELSE name END),
-    status=(CASE WHEN $6 != '' THEN $6 ELSE status END),
-    attribs=(CASE WHEN $7 != '' THEN $7 ELSE attribs END),
+    phone=(CASE WHEN $3 != '' THEN $3 ELSE phone END),
+    first_name=(CASE WHEN $4 != '' THEN $4 ELSE first_name END),
+    last_name=(CASE WHEN $5 != '' THEN $5 ELSE last_name END),
+    name=(CASE WHEN $6 != '' THEN $6 ELSE name END),
+    status=(CASE WHEN $7 != '' THEN $7 ELSE status END),
+    attribs=(CASE WHEN $8 != '' THEN $8 ELSE attribs END),
     updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
 WHERE id = $1;
 
@@ -167,37 +169,38 @@ WHERE id = $1;
 WITH s AS (
     UPDATE subscribers SET
         email=(CASE WHEN $2 != '' THEN $2 ELSE email END),
-        first_name=(CASE WHEN $3 != '' THEN $3 ELSE first_name END),
-        last_name=(CASE WHEN $4 != '' THEN $4 ELSE last_name END),
-        name=(CASE WHEN $5 != '' THEN $5 ELSE name END),
-        status=(CASE WHEN $6 != '' THEN $6 ELSE status END),
-        attribs=(CASE WHEN $7 != '' THEN $7 ELSE attribs END),
+        phone=(CASE WHEN $3 != '' THEN $3 ELSE phone END),
+        first_name=(CASE WHEN $4 != '' THEN $4 ELSE first_name END),
+        last_name=(CASE WHEN $5 != '' THEN $5 ELSE last_name END),
+        name=(CASE WHEN $6 != '' THEN $6 ELSE name END),
+        status=(CASE WHEN $7 != '' THEN $7 ELSE status END),
+        attribs=(CASE WHEN $8 != '' THEN $8 ELSE attribs END),
         updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     WHERE id = $1 RETURNING id
 ),
 listIDs AS (
     SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($8[]) > 0 THEN id=ANY($8)
-              ELSE uuid=ANY($9[]) END)
+        (CASE WHEN CARDINALITY($9[]) > 0 THEN id=ANY($9)
+              ELSE uuid=ANY($10[]) END)
 ),
 d AS (
-    DELETE FROM subscriber_lists WHERE $11 = TRUE AND subscriber_id = $1 AND list_id NOT IN SELECT id FROM listIDs
+    DELETE FROM subscriber_lists WHERE $12 = TRUE AND subscriber_id = $1 AND list_id NOT IN SELECT id FROM listIDs
 )
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
     VALUES(
         (SELECT id FROM s),
         UNNEST(ARRAY(SELECT id FROM listIDs)),
-        (CASE WHEN $6='blocklisted' THEN 'unsubscribed' ELSE $10 END)
+        (CASE WHEN $7='blocklisted' THEN 'unsubscribed' ELSE $11 END)
     )
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET status = (
         CASE
-            WHEN $6='blocklisted' THEN 'unsubscribed'
+            WHEN $7='blocklisted' THEN 'unsubscribed'
             -- When subscriber is edited from the admin form, retain the status. Otherwise, a blocklisted
             -- subscriber when being re-enabled, their subscription statuses change.
             WHEN subscriber_lists.status = 'confirmed' THEN 'confirmed'
             WHEN subscriber_lists.status = 'unsubscribed' THEN 'unsubscribed'
-            ELSE $10
+            ELSE $11
         END
     );
 
@@ -294,7 +297,7 @@ SELECT subscribers.* FROM subscribers
         AND ($2 = '' OR subscriber_lists.status = $2)
     )
     WHERE (CARDINALITY($1) = 0 OR subscriber_lists.list_id IN $1[])
-    AND (CASE WHEN $3 != '' THEN name ~* $3 OR email ~* $3 ELSE TRUE END)
+    AND (CASE WHEN $3 != '' THEN name ~* $3 OR email ~* $3 OR phone ~* $3 ELSE TRUE END)
     AND %query%
     ORDER BY %order% OFFSET $4 LIMIT (CASE WHEN $5 < 1 THEN NULL ELSE $5 END);
 
@@ -325,6 +328,7 @@ SELECT COALESCE(SUM(subscriber_count), 0) AS total FROM mat_list_subscriber_stat
 SELECT subscribers.id,
        subscribers.uuid,
        subscribers.email,
+       subscribers.phone,
        subscribers.name,
        subscribers.status,
        subscribers.attribs,
@@ -340,7 +344,7 @@ SELECT subscribers.id,
     )
     WHERE subscriber_lists.list_id = ALL($1[]) AND id > $2
     AND (CASE WHEN CARDINALITY($3[]) > 0 THEN id=ANY($3) ELSE true END)
-    AND (CASE WHEN $5 != '' THEN name ~* $5 OR email ~* $5 ELSE TRUE END)
+    AND (CASE WHEN $5 != '' THEN name ~* $5 OR email ~* $5 OR phone ~* $5 ELSE TRUE END)
     AND %query%
     ORDER BY subscribers.id ASC LIMIT (CASE WHEN $6 < 1 THEN NULL ELSE $6 END);
 
@@ -362,7 +366,7 @@ ON (
     AND ($3 = '' OR subscriber_lists.status = $3)
 )
 WHERE subscriber_lists.list_id = ALL($2[])
-    AND (CASE WHEN $4 != '' THEN name ~* $4 OR email ~* $4 ELSE TRUE END)
+    AND (CASE WHEN $4 != '' THEN name ~* $4 OR email ~* $4 OR phone ~* $4 ELSE TRUE END)
     AND %query%
 LIMIT (CASE WHEN $1 THEN 1 END)
 

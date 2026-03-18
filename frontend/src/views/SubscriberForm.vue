@@ -22,7 +22,7 @@
 
       <section class="admin-dialog-body modal-card-body">
         <v-row class="mb-1">
-          <v-col cols="12" md="8">
+          <v-col cols="12" md="4">
             <v-text-field
               ref="focus"
               v-model="form.email"
@@ -32,6 +32,19 @@
               :placeholder="$t('subscribers.email')"
               required
               type="email"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+
+          <v-col cols="12" md="4">
+            <v-text-field
+              v-model="form.phone"
+              label="Phone"
+              maxlength="64"
+              name="phone"
+              placeholder="Phone"
+              type="tel"
               variant="outlined"
               density="comfortable"
             />
@@ -376,6 +389,7 @@ function initForm() {
   const baseForm = {
     id: null,
     email: '',
+    phone: '',
     firstName: '',
     lastName: '',
     lists: [],
@@ -397,6 +411,7 @@ function initForm() {
     ...baseForm,
     ...source,
     email: source.email || '',
+    phone: source.phone || '',
     firstName: source.firstName || '',
     lastName: source.lastName || '',
     status: source.status || 'enabled',
@@ -473,6 +488,7 @@ function createSubscriber() {
 
   const payload = {
     email: form.value.email,
+    phone: form.value.phone,
     first_name: form.value.firstName,
     last_name: form.value.lastName,
     status: form.value.status,
@@ -508,6 +524,7 @@ function updateSubscriber() {
   const payload = {
     id: form.value.id,
     email: form.value.email,
+    phone: form.value.phone,
     first_name: form.value.firstName,
     last_name: form.value.lastName,
     status: form.value.status,

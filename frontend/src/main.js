@@ -370,10 +370,33 @@ async function initConfig(rootProxy) {
   proxy.isLoaded = true;
 }
 
+function getAdminBasePath() {
+  const baseURL = import.meta.env.BASE_URL || '/';
+  if (baseURL === '/') {
+    return '';
+  }
+  return baseURL.replace(/\/$/, '');
+}
+
+function getLoginRedirectTarget() {
+  const adminBase = getAdminBasePath();
+  const { pathname = '/', search = '', hash = '' } = window.location;
+  let nextPath = pathname;
+
+  if (adminBase && nextPath.startsWith(`${adminBase}/`)) {
+    nextPath = nextPath.slice(adminBase.length);
+  } else if (adminBase && nextPath === adminBase) {
+    nextPath = '/';
+  }
+
+  const next = `${nextPath || '/'}${search}${hash}`;
+  return next === '/' ? '/admin' : next;
+}
+
 function redirectToLogin() {
-  const adminBase = import.meta.env.BASE_URL.replace(/\/$/, '');
-  const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  window.location.href = `${adminBase}/login?next=${encodeURIComponent(next || '/admin')}`;
+  const adminBase = getAdminBasePath();
+  const next = getLoginRedirectTarget();
+  window.location.href = `${adminBase}/login?next=${encodeURIComponent(next)}`;
 }
 
 router.afterEach((to) => {
