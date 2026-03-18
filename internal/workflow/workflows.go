@@ -739,6 +739,7 @@ func resolveWebhookContact(app core.App, config map[string]any, webhookPayload m
 		fullName = asString(webhookPayload["email"], "Webhook Lead")
 	}
 	contact.Set("uuid", createWorkflowUUID())
+	contact.Set("phone", asString(webhookPayload["phone"], ""))
 	contact.Set("first_name", firstName)
 	contact.Set("last_name", lastName)
 	contact.Set("name", fullName)

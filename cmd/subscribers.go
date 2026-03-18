@@ -50,6 +50,7 @@ type subOptin struct {
 var (
 	dummySubscriber = models.Subscriber{
 		Email:     "demo@listpocket.app",
+		Phone:     "+15555550123",
 		FirstName: "Demo",
 		LastName:  "Subscriber",
 		Name:      "Demo Subscriber",
@@ -194,7 +195,7 @@ func (a *App) ExportSubscribers(c echo.Context) error {
 	hdr.Set(echo.HeaderContentDisposition, "attachment; filename="+"subscribers.csv")
 	hdr.Set("Content-Transfer-Encoding", "binary")
 	hdr.Set("Cache-Control", "no-cache")
-	wr.Write([]string{"uuid", "email", "name", "attributes", "status", "created_at", "updated_at"})
+	wr.Write([]string{"uuid", "email", "phone", "first_name", "last_name", "name", "attributes", "status", "created_at", "updated_at"})
 
 loop:
 	// Iterate in batches until there are no more subscribers to export.
@@ -208,7 +209,7 @@ loop:
 		}
 
 		for _, r := range out {
-			if err = wr.Write([]string{r.UUID, r.Email, r.Name, r.Attribs, r.Status,
+			if err = wr.Write([]string{r.UUID, r.Email, r.Phone, r.FirstName, r.LastName, r.Name, r.Attribs, r.Status,
 				r.CreatedAt.Time.String(), r.UpdatedAt.Time.String()}); err != nil {
 				a.log.Printf("error streaming CSV export: %v", err)
 				break loop
@@ -241,8 +242,8 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 
 	// Filter lists against the current user's permitted lists.
 	listIDs := user.FilterListsByPerm(auth.PermTypeManage, req.Lists)
-	a.log.Printf("create subscriber: email=%q first_name=%q last_name=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
-		req.Email, req.FirstName, req.LastName, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
+	a.log.Printf("create subscriber: email=%q phone=%q first_name=%q last_name=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
+		req.Email, req.Phone, req.FirstName, req.LastName, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
 
 	// Insert the subscriber into the DB.
 	sub, _, err := a.core.InsertSubscriber(req.Subscriber, listIDs, nil, req.PreconfirmSubs, false)
@@ -275,6 +276,10 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	} else {
 		req.Email = em
+	}
+	req.Phone = strings.TrimSpace(req.Phone)
+	if req.Phone != "" && !strHasLen(req.Phone, 1, 64) {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 	}
 
 	req.Subscriber.NormalizeName()

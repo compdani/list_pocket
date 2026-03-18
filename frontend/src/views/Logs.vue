@@ -1,10 +1,16 @@
 <template>
-  <section class="logs content relative">
-    <h1 class="title is-4">
-      {{ $t('logs.title') }}
-    </h1>
-    <hr />
-    <log-view :loading="loading.logs" :lines="lines" />
+  <section class="logs-page">
+    <div class="logs-header">
+      <h1 class="text-h4 font-weight-bold">
+        {{ $t('logs.title') }}
+      </h1>
+    </div>
+
+    <v-card variant="outlined" class="logs-shell">
+      <v-card-text class="pa-0">
+        <log-view :loading="loading.logs" :lines="lines" />
+      </v-card-text>
+    </v-card>
   </section>
 </template>
 
@@ -33,7 +39,7 @@ export default {
   },
 
   computed: {
-    ...mapState(['logs', 'loading']),
+    ...mapState(['loading']),
   },
 
   mounted() {
@@ -43,8 +49,23 @@ export default {
     this.pollId = setInterval(() => this.getLogs(), 10000);
   },
 
-  destroyed() {
+  beforeUnmount() {
     clearInterval(this.pollId);
   },
 };
 </script>
+
+<style scoped>
+.logs-page {
+  position: relative;
+}
+
+.logs-header {
+  margin-bottom: 24px;
+}
+
+.logs-shell :deep(.log-view .lines) {
+  border: 0;
+  height: min(70vh, 680px);
+}
+</style>

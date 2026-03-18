@@ -12,7 +12,7 @@ export default defineConfig(({ _, mode }) => {
       vue(),
       vuetify({ autoImport: true }),
     ],
-    base: '/admin',
+    base: '/admin/',
     mode,
     resolve: {
       alias: {

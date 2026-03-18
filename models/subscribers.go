@@ -30,6 +30,7 @@ type Subscriber struct {
 
 	UUID      string         `db:"uuid" json:"uuid"`
 	Email     string         `db:"email" json:"email" form:"email"`
+	Phone     string         `db:"phone" json:"phone" form:"phone"`
 	FirstName string         `db:"first_name" json:"first_name" form:"first_name"`
 	LastName  string         `db:"last_name" json:"last_name" form:"last_name"`
 	Name      string         `db:"name" json:"name" form:"name"`
@@ -120,6 +121,7 @@ type SubscriberExport struct {
 
 	UUID      string `db:"uuid" json:"uuid"`
 	Email     string `db:"email" json:"email"`
+	Phone     string `db:"phone" json:"phone"`
 	FirstName string `db:"first_name" json:"first_name"`
 	LastName  string `db:"last_name" json:"last_name"`
 	Name      string `db:"name" json:"name"`

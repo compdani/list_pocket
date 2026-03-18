@@ -37,6 +37,7 @@ type sqliteSubscriberRow struct {
 	UpdatedAt string `db:"updated_at"`
 	UUID      string `db:"uuid"`
 	Email     string `db:"email"`
+	Phone     string `db:"phone"`
 	FirstName string `db:"first_name"`
 	LastName  string `db:"last_name"`
 	Name      string `db:"name"`
@@ -80,6 +81,7 @@ func sqliteSubscriberRowsToModels(rows []sqliteSubscriberRow) models.Subscribers
 			},
 			UUID:      row.UUID,
 			Email:     row.Email,
+			Phone:     row.Phone,
 			FirstName: row.FirstName,
 			LastName:  row.LastName,
 			Name:      row.Name,
@@ -477,6 +479,7 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 		record := pbcore.NewRecord(collection)
 		record.Set("uuid", sub.UUID)
 		record.Set("email", sub.Email)
+		record.Set("phone", strings.TrimSpace(sub.Phone))
 		record.Set("first_name", sub.FirstName)
 		record.Set("last_name", sub.LastName)
 		record.Set("name", strings.TrimSpace(sub.Name))
@@ -529,6 +532,7 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 	if err = c.q.InsertSubscriber.Get(&sub.ID,
 		sub.UUID,
 		sub.Email,
+		strings.TrimSpace(sub.Phone),
 		strings.TrimSpace(sub.FirstName),
 		strings.TrimSpace(sub.LastName),
 		strings.TrimSpace(sub.Name),
@@ -590,6 +594,7 @@ func (c *Core) UpdateSubscriber(id int, sub models.Subscriber) (models.Subscribe
 
 	_, err := c.q.UpdateSubscriber.Exec(id,
 		sub.Email,
+		strings.TrimSpace(sub.Phone),
 		strings.TrimSpace(sub.FirstName),
 		strings.TrimSpace(sub.LastName),
 		strings.TrimSpace(sub.Name),
@@ -642,6 +647,7 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 		}
 
 		rec.Set("email", sub.Email)
+		rec.Set("phone", strings.TrimSpace(sub.Phone))
 		rec.Set("first_name", sub.FirstName)
 		rec.Set("last_name", sub.LastName)
 		rec.Set("name", strings.TrimSpace(sub.Name))
@@ -700,6 +706,7 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 
 	_, err := c.q.UpdateSubscriberWithLists.Exec(id,
 		sub.Email,
+		strings.TrimSpace(sub.Phone),
 		strings.TrimSpace(sub.FirstName),
 		strings.TrimSpace(sub.LastName),
 		strings.TrimSpace(sub.Name),
@@ -1222,7 +1229,7 @@ func (c *Core) getSubscriberCount(searchStr, queryExp, subStatus string, listIDs
 }
 
 func (c *Core) getSubscriberSQLite(id int, uuid, email string) (models.Subscriber, error) {
-	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, first_name, last_name, name, attribs, status FROM subscribers WHERE `
+	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE `
 	args := []any{}
 	switch {
 	case id > 0:
@@ -1327,7 +1334,7 @@ func (c *Core) getSubscribersByEmailSQLite(emails []string) (models.Subscribers,
 	}
 
 	var rows []sqliteSubscriberRow
-	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
+	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscriber: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1375,7 +1382,7 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int,
 	}
 
 	q := `SELECT subscribers.rowid AS id, subscribers.created AS created_at, subscribers.updated AS updated_at,
-		subscribers.uuid, subscribers.email, subscribers.first_name, subscribers.last_name, subscribers.name, subscribers.attribs, subscribers.status
+		subscribers.uuid, subscribers.email, subscribers.phone, subscribers.first_name, subscribers.last_name, subscribers.name, subscribers.attribs, subscribers.status
 		FROM subscribers WHERE ` + whereSQL + ` ORDER BY ` + sortCol + ` ` + order
 	if limit > 0 {
 		q += ` LIMIT ? OFFSET ?`
@@ -1533,7 +1540,7 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, subIDs, listIDs 
 		}
 
 		q := `
-			SELECT subscribers.id, subscribers.uuid, subscribers.email, subscribers.name,
+			SELECT subscribers.id, subscribers.uuid, subscribers.email, subscribers.phone, subscribers.name,
 			       subscribers.first_name, subscribers.last_name,
 			       subscribers.status, subscribers.attribs,
 			       subscribers.created AS created_at,
@@ -1621,8 +1628,8 @@ func (c *Core) subscriberFilterSQLite(searchStr, queryExp string, listIDs []int,
 
 	if searchStr != "" {
 		like := "%" + searchStr + "%"
-		where = append(where, `(subscribers.name LIKE ? COLLATE NOCASE OR subscribers.email LIKE ? COLLATE NOCASE)`)
-		args = append(args, like, like)
+		where = append(where, `(subscribers.name LIKE ? COLLATE NOCASE OR subscribers.email LIKE ? COLLATE NOCASE OR subscribers.phone LIKE ? COLLATE NOCASE)`)
+		args = append(args, like, like, like)
 	}
 
 	exp := strings.TrimSpace(sanitizeSQLExp(queryExp))

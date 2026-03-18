@@ -37,9 +37,10 @@ const (
 
 const (
 	sqliteUpsertSubscriber = `
-INSERT INTO subscribers (uuid, email, first_name, last_name, name, attribs, status, updated)
-VALUES (?, ?, ?, ?, ?, ?, 'enabled', (strftime('%Y-%m-%d %H:%M:%fZ')))
+INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status, updated)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled', (strftime('%Y-%m-%d %H:%M:%fZ')))
 ON CONFLICT(email) DO UPDATE SET
+	phone=(CASE WHEN ? THEN excluded.phone ELSE subscribers.phone END),
 	first_name=(CASE WHEN ? THEN excluded.first_name ELSE subscribers.first_name END),
 	last_name=(CASE WHEN ? THEN excluded.last_name ELSE subscribers.last_name END),
 	name=(CASE WHEN ? THEN excluded.name ELSE subscribers.name END),
@@ -63,8 +64,8 @@ ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
 `
 
 	sqliteUpsertBlocklistedSubscriber = `
-INSERT INTO subscribers (uuid, email, first_name, last_name, name, attribs, status, updated)
-VALUES (?, ?, ?, ?, ?, ?, 'blocklisted', (strftime('%Y-%m-%d %H:%M:%fZ')))
+INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status, updated)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'blocklisted', (strftime('%Y-%m-%d %H:%M:%fZ')))
 ON CONFLICT (email) DO UPDATE SET
 	status='blocklisted',
 	updated=(strftime('%Y-%m-%d %H:%M:%fZ'));
@@ -172,6 +173,7 @@ var (
 
 	csvHeaders = map[string]bool{
 		"email":      true,
+		"phone":      true,
 		"name":       true,
 		"first_name": true,
 		"last_name":  true,
@@ -368,18 +370,18 @@ func (s *Session) Start() {
 
 		if s.im.opt.UseJSONListArgs {
 			if s.opt.Mode == ModeSubscribe {
-				if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
+				if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
 					_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus)
 				}
 			} else if s.opt.Mode == ModeBlocklist {
-				if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.FirstName, sub.LastName, sub.Name, sub.Attribs); err == nil {
+				if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs); err == nil {
 					_, err = tx.Exec(sqliteMarkSubscriptionsUnsubscribed, sub.Email)
 				}
 			}
 		} else if s.opt.Mode == ModeSubscribe {
-			_, err = stmt.Exec(uu, sub.Email, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, listIDsArg, s.opt.SubStatus, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
+			_, err = stmt.Exec(uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, listIDsArg, s.opt.SubStatus, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
 		} else if s.opt.Mode == ModeBlocklist {
-			_, err = stmt.Exec(uu, sub.Email, sub.FirstName, sub.LastName, sub.Name, sub.Attribs)
+			_, err = stmt.Exec(uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs)
 		}
 		if err != nil {
 			s.log.Printf("error executing insert: %v", err)
@@ -621,6 +623,7 @@ func (s *Session) LoadCSV(srcPath string, delim rune) error {
 
 		sub := SubReq{}
 		sub.Email = row["email"]
+		sub.Phone = row["phone"]
 
 		sub.Name = row["name"]
 		sub.FirstName = row["first_name"]
@@ -721,6 +724,10 @@ func (im *Importer) ValidateFields(s SubReq) (SubReq, error) {
 		return s, err
 	}
 	s.Email = strings.ToLower(em)
+	s.Phone = strings.TrimSpace(s.Phone)
+	if len(s.Phone) > 64 {
+		return s, errors.New(im.i18n.T("globals.messages.invalidData"))
+	}
 
 	s.NormalizeName()
 	if len(s.Name) == 0 {

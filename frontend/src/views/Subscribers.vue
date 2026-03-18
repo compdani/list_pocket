@@ -146,6 +146,9 @@
             <b-tag v-if="item.status !== 'enabled'" :class="item.status" data-cy="blocklisted">
               {{ $t(`subscribers.status.${item.status}`) }}
             </b-tag>
+            <div v-if="item.phone" class="subtle-row">
+              {{ item.phone }}
+            </div>
             <div class="tag-list">
               <router-link v-for="l in item.lists" :key="l.id" :to="`/subscribers/lists/${l.id}`">
                 <b-tag :class="l.subscriptionStatus" size="is-small">
