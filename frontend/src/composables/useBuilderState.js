@@ -69,6 +69,28 @@ function triggerPresentation(mode) {
   }
 }
 
+function defaultNodeLabel(type, config = {}) {
+  switch (type) {
+    case "trigger":
+      return triggerPresentation(String(config.mode ?? "webhook")).label;
+    case "condition":
+      return "Condition";
+    case "event_start":
+      return "Set Event Start";
+    case "http_request":
+      return "HTTP Request";
+    case "pb_update":
+      return "Update Record";
+    case "pb_query":
+      return "Query Record";
+    case "wait_until":
+      return "Wait Until";
+    case "transform":
+    default:
+      return "Transform";
+  }
+}
+
 function buildNodeTemplate(type, index) {
   const base = {
     id: generateGraphId(),
@@ -392,7 +414,9 @@ export function useBuilderState(workflow) {
 
     if (currentData.type === "trigger" && key === "mode") {
       const presentation = triggerPresentation(String(value));
-      nextData.label = presentation.label;
+      if (currentData.label === defaultNodeLabel(currentData.type, currentData.config)) {
+        nextData.label = presentation.label;
+      }
       nextData.description = presentation.description;
       nextData.contactMode = presentation.contactMode;
     }
@@ -400,6 +424,26 @@ export function useBuilderState(workflow) {
     nextNodes[index] = {
       ...currentNode,
       data: nextData,
+    };
+
+    nodes.value = nextNodes;
+  }
+
+  function updateNodeLabel(nodeId, value) {
+    const nextNodes = [...nodes.value];
+    const index = nextNodes.findIndex((node) => node.id === nodeId);
+    if (index === -1) {
+      return;
+    }
+
+    const currentNode = nextNodes[index];
+    const currentData = currentNode.data ?? emptyData;
+    nextNodes[index] = {
+      ...currentNode,
+      data: {
+        ...currentData,
+        label: value,
+      },
     };
 
     nodes.value = nextNodes;
@@ -515,6 +559,7 @@ export function useBuilderState(workflow) {
     selectedEdgeId,
     selectedNodeId,
     updateNodeConfig,
+    updateNodeLabel,
     updateNodePosition,
     updateSelectedEdgeField,
   };

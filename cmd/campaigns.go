@@ -618,6 +618,13 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 		from = c.QueryParams().Get("from")
 		to   = c.QueryParams().Get("to")
 	)
+	if typ == "" {
+		path := strings.Trim(c.Request().URL.Path, "/")
+		parts := strings.Split(path, "/")
+		if len(parts) > 0 {
+			typ = parts[len(parts)-1]
+		}
+	}
 	if !strHasLen(from, 10, 30) || !strHasLen(to, 10, 30) {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("analytics.invalidDates"))
 	}

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
+	"github.com/gofrs/uuid/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -32,14 +32,14 @@ var (
 )
 
 type sqliteSubscriberRow struct {
-	ID        int             `db:"id"`
-	CreatedAt string          `db:"created_at"`
-	UpdatedAt string          `db:"updated_at"`
-	UUID      string          `db:"uuid"`
-	Email     string          `db:"email"`
-	Name      string          `db:"name"`
-	Attribs   []byte          `db:"attribs"`
-	Status    string          `db:"status"`
+	ID        int    `db:"id"`
+	CreatedAt string `db:"created_at"`
+	UpdatedAt string `db:"updated_at"`
+	UUID      string `db:"uuid"`
+	Email     string `db:"email"`
+	Name      string `db:"name"`
+	Attribs   []byte `db:"attribs"`
+	Status    string `db:"status"`
 }
 
 type sqliteSubscriberActivityViewRow struct {
@@ -729,7 +729,7 @@ func (c *Core) BlocklistSubscribers(subIDs []int) error {
 		}
 
 		q := `UPDATE subscribers
-			SET status='blocklisted', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
 		if _, err := c.db.Exec(q, args...); err != nil {
 			c.log.Printf("error blocklisting subscribers: %v", err)
@@ -738,7 +738,7 @@ func (c *Core) BlocklistSubscribers(subIDs []int) error {
 		}
 
 		q = `UPDATE subscriber_lists
-			SET status='unsubscribed', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
 		if _, err := c.db.Exec(q, args...); err != nil {
 			c.log.Printf("error blocklisting subscribers: %v", err)
@@ -995,10 +995,10 @@ func (c *Core) DeleteSubscriberBounces(id int, uuid string) error {
 }
 
 func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.SubscriberExportProfile, error) {
-	query := `SELECT id, uuid, email, name, attribs, status, created_at, updated_at FROM subscribers WHERE `
+	query := `SELECT rowid AS id, uuid, email, name, attribs, status, created AS created_at, updated AS updated_at FROM subscribers WHERE `
 	args := []any{}
 	if id > 0 {
-		query += `id = ?`
+		query += `rowid = ?`
 		args = append(args, id)
 	} else {
 		query += `uuid = ?`
@@ -1030,7 +1030,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 			sl.status AS subscription_status,
 			(CASE WHEN l.type = 'private' THEN 'Private list' ELSE l.name END) AS name,
 			l.type,
-			sl.created_at
+			sl.created AS created_at
 		FROM subscriber_lists sl
 		LEFT JOIN lists l ON l.id = sl.list_id
 		WHERE sl.subscriber_id = ?`, sid); err != nil {
@@ -1517,7 +1517,9 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, subIDs, listIDs 
 
 		q := `
 			SELECT subscribers.id, subscribers.uuid, subscribers.email, subscribers.name,
-			       subscribers.status, subscribers.attribs, subscribers.created_at, subscribers.updated_at
+			       subscribers.status, subscribers.attribs,
+			       subscribers.created AS created_at,
+			       subscribers.updated AS updated_at
 			FROM subscribers
 			WHERE ` + whereSQL + `
 			ORDER BY subscribers.id ASC`

@@ -22,9 +22,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/models"
+	"github.com/gofrs/uuid/v5"
 	"github.com/lib/pq"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -37,16 +37,16 @@ const (
 
 const (
 	sqliteUpsertSubscriber = `
-INSERT INTO subscribers (uuid, email, name, attribs, status, updated_at)
+INSERT INTO subscribers (uuid, email, name, attribs, status, updated)
 VALUES (?, ?, ?, ?, 'enabled', (strftime('%Y-%m-%d %H:%M:%fZ')))
 ON CONFLICT(email) DO UPDATE SET
 	name=(CASE WHEN ? THEN excluded.name ELSE subscribers.name END),
 	attribs=(CASE WHEN ? THEN excluded.attribs ELSE subscribers.attribs END),
-	updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'));
+	updated=(strftime('%Y-%m-%d %H:%M:%fZ'));
 `
 
 	sqliteUpsertSubscriberLists = `
-INSERT INTO subscriber_lists (subscriber_id, list_id, status, updated_at)
+INSERT INTO subscriber_lists (subscriber_id, list_id, status, updated)
 SELECT
 	s.id,
 	CAST(j.value AS INTEGER),
@@ -56,21 +56,21 @@ FROM subscribers s
 JOIN json_each(?) AS j
 WHERE s.email = ?
 ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
-	updated_at = (strftime('%Y-%m-%d %H:%M:%fZ')),
+	updated = (strftime('%Y-%m-%d %H:%M:%fZ')),
 	status = CASE WHEN ? THEN excluded.status ELSE subscriber_lists.status END;
 `
 
 	sqliteUpsertBlocklistedSubscriber = `
-INSERT INTO subscribers (uuid, email, name, attribs, status, updated_at)
+INSERT INTO subscribers (uuid, email, name, attribs, status, updated)
 VALUES (?, ?, ?, ?, 'blocklisted', (strftime('%Y-%m-%d %H:%M:%fZ')))
 ON CONFLICT (email) DO UPDATE SET
 	status='blocklisted',
-	updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'));
+	updated=(strftime('%Y-%m-%d %H:%M:%fZ'));
 `
 
 	sqliteMarkSubscriptionsUnsubscribed = `
 UPDATE subscriber_lists
-SET status='unsubscribed', updated_at=(strftime('%Y-%m-%d %H:%M:%fZ'))
+SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 WHERE subscriber_id = (SELECT id FROM subscribers WHERE email = ?);
 `
 )

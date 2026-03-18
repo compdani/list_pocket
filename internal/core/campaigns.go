@@ -39,6 +39,36 @@ func sqliteCampaignTimeValue(v null.Time) string {
 	return ""
 }
 
+func normalizeAnalyticsDateInput(value string, endOfDay bool) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "missing analytics date")
+	}
+
+	layouts := []string{
+		"2006-01-02",
+		"2006-01-02T15:04",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02 15:04:05",
+		time.RFC3339,
+		"2006-01-02T15:04:05.000Z",
+		"2006-01-02T15:04:05.999Z",
+		"2006-01-02T15:04:05.000-07:00",
+	}
+
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			if layout == "2006-01-02" && endOfDay {
+				parsed = parsed.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+			}
+			return parsed.UTC().Format("2006-01-02 15:04:05"), nil
+		}
+	}
+
+	return "", echo.NewHTTPError(http.StatusBadRequest, "invalid analytics date")
+}
+
 func (c *Core) sqliteTemplateRecordID(id null.Int) (string, error) {
 	if !id.Valid || id.Int <= 0 {
 		return "", nil
@@ -1392,7 +1422,7 @@ func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate st
 func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
 	if c.isSQLite() {
 		if _, err := c.db.Exec(`
-			INSERT INTO campaign_views (campaign_id, subscriber_id, created_at)
+			INSERT INTO campaign_views (campaign_id, subscriber_id, created)
 			SELECT c.id, s.id, (strftime('%Y-%m-%d %H:%M:%fZ'))
 			FROM campaigns c
 			LEFT JOIN subscribers s ON s.uuid = ?
@@ -1445,7 +1475,7 @@ func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (st
 		}
 
 		if _, err := c.db.Exec(`
-			INSERT INTO link_clicks (campaign_id, subscriber_id, link_id, created_at)
+			INSERT INTO link_clicks (campaign_id, subscriber_id, link_id, created)
 			SELECT c.id, s.id, ?, (strftime('%Y-%m-%d %H:%M:%fZ'))
 			FROM campaigns c
 			LEFT JOIN subscribers s ON s.uuid = ?
@@ -1492,25 +1522,27 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("globals.messages.invalidData"))
 	}
 
-	fromTime, err := time.Parse("2006-01-02", fromDate)
+	fromSQL, err := normalizeAnalyticsDateInput(fromDate, false)
 	if err != nil {
-		fromTime = time.Now().AddDate(0, 0, -7)
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
 	}
-	toTime, err := time.Parse("2006-01-02", toDate)
+	toSQL, err := normalizeAnalyticsDateInput(toDate, true)
 	if err != nil {
-		toTime = time.Now()
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
 	}
+	fromTime, _ := time.Parse("2006-01-02 15:04:05", fromSQL)
+	toTime, _ := time.Parse("2006-01-02 15:04:05", toSQL)
 	groupFmt := "%Y-%m-%d %H:00:00"
 	if toTime.Sub(fromTime).Hours()/24 >= 7 {
 		groupFmt = "%Y-%m-%d 00:00:00"
 	}
 
 	q := `
-		SELECT campaign_id, COUNT(*) AS count, strftime(? , created_at) AS ts
+		SELECT campaign_id, COUNT(*) AS count, strftime(? , created) AS ts
 		FROM ` + table + `
 		WHERE campaign_id IN (` + sqlitePlaceholders(len(campIDs)) + `)
-		  AND created_at >= ?
-		  AND created_at <= ?
+		  AND created >= ?
+		  AND created <= ?
 		GROUP BY campaign_id, ts
 		ORDER BY ts ASC`
 
@@ -1518,7 +1550,7 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	for _, id := range campIDs {
 		args = append(args, id)
 	}
-	args = append(args, fromDate, toDate+" 23:59:59")
+	args = append(args, fromSQL, toSQL)
 
 	type row struct {
 		CampaignID int    `db:"campaign_id"`
@@ -1553,13 +1585,22 @@ func (c *Core) getCampaignAnalyticsLinksSQLite(campIDs []int, fromDate, toDate s
 		return []models.CampaignAnalyticsLink{}, nil
 	}
 
+	fromSQL, err := normalizeAnalyticsDateInput(fromDate, false)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
+	}
+	toSQL, err := normalizeAnalyticsDateInput(toDate, true)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
+	}
+
 	q := `
 		SELECT COUNT(*) AS count, links.url
 		FROM link_clicks
 		LEFT JOIN links ON link_clicks.link_id = links.id
 		WHERE campaign_id IN (` + sqlitePlaceholders(len(campIDs)) + `)
-		  AND link_clicks.created_at >= ?
-		  AND link_clicks.created_at <= ?
+		  AND link_clicks.created >= ?
+		  AND link_clicks.created <= ?
 		GROUP BY links.url
 		ORDER BY count DESC
 		LIMIT 50`
@@ -1568,7 +1609,7 @@ func (c *Core) getCampaignAnalyticsLinksSQLite(campIDs []int, fromDate, toDate s
 	for _, id := range campIDs {
 		args = append(args, id)
 	}
-	args = append(args, fromDate, toDate+" 23:59:59")
+	args = append(args, fromSQL, toSQL)
 
 	out := []models.CampaignAnalyticsLink{}
 	if err := c.db.Select(&out, q, args...); err != nil {

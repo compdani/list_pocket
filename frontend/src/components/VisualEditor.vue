@@ -1,16 +1,20 @@
 <template>
   <div class="visual-editor-wrapper">
-    <iframe ref="visualEditor" id="visual-editor" class="visual-editor email-builder-container"
-      title="Visual email editor" />
+    <iframe
+      ref="visualEditor"
+      id="visual-editor"
+      class="visual-editor email-builder-container"
+      title="Visual email editor"
+    />
 
     <!-- image picker -->
-    <b-modal scroll="keep" :aria-modal="true" :active="isMediaVisible" @update:active="isMediaVisible = $event" :width="900">
-      <div class="modal-card content" style="width: auto">
-        <section expanded class="modal-card-body">
-          <media is-modal @selected="onMediaSelect" />
-        </section>
-      </div>
-    </b-modal>
+    <v-dialog v-model="isMediaVisible" max-width="900">
+      <v-card>
+        <v-card-text class="pt-0">
+          <media is-modal type="pictures" @selected="onMediaSelect" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 

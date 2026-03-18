@@ -497,7 +497,7 @@ func (s *store) RecordBounce(b models.Bounce) (int64, int, error) {
 		}
 
 		if _, err := s.db.Exec(`
-			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created_at)
+			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
 			VALUES (?, ?, ?, ?, ?, (strftime('%Y-%m-%d %H:%M:%fZ')))`,
 			subID, campID, b.Type, b.Source, string(metaJSON)); err != nil {
 			return 0, 0, err

@@ -132,6 +132,12 @@ function saveNodeConfig(key, value) {
   }
 }
 
+function saveNodeLabel(value) {
+  if (selectedNode.value) {
+    builder.updateNodeLabel(selectedNode.value.id, value);
+  }
+}
+
 function applyNodeConfigValues(nodeId, updates) {
   Object.entries(updates).forEach(([key, value]) => {
     builder.updateNodeConfig(nodeId, key, value);
@@ -327,6 +333,7 @@ defineExpose({
           @capture-schema="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)"
           @remove="removeSelectedNode"
           @save="saveNodeConfig"
+          @save-label="saveNodeLabel"
         />
       </div>
     </div>

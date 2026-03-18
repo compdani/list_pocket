@@ -1,25 +1,31 @@
 <template>
-  <div>
-    <b-modal scroll="keep" @close="close" :aria-modal="true" :active="isVisible">
-      <div>
-        <div class="modal-card" style="width: auto">
-          <header class="modal-card-head">
-            <h4>{{ title }}</h4>
-          </header>
-        </div>
-        <section expanded class="modal-card-body preview">
-          <b-loading :active="isLoading" :is-full-page="false" />
-          <iframe id="iframe" name="iframe" ref="iframe" :title="title" :srcdoc="previewHTML"
-            @load="onLoaded" sandbox="allow-scripts" />
-        </section>
-        <footer class="modal-card-foot has-text-right">
-          <b-button @click="close">
-            {{ $t('globals.buttons.close') }}
-          </b-button>
-        </footer>
-      </div>
-    </b-modal>
-  </div>
+  <v-dialog v-model="isVisible" @update:model-value="close" max-width="900">
+    <v-card>
+      <v-card-title class="bg-surface">
+        {{ title }}
+      </v-card-title>
+      <v-card-text class="preview-content">
+        <v-overlay v-if="isLoading" contained persistent>
+          <v-progress-circular indeterminate />
+        </v-overlay>
+        <iframe
+          id="iframe"
+          name="iframe"
+          ref="iframe"
+          :title="title"
+          :srcdoc="previewHTML"
+          @load="onLoaded"
+          sandbox="allow-scripts"
+          class="preview-iframe"
+        />
+      </v-card-text>
+      <v-card-actions class="justify-end">
+        <v-btn @click="close">
+          {{ $t('globals.buttons.close') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>

@@ -1,28 +1,52 @@
 <template>
-  <div class="field list-selector">
+  <div class="list-selector">
     <div :class="['list-tags', ...classes]">
-      <b-taglist>
-        <b-tag v-for="l in selectedItems" :key="l.id" :class="l.subscriptionStatus" :closable="!$props.disabled"
-          :data-id="l.id" @close="removeList(l.id)" class="list">
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <v-chip
+          v-for="l in selectedItems"
+          :key="l.id"
+          :class="l.subscriptionStatus"
+          :closable="!$props.disabled"
+          @click:close="removeList(l.id)"
+          class="list"
+        >
           {{ l.name }}
           <sup v-if="l.optin === 'double' && l.subscriptionStatus">
             {{ $t(`subscribers.status.${l.subscriptionStatus}`) }}
           </sup>
-        </b-tag>
-      </b-taglist>
+        </v-chip>
+      </div>
     </div>
 
-    <b-field :message="message" :label="label + (selectedItems ? ` (${selectedItems.length})` : '')"
-      label-position="on-border">
-      <b-autocomplete v-model="query" :placeholder="placeholder" clearable dropdown-position="top"
-        :disabled="all.length === 0 || $props.disabled" :keep-first="true" :clear-on-select="true" :open-on-focus="true"
-        :data="filteredLists" @select="selectList" field="name" />
-    </b-field>
+    <div>
+      <label v-if="label" :for="inputId" class="d-block mb-2">
+        {{ label }}
+        <span v-if="selectedItems">
+          ({{ selectedItems.length }})
+        </span>
+      </label>
+      <v-autocomplete
+        :id="inputId"
+        v-model="query"
+        :placeholder="placeholder"
+        :disabled="all.length === 0 || $props.disabled"
+        :items="filteredLists"
+        item-title="name"
+        item-value="id"
+        clearable
+        @update:model-value="selectListValue"
+      />
+      <div v-if="message" class="text-caption text-grey mt-1">
+        {{ message }}
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import { nextTick } from 'vue';
+
+let listSelectorId = 0;
 
 export default {
   name: 'ListSelector',
@@ -48,7 +72,10 @@ export default {
   },
 
   data() {
+    listSelectorId += 1;
+
     return {
+      inputId: `list-selector-${listSelectorId}`,
       query: '',
       selectedItems: [],
     };
@@ -66,6 +93,13 @@ export default {
       nextTick(() => {
         this.$emit('input', this.selectedItems);
       });
+    },
+
+    selectListValue(value) {
+      const item = this.filteredLists.find((l) => l.id === value);
+      if (item) {
+        this.selectList(item);
+      }
     },
 
     removeList(id) {

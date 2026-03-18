@@ -1,7 +1,7 @@
 <template>
-  <section class="chart">
+  <div class="chart">
     <canvas class="chart-canvas" />
-  </section>
+  </div>
 </template>
 
 <script>

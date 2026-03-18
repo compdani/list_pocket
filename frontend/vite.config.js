@@ -21,7 +21,6 @@ export default defineConfig(({ _, mode }) => {
         '@vue-flow/controls': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/controls'),
         '@vue-flow/core': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/core'),
         '@vue-flow/minimap': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/minimap'),
-        bulma: require.resolve('bulma/bulma.sass'),
       },
     },
     define: {
@@ -38,7 +37,7 @@ export default defineConfig(({ _, mode }) => {
         '^/$': {
           target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
         },
-        '^/(api|webhooks|subscription|public|health)': {
+        '^/(api|mailapi|webhooks|subscription|public|health)': {
           target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
         },
         '^/admin/login': {

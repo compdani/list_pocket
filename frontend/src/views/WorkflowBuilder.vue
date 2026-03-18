@@ -7,6 +7,7 @@ import RunHistory from "../components/RunHistory.vue";
 import WorkflowBuilderPanel from "../components/WorkflowBuilderPanel.vue";
 import {
   armWorkflowWebhookCapture,
+  cancelWorkflowRun as cancelWorkflowRunRequest,
   createWorkflow as createWorkflowRequest,
   deleteWorkflow as deleteWorkflowRequest,
   getAuthRecord,
@@ -181,6 +182,29 @@ function replaceDashboard(next) {
   saveState.value = "idle";
 }
 
+function updateWorkflowName(value) {
+  const nextName = value;
+  if (!dashboard.value.activeWorkflow?.workflow) {
+    return;
+  }
+
+  dashboard.value = {
+    ...dashboard.value,
+    workflows: (dashboard.value.workflows || []).map((workflow) => (
+      workflow.id === dashboard.value.activeWorkflow.workflow.id
+        ? { ...workflow, name: nextName }
+        : workflow
+    )),
+    activeWorkflow: {
+      ...dashboard.value.activeWorkflow,
+      workflow: {
+        ...dashboard.value.activeWorkflow.workflow,
+        name: nextName,
+      },
+    },
+  };
+}
+
 function syncWorkflowRoute(workflowId) {
   const nextWorkflowId = workflowId || undefined;
   const currentRouteWorkflowId = typeof route.params.workflowId === "string" ? route.params.workflowId : undefined;
@@ -208,6 +232,7 @@ async function saveWorkflow(payload, mode) {
 
   try {
     replaceDashboard(await saveWorkflowGraph(payload.workflow.id, {
+      name: payload.workflow.name,
       nodes: payload.nodes,
       edges: payload.edges,
     }));
@@ -400,6 +425,26 @@ async function selectRun(runId) {
   await loadRunDetail(runId);
 }
 
+async function cancelRun(runId) {
+  if (!runId || !window.confirm("Stop this run? Waiting or queued work will be cancelled.")) {
+    return;
+  }
+
+  try {
+    selectedRunLoading.value = true;
+    selectedRunDetail.value = await cancelWorkflowRunRequest(runId);
+    saveMessage.value = "Run cancelled";
+    saveState.value = "saved";
+    queueDashboardRefresh();
+  } catch (nextError) {
+    error.value = nextError instanceof Error ? nextError.message : "Failed to cancel run";
+    saveMessage.value = error.value;
+    saveState.value = "error";
+  } finally {
+    selectedRunLoading.value = false;
+  }
+}
+
 async function validateWorkflow(workflowId) {
   saveState.value = "saving";
   saveMessage.value = "Validating workflow...";
@@ -497,7 +542,12 @@ onBeforeUnmount(() => {
         <div class="builder-controls-header">
           <div class="builder-controls-copy">
             <span class="builder-controls-label">Workflow</span>
-            <h2>{{ activeWorkflow?.workflow.name ?? "Workflow Builder" }}</h2>
+            <input
+              class="workflow-name-input"
+              :value="activeWorkflow?.workflow.name ?? ''"
+              placeholder="Untitled Workflow"
+              @input="updateWorkflowName($event.target.value)"
+            />
           </div>
           <button class="primary-button" type="button" @click="createWorkflow">
             New Workflow
@@ -545,6 +595,7 @@ onBeforeUnmount(() => {
           :selected-run-detail="selectedRunDetail"
           :selected-run-id="selectedRunId"
           :selected-run-loading="selectedRunLoading"
+          @cancel-run="cancelRun"
           @select-run="selectRun"
         />
       </section>
@@ -680,6 +731,18 @@ onBeforeUnmount(() => {
 .workflow-route .builder-controls-copy h2 {
   margin: 0;
   font-size: 1.45rem;
+}
+
+.workflow-route .workflow-name-input {
+  width: min(420px, 100%);
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1px solid #ccd5e2;
+  border-radius: 14px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .workflow-route .builder-controls-row {

@@ -1,60 +1,89 @@
 <template>
   <!-- Two-way Data-Binding -->
-  <section class="editor">
-    <div class="columns">
-      <div class="column is-three-quarters is-inline-flex">
-        <b-field :label="$t('campaigns.format')" label-position="on-border" class="mr-4 mb-0">
-          <b-select v-model="contentTypeSel" :disabled="disabled" name="content_type">
-            <option v-for="(name, f) in contentTypes" :key="f" name="format" :value="f" :data-cy="`check-${f}`">
-              {{ name }}
-            </option>
-          </b-select>
-        </b-field>
+  <div class="editor">
+    <v-row class="mb-4">
+      <v-col cols="12" sm="9">
+        <v-select
+          v-model="contentTypeSel"
+          :disabled="disabled"
+          :label="$t('campaigns.format')"
+          :items="Object.entries(contentTypes).map(([key, name]) => ({ value: key, title: name }))"
+          item-title="title"
+          item-value="value"
+          name="content_type"
+          class="mb-4"
+        />
 
-        <b-field v-if="self.contentType !== 'visual'" :label="$tc('globals.terms.template')" label-position="on-border">
-          <b-select :placeholder="$t('globals.terms.none')" v-model="templateId" name="template" :disabled="disabled">
-            <option v-for="t in validTemplates" :key="t.id" :value="t.id">
-              {{ t.name }}
-            </option>
-          </b-select>
-        </b-field>
+        <v-select
+          v-if="self.contentType !== 'visual'"
+          v-model="templateId"
+          :label="$tc('globals.terms.template')"
+          :placeholder="$t('globals.terms.none')"
+          :items="validTemplates"
+          item-title="name"
+          item-value="id"
+          name="template"
+          :disabled="disabled"
+          clearable
+        />
 
         <div v-else>
-          <b-button v-if="!isVisualTplSelector" @click="onShowVisualTplSelector" type="is-ghost"
-            icon-left="file-find-outline" data-cy="btn-select-visual-tpl">
+          <v-btn
+            v-if="!isVisualTplSelector"
+            @click="onShowVisualTplSelector"
+            variant="text"
+            prepend-icon="mdi-file-find-outline"
+            data-cy="btn-select-visual-tpl"
+          >
             {{ $t('campaigns.importVisualTemplate') }}
-          </b-button>
-          <b-field v-else :label="$tc('globals.terms.template')" label-position="on-border">
-            <b-select :placeholder="$t('globals.terms.none')" v-model="visualTemplateId"
-              @input="() => isVisualTplDisabled = false" name="template" :disabled="disabled"
-              class="copy-visual-template-list">
-              <option v-for="t in validTemplates" :key="t.id" :value="t.id">
-                {{ t.name }}
-              </option>
-            </b-select>
+          </v-btn>
+          <div v-else class="d-flex align-center gap-2">
+            <v-select
+              v-model="visualTemplateId"
+              @update:model-value="() => isVisualTplDisabled = false"
+              :label="$tc('globals.terms.template')"
+              :placeholder="$t('globals.terms.none')"
+              :items="validTemplates"
+              item-title="name"
+              item-value="id"
+              name="template"
+              :disabled="disabled"
+              clearable
+              class="copy-visual-template-list"
+            />
 
-            <b-button :disabled="disabled || isVisualTplDisabled || !visualTemplateId" class="ml-3"
-              @click="onImportVisualTpl" type="is-primary" icon-left="content-save-outline"
-              data-cy="btn-save-visual-tpl">
+            <v-btn
+              :disabled="disabled || isVisualTplDisabled || !visualTemplateId"
+              @click="onImportVisualTpl"
+              color="primary"
+              prepend-icon="mdi-content-save-outline"
+              data-cy="btn-save-visual-tpl"
+              :loading="loading.templates"
+            >
               {{ $t('globals.terms.import') }}
-
-              <span class="spinner is-tiny" v-if="loading.templates">
-                <b-loading :is-full-page="false" active />
-              </span>
-            </b-button>
-          </b-field>
+            </v-btn>
+          </div>
         </div>
-      </div>
-      <div class="column is- has-text-right">
-        <b-button @click="onTogglePreview" type="is-primary" icon-left="file-find-outline" data-cy="btn-preview"
-          aria-keyshortcuts="F9">
+      </v-col>
+      <v-col cols="12" sm="3" class="text-right">
+        <v-btn
+          @click="onTogglePreview"
+          color="primary"
+          prepend-icon="mdi-file-find-outline"
+          data-cy="btn-preview"
+          aria-keyshortcuts="F9"
+        >
           <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
-        </b-button>
-      </div>
-    </div>
+        </v-btn>
+      </v-col>
+    </v-row>
 
-    <!-- wsywig //-->
-    <richtext-editor v-if="self.contentType === 'richtext'" :disabled="disabled" v-model="self.body" />
+    <richtext-editor
+      v-if="self.contentType === 'richtext'"
+      v-model="self.body"
+      :disabled="disabled"
+      key="editor-richtext"
+    />
 
     <!-- visual editor //-->
     <visual-editor v-if="self.contentType === 'visual'" :source="self.bodySource" @change="onVisualEditorChange"
@@ -67,13 +96,18 @@
     <code-editor lang="markdown" v-if="self.contentType === 'markdown'" v-model="self.body" key="editor-markdown" />
 
     <!-- plain text //-->
-    <b-input v-if="self.contentType === 'plain'" v-model="self.body" type="textarea" name="content" ref="plainEditor"
-      class="plain-editor" />
+    <v-textarea
+      v-if="self.contentType === 'plain'"
+      v-model="self.body"
+      name="content"
+      ref="plainEditor"
+      class="plain-editor"
+    />
 
     <!-- campaign preview //-->
     <campaign-preview v-if="isPreviewing" is-post @close="onTogglePreview" type="campaign" :id="id" :title="title"
       :content-type="self.contentType" :template-id="templateId" :body="self.body" />
-  </section>
+  </div>
 </template>
 
 <script>
@@ -82,8 +116,8 @@ import TurndownService from 'turndown';
 import { mapState } from 'vuex';
 
 import CampaignPreview from './CampaignPreview.vue';
-import VisualEditor from './VisualEditor.vue';
 import RichtextEditor from './RichtextEditor.vue';
+import VisualEditor from './VisualEditor.vue';
 import markdownToVisualBlock from './editor';
 import CodeEditor from './CodeEditor.vue';
 
@@ -92,10 +126,12 @@ const turndown = new TurndownService();
 export default {
   components: {
     CampaignPreview,
+    RichtextEditor,
     'code-editor': CodeEditor,
     'visual-editor': VisualEditor,
-    'richtext-editor': RichtextEditor,
   },
+
+  emits: ['update:modelValue'],
 
   props: {
     contentTypes: { type: Object, default: () => ({}) },
@@ -104,10 +140,9 @@ export default {
     disabled: { type: Boolean, default: false },
     templates: { type: Array, default: null },
 
-    // value is provided by the parent component.
-    // Throught the editor, `this.self` (a mutable clone of `value`) is used,
-    // instead of `this.value` directly.
-    value: {
+    // modelValue is provided by the parent component.
+    // Throughout the editor, `this.self` references that reactive object.
+    modelValue: {
       type: Object,
       default: () => ({
         body: '',
@@ -123,7 +158,7 @@ export default {
       isPreviewing: false,
       isVisualTplSelector: false,
       isVisualTplDisabled: false,
-      contentTypeSel: this.$props.value.contentType,
+      contentTypeSel: this.$props.modelValue.contentType,
       templateId: null,
       visualTemplateId: null,
     };
@@ -326,8 +361,8 @@ export default {
 
   mounted() {
     // Set initial content type for the selector.
-    this.contentTypeSel = this.value.contentType;
-    this.templateId = this.value.templateId;
+    this.contentTypeSel = this.modelValue.contentType;
+    this.templateId = this.modelValue.templateId;
 
     window.addEventListener('keydown', this.onKeyboardShortcut);
 
@@ -336,7 +371,7 @@ export default {
     });
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     window.removeEventListener('keydown', this.onKeyboardShortcut);
     this.$events.$off('campaign.preview');
   },
@@ -344,15 +379,15 @@ export default {
   computed: {
     ...mapState(['serverConfig', 'loading']),
 
-    // This is a clone of the incoming `value` prop that's mutated here.
+    // This references the incoming `modelValue` prop.
     self: {
       get() {
-        return this.value;
+        return this.modelValue;
       },
 
-      // Any change to the local copy, emit it to the parent.
+      // Any direct replacement of the object is emitted to the parent.
       set(val) {
-        this.$emit('input', val);
+        this.$emit('update:modelValue', val);
       },
     },
 
@@ -364,6 +399,23 @@ export default {
   },
 
   watch: {
+    modelValue: {
+      deep: true,
+      handler(val) {
+        if (!val) {
+          return;
+        }
+
+        if (val.contentType && val.contentType !== this.contentTypeSel) {
+          this.contentTypeSel = val.contentType;
+        }
+
+        if (val.templateId !== this.templateId) {
+          this.templateId = val.templateId;
+        }
+      },
+    },
+
     validTemplates() {
       // When the filtered list of validTemplates changes (visual vs. regular),
       // select the appropriate 'default' in the template select list.
