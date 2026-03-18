@@ -1,51 +1,87 @@
 <template>
-  <form novalidate @submit.prevent="onSubmit">
-    <section class="settings">
-      <b-loading :is-full-page="true" v-if="loading.settings || isLoading" active />
-      <header class="columns page-header">
-        <div class="column is-half">
-          <h1 class="title is-4">
-            {{ $t('settings.title') }}
-            <span class="has-text-grey-light">({{ serverConfig.version }})</span>
-          </h1>
-        </div>
-        <div class="column has-text-right">
-          <b-field v-if="$can('settings:manage')" expanded>
-            <b-button expanded :disabled="!hasFormChanged" type="is-primary" icon-left="content-save-outline"
-              native-type="submit" class="isSaveEnabled" data-cy="btn-save">
-              {{ $t('globals.buttons.save') }}
-            </b-button>
-          </b-field>
-        </div>
-      </header>
-      <hr />
+  <v-form @submit.prevent="onSubmit">
+    <section class="settings-page">
+      <v-overlay
+        :model-value="loading.settings || isLoading"
+        class="align-center justify-center"
+        contained
+      >
+        <v-progress-circular indeterminate color="primary" size="56" />
+      </v-overlay>
 
-      <section class="wrap" v-if="form">
-        <div class="settings-tabs">
-          <button
-            v-for="(item, index) in settingsTabs"
+      <div class="settings-header">
+        <div>
+          <h1 class="text-h4 font-weight-bold mb-1">
+            {{ $t('settings.title') }}
+          </h1>
+          <p class="text-medium-emphasis">
+            {{ serverConfig.version }}
+          </p>
+        </div>
+
+        <v-btn
+          v-if="$can('settings:manage')"
+          type="submit"
+          color="primary"
+          prepend-icon="mdi-content-save-outline"
+          :disabled="!hasFormChanged"
+          class="isSaveEnabled"
+          data-cy="btn-save"
+        >
+          {{ $t('globals.buttons.save') }}
+        </v-btn>
+      </div>
+
+      <v-card v-if="form" variant="outlined" class="settings-shell">
+        <v-tabs
+          v-model="tab"
+          color="primary"
+          density="comfortable"
+          class="settings-tabs"
+          align-tabs="start"
+        >
+          <v-tab
+            v-for="item in settingsTabs"
             :key="item.key"
-            type="button"
-            class="settings-tab"
-            :class="{ 'is-active': tab === index }"
-            @click="tab = index"
+            :value="item.key"
           >
             {{ item.label }}
-          </button>
-        </div>
+          </v-tab>
+        </v-tabs>
 
-        <section v-show="tab === 0"><general-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 1"><performance-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 2"><privacy-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 3"><security-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 4"><media-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 5"><smtp-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 6"><bounce-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 7"><messenger-settings :form="form" :key="key" /></section>
-        <section v-show="tab === 8"><appearance-settings :form="form" :key="key" /></section>
-      </section>
+        <v-divider />
+
+        <v-card-text class="pa-6">
+          <v-window v-model="tab" :touch="false">
+            <v-window-item value="general">
+              <general-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="performance">
+              <performance-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="privacy">
+              <privacy-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="security">
+              <security-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="smtp">
+              <smtp-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="bounces">
+              <bounce-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="messengers">
+              <messenger-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item value="appearance">
+              <appearance-settings :form="form" :key="key" />
+            </v-window-item>
+          </v-window>
+        </v-card-text>
+      </v-card>
     </section>
-  </form>
+  </v-form>
 </template>
 
 <script>
@@ -53,12 +89,22 @@ import { mapState } from 'vuex';
 import AppearanceSettings from './settings/appearance.vue';
 import BounceSettings from './settings/bounces.vue';
 import GeneralSettings from './settings/general.vue';
-import MediaSettings from './settings/media.vue';
 import MessengerSettings from './settings/messengers.vue';
 import PerformanceSettings from './settings/performance.vue';
 import PrivacySettings from './settings/privacy.vue';
 import SecuritySettings from './settings/security.vue';
 import SmtpSettings from './settings/smtp.vue';
+
+const SETTINGS_TAB_KEYS = [
+  'general',
+  'performance',
+  'privacy',
+  'security',
+  'smtp',
+  'bounces',
+  'messengers',
+  'appearance',
+];
 
 export default {
   components: {
@@ -66,7 +112,6 @@ export default {
     PerformanceSettings,
     PrivacySettings,
     SecuritySettings,
-    MediaSettings,
     SmtpSettings,
     BounceSettings,
     MessengerSettings,
@@ -75,17 +120,11 @@ export default {
 
   data() {
     return {
-      // :key="key" is a ack to re-render child components every time settings
-      // is pulled. Otherwise, props don't react.
       key: 0,
-
       isLoading: false,
-
-      // formCopy is a stringified copy of the original settings against which
-      // form is compared to detect changes.
       formCopy: '',
       form: null,
-      tab: 0,
+      tab: 'general',
     };
   },
 
@@ -151,7 +190,11 @@ export default {
       };
 
       d['security.captcha'] = d['security.captcha'] || {};
-      d['security.captcha'].hcaptcha = d['security.captcha'].hcaptcha || { secret: '' };
+      d['security.captcha'].altcha = d['security.captcha'].altcha || {
+        enabled: true,
+        complexity: 50000,
+      };
+      d['security.captcha'].hcaptcha = d['security.captcha'].hcaptcha || { enabled: false, key: '', secret: '' };
 
       d['security.oidc'] = d['security.oidc'] || { client_secret: '' };
 
@@ -161,13 +204,10 @@ export default {
     async onSubmit() {
       const form = this.normalizeSettings(JSON.parse(JSON.stringify(this.form)));
 
-      // SMTP boxes.
       let hasDummy = '';
       for (let i = 0; i < form.smtp.length; i += 1) {
-        // trim the host before saving
         form.smtp[i].host = form.smtp[i].host?.trim();
 
-        // If it's the dummy UI password placeholder, ignore it.
         if (this.isDummy(form.smtp[i].password)) {
           form.smtp[i].password = '';
         } else if (this.hasDummy(form.smtp[i].password)) {
@@ -181,12 +221,9 @@ export default {
         }
       }
 
-      // Bounces boxes.
       for (let i = 0; i < form['bounce.mailboxes'].length; i += 1) {
-        // trim the host before saving
         form['bounce.mailboxes'][i].host = form['bounce.mailboxes'][i].host?.trim();
 
-        // If it's the dummy UI password placeholder, ignore it.
         if (this.isDummy(form['bounce.mailboxes'][i].password)) {
           form['bounce.mailboxes'][i].password = '';
         } else if (this.hasDummy(form['bounce.mailboxes'][i].password)) {
@@ -231,7 +268,6 @@ export default {
       }
 
       for (let i = 0; i < form.messengers.length; i += 1) {
-        // If it's the dummy UI password placeholder, ignore it.
         if (this.isDummy(form.messengers[i].password)) {
           form.messengers[i].password = '';
         } else if (this.hasDummy(form.messengers[i].password)) {
@@ -244,7 +280,6 @@ export default {
         return false;
       }
 
-      // Domain blocklist array from multi-line strings.
       form['privacy.domain_blocklist'] = (Array.isArray(form['privacy.domain_blocklist'])
         ? form['privacy.domain_blocklist']
         : String(form['privacy.domain_blocklist'] || '').split('\n'))
@@ -273,7 +308,6 @@ export default {
       this.$api.getSettings().then((data) => {
         let d = {};
         try {
-          // Create a deep-copy of the settings hierarchy.
           d = JSON.parse(JSON.stringify(data));
         } catch (err) {
           return;
@@ -281,13 +315,11 @@ export default {
 
         d = this.normalizeSettings(d);
 
-        // Serialize the `email_headers` array map to display on the form.
         for (let i = 0; i < d.smtp.length; i += 1) {
           d.smtp[i].email_headers = Array.isArray(d.smtp[i].email_headers) ? d.smtp[i].email_headers : [];
           d.smtp[i].strEmailHeaders = JSON.stringify(d.smtp[i].email_headers, null, 4);
         }
 
-        // Domain blocklist array to multi-line string.
         d['privacy.domain_blocklist'] = d['privacy.domain_blocklist'].join('\n');
         d['privacy.domain_allowlist'] = d['privacy.domain_allowlist'].join('\n');
 
@@ -319,7 +351,6 @@ export default {
         { key: 'performance', label: this.$t('settings.performance.name') },
         { key: 'privacy', label: this.$t('settings.privacy.name') },
         { key: 'security', label: this.$t('settings.security.name') },
-        { key: 'media', label: this.$t('settings.media.title') },
         { key: 'smtp', label: this.$t('settings.smtp.name') },
         { key: 'bounces', label: this.$t('settings.bounces.name') },
         { key: 'messengers', label: this.$t('settings.messengers.name') },
@@ -344,7 +375,10 @@ export default {
   },
 
   mounted() {
-    this.tab = this.$utils.getPref('settings.tab') || 0;
+    const storedTab = this.$utils.getPref('settings.tab');
+    this.tab = SETTINGS_TAB_KEYS.includes(storedTab)
+      ? storedTab
+      : SETTINGS_TAB_KEYS[Number.isInteger(storedTab) ? storedTab : 0] || 'general';
     this.getSettings();
   },
 
@@ -357,28 +391,34 @@ export default {
 </script>
 
 <style scoped>
-.settings-tabs {
-  border-bottom: 1px solid #d8dfec;
+.settings-page {
+  position: relative;
+}
+
+.settings-header {
+  align-items: flex-start;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 24px;
 }
 
-.settings-tab {
-  background: #fff;
-  border: 1px solid #d8dfec;
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  color: #667085;
-  cursor: pointer;
-  font-size: 0.95rem;
-  padding: 10px 16px;
+.settings-shell {
+  overflow: visible;
 }
 
-.settings-tab.is-active {
-  background: #f8fbff;
-  color: #0f5bd8;
-  font-weight: 600;
+.settings-tabs {
+  padding: 0 12px;
+}
+
+:deep(.v-window-item) {
+  padding-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .settings-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 </style>

@@ -1,217 +1,294 @@
 <template>
-  <div>
-    <div class="items mail-servers">
-      <div class="block box" v-for="(item, n) in form.smtp" :key="n">
-        <div class="columns">
-          <div class="column is-2">
-            <b-field :label="$t('globals.buttons.enabled')">
-              <b-switch v-model="item.enabled" name="enabled" :native-value="true" data-cy="btn-enable-smtp" />
-            </b-field>
-            <b-field v-if="form.smtp.length > 1">
-              <a @click.prevent="$utils.confirm(null, () => removeSMTP(n))" href="#" data-cy="btn-delete-smtp">
-                <b-icon icon="trash-can-outline" />
-                {{ $t('globals.buttons.delete') }}
-              </a>
-            </b-field>
-          </div><!-- first column -->
+  <div class="settings-section">
+    <v-card
+      v-for="(item, n) in data.smtp"
+      :key="n"
+      variant="outlined"
+      class="server-card"
+    >
+      <div class="card-head">
+        <div class="toggle-field">
+          <div class="text-subtitle-2">{{ $t('globals.buttons.enabled') }}</div>
+          <v-switch
+            v-model="item.enabled"
+            color="primary"
+            hide-details
+            inset
+            name="enabled"
+            data-cy="btn-enable-smtp"
+          />
+        </div>
 
-          <div class="column" :class="{ disabled: !item.enabled }">
-            <div class="columns">
-              <div class="column is-9">
-                <b-field :label="$t('settings.mailserver.host')" label-position="on-border"
-                  :message="$t('settings.mailserver.hostHelp')">
-                  <b-input v-model="item.host" name="host" placeholder="smtp.yourmailserver.net" :maxlength="200" />
-                </b-field>
-              </div>
-              <div class="column">
-                <b-field :label="$t('settings.mailserver.port')" label-position="on-border"
-                  :message="$t('settings.mailserver.portHelp')">
-                  <b-input v-model.number="item.port" name="port" type="number"
-                    placeholder="25" min="1" max="65535" />
-                </b-field>
-              </div>
-            </div><!-- host -->
+        <v-btn
+          v-if="data.smtp.length > 1"
+          variant="text"
+          color="error"
+          prepend-icon="mdi-trash-can-outline"
+          data-cy="btn-delete-smtp"
+          @click.prevent="$utils.confirm(null, () => removeSMTP(n))"
+        >
+          {{ $t('globals.buttons.delete') }}
+        </v-btn>
+      </div>
 
-            <div class="columns">
-              <div class="column is-2">
-                <b-field :label="$t('settings.mailserver.authProtocol')" label-position="on-border">
-                  <b-select v-model="item.auth_protocol" name="auth_protocol">
-                    <option value="login">
-                      LOGIN
-                    </option>
-                    <option value="cram">
-                      CRAM
-                    </option>
-                    <option value="plain">
-                      PLAIN
-                    </option>
-                    <option value="none">
-                      None
-                    </option>
-                  </b-select>
-                </b-field>
+      <div :class="{ 'section-disabled': !item.enabled }">
+        <v-row>
+          <v-col cols="12" md="9">
+            <v-text-field
+              v-model="item.host"
+              :hint="$t('settings.mailserver.hostHelp')"
+              :label="$t('settings.mailserver.host')"
+              maxlength="200"
+              name="host"
+              persistent-hint
+              placeholder="smtp.yourmailserver.net"
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.number="item.port"
+              :hint="$t('settings.mailserver.portHelp')"
+              :label="$t('settings.mailserver.port')"
+              max="65535"
+              min="1"
+              name="port"
+              persistent-hint
+              placeholder="25"
+              type="number"
+            />
+          </v-col>
+        </v-row>
+
+        <v-row>
+          <v-col cols="12" md="3">
+            <v-select
+              v-model="item.auth_protocol"
+              :items="authProtocolOptions"
+              :label="$t('settings.mailserver.authProtocol')"
+              name="auth_protocol"
+            />
+          </v-col>
+          <v-col cols="12" md="9">
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  :ref="`smtpUsername${n}`"
+                  v-model="item.username"
+                  :disabled="item.auth_protocol === 'none'"
+                  :label="$t('settings.mailserver.username')"
+                  maxlength="200"
+                  name="username"
+                  placeholder="mysmtp"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="item.password"
+                  :disabled="item.auth_protocol === 'none'"
+                  :hint="$t('settings.mailserver.passwordHelp')"
+                  :label="$t('settings.mailserver.password')"
+                  maxlength="200"
+                  name="password"
+                  persistent-hint
+                  :placeholder="$t('settings.mailserver.passwordHelp')"
+                  type="password"
+                />
+              </v-col>
+            </v-row>
+          </v-col>
+        </v-row>
+
+        <div class="quick-links">
+          <v-btn v-for="provider in providerTemplates" :key="provider.key" size="small" variant="text" @click="fillSettings(n, provider.key)">
+            {{ provider.label }}
+          </v-btn>
+        </div>
+
+        <v-divider class="my-4" />
+
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="item.hello_hostname"
+              :hint="$t('settings.smtp.heloHostHelp')"
+              :label="$t('settings.smtp.heloHost')"
+              maxlength="200"
+              name="hello_hostname"
+              persistent-hint
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-select
+              v-model="item.tls_type"
+              :items="tlsOptions"
+              :hint="$t('settings.mailserver.tlsHelp')"
+              :label="$t('settings.mailserver.tls')"
+              item-title="label"
+              item-value="value"
+              name="items.tls_type"
+              persistent-hint
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <div class="toggle-field outlined">
+              <div>
+                <div class="text-subtitle-2">{{ $t('settings.mailserver.skipTLS') }}</div>
+                <div class="text-body-2 text-medium-emphasis">{{ $t('settings.mailserver.skipTLSHelp') }}</div>
               </div>
-              <div class="column">
-                <b-field grouped>
-                  <b-field :label="$t('settings.mailserver.username')" label-position="on-border" expanded>
-                    <b-input v-model="item.username" :custom-class="`smtp-username-${n}`"
-                      :disabled="item.auth_protocol === 'none'" name="username" placeholder="mysmtp" :maxlength="200" />
-                  </b-field>
-                  <b-field :label="$t('settings.mailserver.password')" label-position="on-border" expanded
-                    :message="$t('settings.mailserver.passwordHelp')">
-                    <b-input v-model="item.password" :disabled="item.auth_protocol === 'none'" name="password"
-                      type="password" :custom-class="`password-${n}`"
-                      :placeholder="$t('settings.mailserver.passwordHelp')" :maxlength="200" />
-                  </b-field>
-                </b-field>
-              </div>
-            </div><!-- auth -->
-            <div class="spaced-links is-size-7">
-              <a href="#" @click.prevent="() => fillSettings(n, 'gmail')">Gmail</a>
-              <a href="#" @click.prevent="() => fillSettings(n, 'ses')">Amazon SES</a>
-              <a href="#" @click.prevent="() => fillSettings(n, 'mailgun')">Mailgun</a>
-              <a href="#" @click.prevent="() => fillSettings(n, 'mailjet')">Mailjet</a>
-              <a href="#" @click.prevent="() => fillSettings(n, 'sendgrid')">Sendgrid</a>
-              <a href="#" @click.prevent="() => fillSettings(n, 'postmark')">Postmark</a>
-              <a href="#" @click.prevent="() => fillSettings(n, 'forwardemail')">Forward Email</a>
+              <v-switch
+                v-model="item.tls_skip_verify"
+                :disabled="item.tls_type === 'none'"
+                color="primary"
+                hide-details
+                inset
+                name="item.tls_skip_verify"
+              />
             </div>
-            <hr />
+          </v-col>
+        </v-row>
 
-            <div class="columns">
-              <div class="column is-6">
-                <b-field :label="$t('settings.smtp.heloHost')" label-position="on-border"
-                  :message="$t('settings.smtp.heloHostHelp')">
-                  <b-input v-model="item.hello_hostname" name="hello_hostname" placeholder="" :maxlength="200" />
-                </b-field>
-              </div>
-              <div class="column">
-                <b-field grouped>
-                  <b-field :label="$t('settings.mailserver.tls')" expanded :message="$t('settings.mailserver.tlsHelp')"
-                    label-position="on-border">
-                    <b-select v-model="item.tls_type" name="items.tls_type">
-                      <option value="none">
-                        {{ $t('globals.states.off') }}
-                      </option>
-                      <option value="STARTTLS">
-                        STARTTLS
-                      </option>
-                      <option value="TLS">
-                        SSL/TLS
-                      </option>
-                    </b-select>
-                  </b-field>
-                  <b-field :label="$t('settings.mailserver.skipTLS')" expanded
-                    :message="$t('settings.mailserver.skipTLSHelp')">
-                    <b-switch v-model="item.tls_skip_verify" :disabled="item.tls_type === 'none'"
-                      name="item.tls_skip_verify" />
-                  </b-field>
-                </b-field>
-              </div>
-            </div><!-- TLS -->
-            <hr />
+        <v-divider class="my-4" />
 
-            <div class="columns">
-              <div class="column is-3">
-                <b-field :label="$t('settings.mailserver.maxConns')" label-position="on-border"
-                  :message="$t('settings.mailserver.maxConnsHelp')">
-                  <b-input v-model.number="item.max_conns" name="max_conns" type="number"
-                    placeholder="25" min="1" max="65535" />
-                </b-field>
-              </div>
-              <div class="column is-3">
-                <b-field :label="$t('settings.smtp.retries')" label-position="on-border"
-                  :message="$t('settings.smtp.retriesHelp')">
-                  <b-input v-model.number="item.max_msg_retries" name="max_msg_retries" type="number"
-                    placeholder="2" min="1" max="1000" />
-                </b-field>
-              </div>
-              <div class="column is-3">
-                <b-field :label="$t('settings.mailserver.idleTimeout')" label-position="on-border"
-                  :message="$t('settings.mailserver.idleTimeoutHelp')">
-                  <b-input v-model="item.idle_timeout" name="idle_timeout" placeholder="15s" :pattern="regDuration"
-                    :maxlength="10" />
-                </b-field>
-              </div>
-              <div class="column is-3">
-                <b-field :label="$t('settings.mailserver.waitTimeout')" label-position="on-border"
-                  :message="$t('settings.mailserver.waitTimeoutHelp')">
-                  <b-input v-model="item.wait_timeout" name="wait_timeout" placeholder="5s" :pattern="regDuration"
-                    :maxlength="10" />
-                </b-field>
-              </div>
+        <v-row>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.number="item.max_conns"
+              :hint="$t('settings.mailserver.maxConnsHelp')"
+              :label="$t('settings.mailserver.maxConns')"
+              max="65535"
+              min="1"
+              name="max_conns"
+              persistent-hint
+              placeholder="25"
+              type="number"
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model.number="item.max_msg_retries"
+              :hint="$t('settings.smtp.retriesHelp')"
+              :label="$t('settings.smtp.retries')"
+              max="1000"
+              min="1"
+              name="max_msg_retries"
+              persistent-hint
+              placeholder="2"
+              type="number"
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model="item.idle_timeout"
+              :hint="$t('settings.mailserver.idleTimeoutHelp')"
+              :label="$t('settings.mailserver.idleTimeout')"
+              :maxlength="10"
+              name="idle_timeout"
+              persistent-hint
+              placeholder="15s"
+            />
+          </v-col>
+          <v-col cols="12" md="3">
+            <v-text-field
+              v-model="item.wait_timeout"
+              :hint="$t('settings.mailserver.waitTimeoutHelp')"
+              :label="$t('settings.mailserver.waitTimeout')"
+              :maxlength="10"
+              name="wait_timeout"
+              persistent-hint
+              placeholder="5s"
+            />
+          </v-col>
+        </v-row>
+
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="item.name"
+              :hint="$t('settings.mailserver.nameHelp')"
+              :label="$t('globals.fields.name')"
+              maxlength="100"
+              name="name"
+              persistent-hint
+              placeholder="email-primary"
+            />
+          </v-col>
+        </v-row>
+
+        <div>
+          <v-btn
+            v-if="item.email_headers.length === 0 && !item.showHeaders"
+            variant="text"
+            prepend-icon="mdi-plus"
+            @click="showSMTPHeaders(n)"
+          >
+            {{ $t('settings.smtp.setCustomHeaders') }}
+          </v-btn>
+
+          <v-textarea
+            v-if="item.email_headers.length > 0 || item.showHeaders"
+            v-model="item.strEmailHeaders"
+            :hint="$t('settings.smtp.customHeadersHelp')"
+            label="Headers"
+            name="email_headers"
+            persistent-hint
+            placeholder="[{&quot;X-Custom&quot;: &quot;value&quot;}, {&quot;X-Custom2&quot;: &quot;value&quot;}]"
+            rows="4"
+          />
+        </div>
+
+        <v-divider class="my-4" />
+
+        <div class="test-panel">
+          <template v-if="smtpTestItem === n">
+            <div class="text-body-2">
+              <strong>{{ $t('settings.general.fromEmail') }}</strong><br>
+              {{ settings['app.from_email'] }}
             </div>
 
-            <div class="columns">
-              <div class="column is-6">
-                <b-field :label="$t('globals.fields.name')" label-position="on-border"
-                  :message="$t('settings.mailserver.nameHelp')">
-                  <b-input v-model="item.name" name="name" placeholder="email-primary" :maxlength="100" />
-                </b-field>
-              </div>
-            </div>
+            <v-text-field
+              :ref="`testEmailTo${n}`"
+              v-model="testEmail"
+              :label="$t('settings.smtp.toEmail')"
+              placeholder="email@site.com"
+              required
+              type="email"
+            />
 
-            <div class="columns">
-              <div class="column">
-                <p v-if="item.email_headers.length === 0 && !item.showHeaders">
-                  <a href="#" @click.prevent="() => showSMTPHeaders(n)">
-                    <b-icon icon="plus" />{{ $t('settings.smtp.setCustomHeaders') }}</a>
-                </p>
-                <b-field v-if="item.email_headers.length > 0 || item.showHeaders" label-position="on-border"
-                  :message="$t('settings.smtp.customHeadersHelp')">
-                  <b-input v-model="item.strEmailHeaders" name="email_headers" type="textarea"
-                    placeholder="[{&quot;X-Custom&quot;: &quot;value&quot;}, {&quot;X-Custom2&quot;: &quot;value&quot;}]" />
-                </b-field>
-              </div>
-            </div>
-            <hr />
+            <v-btn color="primary" @click.prevent="doSMTPTest(item, n)">
+              {{ $t('settings.smtp.sendTest') }}
+            </v-btn>
+          </template>
 
-            <div>
-              <div class="columns">
-                <template v-if="smtpTestItem === n">
-                  <div class="column is-5">
-                    <strong>{{ $t('settings.general.fromEmail') }}</strong>
-                    <br />
-                    {{ settings['app.from_email'] }}
-                  </div>
-                  <div class="column is-4">
-                    <b-field :label="$t('settings.smtp.toEmail')" label-position="on-border">
-                      <b-input type="email" required v-model="testEmail" :ref="'testEmailTo'"
-                        placeholder="email@site.com" :custom-class="`test-email-${n}`" />
-                    </b-field>
-                  </div>
-                </template>
-                <div class="column has-text-right">
-                  <b-button v-if="smtpTestItem === n" class="is-primary" @click.prevent="() => doSMTPTest(item, n)">
-                    {{ $t('settings.smtp.sendTest') }}
-                  </b-button>
-                  <a href="#" v-else class="is-primary" @click.prevent="showTestForm(n)">
-                    <b-icon icon="rocket-launch-outline" /> {{ $t('settings.smtp.testConnection') }}
-                  </a>
-                </div>
-                <div class="columns">
-                  <div class="column" />
-                </div>
-              </div>
-              <div v-if="errMsg && smtpTestItem === n">
-                <b-field class="mt-4" type="is-danger">
-                  <b-input v-model="errMsg" type="textarea" custom-class="has-text-danger is-size-6" readonly />
-                </b-field>
-              </div>
-            </div><!-- smtp test -->
-          </div>
-        </div><!-- second container column -->
-      </div><!-- block -->
-    </div><!-- mail-servers -->
+          <v-btn
+            v-else
+            variant="text"
+            color="primary"
+            prepend-icon="mdi-rocket-launch-outline"
+            @click.prevent="showTestForm(n)"
+          >
+            {{ $t('settings.smtp.testConnection') }}
+          </v-btn>
+        </div>
 
-    <b-button @click="addSMTP" icon-left="plus" type="is-primary">
+        <v-alert
+          v-if="errMsg && smtpTestItem === n"
+          type="error"
+          variant="tonal"
+          class="mt-4"
+        >
+          {{ errMsg }}
+        </v-alert>
+      </div>
+    </v-card>
+
+    <v-btn color="primary" prepend-icon="mdi-plus" @click="addSMTP">
       {{ $t('globals.buttons.addNew') }}
-    </b-button>
+    </v-btn>
   </div>
 </template>
 
 <script>
 import { mapState } from 'vuex';
-import { regDuration } from '../../constants';
 
 const smtpTemplates = {
   gmail: {
@@ -240,20 +317,45 @@ const smtpTemplates = {
 export default {
   props: {
     form: {
-      type: Object, default: () => { },
+      type: Object, default: () => {},
     },
   },
 
   data() {
     return {
       data: this.form,
-      regDuration,
-      // Index of the SMTP block item in the array to show the
-      // test form in.
       smtpTestItem: null,
       testEmail: '',
       errMsg: '',
     };
+  },
+
+  computed: {
+    ...mapState(['settings']),
+
+    authProtocolOptions() {
+      return ['login', 'cram', 'plain', 'none'];
+    },
+
+    tlsOptions() {
+      return [
+        { label: this.$t('globals.states.off'), value: 'none' },
+        { label: 'STARTTLS', value: 'STARTTLS' },
+        { label: 'SSL/TLS', value: 'TLS' },
+      ];
+    },
+
+    providerTemplates() {
+      return [
+        { key: 'gmail', label: 'Gmail' },
+        { key: 'ses', label: 'Amazon SES' },
+        { key: 'mailgun', label: 'Mailgun' },
+        { key: 'mailjet', label: 'Mailjet' },
+        { key: 'sendgrid', label: 'Sendgrid' },
+        { key: 'postmark', label: 'Postmark' },
+        { key: 'forwardemail', label: 'Forward Email' },
+      ];
+    },
   },
 
   methods: {
@@ -277,8 +379,8 @@ export default {
       });
 
       this.$nextTick(() => {
-        const items = document.querySelectorAll('.mail-servers input[name="host"]');
-        items[items.length - 1].focus();
+        const latest = this.$refs[`smtpUsername${this.data.smtp.length - 1}`];
+        latest?.focus?.();
       });
     },
 
@@ -292,21 +394,11 @@ export default {
       this.data.smtp.splice(i, 1, s);
     },
 
-    testConnection() {
-      let em = this.settings['app.from_email'].replace('>', '').split('<');
-      if (em.length > 1) {
-        em = `<${em[em.length - 1]}>`;
-      }
-    },
-
     doSMTPTest(item, n) {
       if (!this.isTestEnabled(item)) {
         this.$utils.toast(this.$t('settings.smtp.testEnterEmail'), 'is-danger');
         this.$nextTick(() => {
-          const i = document.querySelector(`.password-${n}`);
           this.data.smtp[n].password = '';
-          i.focus();
-          i.select();
         });
         return;
       }
@@ -323,11 +415,10 @@ export default {
 
     showTestForm(n) {
       this.smtpTestItem = n;
-      this.testItem = this.form.smtp[n];
       this.errMsg = '';
 
       this.$nextTick(() => {
-        document.querySelector(`.test-email-${n}`).focus();
+        this.$refs[`testEmailTo${n}`]?.focus?.();
       });
     },
 
@@ -338,7 +429,6 @@ export default {
       if (item.auth_protocol !== 'none' && item.password.includes('•')) {
         return false;
       }
-
       return true;
     },
 
@@ -353,13 +443,57 @@ export default {
       });
 
       this.$nextTick(() => {
-        document.querySelector(`.smtp-username-${n}`).focus();
+        this.$refs[`smtpUsername${n}`]?.focus?.();
       });
     },
   },
-
-  computed: {
-    ...mapState(['settings']),
-  },
 };
 </script>
+
+<style scoped>
+.settings-section {
+  display: grid;
+  gap: 20px;
+}
+
+.server-card {
+  padding: 20px;
+}
+
+.card-head,
+.toggle-field,
+.test-panel {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.toggle-field.outlined {
+  border: 1px solid rgba(15, 76, 129, 0.14);
+  border-radius: 16px;
+  padding: 18px 20px;
+}
+
+.section-disabled {
+  opacity: 0.65;
+}
+
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.test-panel {
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .card-head,
+  .test-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+</style>

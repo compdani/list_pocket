@@ -85,28 +85,28 @@ SELECT lists.*,
 
 -- name: insert-subscriber
 WITH sub AS (
-    INSERT INTO subscribers (uuid, email, name, status, attribs)
-    VALUES($1, $2, $3, $4, $5)
+    INSERT INTO subscribers (uuid, email, first_name, last_name, name, status, attribs)
+    VALUES($1, $2, $3, $4, $5, $6, $7)
     RETURNING id, status
 ),
 listIDs AS (
     SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($6[]) > 0 THEN id=ANY($6)
-              ELSE uuid=ANY($7[]) END)
+        (CASE WHEN CARDINALITY($8[]) > 0 THEN id=ANY($8)
+              ELSE uuid=ANY($9[]) END)
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
     VALUES(
         (SELECT id FROM sub),
         UNNEST(ARRAY(SELECT id FROM listIDs)),
-        (CASE WHEN $4='blocklisted' THEN 'unsubscribed' ELSE $8 END)
+        (CASE WHEN $6='blocklisted' THEN 'unsubscribed' ELSE $10 END)
     )
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
         SET updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
             status=(
-                CASE WHEN $4='blocklisted' OR (SELECT status FROM sub)='blocklisted'
+                CASE WHEN $6='blocklisted' OR (SELECT status FROM sub)='blocklisted'
                 THEN 'unsubscribed'
-                ELSE $8 END
+                ELSE $10 END
             )
 )
 SELECT id from sub;
@@ -115,22 +115,24 @@ SELECT id from sub;
 -- Upserts a subscriber where existing subscribers get their names and attributes overwritten.
 -- If $7 = true, update name/attribs. If $8 = true, update subscription status.
 WITH sub AS (
-    INSERT INTO subscribers as s (uuid, email, name, attribs, status)
-    VALUES($1, $2, $3, $4, 'enabled')
+    INSERT INTO subscribers as s (uuid, email, first_name, last_name, name, attribs, status)
+    VALUES($1, $2, $3, $4, $5, $6, 'enabled')
     ON CONFLICT (email)
     DO UPDATE SET
-        name=(CASE WHEN $7 THEN $3 ELSE s.name END),
-        attribs=(CASE WHEN $7 THEN $4 ELSE s.attribs END),
+        first_name=(CASE WHEN $8 THEN $3 ELSE s.first_name END),
+        last_name=(CASE WHEN $8 THEN $4 ELSE s.last_name END),
+        name=(CASE WHEN $8 THEN $5 ELSE s.name END),
+        attribs=(CASE WHEN $8 THEN $6 ELSE s.attribs END),
         updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     RETURNING uuid, id, status
 ),
 subs AS (
     INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $6 END
-    FROM sub, UNNEST($5[]) AS listID
+    SELECT sub.id, listID, CASE WHEN sub.status = 'blocklisted' THEN 'unsubscribed' ELSE $7 END
+    FROM sub, UNNEST($6[]) AS listID
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET updated = strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
-        status = CASE WHEN $8 THEN EXCLUDED.status ELSE subscriber_lists.status END
+        status = CASE WHEN $9 THEN EXCLUDED.status ELSE subscriber_lists.status END
 )
 SELECT uuid, id from sub;
 
@@ -140,8 +142,8 @@ SELECT uuid, id from sub;
 -- existing subscriptions are marked as 'unsubscribed'.
 -- This is used in the bulk importer.
 WITH sub AS (
-    INSERT INTO subscribers (uuid, email, name, attribs, status)
-    VALUES($1, $2, $3, $4, 'blocklisted')
+    INSERT INTO subscribers (uuid, email, first_name, last_name, name, attribs, status)
+    VALUES($1, $2, $3, $4, $5, $6, 'blocklisted')
     ON CONFLICT (email) DO UPDATE SET status='blocklisted', updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     RETURNING id
 )
@@ -151,9 +153,11 @@ UPDATE subscriber_lists SET status='unsubscribed', updated=strftime('%Y-%m-%d %H
 -- name: update-subscriber
 UPDATE subscribers SET
     email=(CASE WHEN $2 != '' THEN $2 ELSE email END),
-    name=(CASE WHEN $3 != '' THEN $3 ELSE name END),
-    status=(CASE WHEN $4 != '' THEN $4 ELSE status END),
-    attribs=(CASE WHEN $5 != '' THEN $5 ELSE attribs END),
+    first_name=(CASE WHEN $3 != '' THEN $3 ELSE first_name END),
+    last_name=(CASE WHEN $4 != '' THEN $4 ELSE last_name END),
+    name=(CASE WHEN $5 != '' THEN $5 ELSE name END),
+    status=(CASE WHEN $6 != '' THEN $6 ELSE status END),
+    attribs=(CASE WHEN $7 != '' THEN $7 ELSE attribs END),
     updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
 WHERE id = $1;
 
@@ -163,35 +167,37 @@ WHERE id = $1;
 WITH s AS (
     UPDATE subscribers SET
         email=(CASE WHEN $2 != '' THEN $2 ELSE email END),
-        name=(CASE WHEN $3 != '' THEN $3 ELSE name END),
-        status=(CASE WHEN $4 != '' THEN $4 ELSE status END),
-        attribs=(CASE WHEN $5 != '' THEN $5 ELSE attribs END),
+        first_name=(CASE WHEN $3 != '' THEN $3 ELSE first_name END),
+        last_name=(CASE WHEN $4 != '' THEN $4 ELSE last_name END),
+        name=(CASE WHEN $5 != '' THEN $5 ELSE name END),
+        status=(CASE WHEN $6 != '' THEN $6 ELSE status END),
+        attribs=(CASE WHEN $7 != '' THEN $7 ELSE attribs END),
         updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
     WHERE id = $1 RETURNING id
 ),
 listIDs AS (
     SELECT id FROM lists WHERE
-        (CASE WHEN CARDINALITY($6[]) > 0 THEN id=ANY($6)
-              ELSE uuid=ANY($7[]) END)
+        (CASE WHEN CARDINALITY($8[]) > 0 THEN id=ANY($8)
+              ELSE uuid=ANY($9[]) END)
 ),
 d AS (
-    DELETE FROM subscriber_lists WHERE $9 = TRUE AND subscriber_id = $1 AND list_id NOT IN SELECT id FROM listIDs
+    DELETE FROM subscriber_lists WHERE $11 = TRUE AND subscriber_id = $1 AND list_id NOT IN SELECT id FROM listIDs
 )
 INSERT INTO subscriber_lists (subscriber_id, list_id, status)
     VALUES(
         (SELECT id FROM s),
         UNNEST(ARRAY(SELECT id FROM listIDs)),
-        (CASE WHEN $4='blocklisted' THEN 'unsubscribed' ELSE $8 END)
+        (CASE WHEN $6='blocklisted' THEN 'unsubscribed' ELSE $10 END)
     )
     ON CONFLICT (subscriber_id, list_id) DO UPDATE
     SET status = (
         CASE
-            WHEN $4='blocklisted' THEN 'unsubscribed'
+            WHEN $6='blocklisted' THEN 'unsubscribed'
             -- When subscriber is edited from the admin form, retain the status. Otherwise, a blocklisted
             -- subscriber when being re-enabled, their subscription statuses change.
             WHEN subscriber_lists.status = 'confirmed' THEN 'confirmed'
             WHEN subscriber_lists.status = 'unsubscribed' THEN 'unsubscribed'
-            ELSE $8
+            ELSE $10
         END
     );
 

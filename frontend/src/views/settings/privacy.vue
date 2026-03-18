@@ -1,92 +1,149 @@
 <template>
-  <div class="items">
-    <div class="columns">
-      <div class="column is-6">
-        <b-field :label="$t('settings.privacy.disableTracking')" :message="$t('settings.privacy.disableTrackingHelp')">
-          <b-switch v-model="data['privacy.disable_tracking']" name="privacy.disable_tracking" />
-        </b-field>
+  <div class="settings-section">
+    <v-row>
+      <v-col cols="12" md="6">
+        <div class="toggle-field">
+          <div>
+            <div class="text-subtitle-2">{{ $t('settings.privacy.disableTracking') }}</div>
+            <div class="text-body-2 text-medium-emphasis">{{ $t('settings.privacy.disableTrackingHelp') }}</div>
+          </div>
+          <v-switch
+            v-model="data['privacy.disable_tracking']"
+            color="primary"
+            hide-details
+            inset
+            name="privacy.disable_tracking"
+          />
+        </div>
+      </v-col>
+      <v-col cols="12" md="6">
+        <div class="toggle-field" :class="{ 'is-disabled': data['privacy.disable_tracking'] }">
+          <div>
+            <div class="text-subtitle-2">{{ $t('settings.privacy.individualSubTracking') }}</div>
+            <div class="text-body-2 text-medium-emphasis">{{ $t('settings.privacy.individualSubTrackingHelp') }}</div>
+          </div>
+          <v-switch
+            v-model="data['privacy.individual_tracking']"
+            color="primary"
+            :disabled="data['privacy.disable_tracking']"
+            hide-details
+            inset
+            name="privacy.individual_tracking"
+          />
+        </div>
+      </v-col>
+    </v-row>
+
+    <div v-for="item in privacyToggles" :key="item.key" class="toggle-field">
+      <div>
+        <div class="text-subtitle-2">{{ $t(item.label) }}</div>
+        <div class="text-body-2 text-medium-emphasis">{{ $t(item.help) }}</div>
       </div>
-      <div class="column is-6" :class="{ 'is-disabled': data['privacy.disable_tracking'] }">
-        <b-field :label="$t('settings.privacy.individualSubTracking')"
-          :message="$t('settings.privacy.individualSubTrackingHelp')">
-          <b-switch v-model="data['privacy.individual_tracking']" :disabled="data['privacy.disable_tracking']"
-            name="privacy.individual_tracking" />
-        </b-field>
-      </div>
+      <v-switch
+        v-model="data[item.key]"
+        color="primary"
+        hide-details
+        inset
+        :name="item.key"
+      />
     </div>
 
-    <b-field :label="$t('settings.privacy.listUnsubHeader')" :message="$t('settings.privacy.listUnsubHeaderHelp')">
-      <b-switch v-model="data['privacy.unsubscribe_header']" name="privacy.unsubscribe_header" />
-    </b-field>
+    <v-divider class="my-2" />
 
-    <b-field :label="$t('settings.privacy.allowBlocklist')" :message="$t('settings.privacy.allowBlocklistHelp')">
-      <b-switch v-model="data['privacy.allow_blocklist']" name="privacy.allow_blocklist" />
-    </b-field>
-
-    <b-field :label="$t('settings.privacy.allowPrefs')" :message="$t('settings.privacy.allowPrefsHelp')">
-      <b-switch v-model="data['privacy.allow_preferences']" name="privacy.allow_blocklist" />
-    </b-field>
-
-    <b-field :label="$t('settings.privacy.allowExport')" :message="$t('settings.privacy.allowExportHelp')">
-      <b-switch v-model="data['privacy.allow_export']" name="privacy.allow_export" />
-    </b-field>
-
-    <b-field :label="$t('settings.privacy.allowWipe')" :message="$t('settings.privacy.allowWipeHelp')">
-      <b-switch v-model="data['privacy.allow_wipe']" name="privacy.allow_wipe" />
-    </b-field>
-
-    <b-field :label="$t('settings.privacy.recordOptinIP')" :message="$t('settings.privacy.recordOptinIPHelp')">
-      <b-switch v-model="data['privacy.record_optin_ip']" name="privacy.record_optin_ip" />
-    </b-field>
-
-    <hr />
-
-    <div class="settings-tabs">
-      <button type="button" class="settings-tab" :class="{ 'is-active': tab === 0 }" @click="tab = 0">
+    <v-tabs
+      v-model="tab"
+      color="primary"
+      density="comfortable"
+      align-tabs="start"
+    >
+      <v-tab value="blocklist">
         {{ `${$t('settings.privacy.domainBlocklist')} (${numBlocked})` }}
-      </button>
-      <button type="button" class="settings-tab" :class="{ 'is-active': tab === 1 }" @click="tab = 1">
+      </v-tab>
+      <v-tab value="allowlist">
         {{ `${$t('settings.privacy.domainAllowlist')} (${numAllowed})` }}
-      </button>
-    </div>
+      </v-tab>
+    </v-tabs>
 
-    <section v-show="tab === 0">
-      <b-field :message="$t('settings.privacy.domainBlocklistHelp')">
-        <b-input type="textarea" v-model="data['privacy.domain_blocklist']" name="privacy.domain_blocklist" />
-      </b-field>
-    </section>
-    <section v-show="tab === 1">
-      <b-field :message="$t('settings.privacy.domainAllowlistHelp')">
-        <b-input type="textarea" v-model="data['privacy.domain_allowlist']" name="privacy.domain_allowlist" />
-      </b-field>
-    </section>
+    <v-window v-model="tab" :touch="false">
+      <v-window-item value="blocklist">
+        <v-textarea
+          v-model="data['privacy.domain_blocklist']"
+          :hint="$t('settings.privacy.domainBlocklistHelp')"
+          auto-grow
+          name="privacy.domain_blocklist"
+          persistent-hint
+          rows="8"
+        />
+      </v-window-item>
+      <v-window-item value="allowlist">
+        <v-textarea
+          v-model="data['privacy.domain_allowlist']"
+          :hint="$t('settings.privacy.domainAllowlistHelp')"
+          auto-grow
+          name="privacy.domain_allowlist"
+          persistent-hint
+          rows="8"
+        />
+      </v-window-item>
+    </v-window>
   </div>
 </template>
 
 <script>
-
 export default {
   props: {
     form: {
-      type: Object, default: () => { },
+      type: Object, default: () => {},
     },
   },
 
   data() {
     return {
       data: this.form,
-      tab: 0,
+      tab: 'blocklist',
+      privacyToggles: [
+        {
+          key: 'privacy.unsubscribe_header',
+          label: 'settings.privacy.listUnsubHeader',
+          help: 'settings.privacy.listUnsubHeaderHelp',
+        },
+        {
+          key: 'privacy.allow_blocklist',
+          label: 'settings.privacy.allowBlocklist',
+          help: 'settings.privacy.allowBlocklistHelp',
+        },
+        {
+          key: 'privacy.allow_preferences',
+          label: 'settings.privacy.allowPrefs',
+          help: 'settings.privacy.allowPrefsHelp',
+        },
+        {
+          key: 'privacy.allow_export',
+          label: 'settings.privacy.allowExport',
+          help: 'settings.privacy.allowExportHelp',
+        },
+        {
+          key: 'privacy.allow_wipe',
+          label: 'settings.privacy.allowWipe',
+          help: 'settings.privacy.allowWipeHelp',
+        },
+        {
+          key: 'privacy.record_optin_ip',
+          label: 'settings.privacy.recordOptinIP',
+          help: 'settings.privacy.recordOptinIPHelp',
+        },
+      ],
     };
   },
 
   methods: {
-    countItems(str) {
-      return str.split('\n').filter((line) => line.trim()).length;
+    countItems(str = '') {
+      return String(str).split('\n').filter((line) => line.trim()).length;
     },
   },
 
   mounted() {
-    this.tab = this.$utils.getPref('settings.privacyDomainTab') || 0;
+    this.tab = this.$utils.getPref('settings.privacyDomainTab') || 'blocklist';
   },
 
   computed: {
@@ -107,28 +164,22 @@ export default {
 </script>
 
 <style scoped>
-.settings-tabs {
-  border-bottom: 1px solid #d8dfec;
+.settings-section {
+  display: grid;
+  gap: 20px;
+}
+
+.toggle-field {
+  align-items: start;
+  border: 1px solid rgba(15, 76, 129, 0.14);
+  border-radius: 16px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px 20px;
 }
 
-.settings-tab {
-  background: #fff;
-  border: 1px solid #d8dfec;
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  color: #667085;
-  cursor: pointer;
-  font-size: 0.95rem;
-  padding: 10px 16px;
-}
-
-.settings-tab.is-active {
-  background: #f8fbff;
-  color: #0f5bd8;
-  font-weight: 600;
+.toggle-field.is-disabled {
+  opacity: 0.65;
 }
 </style>

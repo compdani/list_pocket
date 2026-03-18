@@ -21,6 +21,8 @@ CREATE TABLE subscribers (
     id              SERIAL PRIMARY KEY,
     uuid uuid       NOT NULL UNIQUE,
     email           TEXT NOT NULL UNIQUE,
+    first_name      TEXT NOT NULL DEFAULT '',
+    last_name       TEXT NOT NULL DEFAULT '',
     name            TEXT NOT NULL,
     attribs         JSONB NOT NULL DEFAULT '{}',
     status          subscriber_status NOT NULL DEFAULT 'enabled',

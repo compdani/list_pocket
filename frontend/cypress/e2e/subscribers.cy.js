@@ -133,7 +133,8 @@ describe('Subscribers', () => {
     // Open the edit popup and edit the default lists.
     cy.get('[data-cy=btn-edit]').each(($el, n) => {
       const email = `email-${n}@EMAIL.com`;
-      const name = `name-${n}`;
+      const firstName = `name-${n}`;
+      const lastName = 'subscriber';
 
       // Open the edit modal.
       cy.wrap($el).click();
@@ -144,7 +145,8 @@ describe('Subscribers', () => {
         id = parseInt($el.text());
 
         cy.get('input[name=email]').clear().type(email);
-        cy.get('input[name=name]').clear().type(name);
+        cy.get('input[name=first_name]').clear().type(firstName);
+        cy.get('input[name=last_name]').clear().type(lastName);
 
         if (status[n] === 'blocklisted') {
           cy.get('select[name=status]').select(status[n]);
@@ -154,7 +156,7 @@ describe('Subscribers', () => {
         cy.get('textarea[name=attribs]').clear().type(json, { parseSpecialCharSequences: false, delay: 0 });
         cy.get('.modal-card-foot button[type=submit]').click();
 
-        rows[id] = { email, name, status: status[n] };
+        rows[id] = { email, name: `${firstName} ${lastName}`, status: status[n] };
       });
     });
 
@@ -201,13 +203,15 @@ describe('Subscribers', () => {
     const n = 0;
     for (let n = 0; n < 6; n++) {
       const email = `email-${n}@EMAIL.com`;
-      const name = `name-${n}`;
+      const firstName = `name-${n}`;
+      const lastName = 'subscriber';
       const status = statuses[(n + 1) % statuses.length];
       const list = lists[(n + 1) % lists.length];
 
       cy.get('[data-cy=btn-new]').click();
       cy.get('input[name=email]').type(email);
-      cy.get('input[name=name]').type(name);
+      cy.get('input[name=first_name]').type(firstName);
+      cy.get('input[name=last_name]').type(lastName);
       cy.get('select[name=status]').select(status);
 
       list.forEach((l) => {
@@ -222,7 +226,7 @@ describe('Subscribers', () => {
       cy.wait(250);
       const tr = cy.get('tbody tr:nth-child(1)').then(($el) => {
         cy.wrap($el).find('td[data-label=E-mail]').contains(email.toLowerCase());
-        cy.wrap($el).find('td[data-label=Name]').contains(name);
+        cy.wrap($el).find('td[data-label=Name]').contains(`${firstName} ${lastName}`);
 
         if (status === 'blocklisted') {
           cy.wrap($el).find('[data-cy=blocklisted]');

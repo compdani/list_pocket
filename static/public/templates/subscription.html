@@ -28,8 +28,10 @@
                 <input type="hidden" name="manage" value="true" />
 
                 <h2>{{ L.T "public.managePrefs" }}</h2>
-                <label>{{ L.T "globals.fields.name" }}</label>
-                <input type="text" name="name" value="{{ .Data.Subscriber.Name }}" maxlength="256" required />
+                <label for="first_name">First name</label>
+                <input id="first_name" type="text" name="first_name" value="{{ .Data.Subscriber.FirstName }}" maxlength="256" required />
+                <label for="last_name">Last name</label>
+                <input id="last_name" type="text" name="last_name" value="{{ .Data.Subscriber.LastName }}" maxlength="256" required />
 
                 {{ if .Data.Subscriptions }}
                     <br /><br />
@@ -103,9 +105,11 @@
 
     function unsubAll(e) {
         if (e.target.checked) {
-            document.querySelector("input[name=name]").disabled = "disabled";
+            document.querySelector("input[name=first_name]").disabled = "disabled";
+            document.querySelector("input[name=last_name]").disabled = "disabled";
         } else {
-            document.querySelector("input[name=name]").removeAttribute("disabled");
+            document.querySelector("input[name=first_name]").removeAttribute("disabled");
+            document.querySelector("input[name=last_name]").removeAttribute("disabled");
         }
 
         document.querySelectorAll('input[type=checkbox][name=l]').forEach(function(l) {

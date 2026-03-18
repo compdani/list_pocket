@@ -37,6 +37,8 @@ type sqliteSubscriberRow struct {
 	UpdatedAt string `db:"updated_at"`
 	UUID      string `db:"uuid"`
 	Email     string `db:"email"`
+	FirstName string `db:"first_name"`
+	LastName  string `db:"last_name"`
 	Name      string `db:"name"`
 	Attribs   []byte `db:"attribs"`
 	Status    string `db:"status"`
@@ -76,11 +78,13 @@ func sqliteSubscriberRowsToModels(rows []sqliteSubscriberRow) models.Subscribers
 				CreatedAt: parseNullTime(row.CreatedAt),
 				UpdatedAt: parseNullTime(row.UpdatedAt),
 			},
-			UUID:    row.UUID,
-			Email:   row.Email,
-			Name:    row.Name,
-			Attribs: attribs,
-			Status:  row.Status,
+			UUID:      row.UUID,
+			Email:     row.Email,
+			FirstName: row.FirstName,
+			LastName:  row.LastName,
+			Name:      row.Name,
+			Attribs:   attribs,
+			Status:    row.Status,
 		})
 	}
 	return out
@@ -439,6 +443,7 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 			c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
 	}
 	sub.UUID = uu.String()
+	sub.NormalizeName()
 
 	subStatus := models.SubscriptionStatusUnconfirmed
 	if preconfirm {
@@ -472,6 +477,8 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 		record := pbcore.NewRecord(collection)
 		record.Set("uuid", sub.UUID)
 		record.Set("email", sub.Email)
+		record.Set("first_name", sub.FirstName)
+		record.Set("last_name", sub.LastName)
 		record.Set("name", strings.TrimSpace(sub.Name))
 		record.Set("status", sub.Status)
 		record.Set("attribs", sub.Attribs)
@@ -522,6 +529,8 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 	if err = c.q.InsertSubscriber.Get(&sub.ID,
 		sub.UUID,
 		sub.Email,
+		strings.TrimSpace(sub.FirstName),
+		strings.TrimSpace(sub.LastName),
 		strings.TrimSpace(sub.Name),
 		sub.Status,
 		sub.Attribs,
@@ -561,6 +570,7 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 
 // UpdateSubscriber updates a subscriber's properties.
 func (c *Core) UpdateSubscriber(id int, sub models.Subscriber) (models.Subscriber, error) {
+	sub.NormalizeName()
 	if c.isSQLite() {
 		out, _, err := c.UpdateSubscriberWithLists(id, sub, nil, nil, false, false, false)
 		return out, err
@@ -580,6 +590,8 @@ func (c *Core) UpdateSubscriber(id int, sub models.Subscriber) (models.Subscribe
 
 	_, err := c.q.UpdateSubscriber.Exec(id,
 		sub.Email,
+		strings.TrimSpace(sub.FirstName),
+		strings.TrimSpace(sub.LastName),
 		strings.TrimSpace(sub.Name),
 		sub.Status,
 		json.RawMessage(attribs),
@@ -602,6 +614,7 @@ func (c *Core) UpdateSubscriber(id int, sub models.Subscriber) (models.Subscribe
 // If deleteLists is set to true, all existing subscriptions are deleted and only
 // the ones provided are added or retained.
 func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs []int, listUUIDs []string, preconfirm, deleteLists, assertOptin bool) (models.Subscriber, bool, error) {
+	sub.NormalizeName()
 	subStatus := models.SubscriptionStatusUnconfirmed
 	if preconfirm {
 		subStatus = models.SubscriptionStatusConfirmed
@@ -629,6 +642,8 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 		}
 
 		rec.Set("email", sub.Email)
+		rec.Set("first_name", sub.FirstName)
+		rec.Set("last_name", sub.LastName)
 		rec.Set("name", strings.TrimSpace(sub.Name))
 		rec.Set("status", sub.Status)
 		rec.Set("attribs", sub.Attribs)
@@ -685,6 +700,8 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 
 	_, err := c.q.UpdateSubscriberWithLists.Exec(id,
 		sub.Email,
+		strings.TrimSpace(sub.FirstName),
+		strings.TrimSpace(sub.LastName),
 		strings.TrimSpace(sub.Name),
 		sub.Status,
 		json.RawMessage(attribs),
@@ -1205,7 +1222,7 @@ func (c *Core) getSubscriberCount(searchStr, queryExp, subStatus string, listIDs
 }
 
 func (c *Core) getSubscriberSQLite(id int, uuid, email string) (models.Subscriber, error) {
-	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, name, attribs, status FROM subscribers WHERE `
+	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, first_name, last_name, name, attribs, status FROM subscribers WHERE `
 	args := []any{}
 	switch {
 	case id > 0:
@@ -1310,7 +1327,7 @@ func (c *Core) getSubscribersByEmailSQLite(emails []string) (models.Subscribers,
 	}
 
 	var rows []sqliteSubscriberRow
-	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
+	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscriber: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1358,7 +1375,7 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int,
 	}
 
 	q := `SELECT subscribers.rowid AS id, subscribers.created AS created_at, subscribers.updated AS updated_at,
-		subscribers.uuid, subscribers.email, subscribers.name, subscribers.attribs, subscribers.status
+		subscribers.uuid, subscribers.email, subscribers.first_name, subscribers.last_name, subscribers.name, subscribers.attribs, subscribers.status
 		FROM subscribers WHERE ` + whereSQL + ` ORDER BY ` + sortCol + ` ` + order
 	if limit > 0 {
 		q += ` LIMIT ? OFFSET ?`
@@ -1517,6 +1534,7 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, subIDs, listIDs 
 
 		q := `
 			SELECT subscribers.id, subscribers.uuid, subscribers.email, subscribers.name,
+			       subscribers.first_name, subscribers.last_name,
 			       subscribers.status, subscribers.attribs,
 			       subscribers.created AS created_at,
 			       subscribers.updated AS updated_at

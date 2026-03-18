@@ -14,7 +14,6 @@ Before starting the app locally, make sure you have:
 
 - Go
 - Node.js and npm
-- PostgreSQL
 - A local `config.toml` copied from `config.toml.sample`
 
 Create your local config file:
