@@ -2,7 +2,17 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig, loadEnv } from 'vite';
 import vuetify from 'vite-plugin-vuetify';
 
+const fs = require('fs');
 const path = require('path');
+
+const resolveVueFlowAlias = (pkg) => {
+  const workflowPath = path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow', pkg);
+  if (fs.existsSync(workflowPath)) {
+    return workflowPath;
+  }
+
+  return path.resolve(__dirname, './node_modules/@vue-flow', pkg);
+};
 
 // https://vitejs.dev/config/
 export default defineConfig(({ _, mode }) => {
@@ -17,10 +27,10 @@ export default defineConfig(({ _, mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        '@vue-flow/background': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/background'),
-        '@vue-flow/controls': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/controls'),
-        '@vue-flow/core': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/core'),
-        '@vue-flow/minimap': path.resolve(__dirname, '../../workflow/frontend/node_modules/@vue-flow/minimap'),
+        '@vue-flow/background': resolveVueFlowAlias('background'),
+        '@vue-flow/controls': resolveVueFlowAlias('controls'),
+        '@vue-flow/core': resolveVueFlowAlias('core'),
+        '@vue-flow/minimap': resolveVueFlowAlias('minimap'),
       },
     },
     define: {
