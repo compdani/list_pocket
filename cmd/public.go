@@ -149,7 +149,7 @@ func (a *App) GetPublicLists(c echo.Context) error {
 func (a *App) ViewCampaignMessage(c echo.Context) error {
 	// Get the campaign.
 	campUUID := c.Param("campUUID")
-	camp, err := a.core.GetCampaign(0, campUUID, "")
+	camp, err := a.core.GetCampaign("", campUUID, "")
 	if err != nil {
 		if er, ok := err.(*echo.HTTPError); ok {
 			if er.Code == http.StatusBadRequest {

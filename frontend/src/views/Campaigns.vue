@@ -637,8 +637,10 @@ export default {
       const fn = () => {
         const params = {};
         if (!this.bulk.all && this.bulk.checked.length > 0) {
-          // If 'all' is not selected, delete campaigns by IDs.
-          params.id = this.bulk.checked.map((c) => c.id);
+          // If 'all' is not selected, delete campaigns by record IDs.
+          params.record_id = this.bulk.checked
+            .map((c) => c.recordId || c.record_id)
+            .filter((id) => typeof id === 'string' && id.length > 0);
         } else {
           // 'All' is selected, delete by query.
           params.query = this.queryParams.query.replace(/[^\p{L}\p{N}\s]/gu, ' ');

@@ -129,7 +129,7 @@ func (a *App) CampaignArchivePage(c echo.Context) error {
 	}
 
 	// Get the campaign from the DB.
-	pubCamp, err := a.core.GetArchivedCampaign(0, uuid, slug)
+	pubCamp, err := a.core.GetArchivedCampaign("", uuid, slug)
 	if err != nil || pubCamp.Type != models.CampaignTypeRegular {
 		notFound := false
 
