@@ -52,26 +52,13 @@ var (
 	reSlug        = regexp.MustCompile(`[^\p{L}\p{M}\p{N}]`)
 )
 
-func (a *App) resolveCampaignRouteID(c echo.Context) (int, error) {
-	rawID := strings.TrimSpace(c.Param("id"))
-	if rawID == "" {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+func (a *App) resolveCampaignRouteID(c echo.Context) (string, error) {
+	recordID := strings.TrimSpace(c.Param("id"))
+	if recordID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
 
-	if id, err := strconv.Atoi(rawID); err == nil && id > 0 {
-		return id, nil
-	}
-
-	ids, err := a.core.ResolveCampaignIDs(nil, []string{rawID})
-	if err != nil {
-		return 0, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
-	if len(ids) != 1 || ids[0] < 1 {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
-	}
-
-	return ids[0], nil
+	return recordID, nil
 }
 
 // GetCampaigns handles retrieval of campaigns.
@@ -134,18 +121,18 @@ func (a *App) GetCampaigns(c echo.Context) error {
 // GetCampaign handles retrieval of campaigns.
 func (a *App) GetCampaign(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeGet, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, c); err != nil {
 		return err
 	}
 
 	// Get the campaign from the DB.
-	out, err := a.core.GetCampaign(id, "", "")
+	out, err := a.core.GetCampaign(recordID, "", "")
 	if err != nil {
 		return err
 	}
@@ -162,13 +149,13 @@ func (a *App) GetCampaign(c echo.Context) error {
 // PreviewCampaign renders the HTML preview of a campaign body.
 func (a *App) PreviewCampaign(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeGet, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, c); err != nil {
 		return err
 	}
 
@@ -183,7 +170,7 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 	}
 
 	// Get the campaign from the DB for previewing with the `template_body` field.
-	camp, err := a.core.GetCampaignForPreview(id, tplID)
+	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err
 	}
@@ -227,19 +214,19 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 // PreviewCampaignArchive renders the public campaign archives page.
 func (a *App) PreviewCampaignArchive(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeGet, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, c); err != nil {
 		return err
 	}
 
 	// Fetch the campaign body from the DB.
 	tplID, _ := strconv.Atoi(c.FormValue("template_id"))
-	camp, err := a.core.GetCampaignForPreview(id, tplID)
+	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err
 	}
@@ -336,7 +323,7 @@ func (a *App) CreateCampaign(c echo.Context) error {
 		a.log.Printf("create campaign: core create failed name=%q error=%v", o.Name, err)
 		return err
 	}
-	a.log.Printf("create campaign: success name=%q campaign_id=%d uuid=%q", out.Name, out.ID, out.UUID)
+	a.log.Printf("create campaign: success name=%q campaign_record_id=%q uuid=%q", out.Name, out.RecordID, out.UUID)
 
 	return c.JSON(http.StatusOK, okResp{out})
 }
@@ -345,18 +332,18 @@ func (a *App) CreateCampaign(c echo.Context) error {
 // Campaigns that are done cannot be modified.
 func (a *App) UpdateCampaign(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
 		return err
 	}
 
 	// Retrieve the campaign from the DB.
-	cm, err := a.core.GetCampaign(id, "", "")
+	cm, err := a.core.GetCampaign(recordID, "", "")
 	if err != nil {
 		return err
 	}
@@ -378,8 +365,8 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	if err := c.Bind(&o); err != nil {
 		return err
 	}
-	a.log.Printf("update campaign: received id=%d name=%q status=%q content_type=%q list_ids=%v media_ids=%v archive=%v",
-		id, o.Name, cm.Status, o.ContentType, o.ListIDs, o.MediaIDs, o.Archive)
+	a.log.Printf("update campaign: received record_id=%q name=%q status=%q content_type=%q list_ids=%v media_ids=%v archive=%v",
+		recordID, o.Name, cm.Status, o.ContentType, o.ListIDs, o.MediaIDs, o.Archive)
 
 	resolvedListIDs, err := a.core.ResolveListIDs(o.ListIDs, o.ListRecordIDs)
 	if err != nil {
@@ -394,7 +381,7 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 		o = c
 	}
 
-	out, err := a.core.UpdateCampaign(id, o.Campaign, o.ListIDs, o.MediaIDs)
+	out, err := a.core.UpdateCampaign(recordID, o.Campaign, o.ListIDs, o.MediaIDs)
 	if err != nil {
 		return err
 	}
@@ -405,13 +392,13 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 // UpdateCampaignStatus handles campaign status modification.
 func (a *App) UpdateCampaignStatus(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
 		return err
 	}
 
@@ -423,18 +410,18 @@ func (a *App) UpdateCampaignStatus(c echo.Context) error {
 	}
 
 	// Update the campaign status in the DB.
-	a.log.Printf("change campaign status: request id=%d target_status=%q", id, req.Status)
-	out, err := a.core.UpdateCampaignStatus(id, req.Status)
+	a.log.Printf("change campaign status: request record_id=%q target_status=%q", recordID, req.Status)
+	out, err := a.core.UpdateCampaignStatus(recordID, req.Status)
 	if err != nil {
-		a.log.Printf("change campaign status: failed id=%d target_status=%q error=%v", id, req.Status, err)
+		a.log.Printf("change campaign status: failed record_id=%q target_status=%q error=%v", recordID, req.Status, err)
 		return err
 	}
-	a.log.Printf("change campaign status: success id=%d new_status=%q", id, out.Status)
+	a.log.Printf("change campaign status: success record_id=%q new_status=%q", recordID, out.Status)
 
 	// If the campaign is being stopped, send the signal to the manager to stop it in flight.
 	if req.Status == models.CampaignStatusPaused || req.Status == models.CampaignStatusCancelled {
-		a.log.Printf("change campaign status: stop signal id=%d target_status=%q", id, req.Status)
-		a.manager.StopCampaign(id)
+		a.log.Printf("change campaign status: stop signal record_id=%q rowid=%d target_status=%q", recordID, out.ID, req.Status)
+		a.manager.StopCampaign(out.ID)
 	}
 
 	return c.JSON(http.StatusOK, okResp{out})
@@ -442,13 +429,13 @@ func (a *App) UpdateCampaignStatus(c echo.Context) error {
 
 // UpdateCampaignArchive handles campaign status modification.
 func (a *App) UpdateCampaignArchive(c echo.Context) error {
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
 		return err
 	}
 
@@ -470,7 +457,7 @@ func (a *App) UpdateCampaignArchive(c echo.Context) error {
 		req.ArchiveSlug = s
 	}
 
-	if err := a.core.UpdateCampaignArchive(id, req.Archive, req.TemplateID, req.Meta, req.ArchiveSlug); err != nil {
+	if err := a.core.UpdateCampaignArchive(recordID, req.Archive, req.TemplateID, req.Meta, req.ArchiveSlug); err != nil {
 		return err
 	}
 
@@ -481,18 +468,18 @@ func (a *App) UpdateCampaignArchive(c echo.Context) error {
 // Only scheduled campaigns that have not started yet can be deleted.
 func (a *App) DeleteCampaign(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
 		return err
 	}
 
 	// Delete the campaign from the DB.
-	if err := a.core.DeleteCampaign(id); err != nil {
+	if err := a.core.DeleteCampaign(recordID); err != nil {
 		return err
 	}
 
@@ -516,19 +503,14 @@ func (a *App) DeleteCampaigns(c echo.Context) error {
 	}
 
 	var (
-		ids   []int
+		recordIDs []string
 		query string
 		all   bool
 	)
 
 	// Check for IDs in query params.
-	if len(c.Request().URL.Query()["id"]) > 0 {
-		var err error
-		ids, err = parseStringIDs(c.Request().URL.Query()["id"])
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-		}
+	if len(c.Request().URL.Query()["record_id"]) > 0 {
+		recordIDs = getQueryStrings("record_id", c.Request().URL.Query())
 	} else {
 		// Check for query param.
 		query = strings.TrimSpace(c.FormValue("query"))
@@ -536,13 +518,13 @@ func (a *App) DeleteCampaigns(c echo.Context) error {
 	}
 
 	// Validate that either IDs or query is provided.
-	if len(ids) == 0 && (query == "" && !all) {
+	if len(recordIDs) == 0 && (query == "" && !all) {
 		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "id or query required"))
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "record_id or query required"))
 	}
 
 	// Delete the campaigns from the DB.
-	if err := a.core.DeleteCampaigns(ids, query, hasAllPerm, permittedLists); err != nil {
+	if err := a.core.DeleteCampaigns(recordIDs, query, hasAllPerm, permittedLists); err != nil {
 		return err
 	}
 
@@ -586,13 +568,13 @@ func (a *App) GetRunningCampaignStats(c echo.Context) error {
 // arbitrary subscribers for testing.
 func (a *App) TestCampaign(c echo.Context) error {
 	// Get the campaign ID.
-	id, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(c)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, id, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
 		return err
 	}
 
@@ -625,7 +607,7 @@ func (a *App) TestCampaign(c echo.Context) error {
 
 	// Get the campaign from the DB for previewing.
 	tplID, _ := strconv.Atoi(c.FormValue("template_id"))
-	camp, err := a.core.GetCampaignForPreview(id, tplID)
+	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err
 	}
@@ -857,7 +839,7 @@ func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 // checkCampaignPerm checks if the user has get or manage access to the given campaign.
 // Either the user has blanket get_all/manage_all permissions, or the campaign
 // belongs to lists that the user has access to.
-func (a *App) checkCampaignPerm(types auth.PermType, id int, c echo.Context) error {
+func (a *App) checkCampaignPerm(types auth.PermType, recordID string, c echo.Context) error {
 	// Get the authenticated user.
 	user := auth.GetUser(c)
 
@@ -881,7 +863,7 @@ func (a *App) checkCampaignPerm(types auth.PermType, id int, c echo.Context) err
 	// all campaigns. If there are no *_all permissions, then ensure that the
 	// campaign belongs to the lists that the user has access to.
 	if hasAllPerm, permittedListIDs := user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage); !hasAllPerm {
-		if ok, err := a.core.CampaignHasLists(id, permittedListIDs); err != nil {
+		if ok, err := a.core.CampaignHasLists(recordID, permittedListIDs); err != nil {
 			return err
 		} else if !ok {
 			return echo.NewHTTPError(http.StatusForbidden,

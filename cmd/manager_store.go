@@ -160,7 +160,12 @@ func (s *store) NextSubscribers(campID, limit int) ([]models.Subscriber, error) 
 // GetCampaign fetches a campaign from the database.
 func (s *store) GetCampaign(campID int) (*models.Campaign, error) {
 	if s.sqlite {
-		c, err := s.core.GetCampaign(campID, "", "")
+		recordID, err := s.sqliteCampaignRecordID(campID)
+		if err != nil {
+			return nil, err
+		}
+
+		c, err := s.core.GetCampaign(recordID, "", "")
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +254,12 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 
 	campaigns := make([]*models.Campaign, 0, len(rowIDs))
 	for _, rowID := range rowIDs {
-		campaign, err := s.core.GetCampaign(rowID, "", "")
+		campaignRecID, err := s.sqliteCampaignRecordID(rowID)
+		if err != nil {
+			return nil, err
+		}
+
+		campaign, err := s.core.GetCampaign(campaignRecID, "", "")
 		if err != nil {
 			return nil, err
 		}
