@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -87,6 +88,25 @@ var (
 		"github.com":          {},
 	}
 )
+
+func getRequestedNextURI(c echo.Context) string {
+	if c.Request().Method == http.MethodGet {
+		return utils.SanitizeURI(c.QueryParam("next"))
+	}
+
+	return utils.SanitizeURI(c.FormValue("next"))
+}
+
+func adminRedirectPath(next string) string {
+	next = utils.SanitizeURI(next)
+	if next == "" || next == "/" {
+		return uriAdmin
+	}
+	if next == uriAdmin || strings.HasPrefix(next, uriAdmin+"/") {
+		return next
+	}
+	return path.Join(uriAdmin, next)
+}
 
 // LoginPage renders the login page and handles the login form.
 func (a *App) LoginPage(c echo.Context) error {
@@ -321,7 +341,7 @@ func (a *App) ResetPage(c echo.Context) error {
 
 // renderLoginPage renders the login page and handles the login form.
 func (a *App) renderLoginPage(c echo.Context, loginErr error) error {
-	next := utils.SanitizeURI(c.FormValue("next"))
+	next := getRequestedNextURI(c)
 	if next == "/" {
 		next = uriAdmin
 	}
@@ -396,7 +416,7 @@ func (a *App) renderLoginPage(c echo.Context, loginErr error) error {
 
 // renderLoginSetupPage renders the first time user setup page.
 func (a *App) renderLoginSetupPage(c echo.Context, loginErr error) error {
-	next := utils.SanitizeURI(c.FormValue("next"))
+	next := getRequestedNextURI(c)
 	if next == "/" {
 		next = uriAdmin
 	}
@@ -756,10 +776,7 @@ func (a *App) doTwofaVerify(c echo.Context, token string, userID int, next strin
 }
 
 func (a *App) completeAuth(c echo.Context, user auth.User, oidcToken, next string) error {
-	next = utils.SanitizeURI(next)
-	if next == "" || next == "/" {
-		next = uriAdmin
-	}
+	next = adminRedirectPath(next)
 
 	a.log.Printf("auth bridge: issuing PocketBase auth for username=%q user_id=%d next=%q", user.Username, user.ID, next)
 	clientAuth, err := a.auth.IssueClientAuth(user)

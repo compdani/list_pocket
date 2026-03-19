@@ -15,6 +15,7 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/internal/subimporter"
+	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
@@ -277,7 +278,7 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 	} else {
 		req.Email = em
 	}
-	req.Phone = strings.TrimSpace(req.Phone)
+	req.Phone = utils.NormalizePhone(req.Phone)
 	if req.Phone != "" && !strHasLen(req.Phone, 1, 64) {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 	}

@@ -5,8 +5,11 @@ import (
 	"net/mail"
 	"net/url"
 	"path"
+	"regexp"
 	"strings"
 )
+
+var nonDigitPattern = regexp.MustCompile(`\D`)
 
 // ValidateEmail validates whether the given string is a correctly formed e-mail address.
 func ValidateEmail(email string) bool {
@@ -55,4 +58,30 @@ func SanitizeURI(u string) string {
 	}
 
 	return path.Clean(p.Path)
+}
+
+// NormalizePhone converts loosely formatted phone numbers to a normalized E.164-like form.
+// Common US 10-digit inputs are normalized to +1XXXXXXXXXX.
+func NormalizePhone(phone string) string {
+	phone = strings.TrimSpace(phone)
+	if phone == "" {
+		return ""
+	}
+
+	hasPlus := strings.HasPrefix(phone, "+")
+	digits := nonDigitPattern.ReplaceAllString(phone, "")
+	if digits == "" {
+		return ""
+	}
+
+	switch {
+	case hasPlus:
+		return "+" + digits
+	case len(digits) == 10:
+		return "+1" + digits
+	case len(digits) == 11 && strings.HasPrefix(digits, "1"):
+		return "+" + digits
+	default:
+		return "+" + digits
+	}
 }

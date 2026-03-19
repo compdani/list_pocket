@@ -348,6 +348,25 @@ export default {
 </script>
 
 <style scoped>
+.page-header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.header-content h1 {
+  line-height: 1.25;
+  margin: 0;
+}
+
+.header-actions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -406,5 +425,16 @@ export default {
 
 .template-dialog-frame {
   display: flex;
+}
+
+@media (max-width: 960px) {
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

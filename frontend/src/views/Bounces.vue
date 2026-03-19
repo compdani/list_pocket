@@ -1,97 +1,142 @@
 <template>
   <section class="bounces">
-    <header class="page-header columns">
-      <div class="column is-two-thirds">
-        <h1 class="title is-4">
+    <header class="page-header">
+      <div class="header-content">
+        <h1 class="text-h4">
           {{ $t('globals.terms.bounces') }}
           <span v-if="bounces.total > 0">({{ bounces.total }})</span>
         </h1>
       </div>
     </header>
 
-    <b-table :data="bounces.results" :hoverable="true" :loading="loading.bounces" default-sort="createdAt" checkable
-      @check-all="onTableCheck" @check="onTableCheck" :checked-rows="bulk.checked" @update:checked-rows="bulk.checked = $event" detailed show-detail-icon
-      paginated backend-pagination pagination-position="both" @page-change="onPageChange"
-      :current-page="queryParams.page" :per-page="bounces.perPage" :total="bounces.total" backend-sorting
-      @sort="onSort">
-      <template #top-left>
-        <div class="actions">
-          <template v-if="bulk.checked.length > 0">
-            <a class="a" href="#" @click.prevent="$utils.confirm(null, () => deleteBounces())" data-cy="btn-delete">
-              <b-icon icon="trash-can-outline" size="is-small" /> {{ $t('globals.buttons.delete') }}
-            </a>
-            <a class="a" href="#" @click.prevent="$utils.confirm(null, () => blocklistSubscribers())"
-              data-cy="btn-manage-blocklist">
-              <b-icon icon="account-off-outline" size="is-small" /> {{ $t('import.blocklist') }}
-            </a>
-            <span>
-              {{ $t('globals.messages.numSelected', { num: numSelectedBounces }) }}
-              <span v-if="!bulk.all && bounces.total > bounces.perPage">
-                &mdash;
-                <a href="#" @click.prevent="selectAllBounces">
-                  {{ $t('subscribers.selectAll', { num: bounces.total }) }}
-                </a>
-              </span>
-            </span>
-          </template>
-        </div>
-      </template>
-      <b-table-column v-slot="props" field="email" :label="$t('subscribers.email')" :td-attrs="$utils.tdID" sortable>
-        <router-link :to="{ name: 'subscriber', params: { id: props.row.subscriberId } }"
-          :class="{ 'blocklisted': props.row.subscriberStatus === 'blocklisted' }">
-          {{ props.row.email }}
-          <b-tag v-if="props.row.subscriberStatus !== 'enabled'" :class="props.row.subscriberStatus"
-            data-cy="blocklisted">
-            {{ $t(`subscribers.status.${props.row.subscriberStatus}`) }}
-          </b-tag>
-        </router-link>
-      </b-table-column>
+    <v-card v-if="bulk.checked.length > 0" class="mb-4 bulk-actions-card" elevation="0">
+      <v-card-text class="bulk-actions-content">
+        <v-btn
+          variant="text"
+          size="small"
+          prepend-icon="mdi-trash-can-outline"
+          @click="$utils.confirm(null, () => deleteBounces())"
+          data-cy="btn-delete"
+        >
+          {{ $t('globals.buttons.delete') }}
+        </v-btn>
+        <v-btn
+          variant="text"
+          size="small"
+          prepend-icon="mdi-account-off-outline"
+          @click="$utils.confirm(null, () => blocklistSubscribers())"
+          data-cy="btn-manage-blocklist"
+        >
+          {{ $t('import.blocklist') }}
+        </v-btn>
+        <span class="ml-2">
+          {{ $t('globals.messages.numSelected', { num: numSelectedBounces }) }}
+          <span v-if="!bulk.all && bounces.total > bounces.perPage">
+            &mdash;
+            <v-btn variant="text" size="small" @click="selectAllBounces">
+              {{ $t('subscribers.selectAll', { num: bounces.total }) }}
+            </v-btn>
+          </span>
+        </span>
+      </v-card-text>
+    </v-card>
 
-      <b-table-column v-slot="props" field="campaign" :label="$tc('globals.terms.campaign')" sortable>
-        <router-link v-if="props.row.campaign" :to="{ name: 'bounces', query: { campaign_id: props.row.campaign.id } }">
-          {{ props.row.campaign.name }}
+    <v-data-table-server
+      :headers="tableHeaders"
+      :items="bounces.results || []"
+      :items-length="bounces.total || 0"
+      :loading="loading.bounces"
+      :page="queryParams.page"
+      :items-per-page="bounces.perPage || 20"
+      :sort-by="tableSortBy"
+      :model-value="bulk.checked"
+      class="bounces-table"
+      item-value="id"
+      return-object
+      show-select
+      show-expand
+      hide-default-footer
+      @update:model-value="updateChecked"
+      @update:options="onTableOptionsChange"
+    >
+      <template #[`item.email`]="{ item }">
+        <router-link :to="{ name: 'subscriber', params: { id: item.subscriberId } }"
+          :class="{ 'text-error': item.subscriberStatus === 'blocklisted' }">
+          {{ item.email }}
+        </router-link>
+        <v-chip
+          v-if="item.subscriberStatus !== 'enabled'"
+          :class="item.subscriberStatus"
+          size="x-small"
+          class="ml-1"
+          data-cy="blocklisted"
+        >
+          {{ $t(`subscribers.status.${item.subscriberStatus}`) }}
+        </v-chip>
+      </template>
+
+      <template #[`item.campaign`]="{ item }">
+        <router-link v-if="item.campaign" :to="{ name: 'bounces', query: { campaign_id: item.campaign.id } }">
+          {{ item.campaign.name }}
         </router-link>
         <span v-else>-</span>
-      </b-table-column>
+      </template>
 
-      <b-table-column v-slot="props" field="source" :label="$t('bounces.source')" sortable>
-        <router-link :to="{ name: 'bounces', query: { source: props.row.source } }">
-          {{ props.row.source }}
+      <template #[`item.source`]="{ item }">
+        <router-link :to="{ name: 'bounces', query: { source: item.source } }">
+          {{ item.source }}
         </router-link>
-      </b-table-column>
+      </template>
 
-      <b-table-column v-slot="props" field="type" :label="$t('globals.fields.type')" sortable>
-        <router-link :to="{ name: 'bounces', query: { type: props.row.type } }">
-          {{ $t(`bounces.${props.row.type}`) }}
+      <template #[`item.type`]="{ item }">
+        <router-link :to="{ name: 'bounces', query: { type: item.type } }">
+          {{ $t(`bounces.${item.type}`) }}
         </router-link>
-      </b-table-column>
+      </template>
 
-      <b-table-column v-slot="props" field="created_at" :label="$t('globals.fields.createdAt')" sortable>
-        {{ $utils.niceDate(props.row.createdAt, true) }}
-      </b-table-column>
+      <template #[`item.created_at`]="{ item }">
+        {{ $utils.niceDate(item.createdAt, true) }}
+      </template>
 
-      <b-table-column v-slot="props" cell-class="actions" align="right">
-        <div>
-          <a v-if="!props.row.isDefault" href="#" @click.prevent="$utils.confirm(null, () => deleteBounce(props.row))"
-            data-cy="btn-delete" :aria-label="$t('globals.buttons.delete')">
-            <b-tooltip :label="$t('globals.buttons.delete')" type="is-dark">
-              <b-icon icon="trash-can-outline" size="is-small" />
-            </b-tooltip>
-          </a>
-          <span v-else class="a has-text-grey-light">
-            <b-icon icon="trash-can-outline" size="is-small" />
-          </span>
+      <template #[`item.actions`]="{ item }">
+        <div class="actions">
+          <v-tooltip :text="$t('globals.buttons.delete')" location="top">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-trash-can-outline"
+                size="x-small"
+                variant="text"
+                @click="$utils.confirm(null, () => deleteBounce(item))"
+                data-cy="btn-delete"
+              />
+            </template>
+          </v-tooltip>
         </div>
-      </b-table-column>
-
-      <template #detail="props">
-        <pre class="is-size-7">{{ props.row.meta }}</pre>
       </template>
 
-      <template #empty v-if="!loading.templates">
-        <empty-placeholder />
+      <template #expanded-row="{ item }">
+        <tr>
+          <td :colspan="tableHeaders.length + 2">
+            <pre class="text-caption pa-2">{{ item.meta }}</pre>
+          </td>
+        </tr>
       </template>
-    </b-table>
+
+      <template #no-data>
+        <empty-placeholder v-if="!loading.bounces" />
+      </template>
+    </v-data-table-server>
+
+    <div class="table-pagination" v-if="bounces.total > 0">
+      <v-pagination
+        :length="bouncePageCount"
+        :model-value="queryParams.page"
+        rounded="circle"
+        total-visible="7"
+        @update:model-value="onPageChange"
+      />
+    </div>
   </section>
 </template>
 
@@ -132,6 +177,33 @@ export default {
       this.getBounces();
     },
 
+    onTableOptionsChange(options) {
+      const [sort] = options.sortBy || [];
+      const nextPage = options.page || 1;
+      const nextOrderBy = sort?.key || this.queryParams.orderBy;
+      const nextOrder = sort?.order || this.queryParams.order;
+
+      if (
+        nextPage === this.queryParams.page
+        && nextOrderBy === this.queryParams.orderBy
+        && nextOrder === this.queryParams.order
+      ) {
+        return;
+      }
+
+      this.queryParams.page = nextPage;
+      this.queryParams.orderBy = nextOrderBy;
+      this.queryParams.order = nextOrder;
+      this.getBounces();
+    },
+
+    updateChecked(rows) {
+      this.bulk.checked = rows;
+      if (this.bulk.checked.length !== this.bounces.total) {
+        this.bulk.all = false;
+      }
+    },
+
     onPageChange(p) {
       this.queryParams.page = p;
       this.getBounces();
@@ -148,7 +220,6 @@ export default {
     },
 
     getBounces() {
-      this.bulk.checked = [];
       this.bulk.all = false;
 
       this.$api.getBounces({
@@ -203,12 +274,32 @@ export default {
   },
 
   computed: {
-    ...mapState(['templates', 'loading']),
-    numSelectedBounces() {
-      if (this.bulk.all) {
-        return this.bounces.total;
+    ...mapState(['loading']),
+
+    tableHeaders() {
+      return [
+        { title: this.$t('subscribers.email'), key: 'email', sortable: true },
+        { title: this.$tc('globals.terms.campaign'), key: 'campaign', sortable: false },
+        { title: this.$t('bounces.source'), key: 'source', sortable: true },
+        { title: this.$t('globals.fields.type'), key: 'type', sortable: true },
+        { title: this.$t('globals.fields.createdAt'), key: 'created_at', sortable: true },
+        { title: '', key: 'actions', sortable: false, align: 'end' },
+      ];
+    },
+
+    tableSortBy() {
+      return [{ key: this.queryParams.orderBy, order: this.queryParams.order }];
+    },
+
+    bouncePageCount() {
+      if (!this.bounces.perPage || !this.bounces.total) {
+        return 1;
       }
-      return this.bulk.checked.length;
+      return Math.max(1, Math.ceil(this.bounces.total / this.bounces.perPage));
+    },
+
+    numSelectedBounces() {
+      return this.bulk.all ? this.bounces.total : this.bulk.checked.length;
     },
   },
 
@@ -233,3 +324,74 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.bounces {
+  --bounces-border: #dce5f2;
+  --bounces-border-strong: #c7d5ea;
+  --bounces-surface-soft: #f6f9ff;
+}
+
+.page-header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.bulk-actions-card {
+  background: #f0f7ff;
+  border: 1px solid #d8e9ff;
+  border-radius: 14px;
+}
+
+.bulk-actions-content {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.bounces-table {
+  background: #fff;
+  border: 1px solid var(--bounces-border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.bounces-table :deep(thead th) {
+  background: var(--bounces-surface-soft);
+  border-bottom: 1px solid var(--bounces-border-strong) !important;
+  color: #334155;
+  font-weight: 600;
+}
+
+.bounces-table :deep(tbody td) {
+  padding-bottom: 14px !important;
+  padding-top: 14px !important;
+  vertical-align: top;
+}
+
+.bounces-table :deep(tbody tr:hover) {
+  background: #f8fbff;
+}
+
+.bounces-table :deep(.v-data-table__tr--selected) {
+  background: #edf5ff;
+}
+
+.table-pagination {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+  margin-top: 14px;
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+</style>

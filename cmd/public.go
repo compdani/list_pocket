@@ -16,6 +16,7 @@ import (
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
@@ -296,7 +297,8 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 		Name:      req.Name,
 	}
 	subUpdate.NormalizeName()
-	if subUpdate.Name == "" || len(subUpdate.Name) > 256 {
+	subUpdate.Phone = utils.NormalizePhone(subUpdate.Phone)
+	if strings.TrimSpace(subUpdate.FirstName) == "" || strings.TrimSpace(subUpdate.LastName) == "" || len(subUpdate.Name) > 256 {
 		return c.Render(http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("subscribers.invalidName")))
 	}
@@ -315,7 +317,7 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	sub.FirstName = subUpdate.FirstName
 	sub.LastName = subUpdate.LastName
 	sub.Name = subUpdate.Name
-	sub.Phone = strings.TrimSpace(subUpdate.Phone)
+	sub.Phone = subUpdate.Phone
 
 	// Update the subscriber properties in the DB.
 	if _, err := a.core.UpdateSubscriber(sub.ID, sub); err != nil {
@@ -756,11 +758,11 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		Email:     req.Email,
 	}
 	subReq.NormalizeName()
-	if len(subReq.Name) == 0 {
-		// If there's no name, use the name bit from the e-mail.
-		subReq.FirstName, subReq.LastName = models.SplitSubscriberName(strings.Split(req.Email, "@")[0])
-		subReq.NormalizeName()
-	} else if len(subReq.Name) > stdInputMaxLen {
+	subReq.Phone = utils.NormalizePhone(subReq.Phone)
+	if strings.TrimSpace(subReq.FirstName) == "" || strings.TrimSpace(subReq.LastName) == "" {
+		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+	}
+	if len(subReq.Name) > stdInputMaxLen {
 		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
 	}
 	if subReq.Phone != "" && len(strings.TrimSpace(subReq.Phone)) > 64 {
@@ -787,7 +789,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		LastName:  subReq.LastName,
 		Name:      subReq.Name,
 		Email:     req.Email,
-		Phone:     strings.TrimSpace(subReq.Phone),
+		Phone:     subReq.Phone,
 		Status:    models.SubscriberStatusEnabled,
 	}, nil, listUUIDs, false, true)
 	if err == nil {

@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/compdani/list_pocket/internal/i18n"
+	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/lib/pq"
@@ -724,7 +725,7 @@ func (im *Importer) ValidateFields(s SubReq) (SubReq, error) {
 		return s, err
 	}
 	s.Email = strings.ToLower(em)
-	s.Phone = strings.TrimSpace(s.Phone)
+	s.Phone = utils.NormalizePhone(s.Phone)
 	if len(s.Phone) > 64 {
 		return s, errors.New(im.i18n.T("globals.messages.invalidData"))
 	}
