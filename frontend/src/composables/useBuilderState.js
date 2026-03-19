@@ -83,6 +83,8 @@ function defaultNodeLabel(type, config = {}) {
       return "Update Record";
     case "pb_query":
       return "Query Record";
+    case "campaign_launch":
+      return "Launch Campaign";
     case "wait_until":
       return "Wait Until";
     case "transform":
@@ -253,6 +255,25 @@ function buildNodeTemplate(type, index) {
             { ...schema("filter", "Filter", "textarea"), description: "Query expression. Use run/contact/company references.", placeholder: "email = {{ contact.email }}" },
           ],
           contactMode: "lookup",
+        },
+      };
+    case "campaign_launch":
+      return {
+        ...base,
+        type: "workflow",
+        data: {
+          label: "Launch Campaign",
+          type,
+          description: "Starts an existing campaign record so workflows can sequence drip sends.",
+          config: {
+            campaignId: "",
+            campaignIdPath: "",
+          },
+          schema: [
+            { ...schema("campaignId", "Campaign Record ID", "text"), description: "PocketBase record id of the campaign to start.", placeholder: "RECORD_ID" },
+            { ...schema("campaignIdPath", "Campaign ID Path", "text"), description: "Optional context path that resolves a campaign record id at runtime.", placeholder: "previous.campaignId" },
+          ],
+          contactMode: "campaign-launch",
         },
       };
     case "wait_until":

@@ -133,14 +133,14 @@ func (s *store) NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models
 // Since batches are processed sequentially, the retrieval is ordered by ID,
 // and every batch takes the last ID of the last batch and fetches the next
 // batch above that.
-func (s *store) NextSubscribers(campID, limit int) ([]models.Subscriber, error) {
+func (s *store) NextSubscribers(campID, limit int) ([]models.Subscriber, bool, error) {
 	if s.sqlite {
 		return s.nextSubscribersSQLite(campID, limit)
 	}
 
 	var camps []runningCamp
 	if err := s.queries.GetRunningCampaign.Select(&camps, campID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	var listIDs []int
@@ -149,12 +149,19 @@ func (s *store) NextSubscribers(campID, limit int) ([]models.Subscriber, error) 
 	}
 
 	if len(listIDs) == 0 {
-		return nil, nil
+		return nil, false, nil
 	}
 
 	var out []models.Subscriber
-	err := s.queries.NextCampaignSubscribers.Select(&out, camps[0].CampaignID, camps[0].CampaignType, camps[0].LastSubscriberID, camps[0].MaxSubscriberID, pq.Array(listIDs), limit)
-	return out, err
+	err := s.queries.NextCampaignSubscribers.Select(&out, camps[0].CampaignID, camps[0].CampaignType, camps[0].LastSubscriberID, camps[0].MaxSubscriberID, pq.Array(listIDs), limit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
+	}
+	return out, hasMore, nil
 }
 
 // GetCampaign fetches a campaign from the database.
@@ -190,6 +197,25 @@ func (s *store) UpdateCampaignStatus(campID int, status string) error {
 	}
 
 	_, err := s.queries.UpdateCampaignStatus.Exec(campID, status)
+	return err
+}
+
+func (s *store) ScheduleCampaignBatch(campID int, sendAt time.Time) error {
+	if s.sqlite {
+		_, err := s.db.Exec(`
+			UPDATE campaigns
+			SET status = 'scheduled',
+			    send_at = ?,
+			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE rowid = ?`,
+			sendAt.UTC().Format("2006-01-02 15:04:05.000Z"), campID)
+		return err
+	}
+
+	_, err := s.db.Exec(`
+		UPDATE campaigns
+		SET status='scheduled', send_at=$1, updated_at=NOW()
+		WHERE id=$2`, sendAt.UTC(), campID)
 	return err
 }
 
@@ -326,7 +352,7 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 	return campaigns, nil
 }
 
-func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, error) {
+func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, bool, error) {
 	var camps []runningCamp
 	if err := s.db.Select(&camps, `
 		SELECT campaigns.rowid AS campaign_id,
@@ -339,7 +365,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 		LEFT JOIN lists ON lists.id = campaign_lists.list_id
 		WHERE campaigns.rowid = ? AND campaigns.status='running'
 	`, campID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	listIDs := make([]int, 0, len(camps))
@@ -350,7 +376,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 	}
 	if len(listIDs) == 0 {
 		s.log.Printf("manager store sqlite: next subscribers campaign_id=%d has no lists", campID)
-		return nil, nil
+		return nil, false, nil
 	}
 
 	c := camps[0]
@@ -365,7 +391,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 	for _, id := range listIDs {
 		args = append(args, id)
 	}
-	args = append(args, c.CampaignType, c.CampaignType, limit)
+	args = append(args, c.CampaignType, c.CampaignType, limit+1)
 
 	var rows []sqliteStoreSubscriberRow
 	if err := s.db.Select(&rows, `
@@ -395,12 +421,17 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 		ORDER BY s.rowid
 		LIMIT ?
 	`, args...); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out := sqliteStoreSubscriberRowsToModels(rows)
 	s.log.Printf("manager store sqlite: next subscribers campaign_id=%d list_ids=%v fetched=%d limit=%d", campID, listIDs, len(out), limit)
 	if len(out) == 0 {
-		return nil, nil
+		return nil, false, nil
+	}
+
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
 	}
 
 	lastID := out[len(out)-1].ID
@@ -409,10 +440,10 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, e
 		SET last_subscriber_id = ?,
 		    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 		WHERE rowid = ?`, lastID, campID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return out, nil
+	return out, hasMore, nil
 }
 
 func placeholders(n int) string {

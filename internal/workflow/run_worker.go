@@ -24,11 +24,13 @@ func newRunEngineForApp(app core.App) *executor.Engine {
 		executor.EventStartExecutor{},
 		executor.HTTPExecutor{},
 		executor.PocketBaseExecutor{},
+		executor.CampaignLaunchExecutor{},
 		executor.WaitExecutor{},
 	)
 }
 
-func startRunWorker(app core.App) {
+// StartRunWorker starts the background workflow executor loop once for the process.
+func StartRunWorker(app core.App) {
 	runWorkerOnce.Do(func() {
 		engine := newRunEngineForApp(app)
 		go func() {

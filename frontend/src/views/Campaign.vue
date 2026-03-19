@@ -253,6 +253,88 @@
               </v-col>
             </v-row>
 
+            <v-card variant="outlined" class="mb-4">
+              <v-card-text>
+                <v-switch
+                  v-model="form.batching.enabled"
+                  :disabled="!canEdit"
+                  color="primary"
+                  hide-details
+                  inset
+                  :label="$t('campaigns.batchingEnable')"
+                />
+                <p class="form-help mb-3">{{ $t('campaigns.batchingHelp') }}</p>
+                <v-row v-if="form.batching.enabled">
+                  <v-col cols="12" md="4">
+                    <v-text-field
+                      v-model.number="form.batching.batchSize"
+                      :disabled="!canEdit"
+                      type="number"
+                      min="1"
+                      :label="$t('campaigns.batchSize')"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-text-field
+                      v-model.number="form.batching.repeatValue"
+                      :disabled="!canEdit"
+                      type="number"
+                      min="1"
+                      :label="$t('campaigns.batchRepeatValue')"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="4">
+                    <v-select
+                      v-model="form.batching.repeatUnit"
+                      :disabled="!canEdit"
+                      :items="batchRepeatUnits"
+                      :label="$t('campaigns.batchRepeatUnit')"
+                      variant="outlined"
+                    />
+                  </v-col>
+                </v-row>
+                <v-row v-if="form.batching.enabled">
+                  <v-col cols="12">
+                    <div class="text-body-2 mb-2">{{ $t('campaigns.batchDays') }}</div>
+                    <div class="d-flex flex-wrap ga-2">
+                      <v-btn
+                        v-for="day in batchDayOptions"
+                        :key="day.value"
+                        :variant="form.batching.days.includes(day.value) ? 'flat' : 'outlined'"
+                        :color="form.batching.days.includes(day.value) ? 'primary' : undefined"
+                        size="small"
+                        @click="toggleBatchDay(day.value)"
+                      >
+                        {{ day.label }}
+                      </v-btn>
+                    </div>
+                  </v-col>
+                </v-row>
+                <v-row v-if="form.batching.enabled" class="mt-2">
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="form.batching.startTime"
+                      :disabled="!canEdit"
+                      type="time"
+                      :label="$t('campaigns.batchStartTime')"
+                      variant="outlined"
+                    />
+                  </v-col>
+                  <v-col cols="12" md="6">
+                    <v-text-field
+                      v-model="form.batching.endTime"
+                      :disabled="!canEdit"
+                      type="time"
+                      :label="$t('campaigns.batchEndTime')"
+                      variant="outlined"
+                    />
+                  </v-col>
+                </v-row>
+              </v-card-text>
+            </v-card>
+
             <div class="d-flex justify-end">
               <v-btn
                 variant="text"
@@ -642,6 +724,15 @@ export default {
         archiveMetaStr: '{}',
         archiveMeta: {},
         testEmails: [],
+        batching: {
+          enabled: false,
+          batchSize: 500,
+          repeatValue: 1,
+          repeatUnit: 'hours',
+          days: [],
+          startTime: '',
+          endTime: '',
+        },
       },
       lastAutoFromEmail: '',
     };
@@ -721,6 +812,53 @@ export default {
       }
 
       this.form.media.push(o);
+    },
+
+    getBatching(attribs) {
+      const value = attribs && typeof attribs === 'object' ? attribs.batching : null;
+      if (!value || typeof value !== 'object') {
+        return {
+          enabled: false,
+          batchSize: 500,
+          repeatValue: 1,
+          repeatUnit: 'hours',
+          days: [],
+          startTime: '',
+          endTime: '',
+        };
+      }
+
+      return {
+        enabled: !!value.enabled,
+        batchSize: Number(value.batchSize || 500),
+        repeatValue: Number(value.repeatValue || 1),
+        repeatUnit: value.repeatUnit || 'hours',
+        days: Array.isArray(value.days) ? value.days : [],
+        startTime: value.startTime || '',
+        endTime: value.endTime || '',
+      };
+    },
+
+    stripSystemAttribs(attribs) {
+      if (!attribs || typeof attribs !== 'object') {
+        return {};
+      }
+
+      const next = { ...attribs };
+      delete next.dripAutomation;
+      delete next.batching;
+      return next;
+    },
+
+    toggleBatchDay(day) {
+      if (!this.canEdit) {
+        return;
+      }
+      if (this.form.batching.days.includes(day)) {
+        this.form.batching.days = this.form.batching.days.filter((item) => item !== day);
+        return;
+      }
+      this.form.batching.days = [...this.form.batching.days, day];
     },
 
     isUnsaved() {
@@ -816,6 +954,8 @@ export default {
 
     getCampaign(id) {
       return this.$api.getCampaign(id).then((data) => {
+        const batching = this.getBatching(data.attribs);
+        const userAttribs = this.stripSystemAttribs(data.attribs);
         const nextForm = {
           ...this.form,
           ...data,
@@ -823,7 +963,8 @@ export default {
           archiveSlug: data.archiveSlug || '',
           headersStr: JSON.stringify(data.headers, null, 4),
           archiveMetaStr: data.archiveMeta ? JSON.stringify(data.archiveMeta, null, 4) : '{}',
-          attribsStr: data.attribs ? JSON.stringify(data.attribs, null, 4) : '{}',
+          attribsStr: JSON.stringify(userAttribs, null, 4),
+          batching,
 
           // The structure that is populated by editor input event.
           content: {
@@ -889,6 +1030,15 @@ export default {
         send_at: this.form.sendLater ? this.form.sendAtDate : null,
         headers: this.form.headers,
         attribs: this.form.attribs,
+        batching: {
+          enabled: this.form.batching.enabled,
+          batch_size: this.form.batching.batchSize,
+          repeat_value: this.form.batching.repeatValue,
+          repeat_unit: this.form.batching.repeatUnit,
+          days: this.form.batching.days,
+          start_time: this.form.batching.startTime,
+          end_time: this.form.batching.endTime,
+        },
         media: this.form.media.map((m) => m.id),
       };
 
@@ -913,6 +1063,15 @@ export default {
         send_at: this.form.sendLater ? this.form.sendAtDate : null,
         headers: this.form.headers,
         attribs: this.form.attribs,
+        batching: {
+          enabled: this.form.batching.enabled,
+          batch_size: this.form.batching.batchSize,
+          repeat_value: this.form.batching.repeatValue,
+          repeat_unit: this.form.batching.repeatUnit,
+          days: this.form.batching.days,
+          start_time: this.form.batching.startTime,
+          end_time: this.form.batching.endTime,
+        },
         template_id: this.form.content.templateId,
         content_type: this.form.content.contentType,
         body: this.form.content.body,
@@ -936,9 +1095,12 @@ export default {
       // This promise is used by startCampaign to first save before starting.
       return new Promise((resolve) => {
         this.$api.updateCampaign(this.data.id, data).then((d) => {
+          const batching = this.getBatching(d.attribs);
+          const userAttribs = this.stripSystemAttribs(d.attribs);
           this.data = d;
           this.form.archiveSlug = d.archiveSlug;
-          this.form.attribsStr = d.attribs ? JSON.stringify(d.attribs, null, 4) : '{}';
+          this.form.attribsStr = JSON.stringify(userAttribs, null, 4);
+          this.form.batching = batching;
 
           this.$utils.toast(this.$t(typMsg, { name: d.name }));
           resolve();
@@ -1058,6 +1220,25 @@ export default {
         : [];
 
       return messengers.length > 0 ? messengers : ['email'];
+    },
+
+    batchRepeatUnits() {
+      return [
+        { title: this.$t('campaigns.batchRepeatHours'), value: 'hours' },
+        { title: this.$t('campaigns.batchRepeatDays'), value: 'days' },
+      ];
+    },
+
+    batchDayOptions() {
+      return [
+        { label: this.$t('globals.days.shortMon'), value: 'mon' },
+        { label: this.$t('globals.days.shortTue'), value: 'tue' },
+        { label: this.$t('globals.days.shortWed'), value: 'wed' },
+        { label: this.$t('globals.days.shortThu'), value: 'thu' },
+        { label: this.$t('globals.days.shortFri'), value: 'fri' },
+        { label: this.$t('globals.days.shortSat'), value: 'sat' },
+        { label: this.$t('globals.days.shortSun'), value: 'sun' },
+      ];
     },
 
     smtpSenders() {

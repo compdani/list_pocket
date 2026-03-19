@@ -34,10 +34,11 @@ const (
 // that provides subscriber and campaign records.
 type Store interface {
 	NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models.Campaign, error)
-	NextSubscribers(campID, limit int) ([]models.Subscriber, error)
+	NextSubscribers(campID, limit int) ([]models.Subscriber, bool, error)
 	GetCampaign(campID int) (*models.Campaign, error)
 	GetAttachment(mediaID int) (models.Attachment, error)
 	UpdateCampaignStatus(campID int, status string) error
+	ScheduleCampaignBatch(campID int, sendAt time.Time) error
 	UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID int) error
 	CreateLink(url string) (string, error)
 	BlocklistSubscriber(id int64) error

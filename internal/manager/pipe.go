@@ -2,6 +2,7 @@ package manager
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,14 +12,15 @@ import (
 )
 
 type pipe struct {
-	camp       *models.Campaign
-	rate       *ratecounter.RateCounter
-	wg         *sync.WaitGroup
-	sent       atomic.Int64
-	lastID     atomic.Uint64
-	errors     atomic.Uint64
-	stopped    atomic.Bool
-	withErrors atomic.Bool
+	camp         *models.Campaign
+	rate         *ratecounter.RateCounter
+	wg           *sync.WaitGroup
+	sent         atomic.Int64
+	lastID       atomic.Uint64
+	errors       atomic.Uint64
+	stopped      atomic.Bool
+	withErrors   atomic.Bool
+	batchHasMore bool
 
 	m *Manager
 }
@@ -74,8 +76,14 @@ func (m *Manager) newPipe(c *models.Campaign) (*pipe, error) {
 // in the current batch or not. A false indicates that all subscribers
 // have been processed, or that a campaign has been paused or cancelled.
 func (p *pipe) NextSubscribers() (bool, error) {
+	batching := p.camp.Batching()
+	limit := p.m.cfg.BatchSize
+	if batching.Enabled && batching.BatchSize > 0 {
+		limit = batching.BatchSize
+	}
+
 	// Fetch the next batch of subscribers from a 'running' campaign.
-	subs, err := p.m.store.NextSubscribers(p.camp.ID, p.m.cfg.BatchSize)
+	subs, hasMore, err := p.m.store.NextSubscribers(p.camp.ID, limit)
 	if err != nil {
 		return false, fmt.Errorf("error fetching campaign subscribers (%s): %v", p.camp.Name, err)
 	}
@@ -85,6 +93,7 @@ func (p *pipe) NextSubscribers() (bool, error) {
 	if len(subs) == 0 {
 		return false, nil
 	}
+	p.batchHasMore = batching.Enabled && hasMore
 
 	// Is there a sliding window limit configured?
 	hasSliding := p.m.cfg.SlidingWindow &&
@@ -130,7 +139,11 @@ func (p *pipe) NextSubscribers() (bool, error) {
 		}
 	}
 
-	return true, nil
+	if batching.Enabled {
+		return false, nil
+	}
+
+	return hasMore, nil
 }
 
 // OnError keeps track of the number of errors that occur while sending messages
@@ -214,6 +227,16 @@ func (p *pipe) cleanup() {
 		return
 	}
 
+	if p.batchHasMore {
+		nextAt := nextBatchScheduleTime(time.Now(), p.camp.Batching())
+		if err := p.m.store.ScheduleCampaignBatch(p.camp.ID, nextAt); err != nil {
+			p.m.log.Printf("error scheduling next campaign batch (%s): %v", p.camp.Name, err)
+			return
+		}
+		p.m.log.Printf("scheduled next campaign batch (%s) at %s", p.camp.Name, nextAt.Format(time.RFC3339))
+		return
+	}
+
 	// Campaign wasn't manually stopped and subscribers were naturally exhausted.
 	// Fetch the up-to-date campaign status from the DB.
 	c, err := p.m.store.GetCampaign(p.camp.ID)
@@ -236,4 +259,86 @@ func (p *pipe) cleanup() {
 
 	// Notify admin.
 	_ = p.m.sendNotif(c, c.Status, "")
+}
+
+func nextBatchScheduleTime(from time.Time, cfg models.CampaignBatching) time.Time {
+	if !cfg.Enabled || cfg.RepeatValue < 1 {
+		return from
+	}
+
+	next := from
+	switch cfg.RepeatUnit {
+	case "days":
+		next = next.AddDate(0, 0, cfg.RepeatValue)
+	default:
+		next = next.Add(time.Duration(cfg.RepeatValue) * time.Hour)
+	}
+
+	for i := 0; i < 14; i++ {
+		if !batchDayAllowed(next, cfg.Days) {
+			next = startOfNextDay(next, cfg.StartTime)
+			continue
+		}
+
+		if adjusted, ok := batchWindowAdjusted(next, cfg.StartTime, cfg.EndTime); ok {
+			return adjusted
+		}
+		next = startOfNextDay(next, cfg.StartTime)
+	}
+
+	return next
+}
+
+func batchDayAllowed(t time.Time, days []string) bool {
+	if len(days) == 0 {
+		return true
+	}
+	day := strings.ToLower(t.Weekday().String()[:3])
+	for _, allowed := range days {
+		if strings.ToLower(allowed) == day {
+			return true
+		}
+	}
+	return false
+}
+
+func batchWindowAdjusted(t time.Time, startTime string, endTime string) (time.Time, bool) {
+	startHour, startMinute, hasStart := parseClock(startTime)
+	endHour, endMinute, hasEnd := parseClock(endTime)
+
+	if hasStart {
+		start := time.Date(t.Year(), t.Month(), t.Day(), startHour, startMinute, 0, 0, t.Location())
+		if t.Before(start) {
+			t = start
+		}
+	}
+
+	if hasEnd {
+		end := time.Date(t.Year(), t.Month(), t.Day(), endHour, endMinute, 0, 0, t.Location())
+		if t.After(end) {
+			return time.Time{}, false
+		}
+	}
+
+	return t, true
+}
+
+func startOfNextDay(t time.Time, startTime string) time.Time {
+	next := t.AddDate(0, 0, 1)
+	hour, minute, ok := parseClock(startTime)
+	if !ok {
+		return time.Date(next.Year(), next.Month(), next.Day(), next.Hour(), next.Minute(), 0, 0, next.Location())
+	}
+	return time.Date(next.Year(), next.Month(), next.Day(), hour, minute, 0, 0, next.Location())
+}
+
+func parseClock(value string) (int, int, bool) {
+	if strings.TrimSpace(value) == "" {
+		return 0, 0, false
+	}
+	parsed, err := time.Parse("15:04", value)
+	if err != nil {
+		return 0, 0, false
+	}
+	return parsed.Hour(), parsed.Minute(), true
 }
