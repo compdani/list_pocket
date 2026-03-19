@@ -119,7 +119,7 @@
 
         <template #[`item.subscriber_count`]="{ item }">
           <template v-if="$can('subscribers:get_all', 'subscribers:get')">
-            <router-link :to="`/subscribers/lists/${item.recordId || item.record_id || item.id}`">
+            <router-link :to="`/subscribers/lists/${item.id}`">
               {{ $utils.formatNumber(item.subscriberCount) }}
               <span class="text-caption view">{{ $t('globals.buttons.view') }}</span>
             </router-link>
@@ -133,7 +133,7 @@
           <div class="fields stats">
             <p v-for="(count, status) in filterStatuses(item)" :key="status">
               <label for="#">{{ $tc(`subscribers.status.${status}`, count) }}</label>
-              <router-link :to="`/subscribers/lists/${item.recordId || item.record_id || item.id}?subscription_status=${status}`" :class="status">
+              <router-link :to="`/subscribers/lists/${item.id}?subscription_status=${status}`" :class="status">
                 {{ $utils.formatNumber(count) }}
               </router-link>
             </p>
@@ -152,7 +152,7 @@
           <div class="action-group">
             <router-link
               v-if="$can('campaigns:manage')"
-              :to="`/campaigns/new?list_record_id=${item.recordId || item.record_id || item.id}`"
+              :to="`/campaigns/new?list_record_id=${item.id}`"
               class="action-button"
               data-cy="btn-campaign"
               :aria-label="$t('campaigns.new')"
@@ -171,7 +171,7 @@
             </button>
             <router-link
               v-if="$can('subscribers:import')"
-              :to="{ name: 'import', query: { list_record_id: item.recordId || item.record_id || item.id } }"
+              :to="{ name: 'import', query: { list_record_id: item.id } }"
               class="action-button"
               data-cy="btn-import"
               :aria-label="$t('globals.buttons.import')"
@@ -379,7 +379,7 @@ export default {
       this.$utils.confirm(
         this.$t('lists.confirmDelete'),
         () => {
-          this.$api.deleteList(list.recordId || list.record_id || list.id).then(() => {
+          this.$api.deleteList(list.id).then(() => {
             this.getLists();
 
             this.$utils.toast(this.$t('globals.messages.deleted', { name: list.name }));
@@ -436,9 +436,8 @@ export default {
         const params = {};
         if (!this.bulk.all && this.bulk.checked.length > 0) {
           // If 'all' is not selected, delete lists by IDs.
-          params.id = this.bulk.checked.map((l) => l.id);
           params.record_id = this.bulk.checked
-            .map((l) => l.recordId || l.record_id || l.id)
+            .map((l) => l.id)
             .filter((id) => typeof id === 'string' && id.length > 0);
         } else {
           // 'All' is selected, delete by query.
@@ -468,8 +467,7 @@ export default {
       const data = {
         name: this.$t('lists.optinTo', { name: list.name }),
         subject: this.$t('lists.confirmSub', { name: list.name }),
-        lists: [list.id],
-        list_record_ids: [list.recordId || list.record_id || String(list.id)],
+        list_record_ids: [list.id],
         from_email: this.settings['app.from_email'],
         content_type: 'richtext',
         messenger: 'email',
@@ -477,7 +475,7 @@ export default {
       };
 
       this.$api.createCampaign(data).then((d) => {
-        this.$router.push({ name: 'campaign', hash: '#content', params: { id: d.recordId || d.record_id || d.id } });
+        this.$router.push({ name: 'campaign', hash: '#content', params: { id: d.id } });
       });
       return false;
     },

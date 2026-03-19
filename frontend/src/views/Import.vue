@@ -406,9 +406,8 @@ export default {
         mode: this.form.mode,
         subscription_status: this.form.subStatus,
         delim: this.form.delim,
-        lists: this.form.lists.map((l) => l.id),
         list_record_ids: this.form.lists
-          .map((l) => l.recordId || l.record_id)
+          .map((l) => l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         overwrite_userinfo: this.form.overwriteUserInfo,
         overwrite_subscription_status: this.form.overwriteSubStatus,
@@ -464,14 +463,13 @@ export default {
     this.renderExample();
     this.pollStatus();
 
-    const ids = this.$utils.parseQueryIDs(this.$route.query.list_id);
     const recordIDs = typeof this.$route.query.list_record_id === 'object'
       ? this.$route.query.list_record_id
       : (this.$route.query.list_record_id ? [this.$route.query.list_record_id] : []);
-    if ((ids.length > 0 || recordIDs.length > 0) && this.lists.results) {
+    if (recordIDs.length > 0 && this.lists.results) {
       this.$nextTick(() => {
         this.form.lists = this.lists.results.filter((l) => (
-          ids.indexOf(l.id) > -1 || recordIDs.indexOf(l.recordId || l.record_id) > -1
+          recordIDs.indexOf(l.id) > -1
         ));
       });
     }

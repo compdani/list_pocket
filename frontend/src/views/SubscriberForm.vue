@@ -4,7 +4,7 @@
       <header class="admin-dialog-head modal-card-head">
         <div class="dialog-meta-row">
           <p v-if="isEditing" class="entity-meta has-text-grey is-size-7">
-            {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.recordId || data.record_id || data.id}`" /></span>
+            {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.id}`" /></span>
             {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
           </p>
           <span v-if="isEditing" class="status-pill" :class="data.status">
@@ -252,9 +252,9 @@
           </v-window-item>
 
           <v-window-item value="activity">
-            <section v-if="isEditing && (data.recordId || data.record_id || data.id)" class="tab-panel activity">
+            <section v-if="isEditing && data.id" class="tab-panel activity">
               <h5 class="mb-3">{{ $t('subscribers.activity') }}</h5>
-              <subscriber-activity :subscriber-id="data.recordId || data.record_id || data.id" />
+              <subscriber-activity :subscriber-id="data.id" />
             </section>
           </v-window-item>
         </v-window>
@@ -362,9 +362,7 @@ const availableLists = computed(() => (
   Array.isArray(lists.value && lists.value.results)
     ? lists.value.results.map((list) => ({
       ...list,
-      listValue: typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
-        ? (list.recordId || list.record_id || list.id)
-        : String(list.id),
+      listValue: String(list.id),
     }))
     : []
 ));
@@ -372,9 +370,7 @@ const availableLists = computed(() => (
 const selectedListIds = computed(() => (
   Array.isArray(form.value.lists)
     ? form.value.lists.map((list) => (
-      typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
-        ? (list.recordId || list.record_id || list.id)
-        : String(list.id)
+      String(list.id)
     ))
     : []
 ));
@@ -458,7 +454,7 @@ function deleteBounces() {
   proxy.$utils.confirm(
     null,
     () => {
-      proxy.$api.deleteSubscriberBounces(form.value.recordId || form.value.record_id || form.value.id).then(() => {
+      proxy.$api.deleteSubscriberBounces(form.value.id).then(() => {
         getBounces();
         const subscriberName = [form.value.firstName, form.value.lastName].filter(Boolean).join(' ') || form.value.email;
         proxy.$utils.toast(proxy.$t('globals.messages.deleted', { name: subscriberName }));
@@ -468,7 +464,7 @@ function deleteBounces() {
 }
 
 function getBounces() {
-  proxy.$api.getSubscriberBounces(form.value.recordId || form.value.record_id || form.value.id).then((response) => {
+  proxy.$api.getSubscriberBounces(form.value.id).then((response) => {
     bounces.value = response;
   });
 }
@@ -507,9 +503,8 @@ function createSubscriber() {
     preconfirm_subscriptions: form.value.preconfirm,
 
     // List IDs.
-    lists: form.value.lists.map((l) => l.id),
     list_record_ids: form.value.lists
-      .map((l) => l.recordId || l.record_id || l.id)
+      .map((l) => l.id)
       .filter((id) => typeof id === 'string' && id.length > 0),
   };
 
@@ -537,7 +532,7 @@ function updateSubscriber() {
 
   const payload = {
     id: form.value.id,
-    record_id: form.value.recordId || form.value.record_id || form.value.id,
+    record_id: form.value.id,
     email: form.value.email,
     phone: form.value.phone,
     first_name: form.value.firstName,
@@ -547,9 +542,8 @@ function updateSubscriber() {
     attribs,
 
     // List IDs.
-    lists: form.value.lists.map((l) => l.id),
     list_record_ids: form.value.lists
-      .map((l) => l.recordId || l.record_id || l.id)
+      .map((l) => l.id)
       .filter((id) => typeof id === 'string' && id.length > 0),
   };
 
@@ -561,7 +555,7 @@ function updateSubscriber() {
 }
 
 function sendOptinConfirmation() {
-  proxy.$api.sendSubscriberOptin(form.value.recordId || form.value.record_id || form.value.id).then(() => {
+  proxy.$api.sendSubscriberOptin(form.value.id).then(() => {
     proxy.$utils.toast(proxy.$t('subscribers.sentOptinConfirm'));
   });
 }

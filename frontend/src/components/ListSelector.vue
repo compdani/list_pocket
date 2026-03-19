@@ -93,12 +93,6 @@ export default {
       if (!list) {
         return '';
       }
-      if (typeof list.recordId === 'string' && list.recordId.length > 0) {
-        return list.recordId;
-      }
-      if (typeof list.record_id === 'string' && list.record_id.length > 0) {
-        return list.record_id;
-      }
       if (list.id !== undefined && list.id !== null) {
         return String(list.id);
       }

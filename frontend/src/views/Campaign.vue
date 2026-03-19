@@ -829,10 +829,9 @@ export default {
     sendTest() {
       const data = {
         id: this.data.id,
-        record_id: this.data.recordId || this.data.record_id || this.data.id,
+        record_id: this.data.id,
         name: this.form.name,
         subject: this.form.subject,
-        lists: this.form.lists.map((l) => l.id),
         from_email: this.form.fromEmail,
         messenger: this.form.messenger,
         type: 'regular',
@@ -857,9 +856,8 @@ export default {
         archiveSlug: this.form.subject,
         name: this.form.name,
         subject: this.form.subject,
-        lists: this.form.lists.map((l) => l.id),
         list_record_ids: this.form.lists
-          .map((l) => l.recordId || l.record_id || l.id)
+          .map((l) => l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         content_type: this.form.content.contentType,
@@ -873,7 +871,7 @@ export default {
       };
 
       this.$api.createCampaign(data).then((d) => {
-        this.$router.push({ name: 'campaign', hash: '#content', params: { id: d.recordId || d.record_id || d.id } });
+        this.$router.push({ name: 'campaign', hash: '#content', params: { id: d.id } });
       });
       return false;
     },
@@ -883,9 +881,8 @@ export default {
         archive_slug: this.form.archiveSlug,
         name: this.form.name,
         subject: this.form.subject,
-        lists: this.form.lists.map((l) => l.id),
         list_record_ids: this.form.lists
-          .map((l) => l.recordId || l.record_id || l.id)
+          .map((l) => l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         messenger: this.form.messenger,
@@ -916,7 +913,7 @@ export default {
 
       // This promise is used by startCampaign to first save before starting.
       return new Promise((resolve) => {
-        this.$api.updateCampaign(this.data.recordId || this.data.record_id || this.data.id, data).then((d) => {
+        this.$api.updateCampaign(this.data.id, data).then((d) => {
           this.data = d;
           this.form.archiveSlug = d.archiveSlug;
           this.form.attribsStr = d.attribs ? JSON.stringify(d.attribs, null, 4) : '{}';
@@ -939,7 +936,7 @@ export default {
         archive_slug: this.form.archiveSlug,
       };
 
-      this.$api.updateCampaignArchive(this.data.recordId || this.data.record_id || this.data.id, data).then((d) => {
+      this.$api.updateCampaignArchive(this.data.id, data).then((d) => {
         this.form.archiveSlug = d.archiveSlug;
       });
     },
@@ -965,7 +962,7 @@ export default {
               return;
             }
 
-            this.$api.changeCampaignStatus(this.data.recordId || this.data.record_id || this.data.id, status).then(() => {
+            this.$api.changeCampaignStatus(this.data.id, status).then(() => {
               this.$router.push({ name: 'campaigns' });
             });
           });
@@ -974,7 +971,7 @@ export default {
     },
 
     unscheduleCampaign() {
-      this.$api.changeCampaignStatus(this.data.recordId || this.data.record_id || this.data.id, 'draft').then((d) => {
+      this.$api.changeCampaignStatus(this.data.id, 'draft').then((d) => {
         this.data = d;
       });
     },
@@ -1022,20 +1019,14 @@ export default {
       return Array.isArray(this.lists && this.lists.results)
         ? this.lists.results.map((list) => ({
           ...list,
-          listValue: typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
-            ? (list.recordId || list.record_id || list.id)
-            : String(list.id),
+          listValue: list.id,
         }))
         : [];
     },
 
     selectedListIds() {
       return Array.isArray(this.form.lists)
-        ? this.form.lists.map((list) => (
-          typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
-            ? (list.recordId || list.record_id || list.id)
-            : String(list.id)
-        ))
+        ? this.form.lists.map((list) => String(list.id))
         : [];
     },
 
@@ -1126,21 +1117,6 @@ export default {
     if (id === 'new') {
       this.isNew = true;
 
-      if (this.$route.query.list_id) {
-        // Multiple list_id query params.
-        let strIds = [];
-        if (typeof this.$route.query.list_id === 'object') {
-          strIds = this.$route.query.list_id;
-        } else {
-          strIds = [this.$route.query.list_id];
-        }
-
-        this.selListIDs = strIds
-          .map((v) => parseInt(v, 10))
-          .filter((v) => !Number.isNaN(v))
-          .map((v) => String(v));
-      }
-
       if (this.$route.query.list_record_id) {
         let recordIds = [];
         if (typeof this.$route.query.list_record_id === 'object') {
@@ -1149,7 +1125,7 @@ export default {
           recordIds = [this.$route.query.list_record_id];
         }
 
-        this.selListIDs = [...this.selListIDs, ...recordIds.filter((v) => typeof v === 'string' && v.length > 0)];
+        this.selListIDs = recordIds.filter((v) => typeof v === 'string' && v.length > 0);
       }
     } else {
       if (typeof id !== 'string' || id.trim() === '') {

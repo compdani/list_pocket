@@ -351,7 +351,7 @@ export const createList = (data) => http.post(
 );
 
 export const updateList = (data) => http.put(
-  `/api/lists/${data.record_id || data.id}`,
+  `/api/lists/${data.id}`,
   data,
   { loading: models.lists },
 );
@@ -419,7 +419,7 @@ export const createSubscriber = (data) => http.post(
 );
 
 export const updateSubscriber = (data) => http.put(
-  `/api/subscribers/${data.record_id || data.id}`,
+  `/api/subscribers/${data.id}`,
   data,
   { loading: models.subscribers },
 );
@@ -531,13 +531,13 @@ export const getCampaignLinkCounts = async (params) => http.get(
 );
 
 export const convertCampaignContent = async (data) => http.post(
-  `/api/campaigns/${data.record_id || data.id}/content`,
+  `/api/campaigns/${data.id}/content`,
   data,
   { loading: models.campaigns },
 );
 
 export const testCampaign = async (data) => http.post(
-  `/api/campaigns/${data.record_id || data.id}/test`,
+  `/api/campaigns/${data.id}/test`,
   data,
   { loading: models.campaigns },
 );
