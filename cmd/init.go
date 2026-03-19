@@ -1524,9 +1524,9 @@ func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 // initAuth initializes the auth module.
 func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *koanf.Koanf) *auth.Auth {
 	callbacks := &auth.Callbacks{
-		GetUser:           func(id int) (auth.User, error) { return co.GetUser(id, "", "") },
+		GetUser:           func(recordID string) (auth.User, error) { return co.GetUser(recordID, "", "") },
 		GetUsers:          co.GetUsers,
-		GetUserByUsername: func(username string) (auth.User, error) { return co.GetUser(0, username, "") },
+		GetUserByUsername: func(username string) (auth.User, error) { return co.GetUser("", username, "") },
 	}
 
 	a, err := auth.New(auth.Config{AuthCollection: "users"}, nil, pb, callbacks, lo)

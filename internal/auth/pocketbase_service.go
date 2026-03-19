@@ -27,9 +27,9 @@ func (s *PocketBaseAuthService) FindByUsername(username string) (*pbcore.Record,
 	return s.a.findAuthRecordByUsername(username)
 }
 
-// FindByUserID returns an auth record mapped to the given legacy user ID.
-func (s *PocketBaseAuthService) FindByUserID(userID int) (*pbcore.Record, error) {
-	return s.a.findAuthRecordByUserID(userID)
+// FindByRecordID returns an auth record by its PocketBase record ID.
+func (s *PocketBaseAuthService) FindByRecordID(recordID string) (*pbcore.Record, error) {
+	return s.a.findAuthRecordByRecordID(recordID)
 }
 
 // UpsertUser stores credentials and user status in PocketBase auth records first.
@@ -86,8 +86,8 @@ func (s *PocketBaseAuthService) UpsertUser(u User, lookupUsername string) (*pbco
 }
 
 func (s *PocketBaseAuthService) lookupRecord(u User, lookupUsername string) (*pbcore.Record, error) {
-	if u.ID > 0 {
-		rec, err := s.FindByUserID(u.ID)
+	if strings.TrimSpace(u.RecordID) != "" {
+		rec, err := s.FindByRecordID(u.RecordID)
 		if err == nil {
 			return rec, nil
 		}
@@ -140,9 +140,9 @@ func (s *PocketBaseAuthService) AuthenticatePassword(username, password string) 
 	return rec, nil
 }
 
-// DeleteByUserID removes the mapped auth record for a legacy user ID.
-func (s *PocketBaseAuthService) DeleteByUserID(userID int) error {
-	rec, err := s.FindByUserID(userID)
+// DeleteByRecordID removes the mapped auth record for a PocketBase record ID.
+func (s *PocketBaseAuthService) DeleteByRecordID(recordID string) error {
+	rec, err := s.FindByRecordID(recordID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil

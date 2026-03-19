@@ -12,7 +12,6 @@ import (
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/labstack/echo/v4"
-	"github.com/pocketbase/dbx"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"gopkg.in/volatiletech/null.v6"
 )
@@ -39,8 +38,8 @@ func (c *Core) GetUsers() ([]auth.User, error) {
 }
 
 // GetUser retrieves a specific user based on any one given identifier.
-func (c *Core) GetUser(id int, username, email string) (auth.User, error) {
-	rec, err := c.findAuthUserRecord(id, username, email)
+func (c *Core) GetUser(recordID, username, email string) (auth.User, error) {
+	rec, err := c.findAuthUserRecord(recordID, username, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return auth.User{}, echo.NewHTTPError(http.StatusNotFound,
@@ -80,7 +79,7 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 		u.Password = null.String{String: tk, Valid: true}
 	}
 
-	rec, err := c.findAuthUserRecord(0, u.Username, "")
+	rec, err := c.findAuthUserRecord("", u.Username, "")
 	if err != nil && err != sql.ErrNoRows {
 		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
@@ -113,7 +112,7 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
-	out, err := c.GetUser(rec.GetInt("legacy_user_id"), "", "")
+	out, err := c.GetUser(rec.Id, "", "")
 	if err != nil {
 		return auth.User{}, err
 	}
@@ -129,8 +128,8 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 }
 
 // UpdateUser updates a given user.
-func (c *Core) UpdateUser(id int, u auth.User) (auth.User, error) {
-	rec, err := c.findAuthUserRecord(id, "", "")
+func (c *Core) UpdateUser(recordID string, u auth.User) (auth.User, error) {
+	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
@@ -140,7 +139,7 @@ func (c *Core) UpdateUser(id int, u auth.User) (auth.User, error) {
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
-	oldUser, err := c.GetUser(id, "", "")
+	oldUser, err := c.GetUser(recordID, "", "")
 	if err != nil {
 		return auth.User{}, err
 	}
@@ -148,7 +147,7 @@ func (c *Core) UpdateUser(id int, u auth.User) (auth.User, error) {
 	if oldUser.Type == auth.UserTypeUser && oldUser.Status == auth.UserStatusEnabled &&
 		oldUser.UserRole.ID == auth.SuperAdminRoleID &&
 		(u.UserRoleID != auth.SuperAdminRoleID || u.Status != auth.UserStatusEnabled) {
-		num, err := c.countOtherEnabledSuperAdmins(id)
+		num, err := c.countOtherEnabledSuperAdmins(recordID)
 		if err != nil {
 			return auth.User{}, err
 		}
@@ -167,12 +166,12 @@ func (c *Core) UpdateUser(id int, u auth.User) (auth.User, error) {
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
-	return c.GetUser(id, "", "")
+	return c.GetUser(recordID, "", "")
 }
 
 // UpdateUserProfile updates the basic fields of a given user (name, email, password).
-func (c *Core) UpdateUserProfile(id int, u auth.User) (auth.User, error) {
-	rec, err := c.findAuthUserRecord(id, "", "")
+func (c *Core) UpdateUserProfile(recordID string, u auth.User) (auth.User, error) {
+	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
@@ -198,12 +197,12 @@ func (c *Core) UpdateUserProfile(id int, u auth.User) (auth.User, error) {
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
-	return c.GetUser(id, "", "")
+	return c.GetUser(recordID, "", "")
 }
 
 // UpdateUserLogin updates a user's record post-login.
-func (c *Core) UpdateUserLogin(id int, avatar string) error {
-	rec, err := c.findAuthUserRecord(id, "", "")
+func (c *Core) UpdateUserLogin(recordID string, avatar string) error {
+	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
@@ -223,8 +222,8 @@ func (c *Core) UpdateUserLogin(id int, avatar string) error {
 }
 
 // SetTwoFA sets or clears the 2FA configuration for a user.
-func (c *Core) SetTwoFA(id int, twofaType, twofaKey string) error {
-	rec, err := c.findAuthUserRecord(id, "", "")
+func (c *Core) SetTwoFA(recordID string, twofaType, twofaKey string) error {
+	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
@@ -243,20 +242,20 @@ func (c *Core) SetTwoFA(id int, twofaType, twofaKey string) error {
 
 // DeleteUsers validates deletion of a given user set. The actual auth record
 // removal is handled by the auth module so it can stay the single deleter.
-func (c *Core) DeleteUsers(ids []int) error {
+func (c *Core) DeleteUsers(recordIDs []string) error {
 	users, err := c.GetUsers()
 	if err != nil {
 		return err
 	}
 
-	deleting := make(map[int]struct{}, len(ids))
-	for _, id := range ids {
-		deleting[id] = struct{}{}
+	deleting := make(map[string]struct{}, len(recordIDs))
+	for _, recordID := range recordIDs {
+		deleting[strings.TrimSpace(recordID)] = struct{}{}
 	}
 
 	numEnabledSupers := 0
 	for _, u := range users {
-		if _, ok := deleting[u.ID]; ok {
+		if _, ok := deleting[u.RecordID]; ok {
 			continue
 		}
 		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID {
@@ -265,7 +264,7 @@ func (c *Core) DeleteUsers(ids []int) error {
 	}
 
 	for _, u := range users {
-		if _, ok := deleting[u.ID]; !ok {
+		if _, ok := deleting[u.RecordID]; !ok {
 			continue
 		}
 		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID && numEnabledSupers == 0 {
@@ -278,23 +277,23 @@ func (c *Core) DeleteUsers(ids []int) error {
 
 // LoginUser attempts to log the given user in by matching the password.
 func (c *Core) LoginUser(username, password string) (auth.User, error) {
-	rec, err := c.findAuthUserRecord(0, username, "")
+	rec, err := c.findAuthUserRecord("", username, "")
 	if err != nil || rec == nil || !rec.ValidatePassword(password) {
 		return auth.User{}, echo.NewHTTPError(http.StatusForbidden, c.i18n.T("users.invalidLogin"))
 	}
 
-	return c.GetUser(0, username, "")
+	return c.GetUser("", username, "")
 }
 
-func (c *Core) findAuthUserRecord(id int, username, email string) (*pbcore.Record, error) {
+func (c *Core) findAuthUserRecord(recordID, username, email string) (*pbcore.Record, error) {
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return nil, fmt.Errorf("pocketbase unavailable")
 	}
 
 	switch {
-	case id > 0:
-		return pb.FindFirstRecordByFilter("users", "legacy_user_id={:id}", dbx.Params{"id": id})
+	case strings.TrimSpace(recordID) != "":
+		return pb.FindRecordById("users", strings.TrimSpace(recordID))
 	case strings.TrimSpace(username) != "":
 		return pb.FindFirstRecordByData("users", "username", strings.TrimSpace(username))
 	case strings.TrimSpace(email) != "":
@@ -371,6 +370,7 @@ func userFromAuthRecord(rec *pbcore.Record) auth.User {
 	out := auth.User{
 		Base: auth.Base{
 			ID:        rec.GetInt("legacy_user_id"),
+			RecordID:  rec.Id,
 			CreatedAt: parseNullTime(rec.GetString("created")),
 			UpdatedAt: parseNullTime(rec.GetString("updated")),
 		},
@@ -468,7 +468,7 @@ func (c *Core) hydrateUsers(users []auth.User) ([]auth.User, error) {
 	return c.setupUserFields(users), nil
 }
 
-func (c *Core) countOtherEnabledSuperAdmins(excludeID int) (int, error) {
+func (c *Core) countOtherEnabledSuperAdmins(excludeRecordID string) (int, error) {
 	users, err := c.GetUsers()
 	if err != nil {
 		return 0, err
@@ -476,7 +476,7 @@ func (c *Core) countOtherEnabledSuperAdmins(excludeID int) (int, error) {
 
 	count := 0
 	for _, u := range users {
-		if u.ID == excludeID {
+		if u.RecordID == excludeRecordID {
 			continue
 		}
 		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID {

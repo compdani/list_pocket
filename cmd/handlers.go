@@ -7,6 +7,7 @@ import (
 	"path"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/labstack/echo/v4"
@@ -173,16 +174,16 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.GET("/profile", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetUserProfile))
 	api.PUT("/profile", wrapEcho(a, tpl, cfg, urlCfg, nil, a.UpdateUserProfile))
 	api.GET("/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetUsers, "users:get")))
-	api.GET("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetUser), "users:get")))
+	api.GET("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetUser, "users:get")))
 	api.POST("/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateUser, "users:manage")))
-	api.PUT("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateUser), "users:manage")))
+	api.PUT("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateUser, "users:manage")))
 	api.DELETE("/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteUsers, "users:manage")))
-	api.DELETE("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteUser), "users:manage")))
+	api.DELETE("/users/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteUser, "users:manage")))
 	api.POST("/logout", wrapEcho(a, tpl, cfg, urlCfg, nil, a.Logout))
 
-	api.GET("/users/{id}/twofa/totp", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.GenerateTOTPQR)))
-	api.PUT("/users/{id}/twofa", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.EnableTOTP)))
-	api.DELETE("/users/{id}/twofa", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.DisableTOTP)))
+	api.GET("/users/{id}/twofa/totp", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.GenerateTOTPQR))
+	api.PUT("/users/{id}/twofa", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.EnableTOTP))
+	api.DELETE("/users/{id}/twofa", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.DisableTOTP))
 
 	api.GET("/roles/users", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetUserRoles, "roles:get")))
 	api.GET("/roles/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GeListRoles, "roles:get")))
@@ -283,12 +284,11 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 			}
 			c.Set(auth.AuthRecordHTTPCtxKey, e.Auth)
 
-			legacyUserID := e.Auth.GetInt("legacy_user_id")
-			if legacyUserID < 1 {
+			if strings.TrimSpace(e.Auth.Id) == "" {
 				return echo.NewHTTPError(http.StatusForbidden, "invalid auth user")
 			}
 
-			user, err := a.core.GetUser(legacyUserID, "", "")
+			user, err := a.core.GetUser(e.Auth.Id, "", "")
 			if err != nil {
 				return echo.NewHTTPError(http.StatusForbidden, "invalid auth user")
 			}

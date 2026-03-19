@@ -38,7 +38,7 @@
 
       <b-table-column v-slot="props" field="username" :label="$t('users.username')" header-class="cy-username" sortable
         :td-attrs="$utils.tdID">
-        <a :href="`/users/${props.row.id}`" @click.prevent="showEditForm(props.row)"
+        <a :href="`/users/${props.row.recordId || props.row.record_id || props.row.id}`" @click.prevent="showEditForm(props.row)"
           :class="{ 'has-text-grey': props.row.status === 'disabled' }">
           {{ props.row.username }}
         </a>
@@ -73,7 +73,7 @@
       <b-table-column v-slot="props" field="name" :label="$t('subscribers.email')" header-class="cy-name" sortable
         :td-attrs="$utils.tdID">
         <div>
-          <a v-if="props.row.email" :href="`/users/${props.row.id}`" @click.prevent="showEditForm(props.row)"
+          <a v-if="props.row.email" :href="`/users/${props.row.recordId || props.row.record_id || props.row.id}`" @click.prevent="showEditForm(props.row)"
             :class="{ 'has-text-grey': props.row.status === 'disabled' }">
             {{ props.row.email }}
           </a>
@@ -208,7 +208,7 @@ export default {
       this.$utils.confirm(
         this.$t('globals.messages.confirm'),
         () => {
-          this.$api.deleteUser(item.id).then(() => {
+          this.$api.deleteUser(item.recordId || item.record_id || item.id).then(() => {
             this.getUsers();
 
             this.$utils.toast(this.$t('globals.messages.deleted', { name: item.name }));
@@ -232,7 +232,7 @@ export default {
 
   mounted() {
     if (this.$route.params.id) {
-      this.$api.getUser(parseInt(this.$route.params.id, 10)).then((data) => {
+      this.$api.getUser(this.$route.params.id).then((data) => {
         this.showEditForm(data);
       });
     } else {

@@ -177,14 +177,14 @@ func (a *App) TwofaPage(c echo.Context) error {
 		return c.Redirect(http.StatusFound, uriAdmin)
 	}
 
-	userID, ok := data.(int)
+	userRecordID, ok := data.(string)
 	if !ok {
 		return a.renderTwofaPage(c, token, next, a.i18n.T("users.invalidRequest"))
 	}
 
 	// Process the 2FA verification POST request.
 	if c.Request().Method == http.MethodPost {
-		return a.doTwofaVerify(c, token, userID, next)
+		return a.doTwofaVerify(c, token, userRecordID, next)
 	}
 
 	// Render the 2FA verification page.
@@ -267,7 +267,7 @@ func (a *App) OIDCFinish(c echo.Context) error {
 	claims.Email = email
 
 	// Get the user by e-mail received from OIDC.
-	user, userErr := a.core.GetUser(0, "", email)
+	user, userErr := a.core.GetUser("", "", email)
 	if userErr != nil {
 		// If the user doesn't exist, and auto-creation is enabled, create a new user.
 		if httpErr, ok := userErr.(*echo.HTTPError); ok && httpErr.Code == http.StatusNotFound && a.cfg.Security.OIDC.AutoCreateUsers {
@@ -283,7 +283,7 @@ func (a *App) OIDCFinish(c echo.Context) error {
 	}
 
 	// Update the user login state (avatar, logged in date) in the DB.
-	if err := a.core.UpdateUserLogin(user.ID, claims.Picture); err != nil {
+	if err := a.core.UpdateUserLogin(user.RecordID, claims.Picture); err != nil {
 		return a.renderLoginPage(c, err)
 	}
 
@@ -325,7 +325,7 @@ func (a *App) ResetPage(c echo.Context) error {
 	}
 
 	// Validate that the user exists.
-	_, err = a.core.GetUser(0, "", email)
+	_, err = a.core.GetUser("", "", email)
 	if err != nil {
 		return c.Render(http.StatusBadRequest, tplMessage, makeMsgTpl(a.i18n.T("users.resetPassword"), "", a.i18n.T("users.invalidResetLink")))
 	}
@@ -507,7 +507,7 @@ func (a *App) doLogin(c echo.Context) error {
 		}
 
 		// Set the token.
-		tmptokens.Set(token, twofaTokenTTL, user.ID)
+		tmptokens.Set(token, twofaTokenTTL, user.RecordID)
 
 		// Redirect to 2FA page.
 		next := utils.SanitizeURI(c.FormValue("next"))
@@ -630,7 +630,7 @@ func (a *App) doForgotPassword(c echo.Context) error {
 	}
 
 	// Get the user by email.
-	user, err := a.core.GetUser(0, "", email)
+	user, err := a.core.GetUser("", "", email)
 	if err != nil {
 		return c.Render(http.StatusOK, tplMessage, makeMsgTpl(a.i18n.T("users.resetPassword"), "", a.i18n.T("users.resetLinkSent")))
 	}
@@ -712,7 +712,7 @@ func (a *App) doResetPassword(c echo.Context, token, email string) error {
 	}
 
 	// Get the user.
-	user, err := a.core.GetUser(0, "", email)
+	user, err := a.core.GetUser("", "", email)
 	if err != nil {
 		return c.Render(http.StatusBadRequest, tplMessage, makeMsgTpl(a.i18n.T("users.resetPassword"), "", a.i18n.T("users.invalidResetLink")))
 	}
@@ -723,7 +723,7 @@ func (a *App) doResetPassword(c echo.Context, token, email string) error {
 	}
 
 	user.Password = null.NewString(password, true)
-	if _, err := a.core.UpdateUserProfile(user.ID, user); err != nil {
+	if _, err := a.core.UpdateUserProfile(user.RecordID, user); err != nil {
 		a.log.Printf("error updating user password: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
 	}
@@ -744,7 +744,7 @@ func (a *App) renderTwofaPage(c echo.Context, token, next, errMsg string) error 
 }
 
 // doTwofaVerify handles the 2FA verification form submission.
-func (a *App) doTwofaVerify(c echo.Context, token string, userID int, next string) error {
+func (a *App) doTwofaVerify(c echo.Context, token string, userRecordID string, next string) error {
 	totpCode := strings.TrimSpace(c.FormValue("totp_code"))
 
 	// Validate.
@@ -753,7 +753,7 @@ func (a *App) doTwofaVerify(c echo.Context, token string, userID int, next strin
 	}
 
 	// Get the user.
-	user, err := a.core.GetUser(userID, "", "")
+	user, err := a.core.GetUser(userRecordID, "", "")
 	if err != nil {
 		return a.renderTwofaPage(c, token, next, a.i18n.T("users.invalidRequest"))
 	}

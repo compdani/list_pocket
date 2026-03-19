@@ -76,6 +76,7 @@ const (
 // Base holds common fields shared across models.
 type Base struct {
 	ID        int       `db:"id" json:"id"`
+	RecordID  string    `db:"record_id" json:"record_id,omitempty"`
 	CreatedAt null.Time `db:"created_at" json:"created_at"`
 	UpdatedAt null.Time `db:"updated_at" json:"updated_at"`
 }

@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -57,7 +56,7 @@ type Config struct {
 }
 
 type Callbacks struct {
-	GetUser           func(id int) (User, error)
+	GetUser           func(recordID string) (User, error)
 	GetUsers          func() ([]User, error)
 	GetUserByUsername func(username string) (User, error)
 }
@@ -211,21 +210,22 @@ func (o *Auth) SyncUser(u User) error {
 	return err
 }
 
-func (o *Auth) DeleteUsers(ids []int) error {
-	for _, id := range ids {
-		if err := o.pbAuth.DeleteByUserID(id); err != nil {
+func (o *Auth) DeleteUsers(recordIDs []string) error {
+	for _, recordID := range recordIDs {
+		if err := o.pbAuth.DeleteByRecordID(recordID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (o *Auth) findAuthRecordByUserID(userID int) (*pbcore.Record, error) {
-	if userID < 1 {
+func (o *Auth) findAuthRecordByRecordID(recordID string) (*pbcore.Record, error) {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
 		return nil, sql.ErrNoRows
 	}
 
-	return o.pb.FindFirstRecordByFilter(o.authCol, "legacy_user_id={:id}", dbx.Params{"id": userID})
+	return o.pb.FindRecordById(o.authCol, recordID)
 }
 
 func (o *Auth) findAuthRecordByUsername(username string) (*pbcore.Record, error) {
@@ -265,7 +265,7 @@ func (o *Auth) LoginUser(username, password string) (User, error) {
 
 func (o *Auth) ValidateUserPassword(username, password string) bool {
 	u, err := o.LoginUser(username, password)
-	return err == nil && u.ID > 0
+	return err == nil && strings.TrimSpace(u.RecordID) != ""
 }
 
 // CacheAPIUser caches an API user for authenticating requests.
@@ -331,6 +331,9 @@ func (o *Auth) LoadCachedUsersFromPocketBase() (bool, error) {
 	apiUsers := make([]User, 0, len(recs))
 	for _, rec := range recs {
 		u := User{
+			Base: Base{
+				RecordID: rec.Id,
+			},
 			Username: rec.GetString("username"),
 			Type:     rec.GetString("user_type"),
 			Status:   rec.GetString("status"),
@@ -749,12 +752,6 @@ func ExtractRoleIDFromRecord(rec *pbcore.Record) int {
 
 	if id := rec.GetInt("role"); id > 0 {
 		return id
-	}
-
-	if raw := strings.TrimSpace(rec.GetString("role")); raw != "" {
-		if id, err := strconv.Atoi(raw); err == nil && id > 0 {
-			return id
-		}
 	}
 
 	return 0
