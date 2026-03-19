@@ -127,6 +127,33 @@ func normalizeCampaignReqBody(body []byte) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
+func campaignListRecordIDs(raw any) []string {
+	if raw == nil {
+		return nil
+	}
+
+	type campaignListRef struct {
+		ID string `json:"id"`
+	}
+
+	var lists []campaignListRef
+	switch v := raw.(type) {
+	case []byte:
+		_ = json.Unmarshal(v, &lists)
+	case string:
+		_ = json.Unmarshal([]byte(v), &lists)
+	}
+
+	out := make([]string, 0, len(lists))
+	for _, item := range lists {
+		if id := strings.TrimSpace(item.ID); id != "" {
+			out = append(out, id)
+		}
+	}
+
+	return out
+}
+
 // GetCampaigns handles retrieval of campaigns.
 func (a *App) GetCampaigns(c echo.Context) error {
 	// Get the authenticated user.
@@ -663,6 +690,23 @@ func (a *App) TestCampaign(c echo.Context) error {
 	var req campReq
 	if err := bindCampaignReq(c, &req); err != nil {
 		return err
+	}
+
+	// Test requests from the UI don't post list IDs. Reuse the campaign's
+	// saved list associations so regular validation and template rendering
+	// continue to work for test sends.
+	if len(req.ListIDs) == 0 && len(req.ListRecordIDs) == 0 {
+		camp, err := a.core.GetCampaign(recordID, "", "")
+		if err != nil {
+			return err
+		}
+
+		req.ListRecordIDs = campaignListRecordIDs(camp.Lists)
+		req.ListIDs, err = a.core.ResolveListIDs(nil, req.ListRecordIDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
 	}
 
 	// Validate.
