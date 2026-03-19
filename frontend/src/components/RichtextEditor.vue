@@ -185,6 +185,7 @@ export default {
                   alignleft aligncenter alignright alignjustify |
                   bullist numlist table image insert-html | outdent indent | link removeformat |
                   html fullscreen help`,
+        base_url: `${uris.static}/tinymce`,
         fontsize_formats: '10px 11px 12px 14px 15px 16px 18px 24px 36px',
         skin: false,
         content_css: false,

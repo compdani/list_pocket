@@ -150,7 +150,7 @@
               {{ item.phone }}
             </div>
             <div class="tag-list">
-              <router-link v-for="l in item.lists" :key="l.id" :to="`/subscribers/lists/${l.id}`">
+              <router-link v-for="l in item.lists" :key="l.id" :to="`/subscribers/lists/${l.recordId || l.record_id || l.id}`">
                 <b-tag :class="l.subscriptionStatus" size="is-small">
                   {{ l.name }}
                   <sup v-if="l.optin === 'double' || l.subscriptionStatus === 'unsubscribed'">
@@ -308,7 +308,7 @@ export default {
         search: '',
 
         // ID of the list the current subscriber view is filtered by.
-        listID: null,
+        listRecordID: null,
         page: 1,
         orderBy: 'id',
         order: 'desc',
@@ -497,7 +497,7 @@ export default {
       this.queryParams = { ...this.queryParams, ...params };
 
       const qp = {
-        list_id: this.queryParams.listID,
+        list_record_id: this.queryParams.listRecordID,
         search: this.queryParams.search,
         query: this.queryParams.queryExp,
         page: this.queryParams.page,
@@ -509,11 +509,15 @@ export default {
       if (this.queryParams.queryExp) {
         delete qp.search;
       } else {
-        delete qp.queryExp;
+        delete qp.query;
       }
 
+      const filteredQP = Object.fromEntries(
+        Object.entries(qp).filter(([, value]) => value !== '' && value !== null && value !== undefined),
+      );
+
       this.$nextTick(() => {
-        this.$api.getSubscribers(qp).then(() => {
+        this.$api.getSubscribers(filteredQP).then(() => {
           this.bulk.checked = [];
         });
       });
@@ -523,7 +527,7 @@ export default {
       this.$utils.confirm(
         null,
         () => {
-          this.$api.deleteSubscriber(sub.id).then(() => {
+          this.$api.deleteSubscriber(sub.record_id || sub.recordId || sub.id).then(() => {
             this.querySubscribers();
 
             this.$utils.toast(this.$t('globals.messages.deleted', { name: sub.name }));
@@ -547,7 +551,7 @@ export default {
           this.$api.blocklistSubscribersByQuery({
             search: this.queryParams.search,
             query: this.queryParams.queryExp,
-            list_ids: this.queryParams.listID ? [this.queryParams.listID] : null,
+            list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
             subscription_status: this.queryParams.subStatus,
           }).then(() => this.querySubscribers());
         };
@@ -569,8 +573,8 @@ export default {
           q.append('query', this.queryParams.queryExp);
         }
 
-        if (this.queryParams.listID) {
-          q.append('list_id', this.queryParams.listID);
+        if (this.queryParams.listRecordID) {
+          q.append('list_record_id', this.queryParams.listRecordID);
         }
 
         if (this.queryParams.subStatus) {
@@ -642,7 +646,7 @@ export default {
             all: this.queryParams.queryExp.trim() === '' && this.queryParams.search.trim() === '',
             search: this.queryParams.search,
             query: this.queryParams.queryExp,
-            list_ids: this.queryParams.listID ? [this.queryParams.listID] : null,
+            list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
             subscription_status: this.queryParams.subStatus,
           }).then(() => {
             this.querySubscribers();
@@ -663,8 +667,10 @@ export default {
         action,
         query: this.fullQueryExp,
         search: this.queryParams.search,
-        list_ids: this.queryParams.listID ? [this.queryParams.listID] : null,
-        target_list_ids: lists.map((l) => l.id),
+        list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
+        target_list_record_ids: lists
+          .map((l) => l.record_id || String(l.id))
+          .filter((id) => typeof id === 'string' && id.length > 0),
       };
 
       if (preconfirm) {
@@ -676,6 +682,9 @@ export default {
         // If 'all' is not selected, perform by IDs.
         fn = this.$api.addSubscribersToLists;
         data.ids = this.bulk.checked.map((s) => s.id);
+        data.subscriber_record_ids = this.bulk.checked
+          .map((s) => s.record_id)
+          .filter((id) => typeof id === 'string' && id.length > 0);
       } else {
         // 'All' is selected, perform by query.
         data.query = this.queryParams.queryExp;
@@ -752,11 +761,13 @@ export default {
 
     // Returns the list that the subscribers are being filtered by in.
     currentList() {
-      if (!this.queryParams.listID || !this.lists.results) {
+      if (!this.queryParams.listRecordID || !this.lists.results) {
         return null;
       }
 
-      return this.lists.results.find((l) => l.id === this.queryParams.listID);
+      return this.lists.results.find((l) => (
+        l.record_id === this.queryParams.listRecordID || String(l.id) === this.queryParams.listRecordID
+      ));
     },
   },
 
@@ -770,14 +781,14 @@ export default {
 
   mounted() {
     if (this.$route.params.listID) {
-      this.queryParams.listID = parseInt(this.$route.params.listID, 10);
+      this.queryParams.listRecordID = this.$route.params.listID;
     }
     if (this.$route.query.subscription_status) {
       this.queryParams.subStatus = this.$route.query.subscription_status;
     }
 
     if (this.$route.params.id) {
-      this.$api.getSubscriber(parseInt(this.$route.params.id, 10)).then((data) => {
+      this.$api.getSubscriber(this.$route.params.id).then((data) => {
         this.showEditForm(data);
       });
     } else {

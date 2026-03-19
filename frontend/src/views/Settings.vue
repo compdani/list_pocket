@@ -366,12 +366,17 @@ export default {
     },
   },
 
-  beforeRouteLeave(to, from, next) {
-    if (this.hasFormChanged) {
-      this.$utils.confirm(this.$t('globals.messages.confirmDiscard'), () => next(true));
-      return;
+  beforeRouteLeave() {
+    if (this.hasFormChanged()) {
+      return new Promise((resolve) => {
+        this.$utils.confirm(
+          this.$t('globals.messages.confirmDiscard'),
+          () => resolve(true),
+          () => resolve(false),
+        );
+      });
     }
-    next(true);
+    return true;
   },
 
   mounted() {

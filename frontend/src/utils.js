@@ -28,25 +28,33 @@ export default class Utils {
     this.intlNumFormat = new Intl.NumberFormat();
 
     if (i18n) {
-      dayjs.updateLocale('en', {
-        relativeTime: {
-          future: '%s',
-          past: '%s',
-          s: `${i18n.tc('globals.terms.second', 2)}`,
-          m: `1 ${i18n.tc('globals.terms.minute', 1)}`,
-          mm: `%d ${i18n.tc('globals.terms.minute', 2)}`,
-          h: `1 ${i18n.tc('globals.terms.hour', 1)}`,
-          hh: `%d ${i18n.tc('globals.terms.hour', 2)}`,
-          d: `1 ${i18n.tc('globals.terms.day', 1)}`,
-          dd: `%d ${i18n.tc('globals.terms.day', 2)}`,
-          M: `1 ${i18n.tc('globals.terms.month', 1)}`,
-          MM: `%d ${i18n.tc('globals.terms.month', 2)}`,
-          y: `${i18n.tc('globals.terms.year', 1)}`,
-          yy: `%d ${i18n.tc('globals.terms.year', 2)}`,
-        },
-      });
+      this.updateRelativeTimeLocale();
     }
   }
+
+  updateRelativeTimeLocale = () => {
+    if (!this.i18n) {
+      return;
+    }
+
+    dayjs.updateLocale('en', {
+      relativeTime: {
+        future: '%s',
+        past: '%s',
+        s: `${this.i18n.tc('globals.terms.second', 2)}`,
+        m: `1 ${this.i18n.tc('globals.terms.minute', 1)}`,
+        mm: `%d ${this.i18n.tc('globals.terms.minute', 2)}`,
+        h: `1 ${this.i18n.tc('globals.terms.hour', 1)}`,
+        hh: `%d ${this.i18n.tc('globals.terms.hour', 2)}`,
+        d: `1 ${this.i18n.tc('globals.terms.day', 1)}`,
+        dd: `%d ${this.i18n.tc('globals.terms.day', 2)}`,
+        M: `1 ${this.i18n.tc('globals.terms.month', 1)}`,
+        MM: `%d ${this.i18n.tc('globals.terms.month', 2)}`,
+        y: `${this.i18n.tc('globals.terms.year', 1)}`,
+        yy: `%d ${this.i18n.tc('globals.terms.year', 2)}`,
+      },
+    });
+  };
 
   getDate = (d) => dayjs(d);
 

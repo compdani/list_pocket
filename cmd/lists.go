@@ -10,6 +10,37 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+func (a *App) resolveListRouteID(c echo.Context) (int, error) {
+	rawID := strings.TrimSpace(c.Param("id"))
+	if rawID == "" {
+		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+
+	if id, err := strconv.Atoi(rawID); err == nil && id > 0 {
+		return id, nil
+	}
+
+	ids, err := a.core.ResolveListIDs(nil, []string{rawID})
+	if err != nil {
+		return 0, echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+	if len(ids) != 1 || ids[0] < 1 {
+		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+
+	return ids[0], nil
+}
+
+func (a *App) resolveListRequestIDs(intIDs []int, recordIDs []string) ([]int, error) {
+	ids, err := a.core.ResolveListIDs(intIDs, recordIDs)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+	return ids, nil
+}
+
 // GetLists retrieves lists with additional metadata like subscriber counts.
 func (a *App) GetLists(c echo.Context) error {
 	// Get the authenticated user.
@@ -77,7 +108,10 @@ func (a *App) GetList(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	// Check if the user has access to the list.
-	id := getID(c)
+	id, err := a.resolveListRouteID(c)
+	if err != nil {
+		return err
+	}
 	if err := user.HasListPerm(auth.PermTypeGet, id); err != nil {
 		return err
 	}
@@ -118,7 +152,10 @@ func (a *App) UpdateList(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	// Check if the user has access to the list.
-	id := getID(c)
+	id, err := a.resolveListRouteID(c)
+	if err != nil {
+		return err
+	}
 	if err := user.HasListPerm(auth.PermTypeManage, id); err != nil {
 		return err
 	}
@@ -145,7 +182,10 @@ func (a *App) UpdateList(c echo.Context) error {
 
 // DeleteList deletes a single list by ID.
 func (a *App) DeleteList(c echo.Context) error {
-	id := getID(c)
+	id, err := a.resolveListRouteID(c)
+	if err != nil {
+		return err
+	}
 
 	// Check if the user has manage permission for the list.
 	user := auth.GetUser(c)
@@ -167,9 +207,10 @@ func (a *App) DeleteLists(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	var (
-		ids   []int
-		query string
-		all   bool
+		ids       []int
+		recordIDs []string
+		query     string
+		all       bool
 	)
 
 	// Check for IDs in query params.
@@ -180,16 +221,24 @@ func (a *App) DeleteLists(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusBadRequest,
 				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
+		recordIDs = c.Request().URL.Query()["record_id"]
 	} else {
 		// Check for query param.
 		query = strings.TrimSpace(c.FormValue("query"))
 		all = c.FormValue("all") == "true"
+		recordIDs = c.Request().URL.Query()["record_id"]
 	}
+
+	resolvedIDs, err := a.resolveListRequestIDs(ids, recordIDs)
+	if err != nil {
+		return err
+	}
+	ids = resolvedIDs
 
 	// Validate that either IDs or query is provided.
 	if len(ids) == 0 && (query == "" && !all) {
 		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "id or query required"))
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "id or record_id or query required"))
 	}
 
 	// For ID deletion, check if the user has manage permission for the specific lists.

@@ -95,7 +95,7 @@
       <template #[`item.status`]="{ item }">
         <div>
           <div>
-            <router-link :to="{ name: 'campaign', params: { id: item.id } }">
+            <router-link :to="{ name: 'campaign', params: { id: item.recordId || item.record_id || item.id } }">
               <v-chip :class="item.status" size="small">
                 {{ $t(`campaigns.status.${item.status}`) }}
               </v-chip>
@@ -125,7 +125,7 @@
             <v-chip v-if="item.type === 'optin'" size="small" class="mr-2">
               {{ $t('lists.optin') }}
             </v-chip>
-            <router-link :to="{ name: 'campaign', params: { id: item.id } }">
+            <router-link :to="{ name: 'campaign', params: { id: item.recordId || item.record_id || item.id } }">
               {{ item.name }}
               <copy-text :text="item.name" hide-text />
             </router-link>
@@ -149,7 +149,7 @@
       <template #[`item.lists`]="{ item }">
         <ul>
           <li v-for="l in item.lists" :key="l.id">
-            <router-link :to="{ name: 'subscribers_list', params: { listID: l.id } }">
+            <router-link :to="{ name: 'subscribers_list', params: { listID: l.recordId || l.record_id || l.id } }">
               {{ l.name }}
             </router-link>
           </li>
@@ -555,7 +555,7 @@ export default {
     },
 
     changeCampaignStatus(c, status) {
-      this.$api.changeCampaignStatus(c.id, status).then(() => {
+      this.$api.changeCampaignStatus(c.recordId || c.record_id || c.id, status).then(() => {
         this.$utils.toast(this.$t('campaigns.statusChanged', { name: c.name, status }));
         this.getCampaigns();
         this.pollStats();
@@ -566,7 +566,7 @@ export default {
       // Fetch the template body from the server.
       let body = '';
       let bodySource = null;
-      await this.$api.getCampaign(c.id).then((data) => {
+      await this.$api.getCampaign(c.recordId || c.record_id || c.id).then((data) => {
         body = data.body;
         bodySource = data.bodySource;
       });
@@ -582,6 +582,9 @@ export default {
         name,
         subject: c.subject,
         lists: c.lists.map((l) => l.id),
+        list_record_ids: c.lists
+          .map((l) => l.record_id || l.recordId)
+          .filter((id) => typeof id === 'string' && id.length > 0),
         type: c.type,
         from_email: c.fromEmail,
         content_type: c.contentType,
@@ -605,12 +608,12 @@ export default {
       }
 
       this.$api.createCampaign(data).then((d) => {
-        this.$router.push({ name: 'campaign', params: { id: d.id } });
+        this.$router.push({ name: 'campaign', params: { id: d.recordId || d.record_id || d.id } });
       });
     },
 
     deleteCampaign(c) {
-      this.$api.deleteCampaign(c.id).then(() => {
+      this.$api.deleteCampaign(c.recordId || c.record_id || c.id).then(() => {
         this.getCampaigns();
         this.$utils.toast(this.$t('globals.messages.deleted', { name: c.name }));
       });

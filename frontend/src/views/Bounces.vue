@@ -60,7 +60,7 @@
       @update:options="onTableOptionsChange"
     >
       <template #[`item.email`]="{ item }">
-        <router-link :to="{ name: 'subscriber', params: { id: item.subscriberId } }"
+        <router-link :to="{ name: 'subscriber', params: { id: item.subscriberRecordId || item.subscriberId } }"
           :class="{ 'text-error': item.subscriberStatus === 'blocklisted' }">
           {{ item.email }}
         </router-link>

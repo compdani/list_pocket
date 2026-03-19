@@ -4,10 +4,10 @@
       <div class="d-flex flex-wrap gap-2 mb-3">
         <v-chip
           v-for="l in selectedItems"
-          :key="l.id"
+          :key="getListValue(l)"
           :class="l.subscriptionStatus"
           :closable="!$props.disabled"
-          @click:close="removeList(l.id)"
+          @click:close="removeList(getListValue(l))"
           class="list"
         >
           {{ l.name }}
@@ -27,13 +27,15 @@
       </label>
       <v-autocomplete
         :id="inputId"
-        v-model="query"
+        :model-value="null"
+        :search="query"
         :placeholder="placeholder"
         :disabled="all.length === 0 || $props.disabled"
-        :items="filteredLists"
+        :items="normalizedLists"
         item-title="name"
-        item-value="id"
+        item-value="listValue"
         clearable
+        @update:search="updateQuery"
         @update:model-value="selectListValue"
       />
       <div v-if="message" class="text-caption text-grey mt-1">
@@ -44,12 +46,13 @@
 </template>
 
 <script>
-import { nextTick } from 'vue';
 
 let listSelectorId = 0;
 
 export default {
   name: 'ListSelector',
+
+  emits: ['input', 'update:modelValue'],
 
   props: {
     label: { type: String, default: '' },
@@ -62,6 +65,10 @@ export default {
       default: () => [],
     },
     selected: {
+      type: Array,
+      default: () => [],
+    },
+    modelValue: {
       type: Array,
       default: () => [],
     },
@@ -82,47 +89,77 @@ export default {
   },
 
   methods: {
+    getListValue(list) {
+      if (!list) {
+        return '';
+      }
+      if (typeof list.record_id === 'string' && list.record_id.length > 0) {
+        return list.record_id;
+      }
+      if (list.id !== undefined && list.id !== null) {
+        return String(list.id);
+      }
+      return '';
+    },
+
+    emitSelection() {
+      this.$emit('input', this.selectedItems);
+      this.$emit('update:modelValue', this.selectedItems);
+    },
+
+    updateQuery(value) {
+      this.query = typeof value === 'string' ? value : '';
+    },
+
     selectList(l) {
       if (!l) {
         return;
       }
-      this.selectedItems.push(l);
+      const listValue = this.getListValue(l);
+      if (this.selectedItems.some((item) => this.getListValue(item) === listValue)) {
+        this.query = '';
+        return;
+      }
+
+      this.selectedItems = [...this.selectedItems, l];
       this.query = '';
 
-      // Propagate the items to the parent's v-model binding.
-      nextTick(() => {
-        this.$emit('input', this.selectedItems);
-      });
+      this.emitSelection();
     },
 
     selectListValue(value) {
-      const item = this.filteredLists.find((l) => l.id === value);
+      const item = typeof value === 'object'
+        ? value
+        : this.filteredLists.find((l) => l.listValue === String(value));
       if (item) {
         this.selectList(item);
       }
     },
 
-    removeList(id) {
-      this.selectedItems = this.selectedItems.filter((l) => l.id !== id);
+    removeList(listValue) {
+      this.selectedItems = this.selectedItems.filter((l) => this.getListValue(l) !== listValue);
 
-      // Propagate the items to the parent's v-model binding.
-      nextTick(() => {
-        this.$emit('input', this.selectedItems);
-      });
+      this.emitSelection();
     },
   },
 
   computed: {
+    normalizedLists() {
+      return this.filteredLists.map((list) => ({
+        ...list,
+        listValue: this.getListValue(list),
+      }));
+    },
+
     // Return the list of unselected lists.
     filteredLists() {
-      // Get a map of IDs of the user subscriptions. eg: {1: true, 2: true};
-      const subIDs = this.selectedItems.reduce((obj, item) => ({ ...obj, [item.id]: true }), {});
+      const selectedValues = new Set(this.selectedItems.map((item) => this.getListValue(item)));
 
       // Filter lists from the global lists whose IDs are not in the user's
       // subscribed ist.
-      const q = this.query.toLowerCase();
+      const q = typeof this.query === 'string' ? this.query.toLowerCase() : '';
       return this.$props.all.filter(
-        (l) => (!(l.id in subIDs) && l.name.toLowerCase().indexOf(q) >= 0),
+        (l) => (!selectedValues.has(this.getListValue(l)) && l.name.toLowerCase().indexOf(q) >= 0),
       );
     },
   },
@@ -134,10 +171,16 @@ export default {
       // Deep-copy.
       this.selectedItems = JSON.parse(JSON.stringify(this.selected));
     },
+
+    modelValue() {
+      this.selectedItems = JSON.parse(JSON.stringify(this.modelValue));
+    },
   },
 
   mounted() {
-    if (this.selected) {
+    if (this.modelValue && this.modelValue.length) {
+      this.selectedItems = JSON.parse(JSON.stringify(this.modelValue));
+    } else if (this.selected) {
       this.selectedItems = JSON.parse(JSON.stringify(this.selected));
     }
   },

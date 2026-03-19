@@ -407,6 +407,9 @@ export default {
         subscription_status: this.form.subStatus,
         delim: this.form.delim,
         lists: this.form.lists.map((l) => l.id),
+        list_record_ids: this.form.lists
+          .map((l) => l.record_id)
+          .filter((id) => typeof id === 'string' && id.length > 0),
         overwrite_userinfo: this.form.overwriteUserInfo,
         overwrite_subscription_status: this.form.overwriteSubStatus,
       }));
@@ -462,9 +465,14 @@ export default {
     this.pollStatus();
 
     const ids = this.$utils.parseQueryIDs(this.$route.query.list_id);
-    if (ids.length > 0 && this.lists.results) {
+    const recordIDs = typeof this.$route.query.list_record_id === 'object'
+      ? this.$route.query.list_record_id
+      : (this.$route.query.list_record_id ? [this.$route.query.list_record_id] : []);
+    if ((ids.length > 0 || recordIDs.length > 0) && this.lists.results) {
       this.$nextTick(() => {
-        this.form.lists = this.lists.results.filter((l) => ids.indexOf(l.id) > -1);
+        this.form.lists = this.lists.results.filter((l) => (
+          ids.indexOf(l.id) > -1 || recordIDs.indexOf(l.record_id) > -1
+        ));
       });
     }
   },

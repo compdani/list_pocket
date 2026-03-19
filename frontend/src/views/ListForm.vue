@@ -5,6 +5,7 @@
         <div class="dialog-meta-row">
           <p v-if="isEditing" class="entity-meta has-text-grey-light is-size-7">
             {{ $t('globals.fields.id') }}: <copy-text :text="`${data.id}`" />
+            Record ID: <copy-text :text="data.record_id" />
             {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
           </p>
           <span v-if="isEditing" class="type-pill" :class="data.type">
@@ -180,7 +181,7 @@ export default {
     },
 
     updateList() {
-      this.$api.updateList({ id: this.data.id, ...this.form }).then((data) => {
+      this.$api.updateList({ id: this.data.id, record_id: this.data.record_id, ...this.form }).then((data) => {
         this.$emit('finished');
         this.$emit('close');
         this.$utils.toast(this.$t('globals.messages.updated', { name: data.name }));

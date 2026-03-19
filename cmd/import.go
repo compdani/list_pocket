@@ -26,6 +26,8 @@ func (a *App) ImportSubscribers(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("import.invalidParams", "error", err.Error()))
 	}
+	a.log.Printf("import subscribers: received mode=%q sub_status=%q delim=%q list_ids=%v list_record_ids=%v overwrite_userinfo=%v overwrite_subscription_status=%v",
+		opt.Mode, opt.SubStatus, opt.Delim, opt.ListIDs, opt.ListRecordIDs, opt.OverwriteUserInfo, opt.OverwriteSubStatus)
 
 	// Validate mode.
 	if opt.Mode != subimporter.ModeSubscribe && opt.Mode != subimporter.ModeBlocklist {
@@ -58,6 +60,7 @@ func (a *App) ImportSubscribers(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("import.invalidFile", "error", err.Error()))
 	}
+	a.log.Printf("import subscribers: file=%q size=%d", file.Filename, file.Size)
 
 	src, err := file.Open()
 	if err != nil {

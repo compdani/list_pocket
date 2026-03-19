@@ -171,7 +171,7 @@
               chips
               closable-chips
               item-title="name"
-              item-value="id"
+              item-value="listValue"
               variant="outlined"
               class="mb-4"
               @update:model-value="onListsChange"
@@ -658,9 +658,9 @@ export default {
 
     onListsChange(selectedIDs = []) {
       const normalizedIDs = Array.isArray(selectedIDs)
-        ? selectedIDs.map((id) => Number(id))
+        ? selectedIDs.map((id) => String(id))
         : [];
-      const listMap = new Map(this.availableLists.map((list) => [Number(list.id), list]));
+      const listMap = new Map(this.availableLists.map((list) => [list.listValue, list]));
       this.form.lists = normalizedIDs
         .map((id) => listMap.get(id))
         .filter(Boolean);
@@ -829,6 +829,7 @@ export default {
     sendTest() {
       const data = {
         id: this.data.id,
+        record_id: this.data.recordId || this.data.record_id,
         name: this.form.name,
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
@@ -857,6 +858,9 @@ export default {
         name: this.form.name,
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
+        list_record_ids: this.form.lists
+          .map((l) => l.recordId || l.record_id)
+          .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         content_type: this.form.content.contentType,
         messenger: this.form.messenger,
@@ -869,7 +873,7 @@ export default {
       };
 
       this.$api.createCampaign(data).then((d) => {
-        this.$router.push({ name: 'campaign', hash: '#content', params: { id: d.id } });
+        this.$router.push({ name: 'campaign', hash: '#content', params: { id: d.recordId || d.record_id || d.id } });
       });
       return false;
     },
@@ -880,6 +884,9 @@ export default {
         name: this.form.name,
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
+        list_record_ids: this.form.lists
+          .map((l) => l.recordId || l.record_id)
+          .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         messenger: this.form.messenger,
         type: 'regular',
@@ -909,7 +916,7 @@ export default {
 
       // This promise is used by startCampaign to first save before starting.
       return new Promise((resolve) => {
-        this.$api.updateCampaign(this.data.id, data).then((d) => {
+        this.$api.updateCampaign(this.data.recordId || this.data.record_id || this.data.id, data).then((d) => {
           this.data = d;
           this.form.archiveSlug = d.archiveSlug;
           this.form.attribsStr = d.attribs ? JSON.stringify(d.attribs, null, 4) : '{}';
@@ -932,7 +939,7 @@ export default {
         archive_slug: this.form.archiveSlug,
       };
 
-      this.$api.updateCampaignArchive(this.data.id, data).then((d) => {
+      this.$api.updateCampaignArchive(this.data.recordId || this.data.record_id || this.data.id, data).then((d) => {
         this.form.archiveSlug = d.archiveSlug;
       });
     },
@@ -958,7 +965,7 @@ export default {
               return;
             }
 
-            this.$api.changeCampaignStatus(this.data.id, status).then(() => {
+            this.$api.changeCampaignStatus(this.data.recordId || this.data.record_id || this.data.id, status).then(() => {
               this.$router.push({ name: 'campaigns' });
             });
           });
@@ -967,7 +974,7 @@ export default {
     },
 
     unscheduleCampaign() {
-      this.$api.changeCampaignStatus(this.data.id, 'draft').then((d) => {
+      this.$api.changeCampaignStatus(this.data.recordId || this.data.record_id || this.data.id, 'draft').then((d) => {
         this.data = d;
       });
     },
@@ -1006,15 +1013,30 @@ export default {
         return [];
       }
 
-      return this.lists.results.filter((l) => this.selListIDs.indexOf(l.id) > -1);
+      return this.availableLists.filter((l) => (
+        this.selListIDs.indexOf(l.listValue) > -1
+      ));
     },
 
     availableLists() {
-      return Array.isArray(this.lists && this.lists.results) ? this.lists.results : [];
+      return Array.isArray(this.lists && this.lists.results)
+        ? this.lists.results.map((list) => ({
+          ...list,
+          listValue: typeof list.record_id === 'string' && list.record_id.length > 0
+            ? list.record_id
+            : String(list.id),
+        }))
+        : [];
     },
 
     selectedListIds() {
-      return Array.isArray(this.form.lists) ? this.form.lists.map((list) => Number(list.id)) : [];
+      return Array.isArray(this.form.lists)
+        ? this.form.lists.map((list) => (
+          typeof list.record_id === 'string' && list.record_id.length > 0
+            ? list.record_id
+            : String(list.id)
+        ))
+        : [];
     },
 
     availableMessengers() {
@@ -1063,12 +1085,17 @@ export default {
     },
   },
 
-  beforeRouteLeave(to, from, next) {
+  beforeRouteLeave() {
     if (this.isUnsaved()) {
-      this.$utils.confirm(this.$t('globals.messages.confirmDiscard'), () => next(true));
-      return;
+      return new Promise((resolve) => {
+        this.$utils.confirm(
+          this.$t('globals.messages.confirmDiscard'),
+          () => resolve(true),
+          () => resolve(false),
+        );
+      });
     }
-    next(true);
+    return true;
   },
 
   watch: {
@@ -1108,11 +1135,24 @@ export default {
           strIds = [this.$route.query.list_id];
         }
 
-        this.selListIDs = strIds.map((v) => parseInt(v, 10));
+        this.selListIDs = strIds
+          .map((v) => parseInt(v, 10))
+          .filter((v) => !Number.isNaN(v))
+          .map((v) => String(v));
+      }
+
+      if (this.$route.query.list_record_id) {
+        let recordIds = [];
+        if (typeof this.$route.query.list_record_id === 'object') {
+          recordIds = this.$route.query.list_record_id;
+        } else {
+          recordIds = [this.$route.query.list_record_id];
+        }
+
+        this.selListIDs = [...this.selListIDs, ...recordIds.filter((v) => typeof v === 'string' && v.length > 0)];
       }
     } else {
-      const intID = parseInt(id, 10);
-      if (intID <= 0 || Number.isNaN(intID)) {
+      if (typeof id !== 'string' || id.trim() === '') {
         this.$utils.toast(this.$t('campaigns.invalid'));
         return;
       }
