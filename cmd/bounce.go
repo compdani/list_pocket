@@ -57,8 +57,12 @@ func (a *App) GetBounces(c echo.Context) error {
 
 // GetSubscriberBounces retrieves a subscriber's bounce records.
 func (a *App) GetSubscriberBounces(c echo.Context) error {
+	subID, err := a.resolveSubscriberRouteID(c)
+	if err != nil {
+		return err
+	}
+
 	// Query and fetch bounces from the DB.
-	subID := getID(c)
 	out, _, err := a.core.QueryBounces(0, subID, "", "", "", 0, 1000)
 	if err != nil {
 		return err

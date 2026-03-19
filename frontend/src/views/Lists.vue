@@ -438,7 +438,7 @@ export default {
           // If 'all' is not selected, delete lists by IDs.
           params.id = this.bulk.checked.map((l) => l.id);
           params.record_id = this.bulk.checked
-            .map((l) => l.recordId || l.record_id)
+            .map((l) => l.recordId || l.record_id || l.id)
             .filter((id) => typeof id === 'string' && id.length > 0);
         } else {
           // 'All' is selected, delete by query.

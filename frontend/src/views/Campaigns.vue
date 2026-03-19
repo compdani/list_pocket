@@ -583,7 +583,7 @@ export default {
         subject: c.subject,
         lists: c.lists.map((l) => l.id),
         list_record_ids: c.lists
-          .map((l) => l.record_id || l.recordId)
+          .map((l) => l.recordId || l.record_id || l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         type: c.type,
         from_email: c.fromEmail,
@@ -639,7 +639,7 @@ export default {
         if (!this.bulk.all && this.bulk.checked.length > 0) {
           // If 'all' is not selected, delete campaigns by record IDs.
           params.record_id = this.bulk.checked
-            .map((c) => c.recordId || c.record_id)
+            .map((c) => c.recordId || c.record_id || c.id)
             .filter((id) => typeof id === 'string' && id.length > 0);
         } else {
           // 'All' is selected, delete by query.

@@ -318,6 +318,14 @@ export default {
   },
 
   methods: {
+    subscriberValue(subscriber) {
+      if (!subscriber) {
+        return '';
+      }
+
+      return subscriber.recordId || subscriber.record_id || String(subscriber.id || '');
+    },
+
     // Count the lists from which a subscriber has not unsubscribed.
     listCount(lists) {
       return lists.reduce((defVal, item) => (defVal + (item.subscriptionStatus !== 'unsubscribed' ? 1 : 0)), 0);
@@ -370,30 +378,31 @@ export default {
     },
 
     isSubscriberChecked(id) {
-      return this.bulk.checked.some((item) => item.id === id);
+      return this.bulk.checked.some((item) => this.subscriberValue(item) === id);
     },
 
     toggleSubscriberSelection(subscriber, checked) {
+      const subscriberID = this.subscriberValue(subscriber);
       if (checked) {
-        if (!this.isSubscriberChecked(subscriber.id)) {
+        if (!this.isSubscriberChecked(subscriberID)) {
           this.bulk.checked = [...this.bulk.checked, subscriber];
         }
       } else {
-        this.bulk.checked = this.bulk.checked.filter((item) => item.id !== subscriber.id);
+        this.bulk.checked = this.bulk.checked.filter((item) => this.subscriberValue(item) !== subscriberID);
       }
       this.onTableCheck();
     },
 
     toggleCurrentPageSubscribers(checked) {
       if (checked) {
-        const checkedMap = new Map(this.bulk.checked.map((item) => [item.id, item]));
+        const checkedMap = new Map(this.bulk.checked.map((item) => [this.subscriberValue(item), item]));
         this.subscriberRows.forEach((row) => {
-          checkedMap.set(row.id, row);
+          checkedMap.set(this.subscriberValue(row), row);
         });
         this.bulk.checked = [...checkedMap.values()];
       } else {
-        const currentIDs = new Set(this.subscriberRows.map((row) => row.id));
-        this.bulk.checked = this.bulk.checked.filter((item) => !currentIDs.has(item.id));
+        const currentIDs = new Set(this.subscriberRows.map((row) => this.subscriberValue(row)));
+        this.bulk.checked = this.bulk.checked.filter((item) => !currentIDs.has(this.subscriberValue(item)));
       }
       this.onTableCheck();
     },
@@ -541,8 +550,10 @@ export default {
       if (!this.bulk.all && this.bulk.checked.length > 0) {
         // If 'all' is not selected, blocklist subscribers by IDs.
         fn = () => {
-          const ids = this.bulk.checked.map((s) => s.id);
-          this.$api.blocklistSubscribers({ ids })
+          const subscriberRecordIDs = this.bulk.checked
+            .map((s) => this.subscriberValue(s))
+            .filter((id) => typeof id === 'string' && id.length > 0);
+          this.$api.blocklistSubscribers({ subscriber_record_ids: subscriberRecordIDs })
             .then(() => this.querySubscribers());
         };
       } else {
@@ -583,7 +594,7 @@ export default {
 
         // Export selected subscribers.
         if (!this.bulk.all && this.bulk.checked.length > 0) {
-          this.bulk.checked.map((s) => q.append('id', s.id));
+          this.bulk.checked.forEach((s) => q.append('subscriber_record_id', this.subscriberValue(s)));
         }
 
         this.downloadWithAuth(`${uris.exportSubscribers}?${q.toString()}`, 'subscribers-export.csv');
@@ -591,7 +602,8 @@ export default {
     },
 
     async downloadSubscriber(subscriber) {
-      await this.downloadWithAuth(`/mailapi/subscribers/${subscriber.id}/export`, `subscriber-${subscriber.id}.json`);
+      const subscriberID = this.subscriberValue(subscriber);
+      await this.downloadWithAuth(`/mailapi/subscribers/${subscriberID}/export`, `subscriber-${subscriberID}.json`);
     },
 
     async downloadWithAuth(url, fallbackFilename) {
@@ -629,8 +641,10 @@ export default {
       if (!this.bulk.all && this.bulk.checked.length > 0) {
         // If 'all' is not selected, delete subscribers by IDs.
         fn = () => {
-          const ids = this.bulk.checked.map((s) => s.id);
-          this.$api.deleteSubscribers({ id: ids })
+          const subscriberRecordIDs = this.bulk.checked
+            .map((s) => this.subscriberValue(s))
+            .filter((id) => typeof id === 'string' && id.length > 0);
+          this.$api.deleteSubscribers({ subscriber_record_id: subscriberRecordIDs })
             .then(() => {
               this.querySubscribers();
 
@@ -681,9 +695,8 @@ export default {
       if (!this.bulk.all && this.bulk.checked.length > 0) {
         // If 'all' is not selected, perform by IDs.
         fn = this.$api.addSubscribersToLists;
-        data.ids = this.bulk.checked.map((s) => s.id);
         data.subscriber_record_ids = this.bulk.checked
-          .map((s) => s.record_id)
+          .map((s) => this.subscriberValue(s))
           .filter((id) => typeof id === 'string' && id.length > 0);
       } else {
         // 'All' is selected, perform by query.
@@ -748,7 +761,7 @@ export default {
         return 'subscriber-form-hidden';
       }
 
-      return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.id ?? 'new'}`;
+      return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.recordId || this.curItem?.record_id || this.curItem?.id || 'new'}`;
     },
 
     subscriberFormData() {
@@ -766,7 +779,9 @@ export default {
       }
 
       return this.lists.results.find((l) => (
-        l.record_id === this.queryParams.listRecordID || String(l.id) === this.queryParams.listRecordID
+        l.recordId === this.queryParams.listRecordID
+          || l.record_id === this.queryParams.listRecordID
+          || String(l.id) === this.queryParams.listRecordID
       ));
     },
   },

@@ -93,6 +93,9 @@ export default {
       if (!list) {
         return '';
       }
+      if (typeof list.recordId === 'string' && list.recordId.length > 0) {
+        return list.recordId;
+      }
       if (typeof list.record_id === 'string' && list.record_id.length > 0) {
         return list.record_id;
       }
@@ -128,9 +131,13 @@ export default {
     },
 
     selectListValue(value) {
+      if (value === null || value === undefined || value === '') {
+        return;
+      }
+
       const item = typeof value === 'object'
         ? value
-        : this.filteredLists.find((l) => l.listValue === String(value));
+        : this.filteredLists.find((l) => this.getListValue(l) === String(value));
       if (item) {
         this.selectList(item);
       }

@@ -408,7 +408,7 @@ export default {
         delim: this.form.delim,
         lists: this.form.lists.map((l) => l.id),
         list_record_ids: this.form.lists
-          .map((l) => l.record_id)
+          .map((l) => l.recordId || l.record_id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         overwrite_userinfo: this.form.overwriteUserInfo,
         overwrite_subscription_status: this.form.overwriteSubStatus,
@@ -471,7 +471,7 @@ export default {
     if ((ids.length > 0 || recordIDs.length > 0) && this.lists.results) {
       this.$nextTick(() => {
         this.form.lists = this.lists.results.filter((l) => (
-          ids.indexOf(l.id) > -1 || recordIDs.indexOf(l.record_id) > -1
+          ids.indexOf(l.id) > -1 || recordIDs.indexOf(l.recordId || l.record_id) > -1
         ));
       });
     }

@@ -38,8 +38,8 @@ const (
 
 const (
 	sqliteUpsertSubscriber = `
-INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status, updated)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled', (strftime('%Y-%m-%d %H:%M:%fZ')))
+INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status, created, updated)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'enabled', (strftime('%Y-%m-%d %H:%M:%fZ')), (strftime('%Y-%m-%d %H:%M:%fZ')))
 ON CONFLICT(email) DO UPDATE SET
 	phone=(CASE WHEN ? THEN excluded.phone ELSE subscribers.phone END),
 	first_name=(CASE WHEN ? THEN excluded.first_name ELSE subscribers.first_name END),
@@ -65,8 +65,8 @@ ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
 `
 
 	sqliteUpsertBlocklistedSubscriber = `
-INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status, updated)
-VALUES (?, ?, ?, ?, ?, ?, ?, 'blocklisted', (strftime('%Y-%m-%d %H:%M:%fZ')))
+INSERT INTO subscribers (uuid, email, phone, first_name, last_name, name, attribs, status, created, updated)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'blocklisted', (strftime('%Y-%m-%d %H:%M:%fZ')), (strftime('%Y-%m-%d %H:%M:%fZ')))
 ON CONFLICT (email) DO UPDATE SET
 	status='blocklisted',
 	updated=(strftime('%Y-%m-%d %H:%M:%fZ'));

@@ -133,7 +133,7 @@
 export default {
   props: {
     subscriberId: {
-      type: Number,
+      type: [Number, String],
       required: true,
     },
   },

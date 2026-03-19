@@ -4,7 +4,7 @@
       <header class="admin-dialog-head modal-card-head">
         <div class="dialog-meta-row">
           <p v-if="isEditing" class="entity-meta has-text-grey is-size-7">
-            {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.id}`" /></span>
+            {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.recordId || data.record_id || data.id}`" /></span>
             {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
           </p>
           <span v-if="isEditing" class="status-pill" :class="data.status">
@@ -252,9 +252,9 @@
           </v-window-item>
 
           <v-window-item value="activity">
-            <section v-if="isEditing && data.id" class="tab-panel activity">
+            <section v-if="isEditing && (data.recordId || data.record_id || data.id)" class="tab-panel activity">
               <h5 class="mb-3">{{ $t('subscribers.activity') }}</h5>
-              <subscriber-activity :subscriber-id="data.id" />
+              <subscriber-activity :subscriber-id="data.recordId || data.record_id || data.id" />
             </section>
           </v-window-item>
         </v-window>
@@ -362,8 +362,8 @@ const availableLists = computed(() => (
   Array.isArray(lists.value && lists.value.results)
     ? lists.value.results.map((list) => ({
       ...list,
-      listValue: typeof list.record_id === 'string' && list.record_id.length > 0
-        ? list.record_id
+      listValue: typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
+        ? (list.recordId || list.record_id || list.id)
         : String(list.id),
     }))
     : []
@@ -372,8 +372,8 @@ const availableLists = computed(() => (
 const selectedListIds = computed(() => (
   Array.isArray(form.value.lists)
     ? form.value.lists.map((list) => (
-      typeof list.record_id === 'string' && list.record_id.length > 0
-        ? list.record_id
+      typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
+        ? (list.recordId || list.record_id || list.id)
         : String(list.id)
     ))
     : []
@@ -509,7 +509,7 @@ function createSubscriber() {
     // List IDs.
     lists: form.value.lists.map((l) => l.id),
     list_record_ids: form.value.lists
-      .map((l) => l.record_id)
+      .map((l) => l.recordId || l.record_id || l.id)
       .filter((id) => typeof id === 'string' && id.length > 0),
   };
 
@@ -537,7 +537,7 @@ function updateSubscriber() {
 
   const payload = {
     id: form.value.id,
-    record_id: form.value.recordId || form.value.record_id,
+    record_id: form.value.recordId || form.value.record_id || form.value.id,
     email: form.value.email,
     phone: form.value.phone,
     first_name: form.value.firstName,
@@ -549,7 +549,7 @@ function updateSubscriber() {
     // List IDs.
     lists: form.value.lists.map((l) => l.id),
     list_record_ids: form.value.lists
-      .map((l) => l.record_id)
+      .map((l) => l.recordId || l.record_id || l.id)
       .filter((id) => typeof id === 'string' && id.length > 0),
   };
 
