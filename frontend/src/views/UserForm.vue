@@ -206,7 +206,7 @@ export default {
       const form = {
         ...this.form, password_login: this.form.passwordLogin, user_role_id: this.form.userRoleId, list_role_id: this.form.listRoleId || null,
       };
-      this.$api.updateUser({ id: this.data.id, record_id: this.data.recordId || this.data.record_id, ...form }).then((data) => {
+      this.$api.updateUser({ id: this.data.id, ...form }).then((data) => {
         this.$emit('finished');
         this.$parent.close();
         this.$utils.toast(this.$t('globals.messages.updated', { name: data.name }));

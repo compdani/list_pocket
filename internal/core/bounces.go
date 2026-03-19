@@ -45,7 +45,7 @@ func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, of
 }
 
 // GetBounce retrieves bounce entries based on the given params.
-func (c *Core) GetBounce(id int) (models.Bounce, error) {
+func (c *Core) GetBounce(id string) (models.Bounce, error) {
 	if c.isSQLite() {
 		out, _, err := c.queryBouncesSQLite(0, 0, "", "id", SortAsc, 0, 1, id)
 		if err != nil {
@@ -142,12 +142,12 @@ func (c *Core) BlocklistBouncedSubscribers() error {
 }
 
 // DeleteBounce deletes a list.
-func (c *Core) DeleteBounce(id int) error {
-	return c.DeleteBounces([]int{id}, false)
+func (c *Core) DeleteBounce(id string) error {
+	return c.DeleteBounces([]string{id}, false)
 }
 
 // DeleteBounces deletes multiple lists.
-func (c *Core) DeleteBounces(ids []int, all bool) error {
+func (c *Core) DeleteBounces(ids []string, all bool) error {
 	if c.isSQLite() {
 		if all {
 			if _, err := c.db.Exec(`DELETE FROM bounces`); err != nil {
@@ -183,7 +183,7 @@ func (c *Core) DeleteBounces(ids []int, all bool) error {
 	return nil
 }
 
-func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order string, offset, limit int, onlyIDs ...int) ([]models.Bounce, int, error) {
+func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order string, offset, limit int, onlyIDs ...string) ([]models.Bounce, int, error) {
 	if !strSliceContains(orderBy, bounceQuerySortFields) {
 		orderBy = "created_at"
 	}
@@ -210,12 +210,12 @@ func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order stri
 			b.source,
 			b.meta,
 			b.created AS created_at,
-			b.subscriber_id,
+			s.id AS subscriber_id,
 			s.uuid AS subscriber_uuid,
 			s.email AS email,
 			s.status AS subscriber_status,
 			CASE WHEN b.campaign_id IS NOT NULL
-			     THEN json_object('id', b.campaign_id, 'name', c.name)
+			     THEN json_object('id', c.id, 'name', c.name)
 			     ELSE NULL END AS campaign,
 			COALESCE(c.name, '') AS campaign_name
 		FROM bounces b
@@ -225,7 +225,7 @@ func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order stri
 	`
 
 	args := []any{}
-	if len(onlyIDs) > 0 && onlyIDs[0] > 0 {
+	if len(onlyIDs) > 0 && strings.TrimSpace(onlyIDs[0]) != "" {
 		q += ` AND b.id = ?`
 		args = append(args, onlyIDs[0])
 	}

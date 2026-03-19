@@ -75,8 +75,8 @@ const (
 
 // Base holds common fields shared across models.
 type Base struct {
-	ID        int       `db:"id" json:"id"`
-	RecordID  string    `db:"record_id" json:"record_id,omitempty"`
+	ID        int       `db:"id" json:"-"`
+	RecordID  string    `db:"record_id" json:"id,omitempty"`
 	CreatedAt null.Time `db:"created_at" json:"created_at"`
 	UpdatedAt null.Time `db:"updated_at" json:"updated_at"`
 }
@@ -99,16 +99,18 @@ type User struct {
 	TwofaType     string           `db:"twofa_type" json:"twofa_type"`
 	TwofaKey      null.String      `db:"twofa_key" json:"-"`
 	LoggedInAt    null.Time        `db:"loggedin_at" json:"loggedin_at"`
-	UserRoleID    int              `db:"user_role_id" json:"user_role_id,omitempty"`
+	UserRoleID    int              `db:"user_role_id" json:"-"`
 	UserRoleName  string           `db:"user_role_name" json:"-"`
-	ListRoleID    *int             `db:"list_role_id" json:"list_role_id,omitempty"`
+	UserRoleRecID string           `db:"-" json:"user_role_id,omitempty"`
+	ListRoleID    *int             `db:"list_role_id" json:"-"`
 	ListRoleName  null.String      `db:"list_role_name" json:"-"`
+	ListRoleRecID string           `db:"-" json:"list_role_id,omitempty"`
 	UserRolePerms pq.StringArray   `db:"user_role_permissions" json:"-"`
 	ListsPermsRaw *json.RawMessage `db:"list_role_perms" json:"-"`
 
 	// Non-DB fields filled post-retrieval.
 	UserRole struct {
-		ID          int      `db:"-" json:"id"`
+		ID          string   `db:"-" json:"id"`
 		Name        string   `db:"-" json:"name"`
 		Permissions []string `db:"-" json:"permissions"`
 	} `db:"-" json:"user_role"`
@@ -128,7 +130,7 @@ type ListPermission struct {
 }
 
 type ListRolePermissions struct {
-	ID    int              `db:"-" json:"id"`
+	ID    string           `db:"-" json:"id"`
 	Name  string           `db:"-" json:"name"`
 	Lists []ListPermission `db:"-" json:"lists"`
 }

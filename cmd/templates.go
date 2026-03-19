@@ -31,14 +31,25 @@ var (
 	regexpTplTag = regexp.MustCompile(`{{(\s+)?template\s+?"content"(\s+)?\.(\s+)?}}`)
 )
 
+func templateRouteRecordID(c echo.Context) (string, error) {
+	recordID := strings.TrimSpace(c.Param("id"))
+	if recordID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+	return recordID, nil
+}
+
 // GetTemplate handles the retrieval of a template
 func (a *App) GetTemplate(c echo.Context) error {
 	// If no_body is true, blank out the body of the template from the response.
 	noBody, _ := strconv.ParseBool(c.QueryParam("no_body"))
 
 	// Get the template from the DB.
-	id := getID(c)
-	out, err := a.core.GetTemplate(id, noBody)
+	recordID, err := templateRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	out, err := a.core.GetTemplate(recordID, noBody)
 	if err != nil {
 		return err
 	}
@@ -63,8 +74,11 @@ func (a *App) GetTemplates(c echo.Context) error {
 // PreviewTemplate renders the HTML preview of a template in the DB.
 func (a *App) PreviewTemplate(c echo.Context) error {
 	// Fetch one template from the DB.
-	id := getID(c)
-	tpl, err := a.core.GetTemplate(id, false)
+	recordID, err := templateRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	tpl, err := a.core.GetTemplate(recordID, false)
 	if err != nil {
 		return err
 	}
@@ -170,8 +184,11 @@ func (a *App) UpdateTemplate(c echo.Context) error {
 	}
 
 	// Update the template in the DB.
-	id := getID(c)
-	out, err := a.core.UpdateTemplate(id, o.Name, o.Subject, []byte(o.Body), o.BodySource)
+	recordID, err := templateRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	out, err := a.core.UpdateTemplate(recordID, o.Name, o.Subject, []byte(o.Body), o.BodySource)
 	if err != nil {
 		return err
 	}
@@ -188,8 +205,11 @@ func (a *App) UpdateTemplate(c echo.Context) error {
 // TemplateSetDefault handles template modification.
 func (a *App) TemplateSetDefault(c echo.Context) error {
 	// Update the template in the DB.
-	id := getID(c)
-	if err := a.core.SetDefaultTemplate(id); err != nil {
+	recordID, err := templateRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	if err := a.core.SetDefaultTemplate(recordID); err != nil {
 		return err
 	}
 
@@ -199,13 +219,20 @@ func (a *App) TemplateSetDefault(c echo.Context) error {
 // DeleteTemplate handles template deletion.
 func (a *App) DeleteTemplate(c echo.Context) error {
 	// Delete the template from the DB.
-	id := getID(c)
-	if err := a.core.DeleteTemplate(id); err != nil {
+	recordID, err := templateRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	tpl, err := a.core.GetTemplate(recordID, true)
+	if err != nil {
+		return err
+	}
+	if err := a.core.DeleteTemplate(recordID); err != nil {
 		return err
 	}
 
 	// Delete cached in-memory template.
-	a.manager.DeleteTpl(id)
+	a.manager.DeleteTpl(tpl.ID)
 
 	return c.JSON(http.StatusOK, okResp{true})
 }

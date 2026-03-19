@@ -145,7 +145,7 @@ func (c *Core) UpdateUser(recordID string, u auth.User) (auth.User, error) {
 	}
 
 	if oldUser.Type == auth.UserTypeUser && oldUser.Status == auth.UserStatusEnabled &&
-		oldUser.UserRole.ID == auth.SuperAdminRoleID &&
+		oldUser.UserRoleID == auth.SuperAdminRoleID &&
 		(u.UserRoleID != auth.SuperAdminRoleID || u.Status != auth.UserStatusEnabled) {
 		num, err := c.countOtherEnabledSuperAdmins(recordID)
 		if err != nil {
@@ -258,7 +258,7 @@ func (c *Core) DeleteUsers(recordIDs []string) error {
 		if _, ok := deleting[u.RecordID]; ok {
 			continue
 		}
-		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID {
+		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRoleID == auth.SuperAdminRoleID {
 			numEnabledSupers++
 		}
 	}
@@ -267,7 +267,7 @@ func (c *Core) DeleteUsers(recordIDs []string) error {
 		if _, ok := deleting[u.RecordID]; !ok {
 			continue
 		}
-		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID && numEnabledSupers == 0 {
+		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRoleID == auth.SuperAdminRoleID && numEnabledSupers == 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
 		}
 	}
@@ -325,7 +325,13 @@ func (c *Core) applyUserToRecord(rec *pbcore.Record, u auth.User, create bool) e
 
 	roleID := u.UserRoleID
 	if roleID < 1 {
-		roleID = u.UserRole.ID
+		if strings.TrimSpace(u.UserRoleRecID) != "" {
+			resolvedRoleID, err := c.ResolveRoleLegacyID(u.UserRoleRecID)
+			if err != nil {
+				return err
+			}
+			roleID = resolvedRoleID
+		}
 	}
 
 	rec.SetEmail(email)
@@ -437,30 +443,50 @@ func (c *Core) hydrateUsers(users []auth.User) ([]auth.User, error) {
 	}
 
 	userRoleMap := make(map[int]auth.Role, len(userRoles))
+	userRoleRecMap := make(map[string]auth.Role, len(userRoles))
 	for _, role := range userRoles {
 		userRoleMap[role.ID] = role
+		userRoleRecMap[role.RecordID] = role
 	}
 
 	listRoleMap := make(map[int]auth.ListRole, len(listRoles))
+	listRoleRecMap := make(map[string]auth.ListRole, len(listRoles))
 	for _, role := range listRoles {
 		listRoleMap[role.ID] = role
+		listRoleRecMap[role.RecordID] = role
 	}
 
 	for i := range users {
 		u := &users[i]
 
 		if role, ok := userRoleMap[u.UserRoleID]; ok {
+			u.UserRoleRecID = role.RecordID
 			u.UserRoleName = role.Name.String
 			u.UserRolePerms = role.Permissions
+			u.UserRole.ID = role.RecordID
 		}
 
 		if u.ListRoleID != nil {
 			if role, ok := listRoleMap[*u.ListRoleID]; ok {
+				u.ListRoleRecID = role.RecordID
 				u.ListRoleName = role.Name
 				if b, err := json.Marshal(role.Lists); err == nil {
 					raw := json.RawMessage(b)
 					u.ListsPermsRaw = &raw
 				}
+			}
+		}
+
+		if u.UserRoleRecID == "" {
+			if role, ok := userRoleRecMap[u.UserRole.ID]; ok {
+				u.UserRoleID = role.ID
+				u.UserRoleRecID = role.RecordID
+			}
+		}
+		if u.ListRoleRecID != "" {
+			if role, ok := listRoleRecMap[u.ListRoleRecID]; ok {
+				id := role.ID
+				u.ListRoleID = &id
 			}
 		}
 	}
@@ -479,7 +505,7 @@ func (c *Core) countOtherEnabledSuperAdmins(excludeRecordID string) (int, error)
 		if u.RecordID == excludeRecordID {
 			continue
 		}
-		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRole.ID == auth.SuperAdminRoleID {
+		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRoleID == auth.SuperAdminRoleID {
 			count++
 		}
 	}
@@ -500,7 +526,7 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 			u.Email = null.String{}
 		}
 
-		u.UserRole.ID = u.UserRoleID
+		u.UserRole.ID = u.UserRoleRecID
 		u.UserRole.Name = u.UserRoleName
 		u.UserRole.Permissions = u.UserRolePerms
 
@@ -519,7 +545,7 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 				}
 			}
 
-			u.ListRole = &auth.ListRolePermissions{ID: *u.ListRoleID, Name: u.ListRoleName.String, Lists: listPerms}
+			u.ListRole = &auth.ListRolePermissions{ID: u.ListRoleRecID, Name: u.ListRoleName.String, Lists: listPerms}
 
 			for _, p := range listPerms {
 				u.ListPermissionsMap[p.ID] = make(map[string]struct{})
