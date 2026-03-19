@@ -63,6 +63,24 @@ var regTplFuncs = []regTplFunc{
 		regExp:  regexp.MustCompile(`{{(\s+)?(TrackView|UnsubscribeURL|ManageURL|OptinURL|MessageURL)(\s+)?}}`),
 		replace: `{{ $2 . }}`,
 	},
+
+	// Compatibility shims for imported templates from other e-mail tools.
+	{
+		regExp:  regexp.MustCompile(`{{\s*unsubscribe\s*}}`),
+		replace: `{{ UnsubscribeURL . }}`,
+	},
+	{
+		regExp:  regexp.MustCompile(`{{\s*update_profile\s*}}`),
+		replace: `{{ ManageURL . }}`,
+	},
+	{
+		regExp:  regexp.MustCompile(`{{\s*contact\.EMAIL\s*}}`),
+		replace: `{{ .Subscriber.Email }}`,
+	},
+	{
+		regExp:  regexp.MustCompile(`{{\s*contact\.NAME\s*}}`),
+		replace: `{{ .Subscriber.Name }}`,
+	},
 }
 
 // markdown is a global instance of Markdown parser and renderer.
