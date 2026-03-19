@@ -94,6 +94,7 @@ type sqliteCampaignMediaRecordRow struct {
 
 type sqliteCampaignRow struct {
 	ID                int           `db:"id"`
+	RecordID          string        `db:"record_id"`
 	CreatedAt         string        `db:"created_at"`
 	UpdatedAt         string        `db:"updated_at"`
 	UUID              string        `db:"uuid"`
@@ -186,6 +187,7 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 	return models.Campaign{
 		Base: models.Base{
 			ID:        row.ID,
+			RecordID:  row.RecordID,
 			CreatedAt: parseNullTime(row.CreatedAt),
 			UpdatedAt: parseNullTime(row.UpdatedAt),
 		},
@@ -222,6 +224,25 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 		TemplateBody:      row.TemplateBody,
 		Total:             row.Total,
 	}
+}
+
+func (c *Core) ResolveCampaignIDs(campaignIDs []int, campaignRecordIDs []string) ([]int, error) {
+	if len(campaignRecordIDs) == 0 || !c.isSQLite() {
+		return appendUniqueInts([]int{}, campaignIDs), nil
+	}
+
+	query := `SELECT rowid FROM campaigns WHERE id IN (` + sqlitePlaceholders(len(campaignRecordIDs)) + `)`
+	args := make([]any, 0, len(campaignRecordIDs))
+	for _, id := range campaignRecordIDs {
+		args = append(args, id)
+	}
+
+	var resolved []int
+	if err := c.db.Select(&resolved, query, args...); err != nil {
+		return nil, err
+	}
+
+	return appendUniqueInts(append([]int{}, campaignIDs...), resolved), nil
 }
 
 func sqliteCampaignRowsToModels(rows []sqliteCampaignRow) models.Campaigns {
@@ -807,7 +828,7 @@ func (c *Core) CampaignHasLists(id int, listIDs []int) (bool, error) {
 
 func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, orderBy, order string, getAll bool, permittedLists []int, offset, limit int) (models.Campaigns, int, error) {
 	query := `
-	SELECT c.rowid AS id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
+	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 		c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
@@ -903,7 +924,7 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 
 func (c *Core) getCampaignSQLite(id int, uuid, archiveSlug string, tplType string) (models.Campaign, error) {
 	q := `
-	SELECT c.rowid AS id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
+	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 		c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
@@ -958,7 +979,7 @@ func (c *Core) getCampaignSQLite(id int, uuid, archiveSlug string, tplType strin
 func (c *Core) getCampaignForPreviewSQLite(id, tplID int) (models.Campaign, error) {
 	var row sqliteCampaignRow
 	if err := c.db.Get(&row, `
-		SELECT c.rowid AS id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
+		SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 			c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
@@ -995,7 +1016,7 @@ func (c *Core) getCampaignForPreviewSQLite(id, tplID int) (models.Campaign, erro
 func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, int, error) {
 	rows := []sqliteCampaignRow{}
 	if err := c.db.Select(&rows, `
-		SELECT COUNT(*) OVER() AS total, c.rowid AS id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
+		SELECT COUNT(*) OVER() AS total, c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 			c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,

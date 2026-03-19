@@ -33,6 +33,7 @@ var (
 
 type sqliteSubscriberRow struct {
 	ID        int    `db:"id"`
+	RecordID  string `db:"record_id"`
 	CreatedAt string `db:"created_at"`
 	UpdatedAt string `db:"updated_at"`
 	UUID      string `db:"uuid"`
@@ -76,6 +77,7 @@ func sqliteSubscriberRowsToModels(rows []sqliteSubscriberRow) models.Subscribers
 		out = append(out, models.Subscriber{
 			Base: models.Base{
 				ID:        row.ID,
+				RecordID:  row.RecordID,
 				CreatedAt: parseNullTime(row.CreatedAt),
 				UpdatedAt: parseNullTime(row.UpdatedAt),
 			},
@@ -117,6 +119,63 @@ func (c *Core) sqliteListRecordIDs(listIDs []int, listUUIDs []string) ([]string,
 	}
 
 	return out, nil
+}
+
+func (c *Core) SQLiteListRecordIDs(listIDs []int, listUUIDs []string) ([]string, error) {
+	return c.sqliteListRecordIDs(listIDs, listUUIDs)
+}
+
+func appendUniqueInts(dst []int, values []int) []int {
+	seen := make(map[int]struct{}, len(dst)+len(values))
+	for _, v := range dst {
+		seen[v] = struct{}{}
+	}
+	for _, v := range values {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		dst = append(dst, v)
+	}
+	return dst
+}
+
+func (c *Core) ResolveListIDs(listIDs []int, listRecordIDs []string) ([]int, error) {
+	if len(listRecordIDs) == 0 || !c.isSQLite() {
+		return appendUniqueInts([]int{}, listIDs), nil
+	}
+
+	query := `SELECT rowid FROM lists WHERE id IN (` + sqlitePlaceholders(len(listRecordIDs)) + `)`
+	args := make([]any, 0, len(listRecordIDs))
+	for _, id := range listRecordIDs {
+		args = append(args, id)
+	}
+
+	var resolved []int
+	if err := c.db.Select(&resolved, query, args...); err != nil {
+		return nil, err
+	}
+
+	return appendUniqueInts(append([]int{}, listIDs...), resolved), nil
+}
+
+func (c *Core) ResolveSubscriberIDs(subIDs []int, subRecordIDs []string) ([]int, error) {
+	if len(subRecordIDs) == 0 || !c.isSQLite() {
+		return appendUniqueInts([]int{}, subIDs), nil
+	}
+
+	query := `SELECT rowid FROM subscribers WHERE id IN (` + sqlitePlaceholders(len(subRecordIDs)) + `)`
+	args := make([]any, 0, len(subRecordIDs))
+	for _, id := range subRecordIDs {
+		args = append(args, id)
+	}
+
+	var resolved []int
+	if err := c.db.Select(&resolved, query, args...); err != nil {
+		return nil, err
+	}
+
+	return appendUniqueInts(append([]int{}, subIDs...), resolved), nil
 }
 
 func (c *Core) sqliteSyncSubscriberLists(subscriberPBID string, listPBIDs []string, status string, deleteLists bool) error {
@@ -1229,7 +1288,7 @@ func (c *Core) getSubscriberCount(searchStr, queryExp, subStatus string, listIDs
 }
 
 func (c *Core) getSubscriberSQLite(id int, uuid, email string) (models.Subscriber, error) {
-	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE `
+	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE `
 	args := []any{}
 	switch {
 	case id > 0:
@@ -1334,7 +1393,7 @@ func (c *Core) getSubscribersByEmailSQLite(emails []string) (models.Subscribers,
 	}
 
 	var rows []sqliteSubscriberRow
-	q := `SELECT rowid AS id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
+	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscriber: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1381,7 +1440,7 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int,
 		return models.Subscribers{}, 0, nil
 	}
 
-	q := `SELECT subscribers.rowid AS id, subscribers.created AS created_at, subscribers.updated AS updated_at,
+	q := `SELECT subscribers.rowid AS id, subscribers.id AS record_id, subscribers.created AS created_at, subscribers.updated AS updated_at,
 		subscribers.uuid, subscribers.email, subscribers.phone, subscribers.first_name, subscribers.last_name, subscribers.name, subscribers.attribs, subscribers.status
 		FROM subscribers WHERE ` + whereSQL + ` ORDER BY ` + sortCol + ` ` + order
 	if limit > 0 {
@@ -1433,7 +1492,7 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 
 	q := `
 		SELECT
-			l.rowid AS id, l.uuid, l.name, l.type, l.optin, l.status, l.tags, l.description,
+			l.rowid AS id, l.id AS record_id, l.uuid, l.name, l.type, l.optin, l.status, l.tags, l.description,
 			s.rowid AS subscriber_id,
 			sl.status AS subscription_status
 		FROM lists l
@@ -1466,6 +1525,7 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 
 	rows := []struct {
 		ID                 int    `db:"id"`
+		RecordID           string `db:"record_id"`
 		UUID               string `db:"uuid"`
 		Name               string `db:"name"`
 		Type               string `db:"type"`
@@ -1493,7 +1553,7 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 		}
 
 		out = append(out, models.List{
-			Base:               models.Base{ID: r.ID},
+			Base:               models.Base{ID: r.ID, RecordID: r.RecordID},
 			UUID:               r.UUID,
 			Name:               r.Name,
 			Type:               r.Type,

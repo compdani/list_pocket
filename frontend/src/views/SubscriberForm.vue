@@ -122,7 +122,7 @@
                 :items="availableLists"
                 :label="$t('subscribers.lists')"
                 item-title="name"
-                item-value="id"
+                item-value="listValue"
                 multiple
                 chips
                 closable-chips
@@ -359,12 +359,23 @@ const statusOptions = computed(() => [
 ]);
 
 const availableLists = computed(() => (
-  Array.isArray(lists.value && lists.value.results) ? lists.value.results : []
+  Array.isArray(lists.value && lists.value.results)
+    ? lists.value.results.map((list) => ({
+      ...list,
+      listValue: typeof list.record_id === 'string' && list.record_id.length > 0
+        ? list.record_id
+        : String(list.id),
+    }))
+    : []
 ));
 
 const selectedListIds = computed(() => (
   Array.isArray(form.value.lists)
-    ? form.value.lists.map((list) => Number(list.id)).filter((id) => !Number.isNaN(id))
+    ? form.value.lists.map((list) => (
+      typeof list.record_id === 'string' && list.record_id.length > 0
+        ? list.record_id
+        : String(list.id)
+    ))
     : []
 ));
 
@@ -436,8 +447,8 @@ function toggleMeta(id) {
 }
 
 function onListsChange(selectedIDs) {
-  const normalizedIDs = Array.isArray(selectedIDs) ? selectedIDs.map((id) => Number(id)) : [];
-  const listMap = new Map(availableLists.value.map((list) => [Number(list.id), list]));
+  const normalizedIDs = Array.isArray(selectedIDs) ? selectedIDs.map((id) => String(id)) : [];
+  const listMap = new Map(availableLists.value.map((list) => [list.listValue, list]));
   form.value.lists = normalizedIDs
     .map((id) => listMap.get(id))
     .filter(Boolean);
@@ -447,7 +458,7 @@ function deleteBounces() {
   proxy.$utils.confirm(
     null,
     () => {
-      proxy.$api.deleteSubscriberBounces(form.value.id).then(() => {
+      proxy.$api.deleteSubscriberBounces(form.value.recordId || form.value.record_id || form.value.id).then(() => {
         getBounces();
         const subscriberName = [form.value.firstName, form.value.lastName].filter(Boolean).join(' ') || form.value.email;
         proxy.$utils.toast(proxy.$t('globals.messages.deleted', { name: subscriberName }));
@@ -457,7 +468,7 @@ function deleteBounces() {
 }
 
 function getBounces() {
-  proxy.$api.getSubscriberBounces(form.value.id).then((response) => {
+  proxy.$api.getSubscriberBounces(form.value.recordId || form.value.record_id || form.value.id).then((response) => {
     bounces.value = response;
   });
 }
@@ -497,6 +508,9 @@ function createSubscriber() {
 
     // List IDs.
     lists: form.value.lists.map((l) => l.id),
+    list_record_ids: form.value.lists
+      .map((l) => l.record_id)
+      .filter((id) => typeof id === 'string' && id.length > 0),
   };
 
   proxy.$api.createSubscriber(payload).then((response) => {
@@ -523,6 +537,7 @@ function updateSubscriber() {
 
   const payload = {
     id: form.value.id,
+    record_id: form.value.recordId || form.value.record_id,
     email: form.value.email,
     phone: form.value.phone,
     first_name: form.value.firstName,
@@ -533,6 +548,9 @@ function updateSubscriber() {
 
     // List IDs.
     lists: form.value.lists.map((l) => l.id),
+    list_record_ids: form.value.lists
+      .map((l) => l.record_id)
+      .filter((id) => typeof id === 'string' && id.length > 0),
   };
 
   proxy.$api.updateSubscriber(payload).then((response) => {
@@ -543,7 +561,7 @@ function updateSubscriber() {
 }
 
 function sendOptinConfirmation() {
-  proxy.$api.sendSubscriberOptin(form.value.id).then(() => {
+  proxy.$api.sendSubscriberOptin(form.value.recordId || form.value.record_id || form.value.id).then(() => {
     proxy.$utils.toast(proxy.$t('subscribers.sentOptinConfirm'));
   });
 }

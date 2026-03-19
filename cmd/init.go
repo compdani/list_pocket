@@ -1027,7 +1027,7 @@ func initImporter(q *models.Queries, db *pbdb.DB, core *core.Core, i *i18n.I18n,
 		updateListDateStmt, err = db.DB.DB.Prepare(`
 UPDATE lists
 SET ` + listUpdatedCol + `=(strftime('%Y-%m-%d %H:%M:%fZ'))
-WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?1));
+WHERE id IN (SELECT value FROM json_each(?1));
 `)
 		useJSONListArgs = true
 	} else {
@@ -1062,6 +1062,13 @@ WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?1));
 			BlocklistStmt:      blocklistStmt,
 			UpdateListDateStmt: updateListDateStmt,
 			UseJSONListArgs:    useJSONListArgs,
+			ResolveListIDs: func(listIDs []int) ([]string, error) {
+				if !useJSONListArgs {
+					return nil, nil
+				}
+
+				return core.SQLiteListRecordIDs(listIDs, nil)
+			},
 
 			// Hook for triggering admin notifications and refreshing stats materialized
 			// views after a successful import.

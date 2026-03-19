@@ -19,6 +19,7 @@ type listType struct {
 
 type sqliteListRow struct {
 	ID               int                 `db:"id"`
+	RecordID         string              `db:"record_id"`
 	CreatedAt        string              `db:"created_at"`
 	UpdatedAt        string              `db:"updated_at"`
 	UUID             string              `db:"uuid"`
@@ -44,6 +45,7 @@ func sqliteListRowsToModels(rows []sqliteListRow) []models.List {
 		out = append(out, models.List{
 			Base: models.Base{
 				ID:        row.ID,
+				RecordID:  row.RecordID,
 				CreatedAt: parseNullTime(row.CreatedAt),
 				UpdatedAt: parseNullTime(row.UpdatedAt),
 			},
@@ -169,6 +171,7 @@ func (c *Core) getListsSQLite(typ, status string, getAll bool, permittedIDs []in
 	query := `
 	SELECT
 		l.rowid AS id,
+		l.id AS record_id,
 		l.created AS created_at,
 		l.updated AS updated_at,
 		l.uuid,
@@ -231,6 +234,7 @@ func (c *Core) queryListsSQLite(searchStr, typ, optin, status string, tags []str
 	SELECT
 		COUNT(*) OVER() AS total,
 		l.rowid AS id,
+		l.id AS record_id,
 		l.created AS created_at,
 		l.updated AS updated_at,
 		l.uuid,
@@ -335,6 +339,7 @@ func (c *Core) getListSQLite(id int, uuid string) (models.List, error) {
 	query := `
 	SELECT
 		l.rowid AS id,
+		l.id AS record_id,
 		l.created AS created_at,
 		l.updated AS updated_at,
 		l.uuid,
@@ -394,6 +399,7 @@ func (c *Core) GetListsByOptin(ids []int, optinType string) ([]models.List, erro
 		q := `
 			SELECT
 				l.rowid AS id,
+				l.id AS record_id,
 				l.created AS created_at,
 				l.updated AS updated_at,
 				l.uuid,

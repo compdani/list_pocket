@@ -53,7 +53,7 @@ ON CONFLICT(email) DO UPDATE SET
 INSERT INTO subscriber_lists (subscriber_id, list_id, status, updated)
 SELECT
 	s.id,
-	CAST(j.value AS INTEGER),
+	j.value,
 	CASE WHEN s.status = 'blocklisted' THEN 'unsubscribed' ELSE ? END,
 	(strftime('%Y-%m-%d %H:%M:%fZ'))
 FROM subscribers s
@@ -116,6 +116,7 @@ type Options struct {
 	BlocklistStmt      *sql.Stmt
 	UpdateListDateStmt *sql.Stmt
 	UseJSONListArgs    bool
+	ResolveListIDs     func([]int) ([]string, error)
 	PostCB             func(subject string, data any) error
 
 	DomainBlocklist []string
@@ -133,14 +134,15 @@ type Session struct {
 
 // SessionOpt represents the options for an importer session.
 type SessionOpt struct {
-	Filename           string `json:"filename"`
-	Mode               string `json:"mode"`
-	SubStatus          string `json:"subscription_status"`
-	Overwrite          bool   `json:"overwrite"`
-	OverwriteUserInfo  bool   `json:"overwrite_userinfo"`
-	OverwriteSubStatus bool   `json:"overwrite_subscription_status"`
-	Delim              string `json:"delim"`
-	ListIDs            []int  `json:"lists"`
+	Filename           string   `json:"filename"`
+	Mode               string   `json:"mode"`
+	SubStatus          string   `json:"subscription_status"`
+	Overwrite          bool     `json:"overwrite"`
+	OverwriteUserInfo  bool     `json:"overwrite_userinfo"`
+	OverwriteSubStatus bool     `json:"overwrite_subscription_status"`
+	Delim              string   `json:"delim"`
+	ListIDs            []int    `json:"lists"`
+	ListRecordIDs      []string `json:"list_record_ids"`
 }
 
 // Status represents statistics from an ongoing import session.
@@ -156,6 +158,7 @@ type Status struct {
 type SubReq struct {
 	models.Subscriber
 	Lists          []int    `json:"lists"`
+	ListRecordIDs  []string `json:"list_record_ids"`
 	ListUUIDs      []string `json:"list_uuids"`
 	PreconfirmSubs bool     `json:"preconfirm_subscriptions"`
 }
@@ -331,11 +334,22 @@ func (s *Session) Start() {
 	copy(listIDs, s.opt.ListIDs)
 
 	var (
-		listIDsArg  any = pq.Array(listIDs)
-		listIDsJSON string
+		listIDsArg    any = pq.Array(listIDs)
+		listIDsJSON   string
+		listRecordIDs = append([]string(nil), s.opt.ListRecordIDs...)
 	)
 	if s.im.opt.UseJSONListArgs {
-		b, err := json.Marshal(listIDs)
+		if len(listRecordIDs) == 0 && s.im.opt.ResolveListIDs != nil {
+			listRecordIDs, err = s.im.opt.ResolveListIDs(listIDs)
+			if err != nil {
+				s.im.setStatus(StatusFailed)
+				s.log.Printf("error resolving list IDs: %v", err)
+				s.im.sendNotif(StatusFailed)
+				return
+			}
+		}
+
+		b, err := json.Marshal(listRecordIDs)
 		if err != nil {
 			s.im.setStatus(StatusFailed)
 			s.log.Printf("error marshaling list IDs: %v", err)
@@ -345,6 +359,8 @@ func (s *Session) Start() {
 		listIDsJSON = string(b)
 		listIDsArg = listIDsJSON
 	}
+	s.log.Printf("import session config: mode=%q sub_status=%q list_ids=%v list_record_ids=%v list_ids_json=%s overwrite_userinfo=%v overwrite_subscription_status=%v",
+		s.opt.Mode, s.opt.SubStatus, listIDs, listRecordIDs, listIDsJSON, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
 
 	for sub := range s.subQueue {
 		if cur == 0 {
@@ -372,6 +388,7 @@ func (s *Session) Start() {
 		if s.im.opt.UseJSONListArgs {
 			if s.opt.Mode == ModeSubscribe {
 				if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
+					s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
 					_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus)
 				}
 			} else if s.opt.Mode == ModeBlocklist {

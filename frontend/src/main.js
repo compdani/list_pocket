@@ -50,7 +50,7 @@ function createEventBus() {
 }
 
 const i18n = createI18n({
-  legacy: true,
+  legacy: false,
   locale: 'en',
   fallbackLocale: 'en',
   messages: {},
@@ -238,18 +238,20 @@ function isI18nSyntaxError(err) {
 }
 
 function withI18nFallback(methodName) {
-  const target = i18n.global[methodName];
+  const translate = methodName === 'tc'
+    ? (key, choice, named) => i18n.global.t(key, choice, named)
+    : i18n.global[methodName];
   const fallbackTarget = methodName === 'tc' ? i18n.global.t : null;
   let original = (key) => key;
-  if (typeof target === 'function') {
-    original = target.bind(i18n.global);
+  if (typeof translate === 'function') {
+    original = translate.bind(i18n.global);
   } else if (typeof fallbackTarget === 'function') {
     original = fallbackTarget.bind(i18n.global);
   }
 
   return (key, ...args) => {
     try {
-      if (methodName === 'tc' && typeof target !== 'function') {
+      if (methodName === 'tc' && typeof translate !== 'function') {
         return original(key);
       }
       return original(key, ...args);
@@ -267,6 +269,15 @@ function withI18nFallback(methodName) {
         : key;
     }
   };
+}
+
+function setI18nLocale(locale) {
+  if (typeof i18n.global.locale === 'string') {
+    i18n.global.locale = locale;
+    return;
+  }
+
+  i18n.global.locale.value = locale;
 }
 
 i18n.global.t = withI18nFallback('t');
@@ -312,8 +323,9 @@ async function initConfig(rootProxy) {
   const cfg = await api.getServerConfig();
   const { defaultMessages, localeMessages } = await loadLocaleMessages(cfg.lang);
   i18n.global.setLocaleMessage('en', defaultMessages);
-  i18n.global.locale = cfg.lang;
+  setI18nLocale(cfg.lang);
   i18n.global.setLocaleMessage(cfg.lang, localeMessages);
+  sharedUtils.updateRelativeTimeLocale();
 
   proxy.$utils = sharedUtils;
   proxy.$api = api;

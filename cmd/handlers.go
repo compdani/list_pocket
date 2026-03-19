@@ -71,14 +71,14 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.GET("/about", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetAboutInfo))
 
 	api.GET("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get")))
-	api.GET("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetSubscriber), "subscribers:get_all", "subscribers:get")))
-	api.GET("/subscribers/{id}/activity", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetSubscriberActivity), "subscribers:get_all", "subscribers:get")))
-	api.GET("/subscribers/{id}/export", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.ExportSubscriberData), "subscribers:get_all", "subscribers:get")))
-	api.GET("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetSubscriberBounces), "bounces:get")))
-	api.DELETE("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteSubscriberBounces), "bounces:manage")))
+	api.GET("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriber, "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/activity", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberActivity, "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/export", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.ExportSubscriberData, "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberBounces, "bounces:get")))
+	api.DELETE("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteSubscriberBounces, "bounces:manage")))
 	api.POST("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateSubscriber, "subscribers:manage")))
-	api.PUT("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateSubscriber), "subscribers:manage")))
-	api.POST("/subscribers/{id}/optin", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.SubscriberSendOptin), "subscribers:manage")))
+	api.PUT("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateSubscriber, "subscribers:manage")))
+	api.POST("/subscribers/{id}/optin", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.SubscriberSendOptin, "subscribers:manage")))
 	api.PUT("/subscribers/blocklist", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BlocklistSubscribers, "subscribers:manage")))
 	api.PUT("/subscribers/{first}/{second}", wrapEcho(a, tpl, cfg, urlCfg, []string{"first", "second"}, func(c echo.Context) error {
 		switch {
@@ -89,13 +89,13 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 		case c.Param("second") == "blocklist":
 			c.SetParamNames("id")
 			c.SetParamValues(c.Param("first"))
-			return pm(hasID(a.BlocklistSubscriber), "subscribers:manage")(c)
+			return pm(a.BlocklistSubscriber, "subscribers:manage")(c)
 		default:
 			return echo.NewHTTPError(http.StatusNotFound, "404 unknown endpoint")
 		}
 	}))
 	api.PUT("/subscribers/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ManageSubscriberLists, "subscribers:manage")))
-	api.DELETE("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteSubscriber), "subscribers:manage")))
+	api.DELETE("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteSubscriber, "subscribers:manage")))
 	api.DELETE("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteSubscribers, "subscribers:manage")))
 
 	api.GET("/bounces", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetBounces, "bounces:get")))
@@ -115,15 +115,15 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.DELETE("/import/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.StopImportSubscribers, "subscribers:import")))
 
 	api.GET("/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetLists))
-	api.GET("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.GetList)))
+	api.GET("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.GetList))
 	api.POST("/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateList, "lists:manage_all")))
-	api.PUT("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.UpdateList)))
+	api.PUT("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.UpdateList))
 	api.DELETE("/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, a.DeleteLists))
-	api.DELETE("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, hasID(a.DeleteList)))
+	api.DELETE("/lists/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, a.DeleteList))
 
 	api.GET("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetCampaigns, "campaigns:get_all", "campaigns:get")))
 	api.GET("/campaigns/running/stats", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetRunningCampaignStats, "campaigns:get_all", "campaigns:get")))
-	api.GET("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetCampaign), "campaigns:get_all", "campaigns:get")))
+	api.GET("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetCampaign, "campaigns:get_all", "campaigns:get")))
 	api.GET("/campaigns/{first}/{second}", wrapEcho(a, tpl, cfg, urlCfg, []string{"first", "second"}, func(c echo.Context) error {
 		switch {
 		case c.Param("first") == "analytics":
@@ -133,22 +133,22 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 		case c.Param("second") == "preview":
 			c.SetParamNames("id")
 			c.SetParamValues(c.Param("first"))
-			return pm(hasID(a.PreviewCampaign), "campaigns:get_all", "campaigns:get")(c)
+			return pm(a.PreviewCampaign, "campaigns:get_all", "campaigns:get")(c)
 		default:
 			return echo.NewHTTPError(http.StatusNotFound, "404 unknown endpoint")
 		}
 	}))
-	api.POST("/campaigns/{id}/preview/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewCampaignArchive), "campaigns:get_all", "campaigns:get")))
-	api.POST("/campaigns/{id}/preview", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewCampaign), "campaigns:get_all", "campaigns:get")))
-	api.POST("/campaigns/{id}/content", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.CampaignContent), "campaigns:manage_all", "campaigns:manage")))
-	api.POST("/campaigns/{id}/text", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewCampaign), "campaigns:get")))
-	api.POST("/campaigns/{id}/test", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.TestCampaign), "campaigns:manage_all", "campaigns:manage")))
+	api.POST("/campaigns/{id}/preview/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.PreviewCampaignArchive, "campaigns:get_all", "campaigns:get")))
+	api.POST("/campaigns/{id}/preview", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.PreviewCampaign, "campaigns:get_all", "campaigns:get")))
+	api.POST("/campaigns/{id}/content", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.CampaignContent, "campaigns:manage_all", "campaigns:manage")))
+	api.POST("/campaigns/{id}/text", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.PreviewCampaign, "campaigns:get")))
+	api.POST("/campaigns/{id}/test", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.TestCampaign, "campaigns:manage_all", "campaigns:manage")))
 	api.POST("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateCampaign, "campaigns:manage_all", "campaigns:manage")))
-	api.PUT("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateCampaign), "campaigns:manage_all", "campaigns:manage")))
-	api.PUT("/campaigns/{id}/status", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateCampaignStatus), "campaigns:manage_all", "campaigns:manage")))
-	api.PUT("/campaigns/{id}/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateCampaignArchive), "campaigns:manage_all", "campaigns:manage")))
+	api.PUT("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaign, "campaigns:manage_all", "campaigns:manage")))
+	api.PUT("/campaigns/{id}/status", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaignStatus, "campaigns:manage_all", "campaigns:manage")))
+	api.PUT("/campaigns/{id}/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaignArchive, "campaigns:manage_all", "campaigns:manage")))
 	api.DELETE("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteCampaigns, "campaigns:manage", "campaigns:manage_all")))
-	api.DELETE("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteCampaign), "campaigns:manage_all", "campaigns:manage")))
+	api.DELETE("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteCampaign, "campaigns:manage_all", "campaigns:manage")))
 
 	api.GET("/media", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetAllMedia, "media:get")))
 	api.GET("/media/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetMedia), "media:get")))

@@ -339,8 +339,8 @@ export const queryLists = (params) => http.get(
   },
 );
 
-export const getList = async (id) => http.get(
-  `/api/lists/${id}`,
+export const getList = async (idOrRecordId) => http.get(
+  `/api/lists/${idOrRecordId}`,
   { loading: models.list },
 );
 
@@ -351,13 +351,13 @@ export const createList = (data) => http.post(
 );
 
 export const updateList = (data) => http.put(
-  `/api/lists/${data.id}`,
+  `/api/lists/${data.record_id || data.id}`,
   data,
   { loading: models.lists },
 );
 
-export const deleteList = (id) => http.delete(
-  `/api/lists/${id}`,
+export const deleteList = (idOrRecordId) => http.delete(
+  `/api/lists/${idOrRecordId}`,
   { loading: models.lists },
 );
 
@@ -377,23 +377,23 @@ export const getSubscribers = async (params) => http.get(
   },
 );
 
-export const getSubscriber = async (id) => http.get(
-  `/api/subscribers/${id}`,
+export const getSubscriber = async (idOrRecordId) => http.get(
+  `/api/subscribers/${idOrRecordId}`,
   { loading: models.subscribers },
 );
 
-export const getSubscriberActivity = async (id) => http.get(
-  `/api/subscribers/${id}/activity`,
+export const getSubscriberActivity = async (idOrRecordId) => http.get(
+  `/api/subscribers/${idOrRecordId}/activity`,
   { loading: models.subscribers },
 );
 
-export const getSubscriberBounces = async (id) => http.get(
-  `/api/subscribers/${id}/bounces`,
+export const getSubscriberBounces = async (idOrRecordId) => http.get(
+  `/api/subscribers/${idOrRecordId}/bounces`,
   { loading: models.bounces },
 );
 
-export const deleteSubscriberBounces = async (id) => http.delete(
-  `/api/subscribers/${id}/bounces`,
+export const deleteSubscriberBounces = async (idOrRecordId) => http.delete(
+  `/api/subscribers/${idOrRecordId}/bounces`,
   { loading: models.bounces },
 );
 
@@ -419,19 +419,19 @@ export const createSubscriber = (data) => http.post(
 );
 
 export const updateSubscriber = (data) => http.put(
-  `/api/subscribers/${data.id}`,
+  `/api/subscribers/${data.record_id || data.id}`,
   data,
   { loading: models.subscribers },
 );
 
-export const sendSubscriberOptin = (id) => http.post(
-  `/api/subscribers/${id}/optin`,
+export const sendSubscriberOptin = (idOrRecordId) => http.post(
+  `/api/subscribers/${idOrRecordId}/optin`,
   {},
   { loading: models.subscribers },
 );
 
-export const deleteSubscriber = (id) => http.delete(
-  `/api/subscribers/${id}`,
+export const deleteSubscriber = (idOrRecordId) => http.delete(
+  `/api/subscribers/${idOrRecordId}`,
   { loading: models.subscribers },
 );
 
@@ -497,7 +497,7 @@ export const getCampaigns = async (params) => http.get('/api/campaigns', {
   camelCase: (keyPath) => !keyPath.startsWith('.results.*.headers'),
 });
 
-export const getCampaign = async (id) => http.get(`/api/campaigns/${id}`, {
+export const getCampaign = async (idOrRecordId) => http.get(`/api/campaigns/${idOrRecordId}`, {
   loading: models.campaigns,
   camelCase: (keyPath) => !keyPath.startsWith('.headers'),
 });
@@ -531,38 +531,38 @@ export const getCampaignLinkCounts = async (params) => http.get(
 );
 
 export const convertCampaignContent = async (data) => http.post(
-  `/api/campaigns/${data.id}/content`,
+  `/api/campaigns/${data.record_id || data.id}/content`,
   data,
   { loading: models.campaigns },
 );
 
 export const testCampaign = async (data) => http.post(
-  `/api/campaigns/${data.id}/test`,
+  `/api/campaigns/${data.record_id || data.id}/test`,
   data,
   { loading: models.campaigns },
 );
 
-export const updateCampaign = async (id, data) => http.put(
-  `/api/campaigns/${id}`,
+export const updateCampaign = async (idOrRecordId, data) => http.put(
+  `/api/campaigns/${idOrRecordId}`,
   data,
   { loading: models.campaigns },
 );
 
-export const changeCampaignStatus = async (id, status) => http.put(
-  `/api/campaigns/${id}/status`,
+export const changeCampaignStatus = async (idOrRecordId, status) => http.put(
+  `/api/campaigns/${idOrRecordId}/status`,
   { status },
 
   { loading: models.campaigns },
 );
 
-export const updateCampaignArchive = async (id, data) => http.put(
-  `/api/campaigns/${id}/archive`,
+export const updateCampaignArchive = async (idOrRecordId, data) => http.put(
+  `/api/campaigns/${idOrRecordId}/archive`,
   data,
   { loading: models.campaigns },
 );
 
-export const deleteCampaign = async (id) => http.delete(
-  `/api/campaigns/${id}`,
+export const deleteCampaign = async (idOrRecordId) => http.delete(
+  `/api/campaigns/${idOrRecordId}`,
   { loading: models.campaigns },
 );
 
