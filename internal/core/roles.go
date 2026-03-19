@@ -127,6 +127,24 @@ func sameStringSet(a, b []string) bool {
 	return true
 }
 
+func hasRolesLegacyIDIndex(col *pbcore.Collection) bool {
+	if col == nil {
+		return false
+	}
+
+	indexes := col.Indexes
+	for _, idx := range indexes {
+		def := strings.ToLower(strings.Join(strings.Fields(idx), " "))
+		if strings.Contains(def, "create unique index") &&
+			strings.Contains(def, " on `roles` ") &&
+			strings.Contains(def, "(legacy_id)") {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (c *Core) useSQLRoleStore() bool {
 	pb := c.db.PocketBase()
 	if pb == nil {
@@ -208,7 +226,9 @@ func (c *Core) ensureRolesCollection() error {
 		}
 
 		if changed {
-			col.AddIndex("idx_roles_legacy_id", true, "legacy_id", "")
+			if !hasRolesLegacyIDIndex(col) {
+				col.AddIndex("idx_roles_legacy_id", true, "legacy_id", "")
+			}
 			if err := pb.Save(col); err != nil {
 				return err
 			}
@@ -228,7 +248,9 @@ func (c *Core) ensureRolesCollection() error {
 		&pbcore.AutodateField{Name: "created", OnCreate: true},
 		&pbcore.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 	)
-	col.AddIndex("idx_roles_legacy_id", true, "legacy_id", "")
+	if !hasRolesLegacyIDIndex(col) {
+		col.AddIndex("idx_roles_legacy_id", true, "legacy_id", "")
+	}
 
 	return pb.Save(col)
 }

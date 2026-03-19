@@ -195,6 +195,13 @@ func (a *App) ExportSubscribers(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
+	if recordIDs := c.QueryParams()["subscriber_record_id"]; len(recordIDs) > 0 {
+		subIDs, err = a.core.ResolveSubscriberIDs(subIDs, recordIDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
+	}
 
 	// Filter by subscription status
 	subStatus := c.QueryParam("subscription_status")
@@ -517,6 +524,11 @@ func (a *App) DeleteSubscriber(c echo.Context) error {
 func (a *App) DeleteSubscribers(c echo.Context) error {
 	// Multiple IDs.
 	ids, err := parseStringIDs(c.Request().URL.Query()["id"])
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+	ids, err = a.core.ResolveSubscriberIDs(ids, c.Request().URL.Query()["subscriber_record_id"])
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))

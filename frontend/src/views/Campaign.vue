@@ -829,7 +829,7 @@ export default {
     sendTest() {
       const data = {
         id: this.data.id,
-        record_id: this.data.recordId || this.data.record_id,
+        record_id: this.data.recordId || this.data.record_id || this.data.id,
         name: this.form.name,
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
@@ -859,7 +859,7 @@ export default {
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
         list_record_ids: this.form.lists
-          .map((l) => l.recordId || l.record_id)
+          .map((l) => l.recordId || l.record_id || l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         content_type: this.form.content.contentType,
@@ -885,7 +885,7 @@ export default {
         subject: this.form.subject,
         lists: this.form.lists.map((l) => l.id),
         list_record_ids: this.form.lists
-          .map((l) => l.recordId || l.record_id)
+          .map((l) => l.recordId || l.record_id || l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         messenger: this.form.messenger,
@@ -1022,8 +1022,8 @@ export default {
       return Array.isArray(this.lists && this.lists.results)
         ? this.lists.results.map((list) => ({
           ...list,
-          listValue: typeof list.record_id === 'string' && list.record_id.length > 0
-            ? list.record_id
+          listValue: typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
+            ? (list.recordId || list.record_id || list.id)
             : String(list.id),
         }))
         : [];
@@ -1032,8 +1032,8 @@ export default {
     selectedListIds() {
       return Array.isArray(this.form.lists)
         ? this.form.lists.map((list) => (
-          typeof list.record_id === 'string' && list.record_id.length > 0
-            ? list.record_id
+          typeof (list.recordId || list.record_id || list.id) === 'string' && (list.recordId || list.record_id || list.id).length > 0
+            ? (list.recordId || list.record_id || list.id)
             : String(list.id)
         ))
         : [];
