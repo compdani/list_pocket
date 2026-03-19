@@ -108,8 +108,8 @@ type Config struct {
 			ClientID          string `koanf:"client_id"`
 			ClientSecret      string `koanf:"client_secret"`
 			AutoCreateUsers   bool   `koanf:"auto_create_users"`
-			DefaultUserRoleID int    `koanf:"default_user_role_id"`
-			DefaultListRoleID int    `koanf:"default_list_role_id"`
+			DefaultUserRoleID string `koanf:"default_user_role_id"`
+			DefaultListRoleID string `koanf:"default_list_role_id"`
 		} `koanf:"oidc"`
 
 		Captcha struct {

@@ -59,8 +59,8 @@ type Settings struct {
 		ClientID          string   `json:"client_id"`
 		ClientSecret      string   `json:"client_secret"`
 		AutoCreateUsers   bool     `json:"auto_create_users"`
-		DefaultUserRoleID null.Int `json:"default_user_role_id"`
-		DefaultListRoleID null.Int `json:"default_list_role_id"`
+		DefaultUserRoleID null.String `json:"default_user_role_id"`
+		DefaultListRoleID null.String `json:"default_list_role_id"`
 	} `json:"security.oidc"`
 
 	SecurityCORSOrigins []string `json:"security.cors_origins"`

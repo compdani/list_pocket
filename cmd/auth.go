@@ -449,9 +449,22 @@ func (a *App) createOIDCUser(claims auth.OIDCclaim, c echo.Context) (auth.User, 
 		name = strings.Split(claims.Email, "@")[0]
 	}
 
-	var listRoleID *int
-	if a.cfg.Security.OIDC.DefaultListRoleID > 0 {
-		listRoleID = &a.cfg.Security.OIDC.DefaultListRoleID
+	var (
+		listRoleID  *int
+		listRoleRec string
+	)
+	if strings.TrimSpace(a.cfg.Security.OIDC.DefaultListRoleID) != "" {
+		id, err := a.core.ResolveRoleLegacyID(a.cfg.Security.OIDC.DefaultListRoleID)
+		if err != nil {
+			return auth.User{}, err
+		}
+		listRoleID = &id
+		listRoleRec = a.cfg.Security.OIDC.DefaultListRoleID
+	}
+
+	userRoleID, err := a.core.ResolveRoleLegacyID(a.cfg.Security.OIDC.DefaultUserRoleID)
+	if err != nil {
+		return auth.User{}, err
 	}
 
 	user, err := a.core.CreateUser(auth.User{
@@ -461,8 +474,10 @@ func (a *App) createOIDCUser(claims auth.OIDCclaim, c echo.Context) (auth.User, 
 		Username:      claims.Email,
 		Name:          name,
 		Email:         null.NewString(claims.Email, true),
-		UserRoleID:    a.cfg.Security.OIDC.DefaultUserRoleID,
+		UserRoleID:    userRoleID,
+		UserRoleRecID: a.cfg.Security.OIDC.DefaultUserRoleID,
 		ListRoleID:    listRoleID,
+		ListRoleRecID: listRoleRec,
 		Status:        auth.UserStatusEnabled,
 	})
 

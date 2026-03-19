@@ -38,8 +38,8 @@ type OIDCConfig struct {
 	ClientID          string `json:"client_id"`
 	ClientSecret      string `json:"client_secret"`
 	AutoCreateUsers   bool   `json:"auto_create_users"`
-	DefaultUserRoleID int    `json:"default_user_role_id"`
-	DefaultListRoleID int    `json:"default_list_role_id"`
+	DefaultUserRoleID string `json:"default_user_role_id"`
+	DefaultListRoleID string `json:"default_list_role_id"`
 }
 
 type BasicAuthConfig struct {
