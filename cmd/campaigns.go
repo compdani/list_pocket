@@ -69,12 +69,19 @@ func (a *App) GetCampaigns(c echo.Context) error {
 	var (
 		hasAllPerm     = user.HasPerm(auth.PermCampaignsGetAll)
 		permittedLists []int
+		err            error
 	)
 
 	if !hasAllPerm {
 		// Either the user has campaigns:get_all permissions and can view all campaigns,
 		// or the campaigns are filtered by the lists the user has get|manage access to.
-		hasAllPerm, permittedLists = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
+		permittedRecordIDs := []string{}
+		hasAllPerm, permittedRecordIDs = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
+		permittedLists, err = a.core.ResolveListIDs(nil, permittedRecordIDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
 	}
 
 	var (
@@ -280,12 +287,13 @@ func (a *App) CreateCampaign(c echo.Context) error {
 
 	// Filter lists against the current user's permitted lists.
 	user := auth.GetUser(c)
-	resolvedListIDs, err := a.core.ResolveListIDs(o.ListIDs, o.ListRecordIDs)
+	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListRecordIDs)
+	resolvedListIDs, err := a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	o.ListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, resolvedListIDs)
+	o.ListIDs = resolvedListIDs
 	a.log.Printf("create campaign: filtered lists username=%q role_id=%d permitted_list_ids=%v", user.Username, user.UserRoleID, o.ListIDs)
 
 	// If the campaign's 'opt-in', prepare a default message.
@@ -368,12 +376,12 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	a.log.Printf("update campaign: received record_id=%q name=%q status=%q content_type=%q list_ids=%v media_ids=%v archive=%v",
 		recordID, o.Name, cm.Status, o.ContentType, o.ListIDs, o.MediaIDs, o.Archive)
 
-	resolvedListIDs, err := a.core.ResolveListIDs(o.ListIDs, o.ListRecordIDs)
+	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListRecordIDs)
+	o.ListIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	o.ListIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, resolvedListIDs)
 
 	if c, err := a.validateCampaignFields(o); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
@@ -494,12 +502,19 @@ func (a *App) DeleteCampaigns(c echo.Context) error {
 	var (
 		hasAllPerm     = user.HasPerm(auth.PermCampaignsManageAll)
 		permittedLists []int
+		err            error
 	)
 
 	if !hasAllPerm {
 		// Either the user has campaigns:manage_all permissions and can manage all campaigns,
 		// or the campaigns are filtered by the lists the user has get|manage access to.
-		hasAllPerm, permittedLists = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
+		permittedRecordIDs := []string{}
+		hasAllPerm, permittedRecordIDs = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
+		permittedLists, err = a.core.ResolveListIDs(nil, permittedRecordIDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
 	}
 
 	var (
@@ -862,7 +877,12 @@ func (a *App) checkCampaignPerm(types auth.PermType, recordID string, c echo.Con
 	// blanket get_all/manage_all list permissions. If yes, then the user can access
 	// all campaigns. If there are no *_all permissions, then ensure that the
 	// campaign belongs to the lists that the user has access to.
-	if hasAllPerm, permittedListIDs := user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage); !hasAllPerm {
+	if hasAllPerm, permittedListRecordIDs := user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage); !hasAllPerm {
+		permittedListIDs, err := a.core.ResolveListIDs(nil, permittedListRecordIDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
 		if ok, err := a.core.CampaignHasLists(recordID, permittedListIDs); err != nil {
 			return err
 		} else if !ok {

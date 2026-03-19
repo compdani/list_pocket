@@ -194,8 +194,8 @@ func (c *Core) ensureRolesCollection() error {
 			col.Fields.Add(&pbcore.TextField{Name: "parent_id"})
 			changed = true
 		}
-		if col.Fields.GetByName("list_id") == nil {
-			col.Fields.Add(&pbcore.NumberField{Name: "list_id", OnlyInt: true})
+		if col.Fields.GetByName("list_record_id") == nil {
+			col.Fields.Add(&pbcore.TextField{Name: "list_record_id"})
 			changed = true
 		}
 		if col.Fields.GetByName("created") == nil {
@@ -224,7 +224,7 @@ func (c *Core) ensureRolesCollection() error {
 		&pbcore.TextField{Name: "name"},
 		&pbcore.JSONField{Name: "permissions"},
 		&pbcore.TextField{Name: "parent_id"},
-		&pbcore.NumberField{Name: "list_id", OnlyInt: true},
+		&pbcore.TextField{Name: "list_record_id"},
 		&pbcore.AutodateField{Name: "created", OnCreate: true},
 		&pbcore.AutodateField{Name: "updated", OnCreate: true, OnUpdate: true},
 	)
@@ -347,9 +347,9 @@ func (c *Core) GetListRoles() ([]auth.ListRole, error) {
 			c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", err.Error()))
 	}
 
-	listNames := map[int]string{}
+	listNames := map[string]string{}
 	rows := []struct {
-		ID   int    `db:"id"`
+		ID   string `db:"id"`
 		Name string `db:"name"`
 	}{}
 	if err := c.db.Select(&rows, "SELECT id, name FROM lists"); err == nil {
@@ -381,8 +381,8 @@ func (c *Core) GetListRoles() ([]auth.ListRole, error) {
 			continue
 		}
 
-		listID := parseIntVal(rec.Get("list_id"))
-		if listID <= 0 {
+		listID := strings.TrimSpace(rec.GetString("list_record_id"))
+		if listID == "" {
 			continue
 		}
 
@@ -593,17 +593,17 @@ func (c *Core) UpsertListPermissions(roleID int, lp []auth.ListPermission) error
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
 	}
 
-	byListID := map[int]*pbcore.Record{}
+	byListID := map[string]*pbcore.Record{}
 	for _, child := range children {
-		listID := parseIntVal(child.Get("list_id"))
-		if listID > 0 {
+		listID := strings.TrimSpace(child.GetString("list_record_id"))
+		if listID != "" {
 			byListID[listID] = child
 		}
 	}
 
-	keep := map[int]struct{}{}
+	keep := map[string]struct{}{}
 	for _, permission := range lp {
-		if permission.ID <= 0 || len(permission.Permissions) == 0 {
+		if strings.TrimSpace(permission.ID) == "" || len(permission.Permissions) == 0 {
 			continue
 		}
 
@@ -618,7 +618,7 @@ func (c *Core) UpsertListPermissions(roleID int, lp []auth.ListPermission) error
 			rec = pbcore.NewRecord(col)
 			rec.Set("type", auth.RoleTypeList)
 			rec.Set("parent_id", parent.Id)
-			rec.Set("list_id", permission.ID)
+			rec.Set("list_record_id", permission.ID)
 		}
 
 		rec.Set("permissions", []string(permission.Permissions))
@@ -642,7 +642,7 @@ func (c *Core) UpsertListPermissions(roleID int, lp []auth.ListPermission) error
 }
 
 // DeleteListPermission deletes a list permission entry from a role.
-func (c *Core) DeleteListPermission(roleID, listID int) error {
+func (c *Core) DeleteListPermission(roleID int, listID string) error {
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -661,7 +661,7 @@ func (c *Core) DeleteListPermission(roleID, listID int) error {
 	}
 
 	for _, child := range children {
-		if parseIntVal(child.Get("list_id")) != listID {
+		if strings.TrimSpace(child.GetString("list_record_id")) != listID {
 			continue
 		}
 

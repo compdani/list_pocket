@@ -26,7 +26,7 @@
               <div class="column is-9">
                 <b-select :placeholder="$tc('globals.terms.list')" v-model="form.curList" name="list"
                   :disabled="disabled || filteredLists.length < 1" expanded class="mb-3">
-                  <option v-for="l in filteredLists" :key="l.id" :value="l.id">
+                  <option v-for="l in filteredLists" :key="l.recordId || l.record_id || l.id" :value="l.recordId || l.record_id || l.id">
                     {{ l.name }}
                   </option>
                 </b-select>
@@ -153,15 +153,15 @@ export default {
 
   methods: {
     onAddListPerm() {
-      const list = this.lists.results.find((l) => l.id === this.form.curList);
-      this.form.lists.push({ id: list.id, name: list.name, permissions: ['list:get', 'list:manage'] });
+      const list = this.lists.results.find((l) => (l.recordId || l.record_id || l.id) === this.form.curList);
+      this.form.lists.push({ id: list.recordId || list.record_id || list.id, name: list.name, permissions: ['list:get', 'list:manage'] });
 
-      this.form.curList = (this.filteredLists.length > 0) ? this.filteredLists[0].id : null;
+      this.form.curList = (this.filteredLists.length > 0) ? (this.filteredLists[0].recordId || this.filteredLists[0].record_id || this.filteredLists[0].id) : null;
     },
 
     onDeleteListPerm(id) {
       this.form.lists = this.form.lists.filter((p) => p.id !== id);
-      this.form.curList = (this.filteredLists.length > 0) ? this.filteredLists[0].id : null;
+      this.form.curList = (this.filteredLists.length > 0) ? (this.filteredLists[0].recordId || this.filteredLists[0].record_id || this.filteredLists[0].id) : null;
     },
 
     onSubmit() {
@@ -243,7 +243,7 @@ export default {
       }
 
       const subIDs = this.form.lists.reduce((obj, item) => ({ ...obj, [item.id]: true }), {});
-      return this.lists.results.filter((l) => (!(l.id in subIDs)));
+      return this.lists.results.filter((l) => !((l.recordId || l.record_id || l.id) in subIDs));
     },
 
   },
@@ -273,7 +273,7 @@ export default {
 
     this.$nextTick(() => {
       if (this.filteredLists.length > 0) {
-        this.form.curList = this.filteredLists[0].id;
+        this.form.curList = this.filteredLists[0].recordId || this.filteredLists[0].record_id || this.filteredLists[0].id;
       }
       this.$refs.focus.focus();
     });

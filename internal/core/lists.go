@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/compdani/list_pocket/models"
@@ -62,6 +63,35 @@ func sqliteListRowsToModels(rows []sqliteListRow) []models.List {
 		})
 	}
 	return out
+}
+
+func (c *Core) ResolveListRecordIDs(listIDs []int) ([]string, error) {
+	if len(listIDs) == 0 {
+		return []string{}, nil
+	}
+
+	if c.isSQLite() {
+		query := `SELECT id FROM lists WHERE rowid IN (` + sqlitePlaceholders(len(listIDs)) + `)`
+		args := make([]any, 0, len(listIDs))
+		for _, id := range listIDs {
+			args = append(args, id)
+		}
+
+		var out []string
+		if err := c.db.Select(&out, query, args...); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
+	out := make([]string, 0, len(listIDs))
+	for _, id := range listIDs {
+		if id > 0 {
+			out = append(out, strconv.Itoa(id))
+		}
+	}
+
+	return out, nil
 }
 
 // GetLists gets all lists optionally filtered by type and status.
@@ -131,10 +161,10 @@ func (c *Core) QueryLists(searchStr, typ, optin, status string, tags []string, o
 	return out, total, nil
 }
 
-// GetList gets a list by its ID or UUID.
-func (c *Core) GetList(id int, uuid string) (models.List, error) {
+// GetList gets a list by its record ID or UUID.
+func (c *Core) GetList(recordID, uuid string) (models.List, error) {
 	if c.isSQLite() {
-		return c.getListSQLite(id, uuid)
+		return c.getListSQLite(recordID, uuid)
 	}
 
 	var uu any
@@ -144,7 +174,7 @@ func (c *Core) GetList(id int, uuid string) (models.List, error) {
 
 	var res []models.List
 	queryStr, stmt := makeSearchQuery("", "", "", c.q.QueryLists, nil)
-	if err := c.db.Select(&res, stmt, id, uu, queryStr, "", "", "", pq.StringArray{}, true, nil, 0, 1); err != nil {
+	if err := c.db.Select(&res, stmt, recordID, uu, queryStr, "", "", "", pq.StringArray{}, true, nil, 0, 1); err != nil {
 		c.log.Printf("error fetching lists: %v", err)
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
@@ -335,7 +365,7 @@ func (c *Core) queryListsSQLite(searchStr, typ, optin, status string, tags []str
 	return out, total, nil
 }
 
-func (c *Core) getListSQLite(id int, uuid string) (models.List, error) {
+func (c *Core) getListSQLite(recordID, uuid string) (models.List, error) {
 	query := `
 	SELECT
 		l.rowid AS id,
@@ -367,9 +397,9 @@ func (c *Core) getListSQLite(id int, uuid string) (models.List, error) {
 	WHERE 1=1`
 
 	args := make([]any, 0, 2)
-	if id > 0 {
-		query += ` AND l.rowid = ?`
-		args = append(args, id)
+	if recordID != "" {
+		query += ` AND l.id = ?`
+		args = append(args, recordID)
 	}
 	if uuid != "" {
 		query += ` AND l.uuid = ?`
@@ -546,7 +576,7 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 		}
 
-		return c.GetList(0, l.UUID)
+		return c.GetList("", l.UUID)
 	}
 
 	// Insert and read ID.
@@ -557,11 +587,11 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
-	return c.GetList(newID, "")
+	return c.GetList("", l.UUID)
 }
 
 // UpdateList updates a given list.
-func (c *Core) UpdateList(id int, l models.List) (models.List, error) {
+func (c *Core) UpdateList(recordID string, l models.List) (models.List, error) {
 	if c.isSQLite() {
 		tags, err := json.Marshal(normalizeTags(l.Tags))
 		if err != nil {
@@ -579,8 +609,8 @@ func (c *Core) UpdateList(id int, l models.List) (models.List, error) {
 				tags=json(?),
 				description=(CASE WHEN ? != '' THEN ? ELSE description END),
 				updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
-			WHERE rowid = ?`,
-			l.Name, l.Name, l.Type, l.Type, l.Optin, l.Optin, l.Status, l.Status, string(tags), l.Description, l.Description, id)
+			WHERE id = ?`,
+			l.Name, l.Name, l.Type, l.Type, l.Optin, l.Optin, l.Status, l.Status, string(tags), l.Description, l.Description, recordID)
 		if err != nil {
 			c.log.Printf("error updating list: %v", err)
 			return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
@@ -592,10 +622,10 @@ func (c *Core) UpdateList(id int, l models.List) (models.List, error) {
 				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 		}
 
-		return c.GetList(id, "")
+		return c.GetList(recordID, "")
 	}
 
-	res, err := c.q.UpdateList.Exec(id, l.Name, l.Type, l.Optin, l.Status, pq.StringArray(normalizeTags(l.Tags)), l.Description)
+	res, err := c.q.UpdateList.Exec(recordID, l.Name, l.Type, l.Optin, l.Status, pq.StringArray(normalizeTags(l.Tags)), l.Description)
 	if err != nil {
 		c.log.Printf("error updating list: %v", err)
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
@@ -607,24 +637,24 @@ func (c *Core) UpdateList(id int, l models.List) (models.List, error) {
 			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 	}
 
-	return c.GetList(id, "")
+	return c.GetList(recordID, "")
 }
 
 // DeleteList deletes a list.
-func (c *Core) DeleteList(id int) error {
-	return c.DeleteLists([]int{id}, "", true, nil)
+func (c *Core) DeleteList(recordID string) error {
+	return c.DeleteLists([]string{recordID}, "", true, nil)
 }
 
 // DeleteLists deletes multiple lists.
-func (c *Core) DeleteLists(ids []int, query string, getAll bool, permittedIDs []int) error {
+func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permittedIDs []int) error {
 	if c.isSQLite() {
 		q := `DELETE FROM lists WHERE 1=1`
 		args := []any{}
 
-		if len(ids) > 0 {
-			q += ` AND rowid IN (` + sqlitePlaceholders(len(ids)) + `)`
-			for _, id := range ids {
-				args = append(args, id)
+		if len(recordIDs) > 0 {
+			q += ` AND id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
+			for _, recordID := range recordIDs {
+				args = append(args, recordID)
 			}
 		} else {
 			queryStr := strings.TrimSpace(query)
@@ -655,13 +685,13 @@ func (c *Core) DeleteLists(ids []int, query string, getAll bool, permittedIDs []
 
 	var queryStr string
 
-	if len(ids) > 0 {
+	if len(recordIDs) > 0 {
 		queryStr = ""
 	} else {
 		queryStr = makeSearchString(query)
 	}
 
-	if _, err := c.q.DeleteLists.Exec(pq.Array(ids), queryStr, getAll, pq.Array(permittedIDs)); err != nil {
+	if _, err := c.q.DeleteLists.Exec(pq.Array(recordIDs), queryStr, getAll, pq.Array(permittedIDs)); err != nil {
 		c.log.Printf("error deleting lists: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))

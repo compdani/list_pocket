@@ -115,14 +115,14 @@ type User struct {
 
 	ListRole           *ListRolePermissions        `db:"-" json:"list_role"`
 	PermissionsMap     map[string]struct{}         `db:"-" json:"-"`
-	ListPermissionsMap map[int]map[string]struct{} `db:"-" json:"-"`
-	GetListIDs         []int                       `db:"-" json:"-"`
-	ManageListIDs      []int                       `db:"-" json:"-"`
+	ListPermissionsMap map[string]map[string]struct{} `db:"-" json:"-"`
+	GetListIDs         []string                       `db:"-" json:"-"`
+	ManageListIDs      []string                       `db:"-" json:"-"`
 	HasPassword        bool                        `db:"-" json:"-"`
 }
 
 type ListPermission struct {
-	ID          int            `json:"id"`
+	ID          string         `json:"id"`
 	Name        string         `json:"name"`
 	Permissions pq.StringArray `json:"permissions"`
 }
@@ -170,7 +170,7 @@ func (u *User) HasPerm(perm string) bool {
 
 // HasListPerm checks if the user has get or manage access to the given list.
 // perm is either PermGet or PermManage.
-func (u *User) HasListPerm(types PermType, listIDs ...int) error {
+func (u *User) HasListPerm(types PermType, listIDs ...string) error {
 	var permAll, perm string
 
 	if types == 0 {
@@ -191,7 +191,7 @@ func (u *User) HasListPerm(types PermType, listIDs ...int) error {
 	}
 
 	for _, id := range listIDs {
-		if id > 0 {
+		if id != "" {
 			if !u.hasListPerm(perm, id) {
 				return ErrPermDenied
 			}
@@ -201,7 +201,7 @@ func (u *User) HasListPerm(types PermType, listIDs ...int) error {
 	return nil
 }
 
-func (u *User) hasListPerm(perm string, listID int) bool {
+func (u *User) hasListPerm(perm string, listID string) bool {
 	// Short-circuit if the user is the primordial super admin.
 	if u.UserRoleID == SuperAdminRoleID {
 		return true
@@ -219,7 +219,7 @@ func (u *User) hasListPerm(perm string, listID int) bool {
 // the given get / manage permissions. If the user has the blanket "*_all"
 // permission (or the user is a super admin), then the bool is set to true and
 // the list is nil as all lists are permitted.
-func (u *User) GetPermittedLists(types PermType) (bool, []int) {
+func (u *User) GetPermittedLists(types PermType) (bool, []string) {
 	if types == 0 {
 		return false, nil
 	}
@@ -251,7 +251,7 @@ func (u *User) GetPermittedLists(types PermType) (bool, []int) {
 		// If the user has per-list permissions, return that. Otherwise, let the
 		// 'manage' permission check run.
 		if len(u.GetListIDs) > 0 {
-			out := make([]int, len(u.GetListIDs))
+			out := make([]string, len(u.GetListIDs))
 			copy(out, u.GetListIDs)
 			return false, out
 		}
@@ -259,7 +259,7 @@ func (u *User) GetPermittedLists(types PermType) (bool, []int) {
 
 	if manage {
 		// User has per-list permissions.
-		out := make([]int, len(u.ManageListIDs))
+		out := make([]string, len(u.ManageListIDs))
 		copy(out, u.ManageListIDs)
 		return false, out
 	}
@@ -268,7 +268,7 @@ func (u *User) GetPermittedLists(types PermType) (bool, []int) {
 }
 
 // FilterListsByPerm returns list IDs filtered by either of the given perms.
-func (u *User) FilterListsByPerm(types PermType, listIDs []int) []int {
+func (u *User) FilterListsByPerm(types PermType, listIDs []string) []string {
 	if types == 0 {
 		return nil
 	}
@@ -296,7 +296,7 @@ func (u *User) FilterListsByPerm(types PermType, listIDs []int) []int {
 		}
 	}
 
-	out := make([]int, 0, len(listIDs))
+	out := make([]string, 0, len(listIDs))
 	for _, id := range listIDs {
 		// Check if it exists in the map.
 		if l, ok := u.ListPermissionsMap[id]; ok {

@@ -278,7 +278,12 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	listIDs = user.FilterListsByPerm(auth.PermTypeManage, listIDs)
+	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeManage, req.ListRecordIDs)
+	listIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
 	a.log.Printf("create subscriber: email=%q phone=%q first_name=%q last_name=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
 		req.Email, req.Phone, req.FirstName, req.LastName, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
 
@@ -337,7 +342,12 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	listIDs = user.FilterListsByPerm(auth.PermTypeManage, listIDs)
+	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeManage, req.ListRecordIDs)
+	listIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
 
 	// Update the subscriber in the DB.
 	id, err := a.resolveSubscriberRouteID(c)
@@ -457,7 +467,12 @@ func (a *App) ManageSubscriberLists(c echo.Context) error {
 	}
 
 	// Filter lists against the current user's permitted lists.
-	listIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, targetListIDs)
+	listRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, req.TargetListRecordIDs)
+	listIDs, err := a.core.ResolveListIDs(nil, listRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
 
 	// User doesn't have the required list permissions.
 	if len(listIDs) == 0 {
@@ -624,11 +639,6 @@ func (a *App) ManageSubscriberListsByQuery(c echo.Context) error {
 		}
 	}
 
-	resolvedSourceListIDs, err := a.core.ResolveListIDs(req.ListIDs, req.ListRecordIDs)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
 	resolvedTargetListIDs, err := a.core.ResolveListIDs(req.TargetListIDs, req.TargetListRecordIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
@@ -640,8 +650,18 @@ func (a *App) ManageSubscriberListsByQuery(c echo.Context) error {
 	}
 
 	// Filter lists against the current user's permitted lists.
-	sourceListIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, resolvedSourceListIDs)
-	targetListIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, resolvedTargetListIDs)
+	sourceListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, req.ListRecordIDs)
+	targetListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, req.TargetListRecordIDs)
+	sourceListIDs, err := a.core.ResolveListIDs(nil, sourceListRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+	targetListIDs, err := a.core.ResolveListIDs(nil, targetListRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
 
 	// Run the action in the DB.
 	switch req.Action {
@@ -738,7 +758,7 @@ func (a *App) exportSubscriberData(id int, subUUID string, exportables map[strin
 // hasSubPerm checks whether the current user has permission to access the given list
 // of subscriber IDs.
 func (a *App) hasSubPerm(u auth.User, subIDs []int) error {
-	allPerm, listIDs := u.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
+	allPerm, listRecordIDs := u.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
 
 	// User has blanket get_all|manage_all permission.
 	if allPerm {
@@ -746,6 +766,10 @@ func (a *App) hasSubPerm(u auth.User, subIDs []int) error {
 	}
 
 	// Check whether the subscribers have the list IDs permitted to the user.
+	listIDs, err := a.core.ResolveListIDs(nil, listRecordIDs)
+	if err != nil {
+		return err
+	}
 	res, err := a.core.HasSubscriberLists(subIDs, listIDs)
 	if err != nil {
 		return err
@@ -762,7 +786,10 @@ func (a *App) hasSubPerm(u auth.User, subIDs []int) error {
 
 // filterListQueryByPerm filters the list IDs in the query params and returns the list IDs to which the user has access.
 func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User) ([]int, error) {
-	var listIDs []int
+	var (
+		listIDs []int
+		err     error
+	)
 	recordParam := param
 	intParam := param
 	if strings.Contains(param, "_record_id") {
@@ -790,7 +817,15 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 				}
 				ids = append(ids, resolvedIDs...)
 			}
-			filtered := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, ids)
+			recordIDs, err := a.core.ResolveListRecordIDs(ids)
+			if err != nil {
+				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			}
+			filteredRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, recordIDs)
+			filtered, err := a.core.ResolveListIDs(nil, filteredRecordIDs)
+			if err != nil {
+				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			}
 			if len(filtered) == 0 && (qp.Has(intParam) || qp.Has(recordParam)) {
 				return []int{-1}, nil
 			}
@@ -818,7 +853,15 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 			ids = append(ids, resolvedIDs...)
 		}
 
-		listIDs = user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, ids)
+		recordIDs, err := a.core.ResolveListRecordIDs(ids)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		}
+		filteredRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, recordIDs)
+		listIDs, err = a.core.ResolveListIDs(nil, filteredRecordIDs)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		}
 	}
 
 	// There are no incoming params. If the user doesn't have permission to get all subscribers,
@@ -826,7 +869,10 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 	if len(listIDs) == 0 {
 		if _, ok := user.PermissionsMap[auth.PermSubscribersGetAll]; !ok {
 			if len(user.GetListIDs) > 0 {
-				listIDs = user.GetListIDs
+				listIDs, err = a.core.ResolveListIDs(nil, user.GetListIDs)
+				if err != nil {
+					return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+				}
 			} else {
 				// User doesn't have access to any lists.
 				listIDs = []int{-1}

@@ -505,7 +505,7 @@ func (c *Core) setupUserFields(users []auth.User) []auth.User {
 		u.UserRole.Permissions = u.UserRolePerms
 
 		// Prepare lookup maps.
-		u.ListPermissionsMap = make(map[int]map[string]struct{})
+		u.ListPermissionsMap = make(map[string]map[string]struct{})
 		u.PermissionsMap = make(map[string]struct{})
 		for _, p := range u.UserRolePerms {
 			u.PermissionsMap[p] = struct{}{}

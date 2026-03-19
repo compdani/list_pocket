@@ -10,17 +10,22 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (a *App) resolveListRouteID(c echo.Context) (int, error) {
-	rawID := strings.TrimSpace(c.Param("id"))
-	if rawID == "" {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+func (a *App) resolveListRouteID(c echo.Context) (string, error) {
+	recordID := strings.TrimSpace(c.Param("id"))
+	if recordID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
 
-	if id, err := strconv.Atoi(rawID); err == nil && id > 0 {
-		return id, nil
+	return recordID, nil
+}
+
+func (a *App) resolveListRoutePermID(c echo.Context) (int, error) {
+	recordID, err := a.resolveListRouteID(c)
+	if err != nil {
+		return 0, err
 	}
 
-	ids, err := a.core.ResolveListIDs(nil, []string{rawID})
+	ids, err := a.core.ResolveListIDs(nil, []string{recordID})
 	if err != nil {
 		return 0, echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
@@ -47,7 +52,11 @@ func (a *App) GetLists(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	// Get the list IDs (or blanket permission) the user has access to.
-	hasAllPerm, permittedIDs := user.GetPermittedLists(auth.PermTypeGet)
+	hasAllPerm, permittedRecordIDs := user.GetPermittedLists(auth.PermTypeGet)
+	permittedIDs, err := a.resolveListRequestIDs(nil, permittedRecordIDs)
+	if err != nil {
+		return err
+	}
 
 	// Minimal query simply returns the list of all lists without JOIN subscriber counts. This is fast.
 	minimal, _ := strconv.ParseBool(c.FormValue("minimal"))
@@ -108,16 +117,16 @@ func (a *App) GetList(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	// Check if the user has access to the list.
-	id, err := a.resolveListRouteID(c)
+	recordID, err := a.resolveListRouteID(c)
 	if err != nil {
 		return err
 	}
-	if err := user.HasListPerm(auth.PermTypeGet, id); err != nil {
+	if err := user.HasListPerm(auth.PermTypeGet, recordID); err != nil {
 		return err
 	}
 
 	// Get the list from the DB.
-	out, err := a.core.GetList(id, "")
+	out, err := a.core.GetList(recordID, "")
 	if err != nil {
 		return err
 	}
@@ -152,11 +161,11 @@ func (a *App) UpdateList(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	// Check if the user has access to the list.
-	id, err := a.resolveListRouteID(c)
+	recordID, err := a.resolveListRouteID(c)
 	if err != nil {
 		return err
 	}
-	if err := user.HasListPerm(auth.PermTypeManage, id); err != nil {
+	if err := user.HasListPerm(auth.PermTypeManage, recordID); err != nil {
 		return err
 	}
 
@@ -172,7 +181,7 @@ func (a *App) UpdateList(c echo.Context) error {
 	}
 
 	// Update the list in the DB.
-	out, err := a.core.UpdateList(id, l)
+	out, err := a.core.UpdateList(recordID, l)
 	if err != nil {
 		return err
 	}
@@ -182,20 +191,19 @@ func (a *App) UpdateList(c echo.Context) error {
 
 // DeleteList deletes a single list by ID.
 func (a *App) DeleteList(c echo.Context) error {
-	id, err := a.resolveListRouteID(c)
+	recordID, err := a.resolveListRouteID(c)
 	if err != nil {
 		return err
 	}
-
 	// Check if the user has manage permission for the list.
 	user := auth.GetUser(c)
-	if err := user.HasListPerm(auth.PermTypeManage, id); err != nil {
+	if err := user.HasListPerm(auth.PermTypeManage, recordID); err != nil {
 		return err
 	}
 
 	// Delete the list from the DB.
 	// Pass getAll=true since we've already verified permissions above.
-	if err := a.core.DeleteLists([]int{id}, "", true, nil); err != nil {
+	if err := a.core.DeleteLists([]string{recordID}, "", true, nil); err != nil {
 		return err
 	}
 
@@ -207,54 +215,42 @@ func (a *App) DeleteLists(c echo.Context) error {
 	user := auth.GetUser(c)
 
 	var (
-		ids       []int
 		recordIDs []string
 		query     string
 		all       bool
 	)
 
-	// Check for IDs in query params.
-	if len(c.Request().URL.Query()["id"]) > 0 {
-		var err error
-		ids, err = parseStringIDs(c.Request().URL.Query()["id"])
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-		}
-		recordIDs = c.Request().URL.Query()["record_id"]
+	if len(c.Request().URL.Query()["record_id"]) > 0 {
+		recordIDs = getQueryStrings("record_id", c.Request().URL.Query())
 	} else {
-		// Check for query param.
 		query = strings.TrimSpace(c.FormValue("query"))
 		all = c.FormValue("all") == "true"
-		recordIDs = c.Request().URL.Query()["record_id"]
 	}
-
-	resolvedIDs, err := a.resolveListRequestIDs(ids, recordIDs)
-	if err != nil {
-		return err
-	}
-	ids = resolvedIDs
 
 	// Validate that either IDs or query is provided.
-	if len(ids) == 0 && (query == "" && !all) {
+	if len(recordIDs) == 0 && (query == "" && !all) {
 		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "id or record_id or query required"))
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "record_id or query required"))
 	}
 
 	// For ID deletion, check if the user has manage permission for the specific lists.
-	if len(ids) > 0 {
-		if err := user.HasListPerm(auth.PermTypeManage, ids...); err != nil {
+	if len(recordIDs) > 0 {
+		if err := user.HasListPerm(auth.PermTypeManage, recordIDs...); err != nil {
 			return err
 		}
 
 		// Delete the lists from the DB.
 		// Pass getAll=true since we've already verified permissions above.
-		if err := a.core.DeleteLists(ids, "", true, nil); err != nil {
+		if err := a.core.DeleteLists(recordIDs, "", true, nil); err != nil {
 			return err
 		}
 	} else {
 		// For query deletion, get the list IDs the user has manage permission for.
-		hasAllPerm, permittedIDs := user.GetPermittedLists(auth.PermTypeManage)
+		hasAllPerm, permittedRecordIDs := user.GetPermittedLists(auth.PermTypeManage)
+		permittedIDs, err := a.resolveListRequestIDs(nil, permittedRecordIDs)
+		if err != nil {
+			return err
+		}
 
 		// Delete the lists from the DB with permission filtering.
 		if err := a.core.DeleteLists(nil, query, hasAllPerm, permittedIDs); err != nil {
