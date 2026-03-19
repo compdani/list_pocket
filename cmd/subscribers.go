@@ -803,31 +803,14 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 		err     error
 	)
 	recordParam := param
-	intParam := param
-	if strings.Contains(param, "_record_id") {
-		intParam = strings.Replace(param, "_record_id", "_id", 1)
-	} else {
-		recordParam = strings.Replace(param, "_id", "_record_id", 1)
-	}
 
 	// Primordial super admin and users with blanket subscriber access should never
 	// be forced into a list-scoped fallback filter.
 	if user.UserRoleID == auth.SuperAdminRoleID || user.HasPerm(auth.PermSubscribersGetAll) {
-		if qp.Has(intParam) || qp.Has(recordParam) {
-			ids := []int{}
-			if qp.Has(intParam) {
-				parsedIDs, err := getQueryInts(intParam, qp)
-				if err != nil {
-					return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-				}
-				ids = append(ids, parsedIDs...)
-			}
-			if qp.Has(recordParam) {
-				resolvedIDs, err := a.core.ResolveListIDs(nil, qp[recordParam])
-				if err != nil {
-					return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-				}
-				ids = append(ids, resolvedIDs...)
+		if qp.Has(recordParam) {
+			ids, err := a.core.ResolveListIDs(nil, qp[recordParam])
+			if err != nil {
+				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 			}
 			recordIDs, err := a.core.ResolveListRecordIDs(ids)
 			if err != nil {
@@ -838,7 +821,7 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 			if err != nil {
 				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 			}
-			if len(filtered) == 0 && (qp.Has(intParam) || qp.Has(recordParam)) {
+			if len(filtered) == 0 && qp.Has(recordParam) {
 				return []int{-1}, nil
 			}
 			return filtered, nil
@@ -848,23 +831,11 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 	}
 
 	// If there are incoming list query params, filter them by permission.
-	if qp.Has(intParam) || qp.Has(recordParam) {
-		ids := []int{}
-		if qp.Has(intParam) {
-			parsedIDs, err := getQueryInts(intParam, qp)
-			if err != nil {
-				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-			}
-			ids = append(ids, parsedIDs...)
+	if qp.Has(recordParam) {
+		ids, err := a.core.ResolveListIDs(nil, qp[recordParam])
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 		}
-		if qp.Has(recordParam) {
-			resolvedIDs, err := a.core.ResolveListIDs(nil, qp[recordParam])
-			if err != nil {
-				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-			}
-			ids = append(ids, resolvedIDs...)
-		}
-
 		recordIDs, err := a.core.ResolveListRecordIDs(ids)
 		if err != nil {
 			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))

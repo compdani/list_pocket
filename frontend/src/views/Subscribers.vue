@@ -150,7 +150,7 @@
               {{ item.phone }}
             </div>
             <div class="tag-list">
-              <router-link v-for="l in item.lists" :key="l.id" :to="`/subscribers/lists/${l.recordId || l.record_id || l.id}`">
+              <router-link v-for="l in item.lists" :key="l.id" :to="`/subscribers/lists/${l.id}`">
                 <b-tag :class="l.subscriptionStatus" size="is-small">
                   {{ l.name }}
                   <sup v-if="l.optin === 'double' || l.subscriptionStatus === 'unsubscribed'">
@@ -323,7 +323,7 @@ export default {
         return '';
       }
 
-      return subscriber.recordId || subscriber.record_id || String(subscriber.id || '');
+      return String(subscriber.id || '');
     },
 
     // Count the lists from which a subscriber has not unsubscribed.
@@ -536,7 +536,7 @@ export default {
       this.$utils.confirm(
         null,
         () => {
-          this.$api.deleteSubscriber(sub.record_id || sub.recordId || sub.id).then(() => {
+          this.$api.deleteSubscriber(sub.id).then(() => {
             this.querySubscribers();
 
             this.$utils.toast(this.$t('globals.messages.deleted', { name: sub.name }));
@@ -683,7 +683,7 @@ export default {
         search: this.queryParams.search,
         list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
         target_list_record_ids: lists
-          .map((l) => l.record_id || String(l.id))
+          .map((l) => l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
       };
 
@@ -761,7 +761,7 @@ export default {
         return 'subscriber-form-hidden';
       }
 
-      return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.recordId || this.curItem?.record_id || this.curItem?.id || 'new'}`;
+      return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.id || 'new'}`;
     },
 
     subscriberFormData() {
@@ -779,9 +779,7 @@ export default {
       }
 
       return this.lists.results.find((l) => (
-        l.recordId === this.queryParams.listRecordID
-          || l.record_id === this.queryParams.listRecordID
-          || String(l.id) === this.queryParams.listRecordID
+        String(l.id) === this.queryParams.listRecordID
       ));
     },
   },

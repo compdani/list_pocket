@@ -37,8 +37,8 @@ func (a *App) resolveListRoutePermID(c echo.Context) (int, error) {
 	return ids[0], nil
 }
 
-func (a *App) resolveListRequestIDs(intIDs []int, recordIDs []string) ([]int, error) {
-	ids, err := a.core.ResolveListIDs(intIDs, recordIDs)
+func (a *App) resolveListRequestIDs(recordIDs []string) ([]int, error) {
+	ids, err := a.core.ResolveListIDs(nil, recordIDs)
 	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
@@ -53,7 +53,7 @@ func (a *App) GetLists(c echo.Context) error {
 
 	// Get the list IDs (or blanket permission) the user has access to.
 	hasAllPerm, permittedRecordIDs := user.GetPermittedLists(auth.PermTypeGet)
-	permittedIDs, err := a.resolveListRequestIDs(nil, permittedRecordIDs)
+	permittedIDs, err := a.resolveListRequestIDs(permittedRecordIDs)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func (a *App) DeleteLists(c echo.Context) error {
 	} else {
 		// For query deletion, get the list IDs the user has manage permission for.
 		hasAllPerm, permittedRecordIDs := user.GetPermittedLists(auth.PermTypeManage)
-		permittedIDs, err := a.resolveListRequestIDs(nil, permittedRecordIDs)
+		permittedIDs, err := a.resolveListRequestIDs(permittedRecordIDs)
 		if err != nil {
 			return err
 		}
