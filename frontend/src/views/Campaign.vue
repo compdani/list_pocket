@@ -148,15 +148,18 @@
               class="mb-4"
             />
 
-            <v-text-field
+            <v-combobox
               v-model="form.fromEmail"
+              :items="availableFromAddresses"
               :label="$t('campaigns.fromAddress')"
               maxlength="200"
               name="from_email"
               :disabled="!canEdit"
               :placeholder="$t('campaigns.fromAddressPlaceholder')"
               required
-              type="text"
+              menu-icon="mdi-chevron-down"
+              :hide-no-data="false"
+              :menu-props="{ maxHeight: 280 }"
               variant="outlined"
               density="comfortable"
               class="mb-4"
@@ -640,6 +643,7 @@ export default {
         archiveMeta: {},
         testEmails: [],
       },
+      lastAutoFromEmail: '',
     };
   },
 
@@ -668,6 +672,22 @@ export default {
 
     onToggleArchivePreview() {
       this.isPreviewingArchive = !this.isPreviewingArchive;
+    },
+
+    getSMTPMetaForMessenger(messenger) {
+      return this.smtpSenders.find((item) => item.messenger === messenger) || null;
+    },
+
+    applyDefaultFromEmailForMessenger(force = false) {
+      const smtpMeta = this.getSMTPMetaForMessenger(this.form.messenger);
+      const nextDefault = (smtpMeta && smtpMeta.defaultFromEmail) || this.serverConfig.from_email || '';
+      const current = (this.form.fromEmail || '').trim();
+      const shouldReplace = force || !current || current === this.lastAutoFromEmail || current === (this.serverConfig.from_email || '');
+
+      if (shouldReplace) {
+        this.form.fromEmail = nextDefault;
+        this.lastAutoFromEmail = nextDefault;
+      }
     },
 
     onAddAltBody() {
@@ -821,6 +841,7 @@ export default {
         });
 
         this.form = nextForm;
+        this.lastAutoFromEmail = nextForm.fromEmail || '';
         this.isAttachFieldVisible = this.form.media.length > 0;
         this.data = data;
       });
@@ -1039,6 +1060,57 @@ export default {
       return messengers.length > 0 ? messengers : ['email'];
     },
 
+    smtpSenders() {
+      if (!this.serverConfig || !Array.isArray(this.serverConfig.smtp_senders)) {
+        return [];
+      }
+
+      return this.serverConfig.smtp_senders.map((sender) => ({
+        messenger: sender.messenger,
+        name: sender.name,
+        fromAddresses: Array.isArray(sender.from_addresses) ? sender.from_addresses : [],
+        defaultFromEmail: sender.default_from_email || '',
+      }));
+    },
+
+    availableFromAddresses() {
+      const normalize = (value) => String(value || '').trim();
+      const addUnique = (list, value) => {
+        const email = normalize(value);
+        if (!email || list.includes(email)) {
+          return list;
+        }
+        list.push(email);
+        return list;
+      };
+
+      const exact = this.getSMTPMetaForMessenger(this.form.messenger);
+      if (exact && Array.isArray(exact.fromAddresses) && this.form.messenger !== 'email') {
+        return exact.fromAddresses.map(normalize).filter(Boolean);
+      }
+
+      if (this.form.messenger === 'email') {
+        return this.smtpSenders.reduce((acc, sender) => {
+          if (sender.messenger === 'email') {
+            if (!Array.isArray(sender.fromAddresses)) {
+              return acc;
+            }
+            sender.fromAddresses.forEach((addr) => addUnique(acc, addr));
+            return acc;
+          }
+
+          if (Array.isArray(sender.fromAddresses)) {
+            sender.fromAddresses.forEach((addr) => addUnique(acc, addr));
+          }
+          return acc;
+        }, []);
+      }
+
+      return exact && Array.isArray(exact.fromAddresses)
+        ? exact.fromAddresses.map(normalize).filter(Boolean)
+        : [];
+    },
+
     contentTypeOptions() {
       return Object.entries(this.contentTypes).map(([value, title]) => ({ value, title }));
     },
@@ -1096,6 +1168,11 @@ export default {
     },
 
     // eslint-disable-next-line func-names
+    'form.messenger': function () {
+      this.applyDefaultFromEmailForMessenger();
+    },
+
+    // eslint-disable-next-line func-names
     'data.sendAt': function () {
       if (this.data.sendAt !== null) {
         this.form.sendLater = true;
@@ -1111,7 +1188,7 @@ export default {
     window.onbeforeunload = () => this.isUnsaved() || null;
 
     // Fill default form fields.
-    this.form.fromEmail = this.serverConfig.from_email;
+    this.applyDefaultFromEmailForMessenger(true);
 
     // New campaign.
     const { id } = this.$route.params;
@@ -1157,6 +1234,7 @@ export default {
       });
     } else {
       this.form.messenger = 'email';
+      this.applyDefaultFromEmailForMessenger(true);
     }
 
     this.$nextTick(() => {

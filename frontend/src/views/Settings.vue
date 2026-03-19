@@ -143,6 +143,8 @@ export default {
           username: '',
           password: '',
           email_headers: [],
+          from_addresses: [],
+          default_from_email: '',
           max_conns: 10,
           max_msg_retries: 2,
           idle_timeout: '15s',
@@ -317,6 +319,7 @@ export default {
 
         for (let i = 0; i < d.smtp.length; i += 1) {
           d.smtp[i].email_headers = Array.isArray(d.smtp[i].email_headers) ? d.smtp[i].email_headers : [];
+          d.smtp[i].from_addresses = Array.isArray(d.smtp[i].from_addresses) ? d.smtp[i].from_addresses : [];
           d.smtp[i].strEmailHeaders = JSON.stringify(d.smtp[i].email_headers, null, 4);
         }
 
@@ -367,7 +370,7 @@ export default {
   },
 
   beforeRouteLeave() {
-    if (this.hasFormChanged()) {
+    if (this.hasFormChanged) {
       return new Promise((resolve) => {
         this.$utils.confirm(
           this.$t('globals.messages.confirmDiscard'),

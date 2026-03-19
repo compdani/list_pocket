@@ -627,34 +627,19 @@ func makeDefaultPBSettings(ko *koanf.Koanf) ([]byte, error) {
 		DomainBlocklist:            []string{},
 		DomainAllowlist:            []string{},
 		SecurityCORSOrigins:        []string{},
-		SMTP: []struct {
-			Name          string              `json:"name"`
-			UUID          string              `json:"uuid"`
-			Enabled       bool                `json:"enabled"`
-			Host          string              `json:"host"`
-			HelloHostname string              `json:"hello_hostname"`
-			Port          int                 `json:"port"`
-			AuthProtocol  string              `json:"auth_protocol"`
-			Username      string              `json:"username"`
-			Password      string              `json:"password,omitempty"`
-			EmailHeaders  []map[string]string `json:"email_headers"`
-			MaxConns      int                 `json:"max_conns"`
-			MaxMsgRetries int                 `json:"max_msg_retries"`
-			IdleTimeout   string              `json:"idle_timeout"`
-			WaitTimeout   string              `json:"wait_timeout"`
-			TLSType       string              `json:"tls_type"`
-			TLSSkipVerify bool                `json:"tls_skip_verify"`
-		}{
+		SMTP: []models.SMTPSettings{
 			{
-				Enabled:       true,
-				Port:          25,
-				AuthProtocol:  "login",
-				EmailHeaders:  []map[string]string{},
-				MaxConns:      10,
-				MaxMsgRetries: 2,
-				IdleTimeout:   "15s",
-				WaitTimeout:   "5s",
-				TLSType:       "none",
+				Enabled:          true,
+				Port:             25,
+				AuthProtocol:     "login",
+				EmailHeaders:     []map[string]string{},
+				FromAddresses:    []string{},
+				DefaultFromEmail: "",
+				MaxConns:         10,
+				MaxMsgRetries:    2,
+				IdleTimeout:      "15s",
+				WaitTimeout:      "5s",
+				TLSType:          "none",
 			},
 		},
 		Messengers: []struct {

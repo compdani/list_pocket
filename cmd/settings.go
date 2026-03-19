@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,15 +14,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/gofrs/uuid/v5"
-	"github.com/jmoiron/sqlx/types"
-	koanfjson "github.com/knadh/koanf/parsers/json"
-	"github.com/knadh/koanf/providers/rawbytes"
-	"github.com/knadh/koanf/v2"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/messenger/email"
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/models"
+	"github.com/gofrs/uuid/v5"
+	"github.com/jmoiron/sqlx/types"
 	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase/tools/cron"
 )
@@ -135,6 +133,12 @@ func (a *App) UpdateSettings(c echo.Context) error {
 		// Ensure the HOST is trimmed of any whitespace.
 		// This is a common mistake when copy-pasting SMTP settings.
 		set.SMTP[i].Host = strings.TrimSpace(s.Host)
+		fromAddrs, defaultFromEmail, err := a.sanitizeSMTPFromEmails(s.FromAddresses, s.DefaultFromEmail)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+		set.SMTP[i].FromAddresses = fromAddrs
+		set.SMTP[i].DefaultFromEmail = defaultFromEmail
 
 		// If there's no password coming in from the frontend, copy the existing
 		// password by matching the UUID.
@@ -301,6 +305,55 @@ func (a *App) UpdateSettings(c echo.Context) error {
 	return a.handleSettingsRestart(c)
 }
 
+func (a *App) sanitizeFromAddress(addr string) (string, error) {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return "", nil
+	}
+
+	if reFromAddress.Match([]byte(addr)) {
+		return addr, nil
+	}
+
+	out, err := a.importer.SanitizeEmail(addr)
+	if err != nil {
+		return "", errors.New(a.i18n.T("campaigns.fieldInvalidFromEmail"))
+	}
+	return out, nil
+}
+
+func (a *App) sanitizeSMTPFromEmails(fromAddresses []string, defaultFromEmail string) ([]string, string, error) {
+	out := make([]string, 0, len(fromAddresses))
+	seen := make(map[string]struct{}, len(fromAddresses))
+
+	for _, addr := range fromAddresses {
+		sanitized, err := a.sanitizeFromAddress(addr)
+		if err != nil {
+			return nil, "", err
+		}
+		if sanitized == "" {
+			continue
+		}
+		if _, ok := seen[sanitized]; ok {
+			continue
+		}
+		seen[sanitized] = struct{}{}
+		out = append(out, sanitized)
+	}
+
+	sanitizedDefault, err := a.sanitizeFromAddress(defaultFromEmail)
+	if err != nil {
+		return nil, "", err
+	}
+	if sanitizedDefault != "" {
+		if _, ok := seen[sanitizedDefault]; !ok {
+			out = append(out, sanitizedDefault)
+		}
+	}
+
+	return out, sanitizedDefault, nil
+}
+
 // UpdateSettingsByKey updates a single setting key-value in the DB.
 func (a *App) UpdateSettingsByKey(c echo.Context) error {
 	key := c.Param("key")
@@ -360,20 +413,11 @@ func (a *App) TestSMTPSettings(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
 	}
 
-	// Load the JSON into koanf to parse SMTP settings properly including timestrings.
-	ko := koanf.New(".")
-	if err := ko.Load(rawbytes.Provider(reqBody), koanfjson.Parser()); err != nil {
+	req, to, from, err := email.ParseSMTPTestRequest(reqBody)
+	if err != nil {
 		a.log.Printf("error unmarshalling SMTP test request: %v", err)
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
 	}
-
-	req := email.Server{}
-	if err := ko.UnmarshalWithConf("", &req, koanf.UnmarshalConf{Tag: "json"}); err != nil {
-		a.log.Printf("error scanning SMTP test request: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
-	}
-
-	to := ko.String("email")
 	if to == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.missingFields", "name", "email"))
 	}
@@ -396,7 +440,11 @@ func (a *App) TestSMTPSettings(c echo.Context) error {
 	}
 
 	m := models.Message{}
-	m.From = a.cfg.FromEmail
+	if from != "" {
+		m.From = from
+	} else {
+		m.From = a.cfg.FromEmail
+	}
 	m.To = []string{to}
 	m.Subject = a.i18n.T("settings.smtp.testConnection")
 	m.Body = b.Bytes()

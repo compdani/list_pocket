@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -59,6 +60,71 @@ func (a *App) resolveCampaignRouteID(c echo.Context) (string, error) {
 	}
 
 	return recordID, nil
+}
+
+func bindCampaignReq(c echo.Context, out *campReq) error {
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return err
+	}
+
+	normalized, err := normalizeCampaignReqBody(body)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(normalized, out)
+}
+
+func normalizeCampaignReqBody(body []byte) ([]byte, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return body, nil
+	}
+
+	payload := map[string]json.RawMessage{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+
+	if raw, ok := payload["body_source"]; ok {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] != '"' && string(raw) != "null" {
+			encoded, err := json.Marshal(string(raw))
+			if err != nil {
+				return nil, err
+			}
+			payload["body_source"] = encoded
+		}
+	}
+
+	if raw, ok := payload["media"]; ok {
+		var vals []any
+		if err := json.Unmarshal(raw, &vals); err != nil {
+			return nil, err
+		}
+
+		mediaIDs := make([]int, 0, len(vals))
+		for _, v := range vals {
+			switch n := v.(type) {
+			case float64:
+				mediaIDs = append(mediaIDs, int(n))
+			case string:
+				id, err := strconv.Atoi(strings.TrimSpace(n))
+				if err != nil {
+					return nil, err
+				}
+				mediaIDs = append(mediaIDs, id)
+			}
+		}
+
+		encoded, err := json.Marshal(mediaIDs)
+		if err != nil {
+			return nil, err
+		}
+		payload["media"] = encoded
+	}
+
+	return json.Marshal(payload)
 }
 
 // GetCampaigns handles retrieval of campaigns.
@@ -279,7 +345,7 @@ func (a *App) CampaignContent(c echo.Context) error {
 // Newly created campaigns are always drafts.
 func (a *App) CreateCampaign(c echo.Context) error {
 	var o campReq
-	if err := c.Bind(&o); err != nil {
+	if err := bindCampaignReq(c, &o); err != nil {
 		return err
 	}
 	a.log.Printf("create campaign: received name=%q type=%q content_type=%q list_ids=%v media_ids=%v messenger=%q archive=%v template_id_valid=%v archive_template_id_valid=%v",
@@ -370,7 +436,7 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	// This allows updating of values that have been sent whereas fields
 	// that are not in the request retain the old values.
 	o := campReq{Campaign: cm}
-	if err := c.Bind(&o); err != nil {
+	if err := bindCampaignReq(c, &o); err != nil {
 		return err
 	}
 	a.log.Printf("update campaign: received record_id=%q name=%q status=%q content_type=%q list_ids=%v media_ids=%v archive=%v",
@@ -519,8 +585,8 @@ func (a *App) DeleteCampaigns(c echo.Context) error {
 
 	var (
 		recordIDs []string
-		query string
-		all   bool
+		query     string
+		all       bool
 	)
 
 	// Check for IDs in query params.
@@ -595,7 +661,7 @@ func (a *App) TestCampaign(c echo.Context) error {
 
 	// Get and validate fields.
 	var req campReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindCampaignReq(c, &req); err != nil {
 		return err
 	}
 
@@ -724,14 +790,44 @@ func (a *App) sendTestMessage(sub models.Subscriber, camp *models.Campaign) erro
 	return a.manager.PushCampaignMessage(msg)
 }
 
+func (a *App) defaultCampaignFromEmail(messenger string) string {
+	settings, err := a.core.GetSettings()
+	if err != nil {
+		return a.cfg.FromEmail
+	}
+
+	enabled := make([]models.SMTPSettings, 0, len(settings.SMTP))
+	for _, item := range settings.SMTP {
+		if item.Enabled {
+			enabled = append(enabled, item)
+		}
+	}
+
+	if messenger != "" && messenger != emailMsgr {
+		for _, item := range enabled {
+			if item.Name == messenger && item.DefaultFromEmail != "" {
+				return item.DefaultFromEmail
+			}
+		}
+	}
+
+	if (messenger == "" || messenger == emailMsgr) && len(enabled) == 1 && enabled[0].DefaultFromEmail != "" {
+		return enabled[0].DefaultFromEmail
+	}
+
+	return a.cfg.FromEmail
+}
+
 // validateCampaignFields validates incoming campaign field values.
 func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 	if c.FromEmail == "" {
-		c.FromEmail = a.cfg.FromEmail
-	} else if !reFromAddress.Match([]byte(c.FromEmail)) {
-		if _, err := a.importer.SanitizeEmail(c.FromEmail); err != nil {
-			return c, errors.New(a.i18n.T("campaigns.fieldInvalidFromEmail"))
+		c.FromEmail = a.defaultCampaignFromEmail(c.Messenger)
+	} else {
+		sanitized, err := a.sanitizeFromAddress(c.FromEmail)
+		if err != nil {
+			return c, err
 		}
+		c.FromEmail = sanitized
 	}
 
 	if !strHasLen(c.Name, 1, stdInputMaxLen) {
