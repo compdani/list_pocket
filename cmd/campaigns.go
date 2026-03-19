@@ -710,7 +710,7 @@ func (a *App) TestCampaign(c echo.Context) error {
 	}
 
 	// Validate.
-	if c, err := a.validateCampaignFields(req); err != nil {
+	if c, err := a.validateCampaignFieldsForTest(req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	} else {
 		req = c
@@ -946,6 +946,67 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 	} else {
 		// If there's no slug set, set it to NULL in the DB.
 		c.ArchiveSlug.Valid = false
+	}
+
+	return c, nil
+}
+
+func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
+	if c.FromEmail == "" {
+		c.FromEmail = a.defaultCampaignFromEmail(c.Messenger)
+	} else {
+		sanitized, err := a.sanitizeFromAddress(c.FromEmail)
+		if err != nil {
+			return c, err
+		}
+		c.FromEmail = sanitized
+	}
+
+	if !strHasLen(c.Name, 1, stdInputMaxLen) {
+		return c, errors.New(a.i18n.T("campaigns.fieldInvalidName"))
+	}
+
+	if !strHasLen(c.Subject, 1, 5000) {
+		return c, errors.New(a.i18n.T("campaigns.fieldInvalidSubject"))
+	}
+
+	if c.ContentType != models.CampaignContentTypeRichtext &&
+		c.ContentType != models.CampaignContentTypeHTML &&
+		c.ContentType != models.CampaignContentTypePlain &&
+		c.ContentType != models.CampaignContentTypeVisual &&
+		c.ContentType != models.CampaignContentTypeMarkdown {
+		c.ContentType = models.CampaignContentTypeRichtext
+	}
+
+	if c.ContentType != models.CampaignContentTypeVisual {
+		c.BodySource.Valid = false
+	}
+
+	if !a.manager.HasMessenger(c.Messenger) {
+		if strings.HasPrefix(c.Messenger, "email-") {
+			c.Messenger = "email"
+		} else {
+			return c, errors.New(a.i18n.Ts("campaigns.fieldInvalidMessenger", "name", c.Messenger))
+		}
+	}
+
+	camp := models.Campaign{Body: c.Body, TemplateBody: tplTag}
+	if err := c.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
+		return c, errors.New(a.i18n.Ts("campaigns.fieldInvalidBody", "error", err.Error()))
+	}
+
+	if len(c.Headers) == 0 {
+		c.Headers = make([]map[string]string, 0)
+	}
+
+	if c.Attribs != nil {
+		if _, err := json.Marshal(c.Attribs); err != nil {
+			return c, errors.New(a.i18n.T("subscribers.invalidJSON"))
+		}
+	}
+
+	if len(c.ArchiveMeta) == 0 {
+		c.ArchiveMeta = json.RawMessage("{}")
 	}
 
 	return c, nil

@@ -6,28 +6,52 @@ import (
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
-	"github.com/lib/pq"
+	null "gopkg.in/volatiletech/null.v6"
 )
 
 // GetSubscriptions retrieves the subscriptions for a subscriber.
 func (c *Core) GetSubscriptions(subID int, subUUID string, allLists bool) ([]models.Subscription, error) {
-	var out []models.Subscription
-	err := c.q.GetSubscriptions.Select(&out, subID, subUUID, allLists)
+	listType := models.ListTypePublic
+	if allLists {
+		listType = ""
+	}
+
+	lists, err := c.getSubscriberListsSQLite(subID, subUUID, nil, nil, "", listType)
 	if err != nil {
 		c.log.Printf("error getting subscriptions: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
-	return out, err
+	out := make([]models.Subscription, 0, len(lists))
+	for _, list := range lists {
+		createdAt := null.String{}
+		if list.SubscriptionCreatedAt.Valid {
+			createdAt = null.StringFrom(list.SubscriptionCreatedAt.Time.Format(time.RFC3339))
+		}
+		out = append(out, models.Subscription{
+			List:                  list,
+			SubscriptionStatus:    nullStringFrom(list.SubscriptionStatus),
+			SubscriptionCreatedAt: createdAt,
+			Meta:                  nil,
+		})
+	}
+	return out, nil
+}
+
+func nullStringFrom(v string) null.String {
+	if v == "" {
+		return null.String{}
+	}
+	return null.StringFrom(v)
 }
 
 // AddSubscriptions adds list subscriptions to subscribers.
 func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
-	if _, err := c.q.AddSubscribersToLists.Exec(pq.Array(subIDs), pq.Array(listIDs), status); err != nil {
+	if err := c.addSubscriptionsSQLite(subIDs, listIDs, status); err != nil {
 		c.log.Printf("error adding subscriptions: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", err.Error()))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -36,42 +60,27 @@ func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
 // AddSubscriptionsByQuery adds list subscriptions to subscribers by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
 func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, status string, subStatus string) error {
-	if c.isSQLite() {
-		subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
-		if err != nil {
-			c.log.Printf("error adding subscriptions by query: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		if err := c.addSubscriptionsSQLite(subIDs, targetListIDs, status); err != nil {
-			c.log.Printf("error adding subscriptions by query: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	if sourceListIDs == nil {
-		sourceListIDs = []int{}
-	}
-
-	err := c.q.ExecSubQueryTpl(searchStr, queryExp, c.q.AddSubscribersToListsByQuery, sourceListIDs, c.db, subStatus, pq.Array(targetListIDs), status)
+	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
+	if err := c.addSubscriptionsSQLite(subIDs, targetListIDs, status); err != nil {
+		c.log.Printf("error adding subscriptions by query: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
 	return nil
 }
 
 // DeleteSubscriptions delete list subscriptions from subscribers.
 func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
-	if _, err := c.q.DeleteSubscriptions.Exec(pq.Array(subIDs), pq.Array(listIDs)); err != nil {
+	if err := c.deleteSubscriptionsSQLite(subIDs, listIDs); err != nil {
 		c.log.Printf("error deleting subscriptions: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", err.Error()))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 
 	}
 
@@ -81,84 +90,90 @@ func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
 // DeleteSubscriptionsByQuery deletes list subscriptions from subscribers by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
 func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) error {
-	if c.isSQLite() {
-		subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
-		if err != nil {
-			c.log.Printf("error deleting subscriptions by query: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		if err := c.deleteSubscriptionsSQLite(subIDs, targetListIDs); err != nil {
-			c.log.Printf("error deleting subscriptions by query: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	if sourceListIDs == nil {
-		sourceListIDs = []int{}
-	}
-
-	err := c.q.ExecSubQueryTpl(searchStr, queryExp, c.q.DeleteSubscriptionsByQuery, sourceListIDs, c.db, subStatus, pq.Array(targetListIDs))
+	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
+	if err := c.deleteSubscriptionsSQLite(subIDs, targetListIDs); err != nil {
+		c.log.Printf("error deleting subscriptions by query: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
 	return nil
 }
 
 // UnsubscribeLists sets list subscriptions to 'unsubscribed'.
 func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error {
-	if _, err := c.q.UnsubscribeSubscribersFromLists.Exec(pq.Array(subIDs), pq.Array(listIDs), pq.StringArray(listUUIDs)); err != nil {
-		c.log.Printf("error unsubscribing from lists: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", err.Error()))
+	if len(subIDs) == 0 {
+		return nil
 	}
 
+	resolvedListIDs := append([]int{}, listIDs...)
+	if len(listUUIDs) > 0 {
+		lists, err := c.getSubscriberListsSQLite(subIDs[0], "", nil, listUUIDs, "", "")
+		if err != nil {
+			c.log.Printf("error unsubscribing from lists: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		}
+
+		for _, list := range lists {
+			if list.ID > 0 {
+				resolvedListIDs = append(resolvedListIDs, list.ID)
+			}
+		}
+	}
+
+	deduped := make([]int, 0, len(resolvedListIDs))
+	seen := map[int]struct{}{}
+	for _, id := range resolvedListIDs {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		deduped = append(deduped, id)
+	}
+
+	if err := c.unsubscribeSubscriptionsSQLite(subIDs, deduped); err != nil {
+		c.log.Printf("error unsubscribing from lists: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
 	return nil
 }
 
 // UnsubscribeListsByQuery sets list subscriptions to 'unsubscribed' by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
 func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) error {
-	if c.isSQLite() {
-		subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
-		if err != nil {
-			c.log.Printf("error unsubscribing from lists by query: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		if err := c.unsubscribeSubscriptionsSQLite(subIDs, targetListIDs); err != nil {
-			c.log.Printf("error unsubscribing from lists by query: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	if sourceListIDs == nil {
-		sourceListIDs = []int{}
-	}
-
-	err := c.q.ExecSubQueryTpl(searchStr, queryExp, c.q.UnsubscribeSubscribersFromListsByQuery, sourceListIDs, c.db, subStatus, pq.Array(targetListIDs))
+	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
+	if err := c.unsubscribeSubscriptionsSQLite(subIDs, targetListIDs); err != nil {
+		c.log.Printf("error unsubscribing from lists by query: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
 	return nil
 }
 
 // DeleteUnconfirmedSubscriptions sets list subscriptions to 'unsubscribed' by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
 func (c *Core) DeleteUnconfirmedSubscriptions(beforeDate time.Time) (int, error) {
-	res, err := c.q.DeleteUnconfirmedSubscriptions.Exec(beforeDate)
+	res, err := c.db.Exec(`
+		DELETE FROM subscriber_lists
+		WHERE status = 'unconfirmed'
+		  AND created < ?`,
+		beforeDate.UTC().Format("2006-01-02 15:04:05"))
 	if err != nil {
 		c.log.Printf("error deleting unconfirmed subscribers: %v", err)
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx/types"
@@ -227,7 +226,7 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 }
 
 func (c *Core) ResolveCampaignIDs(campaignIDs []int, campaignRecordIDs []string) ([]int, error) {
-	if len(campaignRecordIDs) == 0 || !c.isSQLite() {
+	if len(campaignRecordIDs) == 0 {
 		return appendUniqueInts([]int{}, campaignIDs), nil
 	}
 
@@ -246,7 +245,7 @@ func (c *Core) ResolveCampaignIDs(campaignIDs []int, campaignRecordIDs []string)
 }
 
 func (c *Core) ResolveCampaignRecordIDs(campaignIDs []int) ([]string, error) {
-	if len(campaignIDs) == 0 || !c.isSQLite() {
+	if len(campaignIDs) == 0 {
 		return nil, nil
 	}
 
@@ -389,48 +388,7 @@ const (
 // QueryCampaigns retrieves paginated campaigns optionally filtering them by the given arbitrary
 // query expression. It also returns the total number of records in the DB.
 func (c *Core) QueryCampaigns(searchStr string, statuses, tags []string, orderBy, order string, getAll bool, permittedLists []int, offset, limit int) (models.Campaigns, int, error) {
-	if c.isSQLite() {
-		return c.queryCampaignsSQLite(searchStr, statuses, tags, orderBy, order, getAll, permittedLists, offset, limit)
-	}
-
-	queryStr, stmt := makeSearchQuery(searchStr, orderBy, order, c.q.QueryCampaigns, campQuerySortFields)
-
-	if statuses == nil {
-		statuses = []string{}
-	}
-
-	if tags == nil {
-		tags = []string{}
-	}
-
-	// Unsafe to ignore scanning fields not present in models.Campaigns.
-	var out models.Campaigns
-	if err := c.db.Select(&out, stmt, 0, pq.StringArray(statuses), pq.StringArray(tags), queryStr, getAll, pq.Array(permittedLists), offset, limit); err != nil {
-		c.log.Printf("error fetching campaigns: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	for i := range out {
-		// Replace null tags.
-		if out[i].Tags == nil {
-			out[i].Tags = []string{}
-		}
-	}
-
-	// Lazy load stats.
-	if err := out.LoadStats(c.q.GetCampaignStats); err != nil {
-		c.log.Printf("error fetching campaign stats: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaigns}", "error", pqErrMsg(err)))
-	}
-
-	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
-	}
-
-	return out, total, nil
+	return c.queryCampaignsSQLite(searchStr, statuses, tags, orderBy, order, getAll, permittedLists, offset, limit)
 }
 
 // GetCampaign retrieves a campaign.
@@ -457,183 +415,29 @@ func (c *Core) GetArchivedCampaign(recordID, uuid, archiveSlug string) (models.C
 // template body is returned as "template_body". If tplType="archive",
 // the archive template is returned.
 func (c *Core) getCampaign(recordID, uuid, archiveSlug string, tplType string) (models.Campaign, error) {
-	if c.isSQLite() {
-		return c.getCampaignSQLite(recordID, uuid, archiveSlug, tplType)
-	}
-
-	// Unsafe to ignore scanning fields not present in models.Campaigns.
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	var out models.Campaigns
-	if err := c.q.GetCampaign.Select(&out, recordID, uu, archiveSlug, tplType); err != nil {
-		// if err := c.db.Select(&out, stmt, 0, pq.Array([]string{}), queryStr, 0, 1); err != nil {
-		c.log.Printf("error fetching campaign: %v", err)
-		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	if len(out) == 0 {
-		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
-	}
-
-	for i := 0; i < len(out); i++ {
-		// Replace null tags.
-		if out[i].Tags == nil {
-			out[i].Tags = []string{}
-		}
-	}
-
-	// Lazy load stats.
-	if err := out.LoadStats(c.q.GetCampaignStats); err != nil {
-		c.log.Printf("error fetching campaign stats: %v", err)
-		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	return out[0], nil
+	return c.getCampaignSQLite(recordID, uuid, archiveSlug, tplType)
 }
 
 // GetCampaignForPreview retrieves a campaign with a template body. If the optional tplID is > 0
 // that particular template is used, otherwise, the template saved on the campaign is.
 func (c *Core) GetCampaignForPreview(recordID string, tplID string) (models.Campaign, error) {
-	if c.isSQLite() {
-		return c.getCampaignForPreviewSQLite(recordID, tplID)
-	}
-
-	var out models.Campaign
-	if err := c.q.GetCampaignForPreview.Get(&out, recordID, tplID); err != nil {
-		if err == sql.ErrNoRows {
-			return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
-		}
-
-		c.log.Printf("error fetching campaign: %v", err)
-		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	return out, nil
+	return c.getCampaignForPreviewSQLite(recordID, tplID)
 }
 
 // GetArchivedCampaigns retrieves campaigns with a template body.
 func (c *Core) GetArchivedCampaigns(offset, limit int) (models.Campaigns, int, error) {
-	if c.isSQLite() {
-		return c.getArchivedCampaignsSQLite(offset, limit)
-	}
-
-	var out models.Campaigns
-	if err := c.q.GetArchivedCampaigns.Select(&out, offset, limit, campaignTplArchive); err != nil {
-		c.log.Printf("error fetching public campaigns: %v", err)
-		return models.Campaigns{}, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
-	}
-
-	return out, total, nil
+	return c.getArchivedCampaignsSQLite(offset, limit)
 }
 
 // CreateCampaign creates a new campaign.
 func (c *Core) CreateCampaign(o models.Campaign, listIDs []int, mediaIDs []int) (models.Campaign, error) {
 	c.log.Printf("core create campaign: name=%q content_type=%q list_ids=%v media_ids=%v sqlite=%v", o.Name, o.ContentType, listIDs, mediaIDs, c.isSQLite())
-	if c.isSQLite() {
-		return c.createCampaignSQLite(o, listIDs, mediaIDs)
-	}
-
-	uu, err := uuid.NewV4()
-	if err != nil {
-		c.log.Printf("error generating UUID: %v", err)
-		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
-	}
-
-	// Insert and read ID.
-	var newID int
-	if err := c.q.CreateCampaign.Get(&newID,
-		uu,
-		o.Type,
-		o.Name,
-		o.Subject,
-		o.FromEmail,
-		o.Body,
-		o.AltBody,
-		o.ContentType,
-		o.SendAt,
-		o.Headers,
-		o.Attribs,
-		pq.StringArray(normalizeTags(o.Tags)),
-		o.Messenger,
-		o.TemplateID,
-		pq.Array(listIDs),
-		o.Archive,
-		o.ArchiveSlug,
-		o.ArchiveTemplateID,
-		o.ArchiveMeta,
-		pq.Array(mediaIDs),
-		o.BodySource,
-	); err != nil {
-		if err == sql.ErrNoRows {
-			return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noSubs"))
-		}
-
-		c.log.Printf("error creating campaign: %v", err)
-		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	out, err := c.GetCampaign("", uu.String(), "")
-	if err != nil {
-		return models.Campaign{}, err
-	}
-
-	return out, nil
+	return c.createCampaignSQLite(o, listIDs, mediaIDs)
 }
 
 // UpdateCampaign updates a campaign.
 func (c *Core) UpdateCampaign(recordID string, o models.Campaign, listIDs []int, mediaIDs []int) (models.Campaign, error) {
-	if c.isSQLite() {
-		return c.updateCampaignSQLite(recordID, o, listIDs, mediaIDs)
-	}
-
-	_, err := c.q.UpdateCampaign.Exec(recordID,
-		o.Name,
-		o.Subject,
-		o.FromEmail,
-		o.Body,
-		o.AltBody,
-		o.ContentType,
-		o.SendAt,
-		o.Headers,
-		o.Attribs,
-		pq.StringArray(normalizeTags(o.Tags)),
-		o.Messenger,
-		o.TemplateID,
-		pq.Array(listIDs),
-		o.Archive,
-		o.ArchiveSlug,
-		o.ArchiveTemplateID,
-		o.ArchiveMeta,
-		pq.Array(mediaIDs),
-		o.BodySource)
-	if err != nil {
-		c.log.Printf("error updating campaign: %v", err)
-		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	}
-
-	out, err := c.GetCampaign(recordID, "", "")
-	if err != nil {
-		return models.Campaign{}, err
-	}
-
-	return out, nil
+	return c.updateCampaignSQLite(recordID, o, listIDs, mediaIDs)
 }
 
 // UpdateCampaignStatus updates a campaign's status, eg: draft to running.
@@ -675,15 +479,10 @@ func (c *Core) UpdateCampaignStatus(recordID string, status string) (models.Camp
 		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, errMsg)
 	}
 
-	var res sql.Result
-	if c.isSQLite() {
-		res, err = c.db.Exec(`UPDATE campaigns SET
-			status=(CASE WHEN send_at IS NOT NULL AND send_at != '' AND ? = 'running' THEN 'scheduled' ELSE ? END),
-			updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id = ?`, status, status, cm.RecordID)
-	} else {
-		res, err = c.q.UpdateCampaignStatus.Exec(recordID, status)
-	}
+	res, err := c.db.Exec(`UPDATE campaigns SET
+		status=(CASE WHEN send_at IS NOT NULL AND send_at != '' AND ? = 'running' THEN 'scheduled' ELSE ? END),
+		updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE id = ?`, status, status, cm.RecordID)
 	if err != nil {
 		c.log.Printf("error updating campaign status: %v", err)
 
@@ -702,93 +501,61 @@ func (c *Core) UpdateCampaignStatus(recordID string, status string) (models.Camp
 
 // UpdateCampaignArchive updates a campaign's archive properties.
 func (c *Core) UpdateCampaignArchive(recordID string, enabled bool, tplID string, meta models.JSON, archiveSlug string) error {
-	if c.isSQLite() {
-		metaJSON, _ := json.Marshal(meta)
-		if _, err := c.db.Exec(`UPDATE campaigns SET
-			archive=?,
-			archive_slug=(CASE WHEN ? = '' THEN NULL ELSE ? END),
-			archive_template_id=(CASE WHEN ? != '' THEN ? ELSE archive_template_id END),
-			archive_meta=(CASE WHEN ? != '' THEN ? ELSE archive_meta END),
-			updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id=?`,
-			enabled, archiveSlug, archiveSlug, tplID, tplID, string(metaJSON), string(metaJSON), recordID); err != nil {
-			c.log.Printf("error updating campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	if _, err := c.q.UpdateCampaignArchive.Exec(recordID, enabled, archiveSlug, tplID, meta); err != nil {
+	metaJSON, _ := json.Marshal(meta)
+	if _, err := c.db.Exec(`UPDATE campaigns SET
+		archive=?,
+		archive_slug=(CASE WHEN ? = '' THEN NULL ELSE ? END),
+		archive_template_id=(CASE WHEN ? != '' THEN ? ELSE archive_template_id END),
+		archive_meta=(CASE WHEN ? != '' THEN ? ELSE archive_meta END),
+		updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE id=?`,
+		enabled, archiveSlug, archiveSlug, tplID, tplID, string(metaJSON), string(metaJSON), recordID); err != nil {
 		c.log.Printf("error updating campaign: %v", err)
-
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
 	}
-
 	return nil
 }
 
 // DeleteCampaign deletes a campaign.
 func (c *Core) DeleteCampaign(recordID string) error {
-	if c.isSQLite() {
-		if strings.TrimSpace(recordID) == "" {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
-		}
-
-		if _, err := c.db.Exec(`DELETE FROM campaign_lists WHERE campaign_id = ?`, recordID); err != nil {
-			c.log.Printf("error deleting campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		if _, err := c.db.Exec(`DELETE FROM campaign_media WHERE campaign_id = ?`, recordID); err != nil {
-			c.log.Printf("error deleting campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		if _, err := c.db.Exec(`DELETE FROM campaign_views WHERE campaign_id = ?`, recordID); err != nil {
-			c.log.Printf("error deleting campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		if _, err := c.db.Exec(`DELETE FROM link_clicks WHERE campaign_id = ?`, recordID); err != nil {
-			c.log.Printf("error deleting campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		if _, err := c.db.Exec(`DELETE FROM bounces WHERE campaign_id = ?`, recordID); err != nil {
-			c.log.Printf("error deleting campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-
-		res, err := c.db.Exec(`DELETE FROM campaigns WHERE id = ?`, recordID)
-		if err != nil {
-			c.log.Printf("error deleting campaign: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			if err == sql.ErrNoRows {
-				return echo.NewHTTPError(http.StatusBadRequest,
-					c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
-			}
-			return echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
-		}
-
-		return nil
+	if strings.TrimSpace(recordID) == "" {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
 	}
 
-	res, err := c.q.DeleteCampaign.Exec(recordID)
+	if _, err := c.db.Exec(`DELETE FROM campaign_lists WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+	if _, err := c.db.Exec(`DELETE FROM campaign_media WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+	if _, err := c.db.Exec(`DELETE FROM campaign_views WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+	if _, err := c.db.Exec(`DELETE FROM link_clicks WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+	if _, err := c.db.Exec(`DELETE FROM bounces WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+
+	res, err := c.db.Exec(`DELETE FROM campaigns WHERE id = ?`, recordID)
 	if err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-
 	}
-
 	if n, _ := res.RowsAffected(); n == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
@@ -799,64 +566,46 @@ func (c *Core) DeleteCampaign(recordID string) error {
 
 // DeleteCampaigns deletes multiple campaigns by IDs or by query.
 func (c *Core) DeleteCampaigns(recordIDs []string, query string, hasAllPerm bool, permittedLists []int) error {
-	if c.isSQLite() {
-		targetRecordIDs := append([]string{}, recordIDs...)
-		if len(targetRecordIDs) == 0 {
-			searchStr := makeSearchString(query)
-			q := `SELECT DISTINCT c.id
-				FROM campaigns c
-				WHERE 1=1`
-			args := []any{}
+	targetRecordIDs := append([]string{}, recordIDs...)
+	if len(targetRecordIDs) == 0 {
+		searchStr := makeSearchString(query)
+		q := `SELECT DISTINCT c.id
+			FROM campaigns c
+			WHERE 1=1`
+		args := []any{}
 
-			if searchStr != "" {
-				q += ` AND (c.name LIKE ? OR c.subject LIKE ?)`
-				args = append(args, searchStr, searchStr)
+		if searchStr != "" {
+			q += ` AND (c.name LIKE ? OR c.subject LIKE ?)`
+			args = append(args, searchStr, searchStr)
+		}
+
+		if !hasAllPerm {
+			if len(permittedLists) == 0 {
+				return nil
 			}
-
-			if !hasAllPerm {
-				if len(permittedLists) == 0 {
-					return nil
-				}
-				q += ` AND EXISTS (
-					SELECT 1
-					FROM campaign_lists cl
-					LEFT JOIN lists l ON l.id = cl.list_id
-					WHERE cl.campaign_id = c.id
-					  AND l.rowid IN (` + sqlitePlaceholders(len(permittedLists)) + `)
-				)`
-				for _, listID := range permittedLists {
-					args = append(args, listID)
-				}
-			}
-
-			if err := c.db.Select(&targetRecordIDs, q, args...); err != nil {
-				c.log.Printf("error deleting campaigns: %v", err)
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaigns}", "error", pqErrMsg(err)))
+			q += ` AND EXISTS (
+				SELECT 1
+				FROM campaign_lists cl
+				LEFT JOIN lists l ON l.id = cl.list_id
+				WHERE cl.campaign_id = c.id
+				  AND l.rowid IN (` + sqlitePlaceholders(len(permittedLists)) + `)
+			)`
+			for _, listID := range permittedLists {
+				args = append(args, listID)
 			}
 		}
 
-		for _, recordID := range targetRecordIDs {
-			if err := c.DeleteCampaign(recordID); err != nil {
-				return err
-			}
+		if err := c.db.Select(&targetRecordIDs, q, args...); err != nil {
+			c.log.Printf("error deleting campaigns: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaigns}", "error", pqErrMsg(err)))
 		}
-
-		return nil
 	}
 
-	var queryStr string
-
-	if len(recordIDs) > 0 {
-		queryStr = ""
-	} else {
-		queryStr = makeSearchString(query)
-	}
-
-	if _, err := c.q.DeleteCampaigns.Exec(pq.Array(recordIDs), queryStr, hasAllPerm, pq.Array(permittedLists)); err != nil {
-		c.log.Printf("error deleting campaigns: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaigns}", "error", pqErrMsg(err)))
+	for _, recordID := range targetRecordIDs {
+		if err := c.DeleteCampaign(recordID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -864,36 +613,24 @@ func (c *Core) DeleteCampaigns(recordIDs []string, query string, hasAllPerm bool
 
 // CampaignHasLists checks if a campaign has any of the given list IDs.
 func (c *Core) CampaignHasLists(recordID string, listIDs []int) (bool, error) {
-	if c.isSQLite() {
-		if len(listIDs) == 0 {
-			return false, nil
-		}
+	if len(listIDs) == 0 {
+		return false, nil
+	}
 
-		q := `SELECT EXISTS (
-			SELECT 1 FROM campaign_lists WHERE campaign_id = ? AND list_id IN (` + sqlitePlaceholders(len(listIDs)) + `)
-		);`
-		args := []any{recordID}
-		for _, lid := range listIDs {
-			args = append(args, lid)
-		}
-
-		has := false
-		if err := c.db.Get(&has, q, args...); err != nil {
-			c.log.Printf("error checking campaign lists: %v", err)
-			return false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-
-		return has, nil
+	q := `SELECT EXISTS (
+		SELECT 1 FROM campaign_lists WHERE campaign_id = ? AND list_id IN (` + sqlitePlaceholders(len(listIDs)) + `)
+	);`
+	args := []any{recordID}
+	for _, lid := range listIDs {
+		args = append(args, lid)
 	}
 
 	has := false
-	if err := c.q.CampaignHasLists.Get(&has, recordID, pq.Array(listIDs)); err != nil {
+	if err := c.db.Get(&has, q, args...); err != nil {
 		c.log.Printf("error checking campaign lists: %v", err)
 		return false, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
 	}
-
 	return has, nil
 }
 
@@ -1417,33 +1154,16 @@ func sqlitePlaceholders(n int) string {
 
 // GetRunningCampaignStats returns the progress stats of running campaigns.
 func (c *Core) GetRunningCampaignStats() ([]models.CampaignStats, error) {
-	if c.isSQLite() {
-		rows := []sqliteCampaignStatsRow{}
-		if err := c.db.Select(&rows, `SELECT
-			rowid AS id,
-			status,
-			to_send,
-			sent,
-			started_at,
-			updated AS updated_at
-		FROM campaigns
-		WHERE status = ?`, models.CampaignStatusRunning); err != nil {
-			if err == sql.ErrNoRows {
-				return nil, nil
-			}
-
-			c.log.Printf("error fetching campaign stats: %v", err)
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		} else if len(rows) == 0 {
-			return nil, nil
-		}
-
-		return sqliteCampaignStatsRowsToModels(rows), nil
-	}
-
-	out := []models.CampaignStats{}
-	if err := c.q.GetCampaignStatus.Select(&out, models.CampaignStatusRunning); err != nil {
+	rows := []sqliteCampaignStatsRow{}
+	if err := c.db.Select(&rows, `SELECT
+		rowid AS id,
+		status,
+		to_send,
+		sent,
+		started_at,
+		updated AS updated_at
+	FROM campaigns
+	WHERE status = ?`, models.CampaignStatusRunning); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -1451,84 +1171,32 @@ func (c *Core) GetRunningCampaignStats() ([]models.CampaignStats, error) {
 		c.log.Printf("error fetching campaign stats: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-	} else if len(out) == 0 {
+	} else if len(rows) == 0 {
 		return nil, nil
 	}
 
-	return out, nil
+	return sqliteCampaignStatsRowsToModels(rows), nil
 }
 
 func (c *Core) GetCampaignAnalyticsCounts(campIDs []int, typ, fromDate, toDate string) ([]models.CampaignAnalyticsCount, error) {
-	if c.isSQLite() {
-		return c.getCampaignAnalyticsCountsSQLite(campIDs, typ, fromDate, toDate)
-	}
-
-	// Pick campaign view counts or click counts.
-	var stmt *pbdb.Query
-	switch typ {
-	case "views":
-		stmt = c.q.GetCampaignViewCounts
-	case "clicks":
-		stmt = c.q.GetCampaignClickCounts
-	case "bounces":
-		stmt = c.q.GetCampaignBounceCounts
-	default:
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("globals.messages.invalidData"))
-	}
-
-	if !strHasLen(fromDate, 10, 30) || !strHasLen(toDate, 10, 30) {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
-	}
-
-	out := []models.CampaignAnalyticsCount{}
-	if err := stmt.Select(&out, pq.Array(campIDs), fromDate, toDate); err != nil {
-		c.log.Printf("error fetching campaign %s: %v", typ, err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
-	}
-
-	return out, nil
+	return c.getCampaignAnalyticsCountsSQLite(campIDs, typ, fromDate, toDate)
 }
 
 // GetCampaignAnalyticsLinks returns link click analytics for the given campaign IDs.
 func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate string) ([]models.CampaignAnalyticsLink, error) {
-	if c.isSQLite() {
-		return c.getCampaignAnalyticsLinksSQLite(campIDs, fromDate, toDate)
-	}
-
-	out := []models.CampaignAnalyticsLink{}
-	if err := c.q.GetCampaignLinkCounts.Select(&out, pq.Array(campIDs), fromDate, toDate); err != nil {
-		c.log.Printf("error fetching campaign %s: %v", typ, err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
-	}
-
-	return out, nil
+	return c.getCampaignAnalyticsLinksSQLite(campIDs, fromDate, toDate)
 }
 
 // RegisterCampaignView registers a subscriber's view on a campaign.
 func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
-	if c.isSQLite() {
-		if _, err := c.db.Exec(`
-			INSERT INTO campaign_views (campaign_id, subscriber_id, created)
-			SELECT c.id, s.id, (strftime('%Y-%m-%d %H:%M:%fZ'))
-			FROM campaigns c
-			LEFT JOIN subscribers s ON s.uuid = ?
-			WHERE c.uuid = ?
-			LIMIT 1
-		`, subUUID, campUUID); err != nil {
-			c.log.Printf("error registering campaign view: %s", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	if _, err := c.q.RegisterCampaignView.Exec(campUUID, subUUID); err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Column == "campaign_id" {
-			return nil
-		}
-
+	if _, err := c.db.Exec(`
+		INSERT INTO campaign_views (campaign_id, subscriber_id, created)
+		SELECT c.id, s.id, (strftime('%Y-%m-%d %H:%M:%fZ'))
+		FROM campaigns c
+		LEFT JOIN subscribers s ON s.uuid = ?
+		WHERE c.uuid = ?
+		LIMIT 1
+	`, subUUID, campUUID); err != nil {
 		c.log.Printf("error registering campaign view: %s", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
@@ -1539,7 +1207,7 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
 // GetLinkURL returns the original URL for a link UUID without recording a click.
 func (c *Core) GetLinkURL(linkUUID string) (string, error) {
 	var url string
-	if err := c.q.GetLinkURL.Get(&url, linkUUID); err != nil {
+	if err := c.db.Get(&url, `SELECT url FROM links WHERE uuid = ?`, linkUUID); err != nil {
 		c.log.Printf("error getting link URL: %s", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}
@@ -1548,46 +1216,32 @@ func (c *Core) GetLinkURL(linkUUID string) (string, error) {
 
 // RegisterCampaignLinkClick registers a subscriber's link click on a campaign.
 func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (string, error) {
-	if c.isSQLite() {
-		var out struct {
-			ID  int    `db:"id"`
-			URL string `db:"url"`
-		}
-
-		if err := c.db.Get(&out, `SELECT id, url FROM links WHERE uuid = ?`, linkUUID); err != nil {
-			if err == sql.ErrNoRows {
-				return "", echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("public.invalidLink"))
-			}
-			c.log.Printf("error registering link click: %s", err)
-			return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
-		}
-
-		if _, err := c.db.Exec(`
-			INSERT INTO link_clicks (campaign_id, subscriber_id, link_id, created)
-			SELECT c.id, s.id, ?, (strftime('%Y-%m-%d %H:%M:%fZ'))
-			FROM campaigns c
-			LEFT JOIN subscribers s ON s.uuid = ?
-			WHERE c.uuid = ?
-			LIMIT 1
-		`, out.ID, subUUID, campUUID); err != nil {
-			c.log.Printf("error registering link click: %s", err)
-			return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
-		}
-
-		return out.URL, nil
+	var out struct {
+		ID  int    `db:"id"`
+		URL string `db:"url"`
 	}
 
-	var url string
-	if err := c.q.RegisterLinkClick.Get(&url, linkUUID, campUUID, subUUID); err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Column == "link_id" {
+	if err := c.db.Get(&out, `SELECT id, url FROM links WHERE uuid = ?`, linkUUID); err != nil {
+		if err == sql.ErrNoRows {
 			return "", echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("public.invalidLink"))
 		}
-
 		c.log.Printf("error registering link click: %s", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}
 
-	return url, nil
+	if _, err := c.db.Exec(`
+		INSERT INTO link_clicks (campaign_id, subscriber_id, link_id, created)
+		SELECT c.id, s.id, ?, (strftime('%Y-%m-%d %H:%M:%fZ'))
+		FROM campaigns c
+		LEFT JOIN subscribers s ON s.uuid = ?
+		WHERE c.uuid = ?
+		LIMIT 1
+	`, out.ID, subUUID, campUUID); err != nil {
+		c.log.Printf("error registering link click: %s", err)
+		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+	}
+
+	return out.URL, nil
 }
 
 func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, toDate string) ([]models.CampaignAnalyticsCount, error) {
@@ -1711,7 +1365,7 @@ func (c *Core) getCampaignAnalyticsLinksSQLite(campIDs []int, fromDate, toDate s
 
 // DeleteCampaignViews deletes campaign views older than a given date.
 func (c *Core) DeleteCampaignViews(before time.Time) error {
-	if _, err := c.q.DeleteCampaignViews.Exec(before); err != nil {
+	if _, err := c.db.Exec(`DELETE FROM campaign_views WHERE created < ?`, before.UTC().Format("2006-01-02 15:04:05")); err != nil {
 		c.log.Printf("error deleting campaign views: %s", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}
@@ -1721,7 +1375,7 @@ func (c *Core) DeleteCampaignViews(before time.Time) error {
 
 // DeleteCampaignLinkClicks deletes campaign views older than a given date.
 func (c *Core) DeleteCampaignLinkClicks(before time.Time) error {
-	if _, err := c.q.DeleteCampaignLinkClicks.Exec(before); err != nil {
+	if _, err := c.db.Exec(`DELETE FROM link_clicks WHERE created < ?`, before.UTC().Format("2006-01-02 15:04:05")); err != nil {
 		c.log.Printf("error deleting campaign link clicks: %s", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}
