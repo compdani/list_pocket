@@ -135,7 +135,7 @@ export default {
 
   props: {
     contentTypes: { type: Object, default: () => ({}) },
-    id: { type: Number, default: 0 },
+    id: { type: [String, Number], default: '' },
     title: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
     templates: { type: Array, default: null },

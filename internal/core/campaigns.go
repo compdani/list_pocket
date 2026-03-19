@@ -69,17 +69,11 @@ func normalizeAnalyticsDateInput(value string, endOfDay bool) (string, error) {
 	return "", echo.NewHTTPError(http.StatusBadRequest, "invalid analytics date")
 }
 
-func (c *Core) sqliteTemplateRecordID(id null.Int) (string, error) {
-	if !id.Valid || id.Int <= 0 {
+func (c *Core) sqliteTemplateRecordID(id null.String) (string, error) {
+	if !id.Valid || strings.TrimSpace(id.String) == "" {
 		return "", nil
 	}
-
-	var recordID string
-	if err := c.db.Get(&recordID, `SELECT id FROM templates WHERE rowid = ?`, id.Int); err != nil {
-		return "", err
-	}
-
-	return recordID, nil
+	return strings.TrimSpace(id.String), nil
 }
 
 type sqliteCampaignListRecordRow struct {
@@ -111,11 +105,11 @@ type sqliteCampaignRow struct {
 	Tags              []byte        `db:"tags"`
 	Headers           []byte        `db:"headers"`
 	Attribs           []byte        `db:"attribs"`
-	TemplateID        sql.NullInt64 `db:"template_id"`
+	TemplateID        sql.NullString `db:"template_id"`
 	Messenger         string        `db:"messenger"`
 	Archive           bool          `db:"archive"`
 	ArchiveSlug       string        `db:"archive_slug"`
-	ArchiveTemplateID sql.NullInt64 `db:"archive_template_id"`
+	ArchiveTemplateID sql.NullString `db:"archive_template_id"`
 	ArchiveMeta       []byte        `db:"archive_meta"`
 	StartedAt         string        `db:"started_at"`
 	ToSend            int           `db:"to_send"`
@@ -165,14 +159,14 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 		archiveMeta = json.RawMessage(row.ArchiveMeta)
 	}
 
-	templateID := null.Int{}
+	templateID := null.String{}
 	if row.TemplateID.Valid {
-		templateID = null.IntFrom(int(row.TemplateID.Int64))
+		templateID = null.StringFrom(row.TemplateID.String)
 	}
 
-	archiveTemplateID := null.Int{}
+	archiveTemplateID := null.String{}
 	if row.ArchiveTemplateID.Valid {
-		archiveTemplateID = null.IntFrom(int(row.ArchiveTemplateID.Int64))
+		archiveTemplateID = null.StringFrom(row.ArchiveTemplateID.String)
 	}
 
 	bodySource := null.String{}
@@ -505,7 +499,7 @@ func (c *Core) getCampaign(recordID, uuid, archiveSlug string, tplType string) (
 
 // GetCampaignForPreview retrieves a campaign with a template body. If the optional tplID is > 0
 // that particular template is used, otherwise, the template saved on the campaign is.
-func (c *Core) GetCampaignForPreview(recordID string, tplID int) (models.Campaign, error) {
+func (c *Core) GetCampaignForPreview(recordID string, tplID string) (models.Campaign, error) {
 	if c.isSQLite() {
 		return c.getCampaignForPreviewSQLite(recordID, tplID)
 	}
@@ -707,13 +701,13 @@ func (c *Core) UpdateCampaignStatus(recordID string, status string) (models.Camp
 }
 
 // UpdateCampaignArchive updates a campaign's archive properties.
-func (c *Core) UpdateCampaignArchive(recordID string, enabled bool, tplID int, meta models.JSON, archiveSlug string) error {
+func (c *Core) UpdateCampaignArchive(recordID string, enabled bool, tplID string, meta models.JSON, archiveSlug string) error {
 	if c.isSQLite() {
 		metaJSON, _ := json.Marshal(meta)
 		if _, err := c.db.Exec(`UPDATE campaigns SET
 			archive=?,
 			archive_slug=(CASE WHEN ? = '' THEN NULL ELSE ? END),
-			archive_template_id=(CASE WHEN ? > 0 THEN ? ELSE archive_template_id END),
+			archive_template_id=(CASE WHEN ? != '' THEN ? ELSE archive_template_id END),
 			archive_meta=(CASE WHEN ? != '' THEN ? ELSE archive_meta END),
 			updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id=?`,
@@ -907,8 +901,8 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 	query := `
 	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-		c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
-		atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
+		c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		'' AS template_body,
 		COUNT(*) OVER() AS total,
 		COALESCE((
@@ -1003,8 +997,8 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 	q := `
 	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-		c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
-		atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
+		c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 		COALESCE((
 			SELECT json_group_array(json_object('id', l.rowid, 'name', cl.list_name))
@@ -1053,13 +1047,13 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 	return sqliteCampaignRowToModel(row), nil
 }
 
-func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID int) (models.Campaign, error) {
+func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (models.Campaign, error) {
 	var row sqliteCampaignRow
 	if err := c.db.Get(&row, `
 		SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-			c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
-			atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
+			c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 			COALESCE(t.body, '') AS template_body,
 			COALESCE((
 				SELECT json_group_array(json_object('id', l.rowid, 'name', cl.list_name))
@@ -1075,7 +1069,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID int) (models.C
 		FROM campaigns c
 		LEFT JOIN templates tpl ON tpl.id = c.template_id
 		LEFT JOIN templates atpl ON atpl.id = c.archive_template_id
-		LEFT JOIN templates t ON t.id = (CASE WHEN ? = 0 THEN c.template_id ELSE ? END)
+		LEFT JOIN templates t ON t.id = (CASE WHEN ? = '' THEN c.template_id ELSE ? END)
 		WHERE c.id = ?
 	`, tplID, tplID, recordID); err != nil {
 		if err == sql.ErrNoRows {
@@ -1095,8 +1089,8 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 	if err := c.db.Select(&rows, `
 		SELECT COUNT(*) OVER() AS total, c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-			c.tags, c.headers, c.attribs, tpl.rowid AS template_id, c.messenger, c.archive, c.archive_slug,
-			atpl.rowid AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
+			c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 			'[]' AS lists,
 			'[]' AS media,
@@ -1142,8 +1136,8 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	}
 
 	var tpl tplInfo
-	if o.TemplateID.Valid && o.TemplateID.Int > 0 {
-		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE rowid = ? LIMIT 1`, o.TemplateID.Int)
+	if o.TemplateID.Valid && strings.TrimSpace(o.TemplateID.String) != "" {
+		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE id = ? LIMIT 1`, o.TemplateID.String)
 	} else if o.ContentType != models.CampaignContentTypeVisual {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 LIMIT 1`)
 	}
@@ -1160,7 +1154,7 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	if tpl.Type == models.TemplateTypeCampaignVisual {
 		contentType = models.CampaignContentTypeVisual
 		templateID.Valid = false
-		templateID.Int = 0
+		templateID.String = ""
 		if body == "" {
 			body = tpl.Body
 		}

@@ -861,6 +861,7 @@ export default {
           .filter((id) => typeof id === 'string' && id.length > 0),
         from_email: this.form.fromEmail,
         content_type: this.form.content.contentType,
+        template_id: this.form.content.templateId,
         messenger: this.form.messenger,
         type: 'regular',
         tags: this.form.tags,

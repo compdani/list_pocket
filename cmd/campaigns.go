@@ -169,11 +169,11 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 	var (
 		isPost      = c.Request().Method == http.MethodPost
 		contentType = c.FormValue("content_type")
-		tplID, _    = strconv.Atoi(c.FormValue("template_id"))
+		tplID       = strings.TrimSpace(c.FormValue("template_id"))
 	)
 	// For visual content, template ID for previewing is irrelevant.
-	if contentType == models.CampaignContentTypeVisual || tplID < 1 {
-		tplID = 0
+	if contentType == models.CampaignContentTypeVisual {
+		tplID = ""
 	}
 
 	// Get the campaign from the DB for previewing with the `template_body` field.
@@ -232,7 +232,7 @@ func (a *App) PreviewCampaignArchive(c echo.Context) error {
 	}
 
 	// Fetch the campaign body from the DB.
-	tplID, _ := strconv.Atoi(c.FormValue("template_id"))
+	tplID := strings.TrimSpace(c.FormValue("template_id"))
 	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err
@@ -322,7 +322,7 @@ func (a *App) CreateCampaign(c echo.Context) error {
 	a.log.Printf("create campaign: validated name=%q type=%q content_type=%q archive=%v altbody_valid=%v archive_slug_valid=%v send_at_valid=%v",
 		o.Name, o.Type, o.ContentType, o.Archive, o.AltBody.Valid, o.ArchiveSlug.Valid, o.SendAt.Valid)
 
-	if o.ArchiveTemplateID.Valid && o.ArchiveTemplateID.Int != 0 {
+	if o.ArchiveTemplateID.Valid && strings.TrimSpace(o.ArchiveTemplateID.String) != "" {
 		o.ArchiveTemplateID = o.TemplateID
 	}
 
@@ -449,7 +449,7 @@ func (a *App) UpdateCampaignArchive(c echo.Context) error {
 
 	req := struct {
 		Archive     bool        `json:"archive"`
-		TemplateID  int         `json:"archive_template_id"`
+		TemplateID  string      `json:"archive_template_id"`
 		Meta        models.JSON `json:"archive_meta"`
 		ArchiveSlug string      `json:"archive_slug"`
 	}{}
@@ -621,7 +621,7 @@ func (a *App) TestCampaign(c echo.Context) error {
 	}
 
 	// Get the campaign from the DB for previewing.
-	tplID, _ := strconv.Atoi(c.FormValue("template_id"))
+	tplID := strings.TrimSpace(c.FormValue("template_id"))
 	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err

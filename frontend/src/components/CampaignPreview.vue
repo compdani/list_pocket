@@ -39,7 +39,7 @@ export default {
     isPost: { type: Boolean, default: false },
 
     // Template or campaign ID.
-    id: { type: Number, default: 0 },
+    id: { type: [String, Number], default: '' },
     title: { type: String, default: '' },
 
     // campaign | template.
@@ -52,7 +52,7 @@ export default {
 
     body: { type: String, default: '' },
     contentType: { type: String, default: '' },
-    templateId: { type: [Number, null], default: null },
+    templateId: { type: [String, Number, null], default: null },
     isArchive: { type: Boolean, default: false },
   },
 
