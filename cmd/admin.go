@@ -9,13 +9,15 @@ import (
 
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/captcha"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
 type serverConfig struct {
-	RootURL            string `json:"root_url"`
-	FromEmail          string `json:"from_email"`
+	RootURL            string             `json:"root_url"`
+	FromEmail          string             `json:"from_email"`
+	SMTPSenders        []smtpSenderConfig `json:"smtp_senders"`
 	PublicSubscription struct {
 		Enabled          bool        `json:"enabled"`
 		CaptchaEnabled   bool        `json:"captcha_enabled"`
@@ -36,6 +38,13 @@ type serverConfig struct {
 	NeedsRestart  bool            `json:"needs_restart"`
 	HasLegacyUser bool            `json:"has_legacy_user"`
 	Version       string          `json:"version"`
+}
+
+type smtpSenderConfig struct {
+	Messenger        string   `json:"messenger"`
+	Name             string   `json:"name"`
+	FromAddresses    []string `json:"from_addresses"`
+	DefaultFromEmail string   `json:"default_from_email"`
 }
 
 // GetServerConfig returns general server config.
@@ -74,6 +83,34 @@ func (a *App) GetServerConfig(c echo.Context) error {
 	}
 
 	out.MediaProvider = a.cfg.MediaUpload.Provider
+
+	settings, err := a.core.GetSettings()
+	if err != nil {
+		return err
+	}
+	enabledSMTP := make([]models.SMTPSettings, 0, len(settings.SMTP))
+	for _, item := range settings.SMTP {
+		if !item.Enabled {
+			continue
+		}
+		enabledSMTP = append(enabledSMTP, item)
+		if item.Name != "" {
+			out.SMTPSenders = append(out.SMTPSenders, smtpSenderConfig{
+				Messenger:        item.Name,
+				Name:             item.Name,
+				FromAddresses:    item.FromAddresses,
+				DefaultFromEmail: item.DefaultFromEmail,
+			})
+		}
+	}
+	if len(enabledSMTP) == 1 {
+		out.SMTPSenders = append([]smtpSenderConfig{{
+			Messenger:        emailMsgr,
+			Name:             emailMsgr,
+			FromAddresses:    enabledSMTP[0].FromAddresses,
+			DefaultFromEmail: enabledSMTP[0].DefaultFromEmail,
+		}}, out.SMTPSenders...)
+	}
 
 	// Language list.
 	langList, err := getI18nLangList(a.fs)

@@ -2,6 +2,27 @@ package models
 
 import "gopkg.in/volatiletech/null.v6"
 
+type SMTPSettings struct {
+	Name             string              `json:"name"`
+	UUID             string              `json:"uuid"`
+	Enabled          bool                `json:"enabled"`
+	Host             string              `json:"host"`
+	HelloHostname    string              `json:"hello_hostname"`
+	Port             int                 `json:"port"`
+	AuthProtocol     string              `json:"auth_protocol"`
+	Username         string              `json:"username"`
+	Password         string              `json:"password,omitempty"`
+	EmailHeaders     []map[string]string `json:"email_headers"`
+	FromAddresses    []string            `json:"from_addresses"`
+	DefaultFromEmail string              `json:"default_from_email"`
+	MaxConns         int                 `json:"max_conns"`
+	MaxMsgRetries    int                 `json:"max_msg_retries"`
+	IdleTimeout      string              `json:"idle_timeout"`
+	WaitTimeout      string              `json:"wait_timeout"`
+	TLSType          string              `json:"tls_type"`
+	TLSSkipVerify    bool                `json:"tls_skip_verify"`
+}
+
 // Settings represents the app settings stored in the DB.
 type Settings struct {
 	AppSiteName                   string   `json:"app.site_name"`
@@ -29,7 +50,7 @@ type Settings struct {
 	AppMessageSlidingWindowRate     int    `json:"app.message_sliding_window_rate"`
 
 	PrivacyIndividualTracking bool     `json:"privacy.individual_tracking"`
-	PrivacyDisableTracking   bool     `json:"privacy.disable_tracking"`
+	PrivacyDisableTracking    bool     `json:"privacy.disable_tracking"`
 	PrivacyUnsubHeader        bool     `json:"privacy.unsubscribe_header"`
 	PrivacyAllowBlocklist     bool     `json:"privacy.allow_blocklist"`
 	PrivacyAllowPreferences   bool     `json:"privacy.allow_preferences"`
@@ -53,12 +74,12 @@ type Settings struct {
 	} `json:"security.captcha"`
 
 	OIDC struct {
-		Enabled           bool     `json:"enabled"`
-		ProviderURL       string   `json:"provider_url"`
-		ProviderName      string   `json:"provider_name"`
-		ClientID          string   `json:"client_id"`
-		ClientSecret      string   `json:"client_secret"`
-		AutoCreateUsers   bool     `json:"auto_create_users"`
+		Enabled           bool        `json:"enabled"`
+		ProviderURL       string      `json:"provider_url"`
+		ProviderName      string      `json:"provider_name"`
+		ClientID          string      `json:"client_id"`
+		ClientSecret      string      `json:"client_secret"`
+		AutoCreateUsers   bool        `json:"auto_create_users"`
 		DefaultUserRoleID null.String `json:"default_user_role_id"`
 		DefaultListRoleID null.String `json:"default_list_role_id"`
 	} `json:"security.oidc"`
@@ -80,24 +101,7 @@ type Settings struct {
 	UploadS3BucketType         string   `json:"upload.s3.bucket_type"`
 	UploadS3Expiry             string   `json:"upload.s3.expiry"`
 
-	SMTP []struct {
-		Name          string              `json:"name"`
-		UUID          string              `json:"uuid"`
-		Enabled       bool                `json:"enabled"`
-		Host          string              `json:"host"`
-		HelloHostname string              `json:"hello_hostname"`
-		Port          int                 `json:"port"`
-		AuthProtocol  string              `json:"auth_protocol"`
-		Username      string              `json:"username"`
-		Password      string              `json:"password,omitempty"`
-		EmailHeaders  []map[string]string `json:"email_headers"`
-		MaxConns      int                 `json:"max_conns"`
-		MaxMsgRetries int                 `json:"max_msg_retries"`
-		IdleTimeout   string              `json:"idle_timeout"`
-		WaitTimeout   string              `json:"wait_timeout"`
-		TLSType       string              `json:"tls_type"`
-		TLSSkipVerify bool                `json:"tls_skip_verify"`
-	} `json:"smtp"`
+	SMTP []SMTPSettings `json:"smtp"`
 
 	Messengers []struct {
 		UUID          string `json:"uuid"`

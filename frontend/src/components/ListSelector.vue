@@ -27,13 +27,14 @@
       </label>
       <v-autocomplete
         :id="inputId"
-        :model-value="null"
+        :model-value="pickerValue"
         :search="query"
         :placeholder="placeholder"
         :disabled="all.length === 0 || $props.disabled"
         :items="normalizedLists"
         item-title="name"
         item-value="listValue"
+        return-object
         clearable
         @update:search="updateQuery"
         @update:model-value="selectListValue"
@@ -83,6 +84,7 @@ export default {
 
     return {
       inputId: `list-selector-${listSelectorId}`,
+      pickerValue: null,
       query: '',
       selectedItems: [],
     };
@@ -114,11 +116,13 @@ export default {
       }
       const listValue = this.getListValue(l);
       if (this.selectedItems.some((item) => this.getListValue(item) === listValue)) {
+        this.pickerValue = null;
         this.query = '';
         return;
       }
 
       this.selectedItems = [...this.selectedItems, l];
+      this.pickerValue = null;
       this.query = '';
 
       this.emitSelection();
@@ -131,10 +135,13 @@ export default {
 
       const item = typeof value === 'object'
         ? value
-        : this.filteredLists.find((l) => this.getListValue(l) === String(value));
+        : this.normalizedLists.find((l) => this.getListValue(l) === String(value));
       if (item) {
         this.selectList(item);
+        return;
       }
+
+      this.pickerValue = null;
     },
 
     removeList(listValue) {

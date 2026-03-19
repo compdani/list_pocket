@@ -87,40 +87,40 @@ type sqliteCampaignMediaRecordRow struct {
 }
 
 type sqliteCampaignRow struct {
-	ID                int           `db:"id"`
-	RecordID          string        `db:"record_id"`
-	CreatedAt         string        `db:"created_at"`
-	UpdatedAt         string        `db:"updated_at"`
-	UUID              string        `db:"uuid"`
-	Type              string        `db:"type"`
-	Name              string        `db:"name"`
-	Subject           string        `db:"subject"`
-	FromEmail         string        `db:"from_email"`
-	Body              string        `db:"body"`
-	BodySource        string        `db:"body_source"`
-	AltBody           string        `db:"altbody"`
-	SendAt            string        `db:"send_at"`
-	Status            string        `db:"status"`
-	ContentType       string        `db:"content_type"`
-	Tags              []byte        `db:"tags"`
-	Headers           []byte        `db:"headers"`
-	Attribs           []byte        `db:"attribs"`
+	ID                int            `db:"id"`
+	RecordID          string         `db:"record_id"`
+	CreatedAt         string         `db:"created_at"`
+	UpdatedAt         string         `db:"updated_at"`
+	UUID              string         `db:"uuid"`
+	Type              string         `db:"type"`
+	Name              string         `db:"name"`
+	Subject           string         `db:"subject"`
+	FromEmail         string         `db:"from_email"`
+	Body              string         `db:"body"`
+	BodySource        string         `db:"body_source"`
+	AltBody           string         `db:"altbody"`
+	SendAt            string         `db:"send_at"`
+	Status            string         `db:"status"`
+	ContentType       string         `db:"content_type"`
+	Tags              []byte         `db:"tags"`
+	Headers           []byte         `db:"headers"`
+	Attribs           []byte         `db:"attribs"`
 	TemplateID        sql.NullString `db:"template_id"`
-	Messenger         string        `db:"messenger"`
-	Archive           bool          `db:"archive"`
-	ArchiveSlug       string        `db:"archive_slug"`
+	Messenger         string         `db:"messenger"`
+	Archive           bool           `db:"archive"`
+	ArchiveSlug       string         `db:"archive_slug"`
 	ArchiveTemplateID sql.NullString `db:"archive_template_id"`
-	ArchiveMeta       []byte        `db:"archive_meta"`
-	StartedAt         string        `db:"started_at"`
-	ToSend            int           `db:"to_send"`
-	Sent              int           `db:"sent"`
-	TemplateBody      string        `db:"template_body"`
-	Lists             []byte        `db:"lists"`
-	Media             []byte        `db:"media"`
-	Views             int           `db:"views"`
-	Clicks            int           `db:"clicks"`
-	Bounces           int           `db:"bounces"`
-	Total             int           `db:"total"`
+	ArchiveMeta       []byte         `db:"archive_meta"`
+	StartedAt         string         `db:"started_at"`
+	ToSend            int            `db:"to_send"`
+	Sent              int            `db:"sent"`
+	TemplateBody      string         `db:"template_body"`
+	Lists             []byte         `db:"lists"`
+	Media             []byte         `db:"media"`
+	Views             int            `db:"views"`
+	Clicks            int            `db:"clicks"`
+	Bounces           int            `db:"bounces"`
+	Total             int            `db:"total"`
 }
 
 type sqliteCampaignStatsRow struct {
@@ -906,7 +906,7 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 		'' AS template_body,
 		COUNT(*) OVER() AS total,
 		COALESCE((
-			SELECT json_group_array(json_object('id', l.rowid, 'name', cl.list_name))
+			SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
 			FROM campaign_lists cl
 			LEFT JOIN lists l ON l.id = cl.list_id
 			WHERE cl.campaign_id = c.id
@@ -1001,7 +1001,7 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 		COALESCE((
-			SELECT json_group_array(json_object('id', l.rowid, 'name', cl.list_name))
+			SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
 			FROM campaign_lists cl
 			LEFT JOIN lists l ON l.id = cl.list_id
 			WHERE cl.campaign_id = c.id
@@ -1056,7 +1056,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 			COALESCE(t.body, '') AS template_body,
 			COALESCE((
-				SELECT json_group_array(json_object('id', l.rowid, 'name', cl.list_name))
+				SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
 				FROM campaign_lists cl
 				LEFT JOIN lists l ON l.id = cl.list_id
 				WHERE cl.campaign_id = c.id
