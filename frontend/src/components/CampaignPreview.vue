@@ -1,25 +1,27 @@
 <template>
-  <v-dialog v-model="isVisible" @update:model-value="close" max-width="900">
-    <v-card>
-      <v-card-title class="bg-surface">
-        {{ title }}
+  <v-dialog v-model="isVisible" @update:model-value="close" max-width="1100">
+    <v-card class="preview-card">
+      <v-card-title class="preview-title">
+        <span class="preview-title__text">{{ title }}</span>
       </v-card-title>
       <v-card-text class="preview-content">
         <v-overlay v-if="isLoading" contained persistent>
           <v-progress-circular indeterminate />
         </v-overlay>
-        <iframe
-          id="iframe"
-          name="iframe"
-          ref="iframe"
-          :title="title"
-          :srcdoc="previewHTML"
-          @load="onLoaded"
-          sandbox="allow-scripts"
-          class="preview-iframe"
-        />
+        <div class="preview-stage">
+          <iframe
+            id="iframe"
+            name="iframe"
+            ref="iframe"
+            :title="title"
+            :srcdoc="previewHTML"
+            @load="onLoaded"
+            sandbox="allow-scripts"
+            class="preview-iframe"
+          />
+        </div>
       </v-card-text>
-      <v-card-actions class="justify-end">
+      <v-card-actions class="preview-actions">
         <v-btn @click="close">
           {{ $t('globals.buttons.close') }}
         </v-btn>
@@ -155,3 +157,74 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.preview-card {
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.preview-title {
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(var(--v-theme-surface), 1) 0%, rgba(var(--v-theme-surface), 0.96) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  display: flex;
+  min-height: 68px;
+  padding: 0 24px;
+}
+
+.preview-title__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-content {
+  background:
+    radial-gradient(circle at top, rgba(var(--v-theme-primary), 0.06), transparent 35%),
+    linear-gradient(180deg, #f6f7fb 0%, #eef1f6 100%);
+  min-height: 70vh;
+  padding: 24px !important;
+  position: relative;
+}
+
+.preview-stage {
+  align-items: flex-start;
+  display: flex;
+  justify-content: center;
+  min-height: calc(70vh - 48px);
+}
+
+.preview-iframe {
+  background: #fff;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+  height: calc(70vh - 48px);
+  max-width: 900px;
+  width: 100%;
+}
+
+.preview-actions {
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  justify-content: flex-end;
+  padding: 16px 20px;
+}
+
+@media (max-width: 959px) {
+  .preview-content {
+    min-height: 78vh;
+    padding: 12px !important;
+  }
+
+  .preview-stage {
+    min-height: calc(78vh - 24px);
+  }
+
+  .preview-iframe {
+    border-radius: 12px;
+    height: calc(78vh - 24px);
+  }
+}
+</style>
