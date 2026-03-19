@@ -46,7 +46,7 @@ func (s *PocketBaseAuthService) UpsertUser(u User, lookupUsername string) (*pbco
 
 	roleID := u.UserRoleID
 	if roleID < 1 {
-		roleID = u.UserRole.ID
+		roleID = 0
 	}
 
 	rec.SetEmail(email)

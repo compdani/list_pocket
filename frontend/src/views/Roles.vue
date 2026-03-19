@@ -19,7 +19,7 @@
     <b-table :data="roles" :loading="isLoading()" hoverable>
       <b-table-column v-slot="props" field="role" :label="$tc('users.role')" sortable>
         <a href="#" @click.prevent="showEditForm(props.row, 'user')">
-          <b-tag v-if="props.row.id === 1" class="enabled">
+          <b-tag v-if="props.row.name === 'Super Admin' && isUser" class="enabled">
             {{ props.row.name }}
           </b-tag>
           <template v-else>{{ props.row.name }}</template>
@@ -49,7 +49,7 @@
             </b-tooltip>
           </a>
 
-          <template v-if="props.row.id !== 1">
+          <template v-if="!(props.row.name === 'Super Admin' && isUser)">
             <a href="#" @click.prevent="showEditForm(props.row, 'user')" data-cy="btn-edit"
               :aria-label="$t('globals.buttons.edit')">
               <b-tooltip :label="$t('globals.buttons.edit')" type="is-dark">

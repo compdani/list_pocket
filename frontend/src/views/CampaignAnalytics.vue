@@ -259,8 +259,7 @@ export default {
       const campIDs = Object.keys(camps);
       // datasets[] array for line chart.
       const lines = campIDs.map((id, n) => {
-        const cId = parseInt(id, 10);
-        const points = data.filter((item) => item.campaignId === cId);
+        const points = data.filter((item) => item.campaignId === id);
 
         return {
           label: camps[id].name,
@@ -276,8 +275,7 @@ export default {
       const labels = [];
       const points = campIDs.map((id) => {
         labels.push(camps[id].name);
-        const cId = parseInt(id, 10);
-        const sum = data.reduce((a, item) => (item.campaignId === cId ? a + item.count : a), 0);
+        const sum = data.reduce((a, item) => (item.campaignId === id ? a + item.count : a), 0);
         return sum;
       });
 

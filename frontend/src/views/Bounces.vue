@@ -60,7 +60,7 @@
       @update:options="onTableOptionsChange"
     >
       <template #[`item.email`]="{ item }">
-        <router-link :to="{ name: 'subscriber', params: { id: item.subscriberRecordId || item.subscriberId } }"
+        <router-link :to="{ name: 'subscriber', params: { id: item.subscriberId } }"
           :class="{ 'text-error': item.subscriberStatus === 'blocklisted' }">
           {{ item.email }}
         </router-link>
@@ -265,7 +265,7 @@ export default {
 
       if (!this.bulk.all && this.bulk.checked.length > 0) {
         const subIds = this.bulk.checked.map((s) => s.subscriberId);
-        this.$api.blocklistSubscribers({ ids: subIds }).then(cb);
+        this.$api.blocklistSubscribers({ subscriber_record_ids: subIds }).then(cb);
         return;
       }
 
@@ -313,7 +313,7 @@ export default {
 
   mounted() {
     if (this.$route.query.campaign_id) {
-      this.queryParams.campaign_id = parseInt(this.$route.query.campaign_id, 10);
+      this.queryParams.campaign_id = this.$route.query.campaign_id;
     }
 
     if (this.$route.query.source) {

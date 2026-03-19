@@ -594,7 +594,6 @@ func (o *Auth) validatePBToken(token string) (User, *pbcore.Record, error) {
 
 	if roleID := ExtractRoleIDFromRecord(rec); roleID > 0 {
 		user.UserRoleID = roleID
-		user.UserRole.ID = roleID
 	}
 
 	if perms, err := o.loadRolePermissions(rec); err == nil {
@@ -618,7 +617,6 @@ func (o *Auth) validatePBToken(token string) (User, *pbcore.Record, error) {
 			}
 			if user.UserRoleID > 0 {
 				dbUser.UserRoleID = user.UserRoleID
-				dbUser.UserRole.ID = user.UserRoleID
 			}
 			if len(user.PermissionsMap) > 0 {
 				dbUser.PermissionsMap = user.PermissionsMap
@@ -700,7 +698,7 @@ func (o *Auth) Perm(next echo.HandlerFunc, perms ...string) echo.HandlerFunc {
 		}
 
 		// If the current user is a Super Admin user, do no checks.
-		if ExtractRoleID(c) == SuperAdminRoleID || u.UserRole.ID == SuperAdminRoleID {
+		if ExtractRoleID(c) == SuperAdminRoleID || u.UserRoleID == SuperAdminRoleID {
 			return next(c)
 		}
 
@@ -734,9 +732,6 @@ func ExtractRoleID(c echo.Context) int {
 	}
 
 	if u, ok := c.Get(UserHTTPCtxKey).(User); ok {
-		if u.UserRole.ID > 0 {
-			return u.UserRole.ID
-		}
 		if u.UserRoleID > 0 {
 			return u.UserRoleID
 		}

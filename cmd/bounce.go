@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/compdani/list_pocket/models"
@@ -14,7 +15,7 @@ import (
 // GetBounce handles retrieval of a specific bounce record by ID.
 func (a *App) GetBounce(c echo.Context) error {
 	// Fetch one bounce from the DB.
-	id := getID(c)
+	id := strings.TrimSpace(c.Param("id"))
 	out, err := a.core.GetBounce(id)
 	if err != nil {
 		return err
@@ -26,13 +27,20 @@ func (a *App) GetBounce(c echo.Context) error {
 // GetBounces handles retrieval of bounce records.
 func (a *App) GetBounces(c echo.Context) error {
 	var (
-		campID, _ = strconv.Atoi(c.QueryParam("campaign_id"))
-		source    = c.FormValue("source")
-		orderBy   = c.FormValue("order_by")
-		order     = c.FormValue("order")
+		source  = c.FormValue("source")
+		orderBy = c.FormValue("order_by")
+		order   = c.FormValue("order")
 
 		pg = a.pg.NewFromURL(c.Request().URL.Query())
 	)
+	campIDs, err := a.core.ResolveCampaignIDs(nil, getQueryStrings("campaign_id", c.QueryParams()))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+	}
+	campID := 0
+	if len(campIDs) > 0 {
+		campID = campIDs[0]
+	}
 
 	// Query and fetch bounces from the DB.
 	res, total, err := a.core.QueryBounces(campID, 0, source, orderBy, order, pg.Offset, pg.Limit)
@@ -75,18 +83,12 @@ func (a *App) GetSubscriberBounces(c echo.Context) error {
 func (a *App) DeleteBounces(c echo.Context) error {
 	all, _ := strconv.ParseBool(c.QueryParam("all"))
 
-	var ids []int
+	var ids []string
 	if !all {
-		// There are multiple IDs in the query string.
-		res, err := parseStringIDs(c.Request().URL.Query()["id"])
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidID", "error", err.Error()))
-		}
-		if len(res) == 0 {
+		ids = getQueryStrings("id", c.Request().URL.Query())
+		if len(ids) == 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidID"))
 		}
-
-		ids = res
 	}
 
 	// Delete bounces from the DB.
@@ -100,8 +102,8 @@ func (a *App) DeleteBounces(c echo.Context) error {
 // DeleteBounce handles bounce deletion of a single bounce record.
 func (a *App) DeleteBounce(c echo.Context) error {
 	// Delete bounces from the DB.
-	id := getID(c)
-	if err := a.core.DeleteBounces([]int{id}, false); err != nil {
+	id := strings.TrimSpace(c.Param("id"))
+	if err := a.core.DeleteBounces([]string{id}, false); err != nil {
 		return err
 	}
 

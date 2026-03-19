@@ -366,7 +366,7 @@ func ensureSuperAdminRolePermissions(core *core.Core, cfg *Config) error {
 		}
 
 		role.Permissions = perms
-		_, err := core.UpdateUserRole(role.ID, role)
+		_, err := core.UpdateUserRole(role.RecordID, role)
 		return err
 	}
 

@@ -17,6 +17,39 @@ var (
 	reUsername = regexp.MustCompile(`^[a-zA-Z0-9_\-\.@]+$`)
 )
 
+type userReq struct {
+	auth.User
+	UserRoleRecordID string `json:"user_role_id"`
+	ListRoleRecordID string `json:"list_role_id"`
+}
+
+func (a *App) userFromReq(req userReq) (auth.User, error) {
+	u := req.User
+
+	if strings.TrimSpace(req.UserRoleRecordID) != "" {
+		roleID, err := a.core.ResolveRoleLegacyID(req.UserRoleRecordID)
+		if err != nil {
+			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		}
+		u.UserRoleID = roleID
+		u.UserRoleRecID = strings.TrimSpace(req.UserRoleRecordID)
+	}
+
+	if strings.TrimSpace(req.ListRoleRecordID) != "" {
+		roleID, err := a.core.ResolveRoleLegacyID(req.ListRoleRecordID)
+		if err != nil {
+			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		}
+		u.ListRoleID = &roleID
+		u.ListRoleRecID = strings.TrimSpace(req.ListRoleRecordID)
+	} else {
+		u.ListRoleID = nil
+		u.ListRoleRecID = ""
+	}
+
+	return u, nil
+}
+
 func userRouteRecordID(c echo.Context) (string, error) {
 	recordID := strings.TrimSpace(c.Param("id"))
 	if recordID == "" {
@@ -62,8 +95,12 @@ func (a *App) GetUsers(c echo.Context) error {
 
 // CreateUser handles user creation.
 func (a *App) CreateUser(c echo.Context) error {
-	var u auth.User
-	if err := c.Bind(&u); err != nil {
+	var req userReq
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+	u, err := a.userFromReq(req)
+	if err != nil {
 		return err
 	}
 
@@ -130,8 +167,12 @@ func (a *App) CreateUser(c echo.Context) error {
 // UpdateUser handles user modification.
 func (a *App) UpdateUser(c echo.Context) error {
 	// Incoming params.
-	var u auth.User
-	if err := c.Bind(&u); err != nil {
+	var req userReq
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+	u, err := a.userFromReq(req)
+	if err != nil {
 		return err
 	}
 

@@ -70,7 +70,7 @@ type CampaignStats struct {
 }
 
 type CampaignAnalyticsCount struct {
-	CampaignID int       `db:"campaign_id" json:"campaign_id"`
+	CampaignID string    `db:"campaign_id" json:"campaign_id"`
 	Count      int       `db:"count" json:"count"`
 	Timestamp  time.Time `db:"timestamp" json:"timestamp"`
 }

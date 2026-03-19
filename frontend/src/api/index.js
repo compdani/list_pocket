@@ -733,7 +733,7 @@ export const createUser = (data) => http.post(
 );
 
 export const updateUser = (data) => http.put(
-  `/api/users/${data.record_id || data.recordId || data.id}`,
+  `/api/users/${data.id}`,
   data,
   { loading: models.users },
 );

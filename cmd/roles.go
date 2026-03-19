@@ -9,6 +9,14 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+func roleRouteRecordID(c echo.Context) (string, error) {
+	recordID := strings.TrimSpace(c.Param("id"))
+	if recordID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+	return recordID, nil
+}
+
 // GetUserRoles retrieves roles.
 func (a *App) GetUserRoles(c echo.Context) error {
 	// Get all roles.
@@ -71,10 +79,17 @@ func (a *App) CreateListRole(c echo.Context) error {
 
 // UpdateUserRole handles role modification.
 func (a *App) UpdateUserRole(c echo.Context) error {
-	id := getID(c)
+	recordID, err := roleRouteRecordID(c)
+	if err != nil {
+		return err
+	}
 
 	// ID 1 is reserved for the Super Admin user role.
-	if id == auth.SuperAdminRoleID {
+	current, err := a.core.GetRole(recordID)
+	if err != nil {
+		return err
+	}
+	if current.ID == auth.SuperAdminRoleID {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
 
@@ -91,7 +106,7 @@ func (a *App) UpdateUserRole(c echo.Context) error {
 	r.Name.String = strings.TrimSpace(r.Name.String)
 
 	// Update the role in the DB.
-	out, err := a.core.UpdateUserRole(id, r)
+	out, err := a.core.UpdateUserRole(recordID, r)
 	if err != nil {
 		return err
 	}
@@ -106,11 +121,17 @@ func (a *App) UpdateUserRole(c echo.Context) error {
 
 // UpdateListRole handles role modification.
 func (a *App) UpdateListRole(c echo.Context) error {
-	// Get the role ID.
-	id := getID(c)
+	recordID, err := roleRouteRecordID(c)
+	if err != nil {
+		return err
+	}
 
 	// ID 1 is reserved for the Super Admin user role.
-	if id == auth.SuperAdminRoleID {
+	current, err := a.core.GetRole(recordID)
+	if err != nil {
+		return err
+	}
+	if current.ID == auth.SuperAdminRoleID {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
 
@@ -128,7 +149,7 @@ func (a *App) UpdateListRole(c echo.Context) error {
 	r.Name.String = strings.TrimSpace(r.Name.String)
 
 	// Update the role in the DB.
-	out, err := a.core.UpdateListRole(id, r)
+	out, err := a.core.UpdateListRole(recordID, r)
 	if err != nil {
 		return err
 	}
@@ -143,16 +164,22 @@ func (a *App) UpdateListRole(c echo.Context) error {
 
 // DeleteRole handles (user|list) role deletion.
 func (a *App) DeleteRole(c echo.Context) error {
-	// Get the role ID.
-	id := getID(c)
+	recordID, err := roleRouteRecordID(c)
+	if err != nil {
+		return err
+	}
 
 	// ID 1 is reserved for the Super Admin user role.
-	if id == auth.SuperAdminRoleID {
+	current, err := a.core.GetRole(recordID)
+	if err != nil {
+		return err
+	}
+	if current.ID == auth.SuperAdminRoleID {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
 
 	// Delete the role from the DB.
-	if err := a.core.DeleteRole(int(id)); err != nil {
+	if err := a.core.DeleteRole(recordID); err != nil {
 		return err
 	}
 

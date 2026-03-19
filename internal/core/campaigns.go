@@ -138,6 +138,12 @@ type sqliteCampaignStatsRow struct {
 	UpdatedAt string `db:"updated_at"`
 }
 
+type campaignAnalyticsSQLiteRow struct {
+	CampaignID int    `db:"campaign_id"`
+	Count      int    `db:"count"`
+	TS         string `db:"ts"`
+}
+
 func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 	tags := pq.StringArray{}
 	if len(row.Tags) > 0 && string(row.Tags) != "null" {
@@ -243,6 +249,63 @@ func (c *Core) ResolveCampaignIDs(campaignIDs []int, campaignRecordIDs []string)
 	}
 
 	return appendUniqueInts(append([]int{}, campaignIDs...), resolved), nil
+}
+
+func (c *Core) ResolveCampaignRecordIDs(campaignIDs []int) ([]string, error) {
+	if len(campaignIDs) == 0 || !c.isSQLite() {
+		return nil, nil
+	}
+
+	query := `SELECT rowid AS row_id, id FROM campaigns WHERE rowid IN (` + sqlitePlaceholders(len(campaignIDs)) + `)`
+	args := make([]any, 0, len(campaignIDs))
+	for _, id := range campaignIDs {
+		args = append(args, id)
+	}
+
+	var rows []struct {
+		RowID int    `db:"row_id"`
+		ID    string `db:"id"`
+	}
+	if err := c.db.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+
+	idMap := make(map[int]string, len(rows))
+	for _, row := range rows {
+		idMap[row.RowID] = row.ID
+	}
+
+	resolved := make([]string, 0, len(campaignIDs))
+	for _, id := range campaignIDs {
+		if recordID := idMap[id]; recordID != "" {
+			resolved = append(resolved, recordID)
+		}
+	}
+
+	return resolved, nil
+}
+
+func campaignAnalyticsIDMap(ids []int, recordIDs []string) map[int]string {
+	out := make(map[int]string, len(ids))
+	for i, id := range ids {
+		if i < len(recordIDs) {
+			out[id] = recordIDs[i]
+		}
+	}
+	return out
+}
+
+func extractCampaignIDs(rows []campaignAnalyticsSQLiteRow) []int {
+	out := make([]int, 0, len(rows))
+	seen := map[int]struct{}{}
+	for _, row := range rows {
+		if _, ok := seen[row.CampaignID]; ok {
+			continue
+		}
+		seen[row.CampaignID] = struct{}{}
+		out = append(out, row.CampaignID)
+	}
+	return out
 }
 
 func sqliteCampaignRowsToModels(rows []sqliteCampaignRow) models.Campaigns {
@@ -1583,12 +1646,7 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 	args = append(args, fromSQL, toSQL)
 
-	type row struct {
-		CampaignID int    `db:"campaign_id"`
-		Count      int    `db:"count"`
-		TS         string `db:"ts"`
-	}
-	var rows []row
+	var rows []campaignAnalyticsSQLiteRow
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching campaign %s: %v", typ, err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1596,13 +1654,19 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 
 	out := make([]models.CampaignAnalyticsCount, 0, len(rows))
+	recordIDs, err := c.ResolveCampaignRecordIDs(extractCampaignIDs(rows))
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+	recordMap := campaignAnalyticsIDMap(extractCampaignIDs(rows), recordIDs)
 	for _, r := range rows {
 		t, err := time.Parse("2006-01-02 15:04:05", r.TS)
 		if err != nil {
 			continue
 		}
 		out = append(out, models.CampaignAnalyticsCount{
-			CampaignID: r.CampaignID,
+			CampaignID: recordMap[r.CampaignID],
 			Count:      r.Count,
 			Timestamp:  t,
 		})

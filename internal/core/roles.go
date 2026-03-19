@@ -37,6 +37,7 @@ func roleFromRecord(rec *pbcore.Record) auth.Role {
 	} else if id, err := strconv.Atoi(rec.Id); err == nil {
 		out.ID = id
 	}
+	out.RecordID = rec.Id
 
 	name := strings.TrimSpace(rec.GetString("name"))
 	out.Name = null.NewString(name, name != "")
@@ -166,6 +167,35 @@ func (c *Core) getRoleByID(id int) (*pbcore.Record, error) {
 	}
 
 	return pb.FindFirstRecordByFilter("roles", "legacy_id={:id}", dbx.Params{"id": id})
+}
+
+func (c *Core) getRoleByRecordID(recordID string) (*pbcore.Record, error) {
+	if err := c.ensureRolesCollection(); err != nil {
+		return nil, err
+	}
+
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return nil, fmt.Errorf("pocketbase instance is nil")
+	}
+
+	return pb.FindRecordById("roles", strings.TrimSpace(recordID))
+}
+
+func (c *Core) ResolveRoleLegacyID(recordID string) (int, error) {
+	rec, err := c.getRoleByRecordID(recordID)
+	if err != nil {
+		return 0, err
+	}
+	return parseIntVal(rec.Get("legacy_id")), nil
+}
+
+func (c *Core) ResolveRoleRecordID(id int) (string, error) {
+	rec, err := c.getRoleByID(id)
+	if err != nil {
+		return "", err
+	}
+	return rec.Id, nil
 }
 
 func (c *Core) getRoleChildren(parentID string) ([]*pbcore.Record, error) {
@@ -310,10 +340,15 @@ func (c *Core) GetRoles() ([]auth.Role, error) {
 }
 
 // GetRole retrieves a role.
-func (c *Core) GetRole(id int) (auth.Role, error) {
+func (c *Core) GetRole(recordID string) (auth.Role, error) {
 	if c.useSQLRoleStore() {
 		out := []auth.Role{}
-		if err := c.q.GetUserRoles.Select(&out, id); err != nil {
+		roleID, err := c.ResolveRoleLegacyID(recordID)
+		if err != nil {
+			return auth.Role{}, echo.NewHTTPError(http.StatusNotFound,
+				c.i18n.Ts("globals.messages.notFound", "name", "role"))
+		}
+		if err := c.q.GetUserRoles.Select(&out, roleID); err != nil {
 			return auth.Role{}, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", pqErrMsg(err)))
 		}
@@ -326,7 +361,7 @@ func (c *Core) GetRole(id int) (auth.Role, error) {
 		return out[0], nil
 	}
 
-	rec, err := c.getRoleByID(id)
+	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return auth.Role{}, echo.NewHTTPError(http.StatusNotFound,
@@ -530,7 +565,7 @@ func (c *Core) CreateListRole(r auth.ListRole) (auth.ListRole, error) {
 				c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", pqErrMsg(err)))
 		}
 
-		if err := c.UpsertListPermissions(out.ID, r.Lists); err != nil {
+		if err := c.UpsertListPermissions(strconv.Itoa(out.ID), r.Lists); err != nil {
 			return out, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", pqErrMsg(err)))
 		}
@@ -584,10 +619,9 @@ func (c *Core) CreateListRole(r auth.ListRole) (auth.ListRole, error) {
 		}
 	}
 
-	id := parseIntVal(rec.Get("legacy_id"))
-	out := auth.ListRole{Base: auth.Base{ID: id}, Name: null.NewString(rec.GetString("name"), rec.GetString("name") != "")}
+	out := auth.ListRole{Base: auth.Base{ID: parseIntVal(rec.Get("legacy_id")), RecordID: rec.Id}, Name: null.NewString(rec.GetString("name"), rec.GetString("name") != "")}
 
-	if err := c.UpsertListPermissions(out.ID, r.Lists); err != nil {
+	if err := c.UpsertListPermissions(out.RecordID, r.Lists); err != nil {
 		return out, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
 	}
@@ -596,14 +630,14 @@ func (c *Core) CreateListRole(r auth.ListRole) (auth.ListRole, error) {
 }
 
 // UpsertListPermissions upserts permission for a role.
-func (c *Core) UpsertListPermissions(roleID int, lp []auth.ListPermission) error {
+func (c *Core) UpsertListPermissions(roleRecordID string, lp []auth.ListPermission) error {
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", "pocketbase unavailable"))
 	}
 
-	parent, err := c.getRoleByID(roleID)
+	parent, err := c.getRoleByRecordID(roleRecordID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			c.i18n.Ts("globals.messages.notFound", "name", "{users.role}"))
@@ -664,14 +698,14 @@ func (c *Core) UpsertListPermissions(roleID int, lp []auth.ListPermission) error
 }
 
 // DeleteListPermission deletes a list permission entry from a role.
-func (c *Core) DeleteListPermission(roleID int, listID string) error {
+func (c *Core) DeleteListPermission(roleRecordID string, listID string) error {
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{users.role}", "error", "pocketbase unavailable"))
 	}
 
-	parent, err := c.getRoleByID(roleID)
+	parent, err := c.getRoleByRecordID(roleRecordID)
 	if err != nil {
 		return nil
 	}
@@ -701,8 +735,8 @@ func (c *Core) DeleteListPermission(roleID int, listID string) error {
 }
 
 // UpdateUserRole updates a given role.
-func (c *Core) UpdateUserRole(id int, r auth.Role) (auth.Role, error) {
-	rec, err := c.getRoleByID(id)
+func (c *Core) UpdateUserRole(recordID string, r auth.Role) (auth.Role, error) {
+	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		return auth.Role{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.notFound", "name", "{users.userRole}"))
 	}
@@ -725,8 +759,8 @@ func (c *Core) UpdateUserRole(id int, r auth.Role) (auth.Role, error) {
 }
 
 // UpdateListRole updates a given role.
-func (c *Core) UpdateListRole(id int, r auth.ListRole) (auth.ListRole, error) {
-	rec, err := c.getRoleByID(id)
+func (c *Core) UpdateListRole(recordID string, r auth.ListRole) (auth.ListRole, error) {
+	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		return auth.ListRole{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.notFound", "name", "{users.listRole}"))
 	}
@@ -737,14 +771,13 @@ func (c *Core) UpdateListRole(id int, r auth.ListRole) (auth.ListRole, error) {
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{users.listRole}", "error", err.Error()))
 	}
 
-	idInt, _ := strconv.Atoi(rec.Id)
-	out := auth.ListRole{Base: auth.Base{ID: idInt}, Name: null.NewString(rec.GetString("name"), rec.GetString("name") != "")}
+	out := auth.ListRole{Base: auth.Base{ID: parseIntVal(rec.Get("legacy_id")), RecordID: rec.Id}, Name: null.NewString(rec.GetString("name"), rec.GetString("name") != "")}
 
-	if out.ID == 0 {
+	if out.RecordID == "" {
 		return out, echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.notFound", "name", "{users.listRole}"))
 	}
 
-	if err := c.UpsertListPermissions(out.ID, r.Lists); err != nil {
+	if err := c.UpsertListPermissions(out.RecordID, r.Lists); err != nil {
 		return out, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.listRole}", "error", pqErrMsg(err)))
 	}
@@ -753,8 +786,8 @@ func (c *Core) UpdateListRole(id int, r auth.ListRole) (auth.ListRole, error) {
 }
 
 // DeleteRole deletes a given role.
-func (c *Core) DeleteRole(id int) error {
-	rec, err := c.getRoleByID(id)
+func (c *Core) DeleteRole(recordID string) error {
+	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil

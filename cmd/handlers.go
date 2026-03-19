@@ -295,7 +295,6 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 
 			if roleID := auth.ExtractRoleIDFromRecord(e.Auth); roleID > 0 {
 				user.UserRoleID = roleID
-				user.UserRole.ID = roleID
 			}
 
 			c.Set(auth.UserHTTPCtxKey, user)

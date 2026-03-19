@@ -659,7 +659,8 @@ func (a *App) TestCampaign(c echo.Context) error {
 
 // GetCampaignViewAnalytics retrieves view counts for a campaign.
 func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
-	ids, err := parseStringIDs(c.Request().URL.Query()["id"])
+	recordIDs := getQueryStrings("id", c.Request().URL.Query())
+	ids, err := a.core.ResolveCampaignIDs(nil, recordIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))

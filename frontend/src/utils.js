@@ -127,21 +127,21 @@ export default class Utils {
     return this.intlNumFormat.format(v);
   }
 
-  // Parse one or more numeric ids as query params and return as an array of ints.
+  // Parse one or more query ids and return as an array of strings.
   parseQueryIDs = (ids) => {
     if (!ids) {
       return [];
     }
 
     if (typeof ids === 'string') {
-      return [parseInt(ids, 10)];
+      return [ids];
     }
 
     if (typeof ids === 'number') {
-      return [parseInt(ids, 10)];
+      return [`${ids}`];
     }
 
-    return ids.map((id) => parseInt(id, 10));
+    return ids.map((id) => `${id}`);
   };
 
   // https://stackoverflow.com/a/12034334
