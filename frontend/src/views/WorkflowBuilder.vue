@@ -57,6 +57,7 @@ const nodeLibrary = [
   { label: "Wait", type: "wait_until" },
   { label: "HTTP", type: "http_request" },
   { label: "PocketBase", type: "pb_update" },
+  { label: "Launch Campaign", type: "campaign_launch" },
 ];
 
 const authIdentity = computed(() => {
@@ -1205,6 +1206,11 @@ onBeforeUnmount(() => {
 .workflow-route .workflow-node-card[data-kind="pb_update"] .workflow-node-badge {
   background: #fff4d6;
   color: #9a6700;
+}
+
+.workflow-route .workflow-node-card[data-kind="campaign_launch"] .workflow-node-badge {
+  background: #e0f2fe;
+  color: #0f5b99;
 }
 
 .workflow-route .workflow-node-card[data-kind="wait_until"] .workflow-node-badge {

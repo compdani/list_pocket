@@ -24,6 +24,8 @@ const badgeLabel = computed(() => {
       return "Query";
     case "pb_update":
       return "CRM";
+    case "campaign_launch":
+      return "Campaign";
     case "wait_until":
       return "Wait";
     default:

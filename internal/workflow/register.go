@@ -25,8 +25,6 @@ func Register(pb *pocketbase.PocketBase, cfg Config) {
 
 	pb.OnServe().Bind(&hook.Handler[*core.ServeEvent]{
 		Func: func(e *core.ServeEvent) error {
-			startRunWorker(e.App)
-
 			authGroup := e.Router.Group("").Bind(apis.RequireAuth())
 			authGroup.GET("/api/control-plane/dashboard", dashboardHandler)
 			authGroup.POST("/api/control-plane/workflows", createWorkflowHandler)

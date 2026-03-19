@@ -342,6 +342,63 @@ func (PocketBaseExecutor) Execute(ctx context.Context, executionCtx ExecutionCon
 	}, nil
 }
 
+type CampaignLaunchExecutor struct{}
+
+func (CampaignLaunchExecutor) Type() string { return "campaign_launch" }
+func (CampaignLaunchExecutor) Execute(ctx context.Context, executionCtx ExecutionContext) (NodeResult, error) {
+	campaignIDPath := asString(executionCtx.Node.Config["campaignIdPath"], "")
+	campaignID := strings.TrimSpace(asString(resolveConfiguredValue(campaignIDPath, executionCtx), ""))
+	if campaignID == "" {
+		campaignID = strings.TrimSpace(asString(executionCtx.Node.Config["campaignId"], ""))
+	}
+	if campaignID == "" {
+		return NodeResult{}, errors.New("campaign launch node requires config.campaignId or config.campaignIdPath")
+	}
+
+	campaign, err := executionCtx.App.FindRecordById("campaigns", campaignID)
+	if err != nil {
+		return NodeResult{}, fmt.Errorf("campaign %q not found", campaignID)
+	}
+
+	currentStatus := campaign.GetString("status")
+	switch currentStatus {
+	case "running", "scheduled", "finished":
+		output := copyMap(executionCtx.Input)
+		output["campaignLaunch"] = map[string]any{
+			"id":      campaign.Id,
+			"name":    campaign.GetString("name"),
+			"status":  currentStatus,
+			"skipped": true,
+		}
+		return NodeResult{
+			Output: output,
+			Logs:   []string{fmt.Sprintf("campaign %s already %s; launch skipped", campaign.GetString("name"), currentStatus)},
+			Branch: "next",
+		}, nil
+	case "cancelled":
+		return NodeResult{}, fmt.Errorf("campaign %s is cancelled and cannot be launched", campaign.GetString("name"))
+	}
+
+	campaign.Set("status", "running")
+	if err := executionCtx.App.Save(campaign); err != nil {
+		return NodeResult{}, fmt.Errorf("failed to launch campaign %q: %w", campaign.GetString("name"), err)
+	}
+
+	output := copyMap(executionCtx.Input)
+	output["campaignLaunch"] = map[string]any{
+		"id":      campaign.Id,
+		"name":    campaign.GetString("name"),
+		"status":  "running",
+		"skipped": false,
+	}
+
+	return NodeResult{
+		Output: output,
+		Logs:   []string{fmt.Sprintf("campaign %s launched", campaign.GetString("name"))},
+		Branch: "next",
+	}, nil
+}
+
 type WaitExecutor struct{}
 
 func (WaitExecutor) Type() string { return "wait_until" }

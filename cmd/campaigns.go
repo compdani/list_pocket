@@ -36,6 +36,9 @@ type campReq struct {
 
 	MediaIDs []int `json:"media"`
 
+	DripEnabled bool                `json:"drip_enabled"`
+	Batching    campaignBatchingReq `json:"batching"`
+
 	// This is only relevant to campaign test requests.
 	SubscriberEmails pq.StringArray `json:"subscribers"`
 }
@@ -424,6 +427,10 @@ func (a *App) CreateCampaign(c echo.Context) error {
 		a.log.Printf("create campaign: core create failed name=%q error=%v", o.Name, err)
 		return err
 	}
+	out, err = a.syncCampaignDripAutomation(out, o.DripEnabled, campaignDripMetadata{})
+	if err != nil {
+		return err
+	}
 	a.log.Printf("create campaign: success name=%q campaign_record_id=%q uuid=%q", out.Name, out.RecordID, out.UUID)
 
 	return c.JSON(http.StatusOK, okResp{out})
@@ -448,6 +455,7 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	existingDripMeta := parseCampaignDripMetadata(cm.Attribs)
 	user := auth.GetUser(c)
 
 	if !canEditCampaign(cm.Status) {
@@ -483,6 +491,10 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	}
 
 	out, err := a.core.UpdateCampaign(recordID, o.Campaign, o.ListIDs, o.MediaIDs)
+	if err != nil {
+		return err
+	}
+	out, err = a.syncCampaignDripAutomation(out, o.DripEnabled, existingDripMeta)
 	if err != nil {
 		return err
 	}
@@ -932,6 +944,21 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 		}
 	}
 
+	batching := c.Batching.toModel()
+	if batching.Enabled {
+		if batching.BatchSize < 1 {
+			return c, errors.New("batch size must be greater than 0")
+		}
+		if batching.RepeatValue < 1 {
+			return c, errors.New("batch repeat value must be greater than 0")
+		}
+		if batching.RepeatUnit != "hours" && batching.RepeatUnit != "days" {
+			return c, errors.New("batch repeat unit must be hours or days")
+		}
+	}
+
+	c.Attribs = models.MergeCampaignBatching(c.Attribs, batching)
+
 	if len(c.ArchiveMeta) == 0 {
 		c.ArchiveMeta = json.RawMessage("{}")
 	}
@@ -1004,6 +1031,8 @@ func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
 			return c, errors.New(a.i18n.T("subscribers.invalidJSON"))
 		}
 	}
+
+	c.Attribs = models.MergeCampaignBatching(c.Attribs, c.Batching.toModel())
 
 	if len(c.ArchiveMeta) == 0 {
 		c.ArchiveMeta = json.RawMessage("{}")

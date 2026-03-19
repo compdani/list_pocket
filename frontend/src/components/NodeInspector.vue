@@ -98,6 +98,8 @@ function describeContextTokens(type, mode) {
       return ["ctx.run.events", "ctx.run.triggerPayload", "ctx.previous"];
     case "wait_until":
       return ["ctx.run.events", "ctx.previous", "ctx.run.triggerPayload"];
+    case "campaign_launch":
+      return ["ctx.previous.campaignId", "ctx.run.triggerPayload", "ctx.contact"];
     default:
       return shared;
   }

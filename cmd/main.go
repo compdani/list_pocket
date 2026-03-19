@@ -27,6 +27,7 @@ import (
 	"github.com/compdani/list_pocket/internal/messenger/email"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/internal/subimporter"
+	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
@@ -250,8 +251,9 @@ func main() {
 	// Start the campaign manager workers. The campaign batches (fetch from DB, push out
 	// messages) get processed at the specified interval.
 	if ko.Bool("passive") {
-		lo.Println("running in passive mode. won't process campaigns.")
+		lo.Println("running in passive mode. won't process campaigns or workflow runs.")
 	} else {
+		workflow.StartRunWorker(pb)
 		go mgr.Run()
 	}
 
