@@ -112,3 +112,19 @@ func getQueryInts(param string, qp url.Values) ([]int, error) {
 
 	return out, nil
 }
+
+// getQueryStrings returns the non-empty values of the given query param.
+func getQueryStrings(param string, qp url.Values) []string {
+	var out []string
+	if vals, ok := qp[param]; ok {
+		for _, v := range vals {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			out = append(out, v)
+		}
+	}
+
+	return out
+}

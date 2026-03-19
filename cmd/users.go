@@ -17,11 +17,23 @@ var (
 	reUsername = regexp.MustCompile(`^[a-zA-Z0-9_\-\.@]+$`)
 )
 
+func userRouteRecordID(c echo.Context) (string, error) {
+	recordID := strings.TrimSpace(c.Param("id"))
+	if recordID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+
+	return recordID, nil
+}
+
 // GetUser retrieves a single user by ID.
 func (a *App) GetUser(c echo.Context) error {
 	// Get the user from the DB.
-	id := getID(c)
-	out, err := a.core.GetUser(id, "", "")
+	recordID, err := userRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	out, err := a.core.GetUser(recordID, "", "")
 	if err != nil {
 		return err
 	}
@@ -136,7 +148,10 @@ func (a *App) UpdateUser(c echo.Context) error {
 	}
 
 	// Get the user ID.
-	id := getID(c)
+	recordID, err := userRouteRecordID(c)
+	if err != nil {
+		return err
+	}
 	if u.Type != auth.UserTypeAPI {
 		if !utils.ValidateEmail(email) {
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
@@ -155,7 +170,7 @@ func (a *App) UpdateUser(c echo.Context) error {
 				}
 			} else {
 				// Get the user from the DB.
-				user, err := a.core.GetUser(id, "", "")
+				user, err := a.core.GetUser(recordID, "", "")
 				if err != nil {
 					return err
 				}
@@ -176,7 +191,7 @@ func (a *App) UpdateUser(c echo.Context) error {
 		u.Name = u.Username
 	}
 
-	oldUser, err := a.core.GetUser(id, "", "")
+	oldUser, err := a.core.GetUser(recordID, "", "")
 	if err != nil {
 		return err
 	}
@@ -187,7 +202,7 @@ func (a *App) UpdateUser(c echo.Context) error {
 	}
 
 	// Update the user in the DB and then mirror role/user metadata back to PocketBase.
-	user, err := a.core.UpdateUser(id, u)
+	user, err := a.core.UpdateUser(recordID, u)
 	if err != nil {
 		_ = a.auth.SyncUser(oldUser)
 		return err
@@ -211,8 +226,11 @@ func (a *App) UpdateUser(c echo.Context) error {
 // DeleteUser handles the deletion of a single user by ID.
 func (a *App) DeleteUser(c echo.Context) error {
 	// Delete the user(s) from the DB.
-	id := getID(c)
-	if err := a.core.DeleteUsers([]int{id}); err != nil {
+	recordID, err := userRouteRecordID(c)
+	if err != nil {
+		return err
+	}
+	if err := a.core.DeleteUsers([]string{recordID}); err != nil {
 		return err
 	}
 
@@ -221,7 +239,7 @@ func (a *App) DeleteUser(c echo.Context) error {
 		return err
 	}
 
-	if err := a.auth.DeleteUsers([]int{id}); err != nil {
+	if err := a.auth.DeleteUsers([]string{recordID}); err != nil {
 		return err
 	}
 
@@ -230,13 +248,13 @@ func (a *App) DeleteUser(c echo.Context) error {
 
 // DeleteUsers handles user deletion, either a single one (ID in the URI), or a list.
 func (a *App) DeleteUsers(c echo.Context) error {
-	ids, err := getQueryInts("id", c.QueryParams())
-	if err != nil {
+	recordIDs := getQueryStrings("record_id", c.QueryParams())
+	if len(recordIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
 
 	// Delete the user(s) from the DB.
-	if err := a.core.DeleteUsers(ids); err != nil {
+	if err := a.core.DeleteUsers(recordIDs); err != nil {
 		return err
 	}
 
@@ -245,7 +263,7 @@ func (a *App) DeleteUsers(c echo.Context) error {
 		return err
 	}
 
-	if err := a.auth.DeleteUsers(ids); err != nil {
+	if err := a.auth.DeleteUsers(recordIDs); err != nil {
 		return err
 	}
 
@@ -293,7 +311,7 @@ func (a *App) UpdateUserProfile(c echo.Context) error {
 	}
 
 	// Update the user in the DB.
-	out, err := a.core.UpdateUserProfile(user.ID, u)
+	out, err := a.core.UpdateUserProfile(user.RecordID, u)
 	if err != nil {
 		return err
 	}
@@ -337,7 +355,7 @@ func (a *App) EnableTOTP(c echo.Context) error {
 	}
 
 	// Enable TOTP in the DB.
-	if err := a.core.SetTwoFA(u.ID, models.TwofaTypeTOTP, secret); err != nil {
+	if err := a.core.SetTwoFA(u.RecordID, models.TwofaTypeTOTP, secret); err != nil {
 		return err
 	}
 
@@ -367,7 +385,7 @@ func (a *App) DisableTOTP(c echo.Context) error {
 	}
 
 	// Disable TOTP in the DB.
-	if err := a.core.SetTwoFA(u.ID, models.TwofaTypeNone, ""); err != nil {
+	if err := a.core.SetTwoFA(u.RecordID, models.TwofaTypeNone, ""); err != nil {
 		return err
 	}
 

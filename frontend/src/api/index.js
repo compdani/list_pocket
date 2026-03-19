@@ -721,8 +721,8 @@ export const queryUsers = () => http.get(
   },
 );
 
-export const getUser = async (id) => http.get(
-  `/api/users/${id}`,
+export const getUser = async (idOrRecordId) => http.get(
+  `/api/users/${idOrRecordId}`,
   { loading: models.users },
 );
 
@@ -733,13 +733,13 @@ export const createUser = (data) => http.post(
 );
 
 export const updateUser = (data) => http.put(
-  `/api/users/${data.id}`,
+  `/api/users/${data.record_id || data.recordId || data.id}`,
   data,
   { loading: models.users },
 );
 
-export const deleteUser = (id) => http.delete(
-  `/api/users/${id}`,
+export const deleteUser = (idOrRecordId) => http.delete(
+  `/api/users/${idOrRecordId}`,
   { loading: models.users },
 );
 
