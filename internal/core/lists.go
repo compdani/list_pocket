@@ -3,7 +3,6 @@ package core
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/compdani/list_pocket/models"
@@ -70,131 +69,33 @@ func (c *Core) ResolveListRecordIDs(listIDs []int) ([]string, error) {
 		return []string{}, nil
 	}
 
-	if c.isSQLite() {
-		query := `SELECT id FROM lists WHERE rowid IN (` + sqlitePlaceholders(len(listIDs)) + `)`
-		args := make([]any, 0, len(listIDs))
-		for _, id := range listIDs {
-			args = append(args, id)
-		}
-
-		var out []string
-		if err := c.db.Select(&out, query, args...); err != nil {
-			return nil, err
-		}
-		return out, nil
-	}
-
-	out := make([]string, 0, len(listIDs))
+	query := `SELECT id FROM lists WHERE rowid IN (` + sqlitePlaceholders(len(listIDs)) + `)`
+	args := make([]any, 0, len(listIDs))
 	for _, id := range listIDs {
-		if id > 0 {
-			out = append(out, strconv.Itoa(id))
-		}
+		args = append(args, id)
 	}
 
+	var out []string
+	if err := c.db.Select(&out, query, args...); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
 // GetLists gets all lists optionally filtered by type and status.
 func (c *Core) GetLists(typ, status string, getAll bool, permittedIDs []int) ([]models.List, error) {
-	if c.isSQLite() {
-		return c.getListsSQLite(typ, status, getAll, permittedIDs)
-	}
-
-	out := []models.List{}
-
-	if err := c.q.GetLists.Select(&out, typ, status, "id", getAll, pq.Array(permittedIDs)); err != nil {
-		c.log.Printf("error fetching lists: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
-	}
-
-	// Replace null tags.
-	for i, l := range out {
-		if l.Tags == nil {
-			out[i].Tags = []string{}
-		}
-
-		// Total counts.
-		for _, c := range l.SubscriberCounts {
-			out[i].SubscriberCount += c
-		}
-	}
-
-	return out, nil
+	return c.getListsSQLite(typ, status, getAll, permittedIDs)
 }
 
 // QueryLists gets multiple lists based on multiple query params. Along with the  paginated and sliced
 // results, the total number of lists in the DB is returned.
 func (c *Core) QueryLists(searchStr, typ, optin, status string, tags []string, orderBy, order string, getAll bool, permittedIDs []int, offset, limit int) ([]models.List, int, error) {
-	if c.isSQLite() {
-		return c.queryListsSQLite(searchStr, typ, optin, status, tags, orderBy, order, getAll, permittedIDs, offset, limit)
-	}
-
-	_ = c.refreshCache(matListSubStats, false)
-
-	if tags == nil {
-		tags = []string{}
-	}
-
-	var (
-		out            = []models.List{}
-		queryStr, stmt = makeSearchQuery(searchStr, orderBy, order, c.q.QueryLists, listQuerySortFields)
-	)
-	if err := c.db.Select(&out, stmt, 0, "", queryStr, typ, optin, status, pq.StringArray(tags), getAll, pq.Array(permittedIDs), offset, limit); err != nil {
-		c.log.Printf("error fetching lists: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
-	}
-
-	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
-
-		// Replace null tags.
-		for i, l := range out {
-			if l.Tags == nil {
-				out[i].Tags = []string{}
-			}
-		}
-	}
-
-	return out, total, nil
+	return c.queryListsSQLite(searchStr, typ, optin, status, tags, orderBy, order, getAll, permittedIDs, offset, limit)
 }
 
 // GetList gets a list by its record ID or UUID.
 func (c *Core) GetList(recordID, uuid string) (models.List, error) {
-	if c.isSQLite() {
-		return c.getListSQLite(recordID, uuid)
-	}
-
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	var res []models.List
-	queryStr, stmt := makeSearchQuery("", "", "", c.q.QueryLists, nil)
-	if err := c.db.Select(&res, stmt, recordID, uu, queryStr, "", "", "", pq.StringArray{}, true, nil, 0, 1); err != nil {
-		c.log.Printf("error fetching lists: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
-	}
-
-	if len(res) == 0 {
-		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
-	}
-
-	out := res[0]
-	if out.Tags == nil {
-		out.Tags = []string{}
-	}
-	// Total counts.
-	for _, c := range out.SubscriberCounts {
-		out.SubscriberCount += c
-	}
-
-	return out, nil
+	return c.getListSQLite(recordID, uuid)
 }
 
 func (c *Core) getListsSQLite(typ, status string, getAll bool, permittedIDs []int) ([]models.List, error) {
@@ -424,53 +325,42 @@ func (c *Core) getListSQLite(recordID, uuid string) (models.List, error) {
 
 // GetListsByOptin returns lists by optin type.
 func (c *Core) GetListsByOptin(ids []int, optinType string) ([]models.List, error) {
-	if c.isSQLite() {
-		rows := []sqliteListRow{}
-		q := `
-			SELECT
-				l.rowid AS id,
-				l.id AS record_id,
-				l.created AS created_at,
-				l.updated AS updated_at,
-				l.uuid,
-				l.name,
-				l.type,
-				l.optin,
-				l.status,
-				l.tags,
-				l.description,
-				0 AS subscriber_count,
-				'{}' AS subscriber_statuses,
-				0 AS total
-			FROM lists l
-			WHERE l.optin = ?
-		`
-		args := []any{optinType}
-		if len(ids) > 0 {
-			q += ` AND l.rowid IN (` + sqlitePlaceholders(len(ids)) + `)`
-			for _, id := range ids {
-				args = append(args, id)
-			}
+	rows := []sqliteListRow{}
+	q := `
+		SELECT
+			l.rowid AS id,
+			l.id AS record_id,
+			l.created AS created_at,
+			l.updated AS updated_at,
+			l.uuid,
+			l.name,
+			l.type,
+			l.optin,
+			l.status,
+			l.tags,
+			l.description,
+			0 AS subscriber_count,
+			'{}' AS subscriber_statuses,
+			0 AS total
+		FROM lists l
+		WHERE l.optin = ?
+	`
+	args := []any{optinType}
+	if len(ids) > 0 {
+		q += ` AND l.rowid IN (` + sqlitePlaceholders(len(ids)) + `)`
+		for _, id := range ids {
+			args = append(args, id)
 		}
-		q += ` ORDER BY l.rowid`
-
-		if err := c.db.Select(&rows, q, args...); err != nil {
-			c.log.Printf("error fetching lists for opt-in: %s", pqErrMsg(err))
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
-		}
-
-		return sqliteListRowsToModels(rows), nil
 	}
+	q += ` ORDER BY l.rowid`
 
-	out := []models.List{}
-	if err := c.q.GetListsByOptin.Select(&out, optinType, pq.Array(ids), nil); err != nil {
+	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching lists for opt-in: %s", pqErrMsg(err))
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
-	return out, nil
+	return sqliteListRowsToModels(rows), nil
 }
 
 // GetListTypes returns lists by their IDs or UUIDs.
@@ -486,42 +376,23 @@ func (c *Core) GetListTypes(ids []int, uuids []string) (map[any]string, error) {
 		return out, nil
 	}
 
-	if c.isSQLite() {
-		q := `SELECT rowid AS id, uuid, type FROM lists WHERE `
-		args := make([]any, 0, max(len(ids), len(uuids)))
+	q := `SELECT rowid AS id, uuid, type FROM lists WHERE `
+	args := make([]any, 0, max(len(ids), len(uuids)))
 
-		switch {
-		case len(ids) > 0:
-			q += `rowid IN (` + sqlitePlaceholders(len(ids)) + `)`
-			for _, id := range ids {
-				args = append(args, id)
-			}
-		case len(uuids) > 0:
-			q += `uuid IN (` + sqlitePlaceholders(len(uuids)) + `)`
-			for _, uuid := range uuids {
-				args = append(args, uuid)
-			}
+	switch {
+	case len(ids) > 0:
+		q += `rowid IN (` + sqlitePlaceholders(len(ids)) + `)`
+		for _, id := range ids {
+			args = append(args, id)
 		}
-
-		if err := c.db.Select(&res, q, args...); err != nil {
-			c.log.Printf("error fetching list types: %v", err)
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+	case len(uuids) > 0:
+		q += `uuid IN (` + sqlitePlaceholders(len(uuids)) + `)`
+		for _, uuid := range uuids {
+			args = append(args, uuid)
 		}
-
-		isIDs := ids != nil
-		for _, r := range res {
-			if isIDs {
-				out[r.ID] = r.Type
-			} else {
-				out[r.UUID] = r.Type
-			}
-		}
-
-		return out, nil
 	}
 
-	if err := c.q.GetListTypes.Select(&res, pq.Array(ids), pq.StringArray(uuids)); err != nil {
+	if err := c.db.Select(&res, q, args...); err != nil {
 		c.log.Printf("error fetching list types: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
@@ -559,29 +430,17 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 	}
 
 	l.UUID = uu.String()
-	if c.isSQLite() {
-		tags, err := json.Marshal(normalizeTags(l.Tags))
-		if err != nil {
-			c.log.Printf("error marshaling list tags: %v", err)
-			return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", err.Error()))
-		}
-
-		if _, err := c.db.Exec(`
-			INSERT INTO lists (uuid, name, type, optin, status, tags, description)
-			VALUES (?, ?, ?, ?, ?, json(?), ?)`,
-			l.UUID, l.Name, l.Type, l.Optin, l.Status, string(tags), l.Description); err != nil {
-			c.log.Printf("error creating list: %v", err)
-			return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
-		}
-
-		return c.GetList("", l.UUID)
+	tags, err := json.Marshal(normalizeTags(l.Tags))
+	if err != nil {
+		c.log.Printf("error marshaling list tags: %v", err)
+		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", err.Error()))
 	}
 
-	// Insert and read ID.
-	var newID int
-	if err := c.q.CreateList.Get(&newID, l.UUID, l.Name, l.Type, l.Optin, l.Status, pq.StringArray(normalizeTags(l.Tags)), l.Description); err != nil {
+	if _, err := c.db.Exec(`
+		INSERT INTO lists (uuid, name, type, optin, status, tags, description)
+		VALUES (?, ?, ?, ?, ?, json(?), ?)`,
+		l.UUID, l.Name, l.Type, l.Optin, l.Status, string(tags), l.Description); err != nil {
 		c.log.Printf("error creating list: %v", err)
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
@@ -592,40 +451,24 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 
 // UpdateList updates a given list.
 func (c *Core) UpdateList(recordID string, l models.List) (models.List, error) {
-	if c.isSQLite() {
-		tags, err := json.Marshal(normalizeTags(l.Tags))
-		if err != nil {
-			c.log.Printf("error marshaling list tags: %v", err)
-			return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", err.Error()))
-		}
-
-		res, err := c.db.Exec(`
-			UPDATE lists SET
-				name=(CASE WHEN ? != '' THEN ? ELSE name END),
-				type=(CASE WHEN ? != '' THEN ? ELSE type END),
-				optin=(CASE WHEN ? != '' THEN ? ELSE optin END),
-				status=(CASE WHEN ? != '' THEN ? ELSE status END),
-				tags=json(?),
-				description=(CASE WHEN ? != '' THEN ? ELSE description END),
-				updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
-			WHERE id = ?`,
-			l.Name, l.Name, l.Type, l.Type, l.Optin, l.Optin, l.Status, l.Status, string(tags), l.Description, l.Description, recordID)
-		if err != nil {
-			c.log.Printf("error updating list: %v", err)
-			return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
-		}
-
-		if n, _ := res.RowsAffected(); n == 0 {
-			return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
-		}
-
-		return c.GetList(recordID, "")
+	tags, err := json.Marshal(normalizeTags(l.Tags))
+	if err != nil {
+		c.log.Printf("error marshaling list tags: %v", err)
+		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", err.Error()))
 	}
 
-	res, err := c.q.UpdateList.Exec(recordID, l.Name, l.Type, l.Optin, l.Status, pq.StringArray(normalizeTags(l.Tags)), l.Description)
+	res, err := c.db.Exec(`
+		UPDATE lists SET
+			name=(CASE WHEN ? != '' THEN ? ELSE name END),
+			type=(CASE WHEN ? != '' THEN ? ELSE type END),
+			optin=(CASE WHEN ? != '' THEN ? ELSE optin END),
+			status=(CASE WHEN ? != '' THEN ? ELSE status END),
+			tags=json(?),
+			description=(CASE WHEN ? != '' THEN ? ELSE description END),
+			updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+		WHERE id = ?`,
+		l.Name, l.Name, l.Type, l.Type, l.Optin, l.Optin, l.Status, l.Status, string(tags), l.Description, l.Description, recordID)
 	if err != nil {
 		c.log.Printf("error updating list: %v", err)
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
@@ -647,51 +490,34 @@ func (c *Core) DeleteList(recordID string) error {
 
 // DeleteLists deletes multiple lists.
 func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permittedIDs []int) error {
-	if c.isSQLite() {
-		q := `DELETE FROM lists WHERE 1=1`
-		args := []any{}
-
-		if len(recordIDs) > 0 {
-			q += ` AND id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
-			for _, recordID := range recordIDs {
-				args = append(args, recordID)
-			}
-		} else {
-			queryStr := strings.TrimSpace(query)
-			if queryStr != "" {
-				q += ` AND name LIKE ?`
-				args = append(args, "%"+queryStr+"%")
-			}
-		}
-
-		if !getAll {
-			if len(permittedIDs) == 0 {
-				q += ` AND 1=0`
-			} else {
-				q += ` AND rowid IN (` + sqlitePlaceholders(len(permittedIDs)) + `)`
-				for _, id := range permittedIDs {
-					args = append(args, id)
-				}
-			}
-		}
-
-		if _, err := c.db.Exec(q, args...); err != nil {
-			c.log.Printf("error deleting lists: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	var queryStr string
+	q := `DELETE FROM lists WHERE 1=1`
+	args := []any{}
 
 	if len(recordIDs) > 0 {
-		queryStr = ""
+		q += ` AND id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
+		for _, recordID := range recordIDs {
+			args = append(args, recordID)
+		}
 	} else {
-		queryStr = makeSearchString(query)
+		queryStr := strings.TrimSpace(query)
+		if queryStr != "" {
+			q += ` AND name LIKE ?`
+			args = append(args, "%"+queryStr+"%")
+		}
 	}
 
-	if _, err := c.q.DeleteLists.Exec(pq.Array(recordIDs), queryStr, getAll, pq.Array(permittedIDs)); err != nil {
+	if !getAll {
+		if len(permittedIDs) == 0 {
+			q += ` AND 1=0`
+		} else {
+			q += ` AND rowid IN (` + sqlitePlaceholders(len(permittedIDs)) + `)`
+			for _, id := range permittedIDs {
+				args = append(args, id)
+			}
+		}
+	}
+
+	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error deleting lists: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))

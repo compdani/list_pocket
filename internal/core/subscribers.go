@@ -141,7 +141,7 @@ func appendUniqueInts(dst []int, values []int) []int {
 }
 
 func (c *Core) ResolveListIDs(listIDs []int, listRecordIDs []string) ([]int, error) {
-	if len(listRecordIDs) == 0 || !c.isSQLite() {
+	if len(listRecordIDs) == 0 {
 		return appendUniqueInts([]int{}, listIDs), nil
 	}
 
@@ -160,7 +160,7 @@ func (c *Core) ResolveListIDs(listIDs []int, listRecordIDs []string) ([]int, err
 }
 
 func (c *Core) ResolveSubscriberIDs(subIDs []int, subRecordIDs []string) ([]int, error) {
-	if len(subRecordIDs) == 0 || !c.isSQLite() {
+	if len(subRecordIDs) == 0 {
 		return appendUniqueInts([]int{}, subIDs), nil
 	}
 
@@ -213,228 +213,39 @@ func (c *Core) sqliteSyncSubscriberLists(subscriberPBID string, listPBIDs []stri
 
 // GetSubscriber fetches a subscriber by one of the given params.
 func (c *Core) GetSubscriber(id int, uuid, email string) (models.Subscriber, error) {
-	if c.isSQLite() {
-		return c.getSubscriberSQLite(id, uuid, email)
-	}
-
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	var out models.Subscribers
-	if err := c.q.GetSubscriber.Select(&out, id, uu, email); err != nil {
-		c.log.Printf("error fetching subscriber: %v", err)
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching",
-				"name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-	}
-	if len(out) == 0 {
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name",
-				fmt.Sprintf("{globals.terms.subscriber} (%d: %s%s)", id, uuid, email)))
-	}
-	if err := out.LoadLists(c.q.GetSubscriberListsLazy); err != nil {
-		c.log.Printf("error loading subscriber lists: %v", err)
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching",
-				"name", "{globals.terms.lists}", "error", pqErrMsg(err)))
-	}
-
-	return out[0], nil
+	return c.getSubscriberSQLite(id, uuid, email)
 }
 
 // HasSubscriberLists checks if the given subscribers have at least one of the given lists.
 func (c *Core) HasSubscriberLists(subIDs []int, listIDs []int) (map[int]bool, error) {
-	if c.isSQLite() {
-		return c.hasSubscriberListsSQLite(subIDs, listIDs)
-	}
-
-	res := []struct {
-		SubID int  `db:"subscriber_id"`
-		Has   bool `db:"has"`
-	}{}
-
-	if err := c.q.HasSubscriberLists.Select(&res, pq.Array(subIDs), pq.Array(listIDs)); err != nil {
-		c.log.Printf("error fetching subscriber: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-	}
-
-	out := make(map[int]bool, len(res))
-	for _, r := range res {
-		out[r.SubID] = r.Has
-	}
-
-	return out, nil
+	return c.hasSubscriberListsSQLite(subIDs, listIDs)
 }
 
 // GetSubscribersByEmail fetches a subscriber by one of the given params.
 func (c *Core) GetSubscribersByEmail(emails []string) (models.Subscribers, error) {
-	if c.isSQLite() {
-		return c.getSubscribersByEmailSQLite(emails)
-	}
-
-	var out models.Subscribers
-
-	if err := c.q.GetSubscribersByEmails.Select(&out, pq.Array(emails)); err != nil {
-		c.log.Printf("error fetching subscriber: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-	}
-	if len(out) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
-	}
-
-	if err := out.LoadLists(c.q.GetSubscriberListsLazy); err != nil {
-		c.log.Printf("error loading subscriber lists: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
-	}
-
-	return out, nil
+	return c.getSubscribersByEmailSQLite(emails)
 }
 
 // QuerySubscribers queries and returns paginated subscrribers based on the given params including the total count.
 func (c *Core) QuerySubscribers(searchStr, queryExp string, listIDs []int, subStatus string, order, orderBy string, offset, limit int) (models.Subscribers, int, error) {
-	if c.isSQLite() {
-		return c.querySubscribersSQLite(searchStr, queryExp, listIDs, subStatus, order, orderBy, offset, limit)
-	}
-
-	// Sort params.
-	if !strSliceContains(orderBy, subQuerySortFields) {
-		orderBy = "subscribers.id"
-	}
-	if order != SortAsc && order != SortDesc {
-		order = SortDesc
-	}
-
-	// Required for pq.Array()
-	if listIDs == nil {
-		listIDs = []int{}
-	}
-
-	// There's an arbitrary query condition.
-	cond := "TRUE"
-	if queryExp != "" {
-		cond = queryExp
-	}
-
-	// stmt is the raw SQL query.
-	stmt := strings.ReplaceAll(c.q.QuerySubscribers, "%query%", cond)
-	stmt = strings.ReplaceAll(stmt, "%order%", orderBy+" "+order)
-
-	// Validate the tables used in the query.
-	if err := validateQueryTables(c.db, stmt, allowedSubQueryTables); err != nil {
-		c.log.Printf("error validating query tables: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("subscribers.errorPreparingQuery", "error", err.Error()))
-	}
-
-	// Create a readonly transaction that just does COUNT() to obtain the count of results
-	// and to ensure that the arbitrary query is indeed readonly.
-	total, err := c.getSubscriberCount(searchStr, cond, subStatus, listIDs)
-	if err != nil {
-		c.log.Printf("error getting subscriber count: %v", err)
-		return nil, 0, err
-	}
-
-	// No results.
-	if total == 0 {
-		return models.Subscribers{}, 0, nil
-	}
-
-	tx, err := c.db.BeginTxx(context.Background(), &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		c.log.Printf("error preparing subscriber query: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("subscribers.errorPreparingQuery", "error", pqErrMsg(err)))
-	}
-	defer tx.Rollback()
-
-	var out models.Subscribers
-	if err := tx.Select(&out, stmt, pq.Array(listIDs), subStatus, searchStr, offset, limit); err != nil {
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-	}
-
-	// Lazy load lists for each subscriber.
-	if err := out.LoadLists(c.q.GetSubscriberListsLazy); err != nil {
-		c.log.Printf("error fetching subscriber lists: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-	}
-
-	return out, total, nil
+	return c.querySubscribersSQLite(searchStr, queryExp, listIDs, subStatus, order, orderBy, offset, limit)
 }
 
 // GetSubscriberLists returns a subscriber's lists based on the given conditions.
 func (c *Core) GetSubscriberLists(subID int, uuid string, listIDs []int, listUUIDs []string, subStatus string, listType string) ([]models.List, error) {
-	if c.isSQLite() {
-		return c.getSubscriberListsSQLite(subID, uuid, listIDs, listUUIDs, subStatus, listType)
-	}
-
-	if listIDs == nil {
-		listIDs = []int{}
-	}
-	if listUUIDs == nil {
-		listUUIDs = []string{}
-	}
-
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	// Fetch double opt-in lists from the given list IDs.
-	// Get the list of subscription lists where the subscriber hasn't confirmed.
-	out := []models.List{}
-	if err := c.q.GetSubscriberLists.Select(&out, subID, uu, pq.Array(listIDs), pq.Array(listUUIDs), subStatus, listType); err != nil {
-		c.log.Printf("error fetching lists for opt-in: %s", pqErrMsg(err))
-		return nil, err
-	}
-
-	return out, nil
+	return c.getSubscriberListsSQLite(subID, uuid, listIDs, listUUIDs, subStatus, listType)
 }
 
 // GetSubscriberProfileForExport returns the subscriber's profile data as a JSON exportable.
 // Get the subscriber's data. A single query that gets the profile, list subscriptions, campaign views,
 // and link clicks. Names of private lists are replaced with "Private list".
 func (c *Core) GetSubscriberProfileForExport(id int, uuid string) (models.SubscriberExportProfile, error) {
-	if c.isSQLite() {
-		return c.getSubscriberProfileForExportSQLite(id, uuid)
-	}
-
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	var out models.SubscriberExportProfile
-	if err := c.q.ExportSubscriberData.Get(&out, id, uu); err != nil {
-		c.log.Printf("error fetching subscriber export data: %v", err)
-
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
-	}
-
-	return out, nil
+	return c.getSubscriberProfileForExportSQLite(id, uuid)
 }
 
 // GetSubscriberActivity returns the subscriber's campaign views and link clicks for the Activity tab.
 func (c *Core) GetSubscriberActivity(id int) (models.SubscriberActivity, error) {
-	if c.isSQLite() {
-		return c.getSubscriberActivitySQLite(id)
-	}
-
-	var out models.SubscriberActivity
-	if err := c.q.GetSubscriberActivity.Get(&out, id); err != nil {
-		c.log.Printf("error fetching subscriber activity: %v", err)
-
-		return models.SubscriberActivity{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
-	}
-
-	return out, nil
+	return c.getSubscriberActivitySQLite(id)
 }
 
 // ExportSubscribers returns an iterator function that provides lists of subscribers based
@@ -442,55 +253,7 @@ func (c *Core) GetSubscriberActivity(id int) (models.SubscriberActivity, error) 
 // repeatedly until there are nil subscribers. It's an iterator because exports can be extremely
 // large and may have to be fetched in batches from the DB and streamed somewhere.
 func (c *Core) ExportSubscribers(searchStr, query string, subIDs, listIDs []int, subStatus string, batchSize int) (func() ([]models.SubscriberExport, error), error) {
-	if c.isSQLite() {
-		return c.exportSubscribersSQLite(searchStr, query, subIDs, listIDs, subStatus, batchSize)
-	}
-
-	if subIDs == nil {
-		subIDs = []int{}
-	}
-	if listIDs == nil {
-		listIDs = []int{}
-	}
-
-	// There's an arbitrary query condition.
-	cond := "TRUE"
-	if query != "" {
-		cond = query
-	}
-
-	stmt := strings.ReplaceAll(c.q.QuerySubscribersForExport, "%query%", cond)
-
-	// Create a readonly transaction that just does COUNT() to obtain the count of results
-	// and to ensure that the arbitrary query is indeed readonly.
-	if _, err := c.getSubscriberCount(searchStr, cond, subStatus, listIDs); err != nil {
-		c.log.Printf("error getting subscriber count: %v", err)
-		return nil, err
-	}
-
-	// Prepare the actual query statement.
-	tx, err := c.db.Preparex(stmt)
-	if err != nil {
-		c.log.Printf("error preparing subscriber query: %v", err)
-		return nil, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("subscribers.errorPreparingQuery", "error", pqErrMsg(err)))
-	}
-
-	id := 0
-	return func() ([]models.SubscriberExport, error) {
-		var out []models.SubscriberExport
-		if err := tx.Select(&out, pq.Array(listIDs), id, pq.Array(subIDs), subStatus, searchStr, batchSize); err != nil {
-			c.log.Printf("error exporting subscribers by query: %v", err)
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-		if len(out) == 0 {
-			return nil, nil
-		}
-
-		id = out[len(out)-1].ID
-		return out, nil
-	}, nil
+	return c.exportSubscribersSQLite(searchStr, query, subIDs, listIDs, subStatus, batchSize)
 }
 
 // InsertSubscriber inserts a subscriber and returns the ID. The first bool indicates if
@@ -514,7 +277,6 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 		sub.Status = auth.UserStatusEnabled
 	}
 
-	// For pq.Array()
 	if listIDs == nil {
 		listIDs = []int{}
 	}
@@ -522,109 +284,65 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 		listUUIDs = []string{}
 	}
 
-	if c.isSQLite() {
-		pb := c.db.PocketBase()
-		if pb == nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
-		}
-
-		collection, err := pb.FindCollectionByNameOrId("subscribers")
-		if err != nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-
-		record := pbcore.NewRecord(collection)
-		record.Set("uuid", sub.UUID)
-		record.Set("email", sub.Email)
-		record.Set("phone", strings.TrimSpace(sub.Phone))
-		record.Set("first_name", sub.FirstName)
-		record.Set("last_name", sub.LastName)
-		record.Set("name", strings.TrimSpace(sub.Name))
-		record.Set("status", sub.Status)
-		record.Set("attribs", sub.Attribs)
-
-		if err := pb.Save(record); err != nil {
-			if strings.Contains(strings.ToLower(err.Error()), "unique") && strings.Contains(strings.ToLower(err.Error()), "email") {
-				return models.Subscriber{}, false, echo.NewHTTPError(http.StatusConflict, c.i18n.T("subscribers.emailExists"))
-			}
-			c.log.Printf("error inserting subscriber: %v", err)
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-		subscriberPBID := record.Id
-
-		if len(listIDs) > 0 || len(listUUIDs) > 0 {
-			listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
-			if err != nil {
-				return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-			}
-			status := subStatus
-			if sub.Status == models.SubscriberStatusBlockListed {
-				status = models.SubscriptionStatusUnsubscribed
-			}
-			if err := c.sqliteSyncSubscriberLists(subscriberPBID, listPBIDs, status, false); err != nil {
-				return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-			}
-		}
-
-		out, err := c.GetSubscriber(0, sub.UUID, sub.Email)
-		if err != nil {
-			return models.Subscriber{}, false, err
-		}
-
-		hasOptin := false
-		if !preconfirm && c.consts.SendOptinConfirmation {
-			num, err := c.h.SendOptinConfirmation(out, listIDs)
-			if assertOptin && err != nil {
-				return out, hasOptin, err
-			}
-			hasOptin = num > 0
-		}
-
-		return out, hasOptin, nil
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
 	}
 
-	if err = c.q.InsertSubscriber.Get(&sub.ID,
-		sub.UUID,
-		sub.Email,
-		strings.TrimSpace(sub.Phone),
-		strings.TrimSpace(sub.FirstName),
-		strings.TrimSpace(sub.LastName),
-		strings.TrimSpace(sub.Name),
-		sub.Status,
-		sub.Attribs,
-		pq.Array(listIDs),
-		pq.Array(listUUIDs),
-		subStatus); err != nil {
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Constraint == "subscribers_email_key" {
+	collection, err := pb.FindCollectionByNameOrId("subscribers")
+	if err != nil {
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+	}
+
+	record := pbcore.NewRecord(collection)
+	record.Set("uuid", sub.UUID)
+	record.Set("email", sub.Email)
+	record.Set("phone", strings.TrimSpace(sub.Phone))
+	record.Set("first_name", sub.FirstName)
+	record.Set("last_name", sub.LastName)
+	record.Set("name", strings.TrimSpace(sub.Name))
+	record.Set("status", sub.Status)
+	record.Set("attribs", sub.Attribs)
+
+	if err := pb.Save(record); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") && strings.Contains(strings.ToLower(err.Error()), "email") {
 			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusConflict, c.i18n.T("subscribers.emailExists"))
-		} else {
-			// return sub.Subscriber, errSubscriberExists
-			c.log.Printf("error inserting subscriber: %v", err)
+		}
+		c.log.Printf("error inserting subscriber: %v", err)
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+	}
+	subscriberPBID := record.Id
+
+	if len(listIDs) > 0 || len(listUUIDs) > 0 {
+		listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
+		if err != nil {
+			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		}
+		status := subStatus
+		if sub.Status == models.SubscriberStatusBlockListed {
+			status = models.SubscriptionStatusUnsubscribed
+		}
+		if err := c.sqliteSyncSubscriberLists(subscriberPBID, listPBIDs, status, false); err != nil {
 			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 		}
 	}
 
-	// Fetch the subscriber's full data. If the subscriber already existed and wasn't
-	// created, the id will be empty. Fetch the details by e-mail then.
-	out, err := c.GetSubscriber(sub.ID, "", sub.Email)
+	out, err := c.GetSubscriber(0, sub.UUID, sub.Email)
 	if err != nil {
 		return models.Subscriber{}, false, err
 	}
 
 	hasOptin := false
 	if !preconfirm && c.consts.SendOptinConfirmation {
-		// Send a confirmation e-mail (if there are any double opt-in lists).
 		num, err := c.h.SendOptinConfirmation(out, listIDs)
 		if assertOptin && err != nil {
 			return out, hasOptin, err
 		}
-
 		hasOptin = num > 0
 	}
 
@@ -634,44 +352,8 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 // UpdateSubscriber updates a subscriber's properties.
 func (c *Core) UpdateSubscriber(id int, sub models.Subscriber) (models.Subscriber, error) {
 	sub.NormalizeName()
-	if c.isSQLite() {
-		out, _, err := c.UpdateSubscriberWithLists(id, sub, nil, nil, false, false, false)
-		return out, err
-	}
-
-	// Format raw JSON attributes.
-	attribs := []byte("{}")
-	if len(sub.Attribs) > 0 {
-		if b, err := json.Marshal(sub.Attribs); err != nil {
-			return models.Subscriber{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating",
-					"name", "{globals.terms.subscriber}", "error", err.Error()))
-		} else {
-			attribs = b
-		}
-	}
-
-	_, err := c.q.UpdateSubscriber.Exec(id,
-		sub.Email,
-		strings.TrimSpace(sub.Phone),
-		strings.TrimSpace(sub.FirstName),
-		strings.TrimSpace(sub.LastName),
-		strings.TrimSpace(sub.Name),
-		sub.Status,
-		json.RawMessage(attribs),
-	)
-	if err != nil {
-		c.log.Printf("error updating subscriber: %v", err)
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-	}
-
-	out, err := c.GetSubscriber(sub.ID, "", sub.Email)
-	if err != nil {
-		return models.Subscriber{}, err
-	}
-
-	return out, nil
+	out, _, err := c.UpdateSubscriberWithLists(id, sub, nil, nil, false, false, false)
+	return out, err
 }
 
 // UpdateSubscriberWithLists updates a subscriber's properties.
@@ -684,111 +366,62 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 		subStatus = models.SubscriptionStatusConfirmed
 	}
 
-	if c.isSQLite() {
-		pb := c.db.PocketBase()
-		if pb == nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
-		}
-
-		var recID string
-		if err := c.db.Get(&recID, `SELECT id FROM subscribers WHERE rowid = ?`, id); err != nil {
-			c.log.Printf("error updating subscriber: %v", err)
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-
-		rec, err := pb.FindRecordById("subscribers", recID)
-		if err != nil {
-			c.log.Printf("error updating subscriber: %v", err)
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-
-		rec.Set("email", sub.Email)
-		rec.Set("phone", strings.TrimSpace(sub.Phone))
-		rec.Set("first_name", sub.FirstName)
-		rec.Set("last_name", sub.LastName)
-		rec.Set("name", strings.TrimSpace(sub.Name))
-		rec.Set("status", sub.Status)
-		rec.Set("attribs", sub.Attribs)
-		if err := pb.Save(rec); err != nil {
-			c.log.Printf("error updating subscriber: %v", err)
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-
-		listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
-		if err != nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-
-		status := subStatus
-		if sub.Status == models.SubscriberStatusBlockListed {
-			status = models.SubscriptionStatusUnsubscribed
-		}
-		if err := c.sqliteSyncSubscriberLists(recID, listPBIDs, status, deleteLists); err != nil {
-			c.log.Printf("error updating subscriber: %v", err)
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-		}
-
-		out, err := c.GetSubscriber(id, "", sub.Email)
-		if err != nil {
-			return models.Subscriber{}, false, err
-		}
-
-		hasOptin := false
-		if !preconfirm && c.consts.SendOptinConfirmation && len(listIDs) > 0 {
-			num, err := c.h.SendOptinConfirmation(out, listIDs)
-			if assertOptin && err != nil {
-				return out, hasOptin, err
-			}
-			hasOptin = num > 0
-		}
-
-		return out, hasOptin, nil
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
 	}
 
-	// Format raw JSON attributes.
-	attribs := []byte("{}")
-	if len(sub.Attribs) > 0 {
-		if b, err := json.Marshal(sub.Attribs); err != nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating",
-					"name", "{globals.terms.subscriber}", "error", err.Error()))
-		} else {
-			attribs = b
-		}
+	var recID string
+	if err := c.db.Get(&recID, `SELECT id FROM subscribers WHERE rowid = ?`, id); err != nil {
+		c.log.Printf("error updating subscriber: %v", err)
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
-	_, err := c.q.UpdateSubscriberWithLists.Exec(id,
-		sub.Email,
-		strings.TrimSpace(sub.Phone),
-		strings.TrimSpace(sub.FirstName),
-		strings.TrimSpace(sub.LastName),
-		strings.TrimSpace(sub.Name),
-		sub.Status,
-		json.RawMessage(attribs),
-		pq.Array(listIDs),
-		pq.Array(listUUIDs),
-		subStatus,
-		deleteLists)
+	rec, err := pb.FindRecordById("subscribers", recID)
 	if err != nil {
 		c.log.Printf("error updating subscriber: %v", err)
 		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
-	out, err := c.GetSubscriber(sub.ID, "", sub.Email)
+	rec.Set("email", sub.Email)
+	rec.Set("phone", strings.TrimSpace(sub.Phone))
+	rec.Set("first_name", sub.FirstName)
+	rec.Set("last_name", sub.LastName)
+	rec.Set("name", strings.TrimSpace(sub.Name))
+	rec.Set("status", sub.Status)
+	rec.Set("attribs", sub.Attribs)
+	if err := pb.Save(rec); err != nil {
+		c.log.Printf("error updating subscriber: %v", err)
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+	}
+
+	listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
+	if err != nil {
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+	}
+
+	status := subStatus
+	if sub.Status == models.SubscriberStatusBlockListed {
+		status = models.SubscriptionStatusUnsubscribed
+	}
+	if err := c.sqliteSyncSubscriberLists(recID, listPBIDs, status, deleteLists); err != nil {
+		c.log.Printf("error updating subscriber: %v", err)
+		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+	}
+
+	out, err := c.GetSubscriber(id, "", sub.Email)
 	if err != nil {
 		return models.Subscriber{}, false, err
 	}
 
 	hasOptin := false
-	if !preconfirm && c.consts.SendOptinConfirmation {
-		// Send a confirmation e-mail (if there are any double opt-in lists).
+	if !preconfirm && c.consts.SendOptinConfirmation && len(listIDs) > 0 {
 		num, err := c.h.SendOptinConfirmation(out, listIDs)
 		if assertOptin && err != nil {
 			return out, hasOptin, err
@@ -801,38 +434,28 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 
 // BlocklistSubscribers blocklists the given list of subscribers.
 func (c *Core) BlocklistSubscribers(subIDs []int) error {
-	if c.isSQLite() {
-		if len(subIDs) == 0 {
-			return nil
-		}
-
-		args := make([]any, 0, len(subIDs))
-		for _, id := range subIDs {
-			args = append(args, id)
-		}
-
-		q := `UPDATE subscribers
-			SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
-		if _, err := c.db.Exec(q, args...); err != nil {
-			c.log.Printf("error blocklisting subscribers: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
-		}
-
-		q = `UPDATE subscriber_lists
-			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE subscriber_id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
-		if _, err := c.db.Exec(q, args...); err != nil {
-			c.log.Printf("error blocklisting subscribers: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
-		}
-
+	if len(subIDs) == 0 {
 		return nil
 	}
 
-	if _, err := c.q.BlocklistSubscribers.Exec(pq.Array(subIDs)); err != nil {
+	args := make([]any, 0, len(subIDs))
+	for _, id := range subIDs {
+		args = append(args, id)
+	}
+
+	q := `UPDATE subscribers
+		SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
+	if _, err := c.db.Exec(q, args...); err != nil {
+		c.log.Printf("error blocklisting subscribers: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
+	}
+
+	q = `UPDATE subscriber_lists
+		SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE subscriber_id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
+	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
@@ -843,32 +466,22 @@ func (c *Core) BlocklistSubscribers(subIDs []int) error {
 
 // BlocklistSubscribersByQuery blocklists the given list of subscribers.
 func (c *Core) BlocklistSubscribersByQuery(searchStr, queryExp string, listIDs []int, subStatus string) error {
-	if c.isSQLite() {
-		ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, listIDs, subStatus, 0, 0)
-		if err != nil {
-			c.log.Printf("error blocklisting subscribers: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("subscribers.errorBlocklisting", "error", pqErrMsg(err)))
-		}
-
-		for i := 0; i < len(ids); i += 400 {
-			end := i + 400
-			if end > len(ids) {
-				end = len(ids)
-			}
-			if err := c.BlocklistSubscribers(ids[i:end]); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	if err := c.q.ExecSubQueryTpl(searchStr, sanitizeSQLExp(queryExp), c.q.BlocklistSubscribersByQuery, listIDs, c.db, subStatus); err != nil {
+	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, listIDs, subStatus, 0, 0)
+	if err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("subscribers.errorBlocklisting", "error", pqErrMsg(err)))
 	}
 
+	for i := 0; i < len(ids); i += 400 {
+		end := i + 400
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := c.BlocklistSubscribers(ids[i:end]); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -881,37 +494,28 @@ func (c *Core) DeleteSubscribers(subIDs []int, subUUIDs []string) error {
 		subUUIDs = []string{}
 	}
 
-	if c.isSQLite() {
-		if len(subIDs) == 0 && len(subUUIDs) == 0 {
-			return nil
-		}
-
-		clauses := make([]string, 0, 2)
-		args := make([]any, 0, len(subIDs)+len(subUUIDs))
-
-		if len(subIDs) > 0 {
-			clauses = append(clauses, `id IN (`+sqlitePlaceholders(len(subIDs))+`)`)
-			for _, id := range subIDs {
-				args = append(args, id)
-			}
-		}
-		if len(subUUIDs) > 0 {
-			clauses = append(clauses, `uuid IN (`+sqlitePlaceholders(len(subUUIDs))+`)`)
-			for _, u := range subUUIDs {
-				args = append(args, u)
-			}
-		}
-
-		q := `DELETE FROM subscribers WHERE ` + strings.Join(clauses, " OR ")
-		if _, err := c.db.Exec(q, args...); err != nil {
-			c.log.Printf("error deleting subscribers: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
+	if len(subIDs) == 0 && len(subUUIDs) == 0 {
 		return nil
 	}
 
-	if _, err := c.q.DeleteSubscribers.Exec(pq.Array(subIDs), pq.Array(subUUIDs)); err != nil {
+	clauses := make([]string, 0, 2)
+	args := make([]any, 0, len(subIDs)+len(subUUIDs))
+
+	if len(subIDs) > 0 {
+		clauses = append(clauses, `id IN (`+sqlitePlaceholders(len(subIDs))+`)`)
+		for _, id := range subIDs {
+			args = append(args, id)
+		}
+	}
+	if len(subUUIDs) > 0 {
+		clauses = append(clauses, `uuid IN (`+sqlitePlaceholders(len(subUUIDs))+`)`)
+		for _, u := range subUUIDs {
+			args = append(args, u)
+		}
+	}
+
+	q := `DELETE FROM subscribers WHERE ` + strings.Join(clauses, " OR ")
+	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error deleting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -922,89 +526,59 @@ func (c *Core) DeleteSubscribers(subIDs []int, subUUIDs []string) error {
 
 // DeleteSubscribersByQuery deletes subscribers by a given arbitrary query expression.
 func (c *Core) DeleteSubscribersByQuery(searchStr, queryExp string, listIDs []int, subStatus string) error {
-	if c.isSQLite() {
-		ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, listIDs, subStatus, 0, 0)
-		if err != nil {
-			c.log.Printf("error deleting subscribers: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		for i := 0; i < len(ids); i += 400 {
-			end := i + 400
-			if end > len(ids) {
-				end = len(ids)
-			}
-			if err := c.DeleteSubscribers(ids[i:end], nil); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	err := c.q.ExecSubQueryTpl(searchStr, sanitizeSQLExp(queryExp), c.q.DeleteSubscribersByQuery, listIDs, c.db, subStatus)
+	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, listIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
-	return err
+	for i := 0; i < len(ids); i += 400 {
+		end := i + 400
+		if end > len(ids) {
+			end = len(ids)
+		}
+		if err := c.DeleteSubscribers(ids[i:end], nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // UnsubscribeByCampaign unsubscribes a given subscriber from lists in a given campaign.
 func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) error {
-	if c.isSQLite() {
-		var (
-			subRecID  string
-			campRecID string
-		)
+	var (
+		subRecID  string
+		campRecID string
+	)
 
-		if err := c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE uuid = ?`, subUUID); err != nil {
+	if err := c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE uuid = ?`, subUUID); err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+
+	if err := c.db.Get(&campRecID, `SELECT id FROM campaigns WHERE uuid = ?`, campUUID); err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+
+	if blocklist {
+		if _, err := c.db.Exec(`UPDATE subscribers
+			SET status = 'blocklisted',
+			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE id = ?`, subRecID); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		if err := c.db.Get(&campRecID, `SELECT id FROM campaigns WHERE uuid = ?`, campUUID); err != nil {
-			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		if blocklist {
-			if _, err := c.db.Exec(`UPDATE subscribers
-				SET status = 'blocklisted',
-				    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
-				WHERE id = ?`, subRecID); err != nil {
-				c.log.Printf("error unsubscribing: %v", err)
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-			}
-
-			if _, err := c.db.Exec(`UPDATE subscriber_lists
-				SET status = 'unsubscribed',
-				    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
-				WHERE subscriber_id = ?
-				  AND status != 'unsubscribed'`, subRecID); err != nil {
-				c.log.Printf("error unsubscribing: %v", err)
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-			}
-
-			return nil
 		}
 
 		if _, err := c.db.Exec(`UPDATE subscriber_lists
 			SET status = 'unsubscribed',
 			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id = ?
-			  AND status != 'unsubscribed'
-			  AND list_id IN (
-			    SELECT list_id
-			    FROM campaign_lists
-			    WHERE campaign_id = ?
-			  )`, subRecID, campRecID); err != nil {
+			  AND status != 'unsubscribed'`, subRecID); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -1013,7 +587,16 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		return nil
 	}
 
-	if _, err := c.q.UnsubscribeByCampaign.Exec(campUUID, subUUID, blocklist); err != nil {
+	if _, err := c.db.Exec(`UPDATE subscriber_lists
+		SET status = 'unsubscribed',
+		    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE subscriber_id = ?
+		  AND status != 'unsubscribed'
+		  AND list_id IN (
+		    SELECT list_id
+		    FROM campaign_lists
+		    WHERE campaign_id = ?
+		  )`, subRecID, campRecID); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -1028,7 +611,29 @@ func (c *Core) ConfirmOptionSubscription(subUUID string, listUUIDs []string, met
 		meta = models.JSON{}
 	}
 
-	if _, err := c.q.ConfirmSubscriptionOptin.Exec(subUUID, pq.Array(listUUIDs), meta); err != nil {
+	if len(listUUIDs) == 0 {
+		return nil
+	}
+
+	metaJSON, _ := json.Marshal(meta)
+	args := make([]any, 0, len(listUUIDs)+2)
+	args = append(args, string(metaJSON), subUUID)
+	for _, listUUID := range listUUIDs {
+		args = append(args, listUUID)
+	}
+
+	if _, err := c.db.Exec(`UPDATE subscriber_lists
+		SET status='confirmed',
+		    meta=(CASE
+		        WHEN json_valid(COALESCE(meta, '{}')) AND json_valid(?)
+		            THEN json_patch(COALESCE(meta, '{}'), ?)
+		        ELSE COALESCE(meta, '{}')
+		    END),
+		    updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+		WHERE subscriber_id = (SELECT id FROM subscribers WHERE uuid = ?)
+		  AND list_id IN (
+		      SELECT id FROM lists WHERE uuid IN (`+sqlitePlaceholders(len(listUUIDs))+`)
+		  )`, append([]any{string(metaJSON), string(metaJSON), subUUID}, args[2:]...)...); err != nil {
 		c.log.Printf("error confirming subscription: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -1039,36 +644,22 @@ func (c *Core) ConfirmOptionSubscription(subUUID string, listUUIDs []string, met
 
 // DeleteSubscriberBounces deletes the given list of subscribers.
 func (c *Core) DeleteSubscriberBounces(id int, uuid string) error {
-	if c.isSQLite() {
-		var subID int
-		var err error
-		if uuid != "" {
-			err = c.db.Get(&subID, `SELECT id FROM subscribers WHERE uuid = ?`, uuid)
-		} else {
-			subID = id
-		}
-		if err != nil && err != sql.ErrNoRows {
-			c.log.Printf("error deleting bounces: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
-		}
-		if subID == 0 {
-			return nil
-		}
-		if _, err := c.db.Exec(`DELETE FROM bounces WHERE subscriber_id = ?`, subID); err != nil {
-			c.log.Printf("error deleting bounces: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
-		}
+	var subID int
+	var err error
+	if uuid != "" {
+		err = c.db.Get(&subID, `SELECT id FROM subscribers WHERE uuid = ?`, uuid)
+	} else {
+		subID = id
+	}
+	if err != nil && err != sql.ErrNoRows {
+		c.log.Printf("error deleting bounces: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
+	}
+	if subID == 0 {
 		return nil
 	}
-
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	if _, err := c.q.DeleteBouncesBySubscriber.Exec(id, uu); err != nil {
+	if _, err := c.db.Exec(`DELETE FROM bounces WHERE subscriber_id = ?`, subID); err != nil {
 		c.log.Printf("error deleting bounces: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
