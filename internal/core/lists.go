@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/compdani/list_pocket/models"
+	"github.com/gofrs/uuid/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 )
@@ -18,19 +18,19 @@ type listType struct {
 }
 
 type sqliteListRow struct {
-	ID               int             `db:"id"`
-	CreatedAt        string          `db:"created_at"`
-	UpdatedAt        string          `db:"updated_at"`
-	UUID             string          `db:"uuid"`
-	Name             string          `db:"name"`
-	Type             string          `db:"type"`
-	Optin            string          `db:"optin"`
-	Status           string          `db:"status"`
-	Tags             []byte          `db:"tags"`
-	Description      string          `db:"description"`
-	SubscriberCount  int             `db:"subscriber_count"`
+	ID               int                 `db:"id"`
+	CreatedAt        string              `db:"created_at"`
+	UpdatedAt        string              `db:"updated_at"`
+	UUID             string              `db:"uuid"`
+	Name             string              `db:"name"`
+	Type             string              `db:"type"`
+	Optin            string              `db:"optin"`
+	Status           string              `db:"status"`
+	Tags             []byte              `db:"tags"`
+	Description      string              `db:"description"`
+	SubscriberCount  int                 `db:"subscriber_count"`
 	SubscriberCounts models.StringIntMap `db:"subscriber_statuses"`
-	Total            int             `db:"total"`
+	Total            int                 `db:"total"`
 }
 
 func sqliteListRowsToModels(rows []sqliteListRow) []models.List {
@@ -446,6 +446,45 @@ func (c *Core) GetListTypes(ids []int, uuids []string) (map[any]string, error) {
 	res := []listType{}
 
 	out := map[any]string{}
+	if len(ids) == 0 && len(uuids) == 0 {
+		return out, nil
+	}
+
+	if c.isSQLite() {
+		q := `SELECT rowid AS id, uuid, type FROM lists WHERE `
+		args := make([]any, 0, max(len(ids), len(uuids)))
+
+		switch {
+		case len(ids) > 0:
+			q += `rowid IN (` + sqlitePlaceholders(len(ids)) + `)`
+			for _, id := range ids {
+				args = append(args, id)
+			}
+		case len(uuids) > 0:
+			q += `uuid IN (` + sqlitePlaceholders(len(uuids)) + `)`
+			for _, uuid := range uuids {
+				args = append(args, uuid)
+			}
+		}
+
+		if err := c.db.Select(&res, q, args...); err != nil {
+			c.log.Printf("error fetching list types: %v", err)
+			return nil, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		}
+
+		isIDs := ids != nil
+		for _, r := range res {
+			if isIDs {
+				out[r.ID] = r.Type
+			} else {
+				out[r.UUID] = r.Type
+			}
+		}
+
+		return out, nil
+	}
+
 	if err := c.q.GetListTypes.Select(&res, pq.Array(ids), pq.StringArray(uuids)); err != nil {
 		c.log.Printf("error fetching list types: %v", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,

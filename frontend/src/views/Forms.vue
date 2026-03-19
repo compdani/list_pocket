@@ -178,8 +178,8 @@ const formHTML = computed(() => {
     + '    <input type="hidden" name="nonce" />\n\n'
     + `    <p><input type="email" name="email" required placeholder="${proxy.$t('subscribers.email')}" /></p>\n`
     + '    <p><input type="tel" name="phone" placeholder="Phone" /></p>\n'
-    + '    <p><input type="text" name="first_name" placeholder="First name" /></p>\n'
-    + '    <p><input type="text" name="last_name" placeholder="Last name" /></p>\n\n';
+    + '    <p><input type="text" name="first_name" placeholder="First name" required /></p>\n'
+    + '    <p><input type="text" name="last_name" placeholder="Last name" required /></p>\n\n';
 
   selectedPublicLists.value.forEach((l, index) => {
     const id = `${String(l.uuid).slice(0, 5)}-${index}`;

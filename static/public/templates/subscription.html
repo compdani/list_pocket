@@ -92,6 +92,30 @@
     </section>
 </form>
 <script>
+    function normalizePhone(value) {
+        value = (value || '').trim();
+        if (!value) {
+            return '';
+        }
+
+        var hasPlus = value.charAt(0) === '+';
+        var digits = value.replace(/\D/g, '');
+        if (!digits) {
+            return '';
+        }
+
+        if (hasPlus) {
+            return '+' + digits;
+        }
+        if (digits.length === 10) {
+            return '+1' + digits;
+        }
+        if (digits.length === 11 && digits.charAt(0) === '1') {
+            return '+' + digits;
+        }
+        return '+' + digits;
+    }
+
     function handleData() {
         var a = document.querySelector('input[name="data-action"]:checked').value,
             f = document.querySelector("#data-form");
@@ -124,6 +148,22 @@
             }
         });
     }
+
+    (function() {
+        var form = document.querySelector('.manage-form');
+        var phone = document.querySelector('input[name="phone"]');
+        if (!form || !phone) {
+            return;
+        }
+
+        phone.addEventListener('blur', function() {
+            phone.value = normalizePhone(phone.value);
+        });
+
+        form.addEventListener('submit', function() {
+            phone.value = normalizePhone(phone.value);
+        });
+    })();
 </script>
 {{ end }}
 

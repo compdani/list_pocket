@@ -1,78 +1,104 @@
 <template>
-  <section class="analytics content relative">
-    <h1 class="title is-4">
-      {{ $t('analytics.title') }}
-    </h1>
-    <div v-if="serverConfig.privacy.disable_tracking || !serverConfig.privacy.individual_tracking"
-      class="notification is-info">
-      <template v-if="serverConfig.privacy.disable_tracking">
-        {{ $t('analytics.trackingDisabled') }}
-      </template>
-      <template v-else-if="!serverConfig.privacy.individual_tracking">
-        {{ $t('analytics.nonIndividualTracking') }}
-      </template>
-    </div>
-    <hr />
+  <section class="analytics">
+    <v-container>
+      <v-row>
+        <v-col cols="12">
+          <h1 class="text-h4 mb-4">
+            {{ $t('analytics.title') }}
+          </h1>
+        </v-col>
+      </v-row>
 
-    <form @submit.prevent="onSubmit">
-      <div class="columns">
-        <div class="column is-6">
-          <b-field :label="$t('globals.terms.campaigns')" label-position="on-border">
-            <b-taginput v-model="form.campaigns" :data="queriedCampaigns" name="campaigns" ellipsis icon="tag-outline"
-              :placeholder="$t('globals.terms.campaigns')" autocomplete :allow-new="false"
-              :before-adding="isCampaignSelected" @typing="queryCampaigns" field="name" :loading="isSearchLoading" />
-          </b-field>
-        </div>
+      <v-row v-if="serverConfig.privacy.disable_tracking || !serverConfig.privacy.individual_tracking">
+        <v-col cols="12">
+          <v-alert type="info" variant="tonal">
+            <template v-if="serverConfig.privacy.disable_tracking">
+              {{ $t('analytics.trackingDisabled') }}
+            </template>
+            <template v-else-if="!serverConfig.privacy.individual_tracking">
+              {{ $t('analytics.nonIndividualTracking') }}
+            </template>
+          </v-alert>
+        </v-col>
+      </v-row>
 
-        <div class="column is-5">
-          <div class="columns">
-            <div class="column is-6">
-              <b-field data-cy="from" :label="$t('analytics.fromDate')" label-position="on-border">
-                <b-input
-                  :value="toDateTimeLocal(form.from)"
-                  type="datetime-local"
-                  icon="calendar-clock"
-                  @input="onFromInput($event.target.value)"
+      <v-form @submit.prevent="onSubmit" class="mb-6">
+        <v-row>
+          <v-col cols="12" md="6">
+            <v-autocomplete
+              v-model="form.campaigns"
+              :items="queriedCampaigns"
+              :label="$t('globals.terms.campaigns')"
+              item-title="name"
+              item-value="id"
+              multiple
+              chips
+              closable-chips
+              :placeholder="$t('globals.terms.campaigns')"
+              :loading="isSearchLoading"
+              @update:search="queryCampaigns"
+            />
+          </v-col>
+
+          <v-col cols="12" md="3">
+            <v-text-field
+              :value="toDateTimeLocal(form.from)"
+              :label="$t('analytics.fromDate')"
+              type="datetime-local"
+              data-cy="from"
+              @input="onFromInput($event)"
+            />
+          </v-col>
+
+          <v-col cols="12" md="3">
+            <v-text-field
+              :value="toDateTimeLocal(form.to)"
+              :label="$t('analytics.toDate')"
+              type="datetime-local"
+              data-cy="to"
+              @input="onToInput($event)"
+            />
+          </v-col>
+
+          <v-col cols="12" class="d-flex justify-end">
+            <v-btn
+              type="submit"
+              color="primary"
+              :disabled="form.campaigns.length === 0"
+              data-cy="btn-search"
+              icon="mdi-magnify"
+            />
+          </v-col>
+        </v-row>
+      </v-form>
+
+      <v-row>
+        <v-col cols="12">
+          <div v-for="(v, k) in charts" :key="k" class="mb-6">
+            <v-row>
+              <v-col cols="12" md="9">
+                <v-progress-circular
+                  v-if="v.loading"
+                  indeterminate
+                  color="primary"
+                  class="mx-auto d-block mb-4"
                 />
-              </b-field>
-            </div>
-            <div class="column is-6">
-              <b-field data-cy="to" :label="$t('analytics.toDate')" label-position="on-border">
-                <b-input
-                  :value="toDateTimeLocal(form.to)"
-                  type="datetime-local"
-                  icon="calendar-clock"
-                  @input="onToInput($event.target.value)"
-                />
-              </b-field>
-            </div>
-          </div><!-- columns -->
-        </div><!-- columns -->
-
-        <div class="column is-1">
-          <b-button native-type="submit" type="is-primary" icon-left="magnify" :disabled="form.campaigns.length === 0"
-            data-cy="btn-search" />
-        </div>
-      </div><!-- columns -->
-    </form>
-
-    <section class="charts mt-5">
-      <div class="chart" v-for="(v, k) in charts" :key="k">
-        <div class="columns">
-          <div class="column is-9">
-            <b-loading v-if="v.loading" :active="v.loading" :is-full-page="false" />
-            <h4 v-if="v.chart !== null">
-              {{ v.name }}
-              <span class="has-text-grey-light">({{ $utils.niceNumber(counts[k]) }})</span>
-            </h4>
-            <chart :type="v.type" v-if="!v.loading" :data="v.data" :on-click="v.onClick" />
+                <div v-else>
+                  <h3 v-if="v.chart !== null" class="text-h6 mb-3">
+                    {{ v.name }}
+                    <span class="text-caption text-medium-emphasis">({{ $utils.niceNumber(counts[k]) }})</span>
+                  </h3>
+                  <chart :type="v.type" :data="v.data" :on-click="v.onClick" />
+                </div>
+              </v-col>
+              <v-col cols="12" md="3">
+                <chart v-if="!v.loading" type="donut" :data="v.donutData" />
+              </v-col>
+            </v-row>
           </div>
-          <div class="column is-2 donut-container">
-            <chart type="donut" v-if="!v.loading" :data="v.donutData" />
-          </div>
-        </div>
-      </div>
-    </section>
+        </v-col>
+      </v-row>
+    </v-container>
   </section>
 </template>
 
@@ -196,10 +222,6 @@ export default {
       return dayjs(s).format('YYYY-MM-DD HH:mm');
     },
 
-    isCampaignSelected(camp) {
-      return !this.form.campaigns.find(({ id }) => id === camp.id);
-    },
-
     makeLinksChart(typ, camps, data) {
       const labels = data.map((l) => {
         try {
@@ -280,12 +302,10 @@ export default {
         order: 'DESC',
       }).then((data) => {
         this.isSearchLoading = false;
-        this.queriedCampaigns = data.results.map((c) => {
-          // Change the name to include the ID in the auto-suggest results.
-          const camp = c;
-          camp.name = `#${c.id}: ${c.name}`;
-          return camp;
-        });
+        this.queriedCampaigns = data.results.map((c) => ({
+          ...c,
+          name: `#${c.id}: ${c.name}`,
+        }));
       });
     },
 
@@ -340,8 +360,10 @@ export default {
             return;
           }
 
-          const camp = d.value;
-          camp.name = `#${camp.id}: ${camp.name}`;
+          const camp = {
+            ...d.value,
+            name: `#${d.value.id}: ${d.value.name}`,
+          };
           this.form.campaigns.push(camp);
         });
 

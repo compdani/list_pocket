@@ -17,11 +17,11 @@
             </p>
             <p>
                 <label for="first_name">First name</label>
-                <input id="first_name" name="first_name" type="text" placeholder="First name" >
+                <input id="first_name" name="first_name" type="text" placeholder="First name" required>
             </p>
             <p>
                 <label for="last_name">Last name</label>
-                <input id="last_name" name="last_name" type="text" placeholder="Last name" >
+                <input id="last_name" name="last_name" type="text" placeholder="Last name" required>
             </p>
 
             <ul class="lists">
@@ -60,6 +60,48 @@
         </div>
     </form>
 </section>
+
+<script>
+    (function() {
+        function normalizePhone(value) {
+            value = (value || '').trim();
+            if (!value) {
+                return '';
+            }
+
+            var hasPlus = value.charAt(0) === '+';
+            var digits = value.replace(/\D/g, '');
+            if (!digits) {
+                return '';
+            }
+
+            if (hasPlus) {
+                return '+' + digits;
+            }
+            if (digits.length === 10) {
+                return '+1' + digits;
+            }
+            if (digits.length === 11 && digits.charAt(0) === '1') {
+                return '+' + digits;
+            }
+            return '+' + digits;
+        }
+
+        var form = document.querySelector('.form');
+        var phone = document.querySelector('input[name="phone"]');
+        if (!form || !phone) {
+            return;
+        }
+
+        phone.addEventListener('blur', function() {
+            phone.value = normalizePhone(phone.value);
+        });
+
+        form.addEventListener('submit', function() {
+            phone.value = normalizePhone(phone.value);
+        });
+    })();
+</script>
 
 {{ template "footer" .}}
 {{ end }}
