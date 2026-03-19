@@ -362,7 +362,8 @@ async function initConfig(rootProxy) {
     const listPerms = Array.isArray(profile.listRole && profile.listRole.lists)
       ? profile.listRole.lists
       : [];
-    return listPerms.some((list) => list.id === id && list.permissions.includes(perm));
+    const targetID = typeof id === 'string' ? id : String(id);
+    return listPerms.some((list) => String(list.id) === targetID && list.permissions.includes(perm));
   };
 
   if (vueApp) {
