@@ -3,12 +3,34 @@ package core
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	null "gopkg.in/volatiletech/null.v6"
 )
+
+func sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
+	bodySource := null.String{}
+	if value := strings.TrimSpace(rec.GetString("body_source")); value != "" {
+		bodySource = null.StringFrom(value)
+	}
+
+	return models.Template{
+		Base: models.Base{
+			RecordID:  rec.Id,
+			CreatedAt: parseNullTime(rec.GetString("created")),
+			UpdatedAt: parseNullTime(rec.GetString("updated")),
+		},
+		Name:       rec.GetString("name"),
+		Subject:    rec.GetString("subject"),
+		Type:       rec.GetString("type"),
+		Body:       rec.GetString("body"),
+		BodySource: bodySource,
+		IsDefault:  rec.GetBool("is_default"),
+	}
+}
 
 // GetTemplates retrieves all templates.
 func (c *Core) GetTemplates(status string, noBody bool) ([]models.Template, error) {
@@ -92,7 +114,7 @@ func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource
 			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 		}
-		return c.GetTemplate(rec.Id, false)
+		return sqliteTemplateFromRecord(rec), nil
 	}
 
 	var newID int
@@ -121,7 +143,7 @@ func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte
 			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 		}
-		return c.GetTemplate(recordID, false)
+		return sqliteTemplateFromRecord(rec), nil
 	}
 
 	res, err := c.q.UpdateTemplate.Exec(recordID, name, subject, body, bodySource)
