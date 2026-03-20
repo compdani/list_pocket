@@ -76,27 +76,29 @@
 
       <v-row>
         <v-col cols="12">
-          <div v-for="(v, k) in charts" :key="k" class="mb-6">
+          <div v-for="k in analyticsChartKeys()" :key="k" class="mb-6">
+            <template v-if="charts[k]">
             <v-row>
               <v-col cols="12" md="9">
                 <v-progress-circular
-                  v-if="v.loading"
+                  v-if="charts[k].loading"
                   indeterminate
                   color="primary"
                   class="mx-auto d-block mb-4"
                 />
                 <div v-else>
-                  <h3 v-if="v.chart !== null" class="text-h6 mb-3">
-                    {{ v.name }}
+                  <h3 v-if="charts[k].chart !== null" class="text-h6 mb-3">
+                    {{ charts[k].name }}
                     <span class="text-caption text-medium-emphasis">({{ $utils.niceNumber(counts[k]) }})</span>
                   </h3>
-                  <chart :type="v.type" :data="v.data" :on-click="v.onClick" />
+                  <chart :type="charts[k].type" :data="charts[k].data" :on-click="charts[k].onClick" />
                 </div>
               </v-col>
               <v-col cols="12" md="3">
-                <chart v-if="!v.loading" type="donut" :data="v.donutData" />
+                <chart v-if="!charts[k].loading" type="donut" :data="charts[k].donutData" />
               </v-col>
             </v-row>
+            </template>
           </div>
         </v-col>
       </v-row>
@@ -134,6 +136,7 @@ export default {
 
       // Data for each view.
       counts: {
+        viewsUnique: 0,
         views: 0,
         clicks: 0,
         bounces: 0,
@@ -141,8 +144,17 @@ export default {
       },
       urls: [],
       charts: {
+        viewsUnique: {
+          name: this.$t('analytics.uniqueViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUniqueViewCounts,
+          chartFn: this.makeCharts,
+          loading: false,
+        },
+
         views: {
-          name: this.$t('campaigns.views'),
+          name: this.$t('analytics.totalViews'),
           type: 'line',
           data: null,
           fn: this.$api.getCampaignViewCounts,
@@ -400,6 +412,18 @@ export default {
         window.open(this.urls[bars[0].index], '_blank', 'noopener noreferrer');
       }
     },
+
+    analyticsChartKeys() {
+      if (this.serverConfig.privacy.disable_tracking) {
+        return ['clicks', 'bounces', 'links'];
+      }
+
+      if (!this.serverConfig.privacy.individual_tracking) {
+        return ['views', 'clicks', 'bounces', 'links'];
+      }
+
+      return ['viewsUnique', 'views', 'clicks', 'bounces', 'links'];
+    },
   },
 
   computed: {
@@ -440,7 +464,7 @@ export default {
           this.mergeCampaignOptions(this.form.campaigns);
 
           // Fetch count for each analytics type (views, counts, bounces);
-          Object.keys(this.charts).forEach((k) => {
+          this.analyticsChartKeys().forEach((k) => {
             this.charts[k].data = null;
             this.charts[k].donutData = null;
 
