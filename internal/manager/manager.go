@@ -361,7 +361,10 @@ func (m *Manager) GetTpl(id int) (*models.Template, error) {
 // TemplateFuncs returns the template functions to be applied into
 // compiled campaign templates.
 func (m *Manager) TemplateFuncs(c *models.Campaign) template.FuncMap {
-	f := template.FuncMap{
+	f := template.FuncMap{}
+	maps.Copy(f, m.tplFuncs)
+
+	fns := template.FuncMap{
 		"TrackLink": func(url string, msg *CampaignMessage) string {
 			if m.cfg.DisableTracking {
 				return url
@@ -408,8 +411,7 @@ func (m *Manager) TemplateFuncs(c *models.Campaign) template.FuncMap {
 			return m.cfg.RootURL
 		},
 	}
-
-	maps.Copy(f, m.tplFuncs)
+	maps.Copy(f, fns)
 
 	return f
 }
