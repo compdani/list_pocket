@@ -112,7 +112,7 @@ function normalizeAnalyticsParams(params = {}) {
     if (value instanceof Date || (typeof value === 'string' && value.includes('T'))) {
       const parsed = dayjs(value);
       if (parsed.isValid()) {
-        out[key] = parsed.format('YYYY-MM-DD');
+        out[key] = parsed.toDate().toISOString();
       }
     }
   });
@@ -254,7 +254,10 @@ export const getDashboardCounts = () => http.get(
 
 export const getDashboardCharts = () => http.get(
   '/api/dashboard/charts',
-  { loading: models.dashboard },
+  {
+    loading: models.dashboard,
+    params: { tz_offset: new Date().getTimezoneOffset() },
+  },
 );
 
 export const getWorkflowDashboard = (workflowId) => sendControlPlane(

@@ -114,7 +114,7 @@
               {{ $utils.duration(new Date(), item.sendAt, true) }}
               <br />
             </span>
-            {{ $utils.niceDate(item.sendAt, true) }}
+            {{ formatListTimestamp(item.sendAt) }}
           </div>
         </div>
       </template>
@@ -160,15 +160,15 @@
         <div class="fields timestamps">
           <div>
             <div class="text-caption font-weight-bold">{{ $t('globals.fields.createdAt') }}</div>
-            <div class="text-caption">{{ $utils.niceDate(item.createdAt, true) }}</div>
+            <div class="text-caption">{{ formatListTimestamp(item.createdAt) }}</div>
           </div>
           <div v-if="getCampaignStats(item).startedAt">
             <div class="text-caption font-weight-bold">{{ $t('campaigns.startedAt') }}</div>
-            <div class="text-caption">{{ $utils.niceDate(getCampaignStats(item).startedAt, true) }}</div>
+            <div class="text-caption">{{ formatListTimestamp(getCampaignStats(item).startedAt) }}</div>
           </div>
           <div v-if="isDone(item)">
             <div class="text-caption font-weight-bold">{{ $t('campaigns.ended') }}</div>
-            <div class="text-caption">{{ $utils.niceDate(getCampaignStats(item).updatedAt, true) }}</div>
+            <div class="text-caption">{{ formatListTimestamp(getCampaignStats(item).updatedAt) }}</div>
           </div>
           <div v-if="getCampaignStats(item).startedAt && getCampaignStats(item).updatedAt" class="text-capitalize">
             <v-icon size="small">mdi-alarm</v-icon>
@@ -419,6 +419,14 @@ export default {
   },
 
   methods: {
+    formatListTimestamp(value) {
+      if (!value) {
+        return '';
+      }
+
+      return dayjs(value).format('MM-DD-YY hh:mm A');
+    },
+
     // Campaign statuses.
     canStart(c) {
       return c.status === 'draft' && !c.sendAt;

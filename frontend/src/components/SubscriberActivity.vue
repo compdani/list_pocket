@@ -71,7 +71,7 @@
           </template>
           <template #item.lastViewedAt="{ item }">
             <span v-if="item.lastViewedAt">
-              {{ $utils.niceDate(item.lastViewedAt, true) }}
+              {{ formatActivityTimestamp(item.lastViewedAt) }}
             </span>
           </template>
         </v-data-table>
@@ -116,7 +116,7 @@
           </template>
           <template #item.lastClickedAt="{ item }">
             <span v-if="item.lastClickedAt">
-              {{ $utils.niceDate(item.lastClickedAt, true) }}
+              {{ formatActivityTimestamp(item.lastClickedAt) }}
             </span>
           </template>
         </v-data-table>
@@ -129,6 +129,7 @@
 </template>
 
 <script>
+import dayjs from 'dayjs';
 
 export default {
   props: {
@@ -182,6 +183,14 @@ export default {
   },
 
   methods: {
+    formatActivityTimestamp(value) {
+      if (!value) {
+        return '';
+      }
+
+      return dayjs(value).format('MM-DD-YY hh:mm A');
+    },
+
     getActivity() {
       if (!this.subscriberId) {
         this.activity = {
