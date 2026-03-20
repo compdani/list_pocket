@@ -378,6 +378,10 @@
       type="campaign"
       :id="previewItem.id"
       :title="previewItem.name"
+      :body="previewItem.body"
+      :content-type="previewItem.contentType"
+      :template-id="previewItem.templateId"
+      is-post
       @close="closePreview"
     />
   </section>
@@ -508,8 +512,15 @@ export default {
     },
 
     // Campaign actions.
-    previewCampaign(c) {
-      this.previewItem = c;
+    async previewCampaign(c) {
+      const data = await this.$api.getCampaign(c.id);
+      this.previewItem = {
+        id: data.id,
+        name: data.name,
+        body: data.body,
+        contentType: data.contentType,
+        templateId: data.templateId,
+      };
     },
 
     closePreview() {
