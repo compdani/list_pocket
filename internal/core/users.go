@@ -420,15 +420,20 @@ func parseNullTime(value string) null.Time {
 		return null.Time{}
 	}
 
-	t, err := time.Parse("2006-01-02 15:04:05.000Z", value)
-	if err != nil {
-		t, err = time.Parse(time.RFC3339, value)
-		if err != nil {
-			return null.Time{}
+	layouts := []string{
+		"2006-01-02 15:04:05.000Z",
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+	}
+
+	for _, layout := range layouts {
+		t, err := time.Parse(layout, value)
+		if err == nil {
+			return null.NewTime(t, true)
 		}
 	}
 
-	return null.NewTime(t, true)
+	return null.Time{}
 }
 
 func (c *Core) hydrateUsers(users []auth.User) ([]auth.User, error) {
