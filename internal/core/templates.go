@@ -1,6 +1,7 @@
 package core
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,7 +12,24 @@ import (
 	null "gopkg.in/volatiletech/null.v6"
 )
 
-func sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
+func (c *Core) sqliteTemplateLegacyID(recordID string) int {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return 0
+	}
+
+	var id int
+	if err := c.db.Get(&id, `SELECT rowid FROM templates WHERE id = ? LIMIT 1`, recordID); err != nil {
+		if err != sql.ErrNoRows {
+			c.log.Printf("error resolving template rowid for %q: %v", recordID, err)
+		}
+		return 0
+	}
+
+	return id
+}
+
+func (c *Core) sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
 	bodySource := null.String{}
 	if value := strings.TrimSpace(rec.GetString("body_source")); value != "" {
 		bodySource = null.StringFrom(value)
@@ -19,6 +37,7 @@ func sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
 
 	return models.Template{
 		Base: models.Base{
+			ID:        c.sqliteTemplateLegacyID(rec.Id),
 			RecordID:  rec.Id,
 			CreatedAt: parseNullTime(rec.GetString("created")),
 			UpdatedAt: parseNullTime(rec.GetString("updated")),
@@ -49,7 +68,7 @@ func (c *Core) GetTemplates(status string, noBody bool) ([]models.Template, erro
 
 		out := make([]models.Template, 0, len(recs))
 		for _, rec := range recs {
-			tpl := sqliteTemplateFromRecord(rec)
+			tpl := c.sqliteTemplateFromRecord(rec)
 			if noBody {
 				tpl.Body = ""
 			}
@@ -83,7 +102,7 @@ func (c *Core) GetTemplate(recordID string, noBody bool) (models.Template, error
 				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
 		}
 
-		out := sqliteTemplateFromRecord(rec)
+		out := c.sqliteTemplateFromRecord(rec)
 		if noBody {
 			out.Body = ""
 		}
@@ -124,7 +143,7 @@ func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource
 			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 		}
-		return sqliteTemplateFromRecord(rec), nil
+		return c.sqliteTemplateFromRecord(rec), nil
 	}
 
 	var newID int
@@ -153,7 +172,7 @@ func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte
 			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 		}
-		return sqliteTemplateFromRecord(rec), nil
+		return c.sqliteTemplateFromRecord(rec), nil
 	}
 
 	res, err := c.q.UpdateTemplate.Exec(recordID, name, subject, body, bodySource)
