@@ -1217,7 +1217,7 @@ func (c *Core) GetLinkURL(linkUUID string) (string, error) {
 // RegisterCampaignLinkClick registers a subscriber's link click on a campaign.
 func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (string, error) {
 	var out struct {
-		ID  int    `db:"id"`
+		ID  string `db:"id"`
 		URL string `db:"url"`
 	}
 
