@@ -178,6 +178,40 @@ func (c *Core) ResolveSubscriberIDs(subIDs []int, subRecordIDs []string) ([]int,
 	return appendUniqueInts(append([]int{}, subIDs...), resolved), nil
 }
 
+func (c *Core) ResolveSubscriberRecordIDs(subIDs []int) ([]string, error) {
+	if len(subIDs) == 0 {
+		return nil, nil
+	}
+
+	query := `SELECT rowid AS row_id, id FROM subscribers WHERE rowid IN (` + sqlitePlaceholders(len(subIDs)) + `)`
+	args := make([]any, 0, len(subIDs))
+	for _, id := range subIDs {
+		args = append(args, id)
+	}
+
+	var rows []struct {
+		RowID int    `db:"row_id"`
+		ID    string `db:"id"`
+	}
+	if err := c.db.Select(&rows, query, args...); err != nil {
+		return nil, err
+	}
+
+	idMap := make(map[int]string, len(rows))
+	for _, row := range rows {
+		idMap[row.RowID] = row.ID
+	}
+
+	resolved := make([]string, 0, len(subIDs))
+	for _, id := range subIDs {
+		if recordID := idMap[id]; recordID != "" {
+			resolved = append(resolved, recordID)
+		}
+	}
+
+	return resolved, nil
+}
+
 func (c *Core) sqliteSyncSubscriberLists(subscriberPBID string, listPBIDs []string, status string, deleteLists bool) error {
 	if deleteLists {
 		if len(listPBIDs) == 0 {

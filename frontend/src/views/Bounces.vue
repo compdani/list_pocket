@@ -164,7 +164,7 @@ export default {
         page: 1,
         orderBy: 'created_at',
         order: 'desc',
-        campaignID: 0,
+        campaign_id: '',
         source: '',
       },
     };
