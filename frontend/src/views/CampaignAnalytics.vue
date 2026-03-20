@@ -140,6 +140,7 @@ export default {
         views: 0,
         clicks: 0,
         bounces: 0,
+        unsubscribes: 0,
         links: 0,
       },
       urls: [],
@@ -178,6 +179,15 @@ export default {
           fn: this.$api.getCampaignBounceCounts,
           chartFn: this.makeCharts,
           donutColor: chartColorRed,
+          loading: false,
+        },
+
+        unsubscribes: {
+          name: this.$t('analytics.unsubscribes'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUnsubscribeCounts,
+          chartFn: this.makeCharts,
           loading: false,
         },
 
@@ -415,14 +425,14 @@ export default {
 
     analyticsChartKeys() {
       if (this.serverConfig.privacy.disable_tracking) {
-        return ['clicks', 'bounces', 'links'];
+        return ['clicks', 'bounces', 'unsubscribes', 'links'];
       }
 
       if (!this.serverConfig.privacy.individual_tracking) {
-        return ['views', 'clicks', 'bounces', 'links'];
+        return ['views', 'clicks', 'bounces', 'unsubscribes', 'links'];
       }
 
-      return ['viewsUnique', 'views', 'clicks', 'bounces', 'links'];
+      return ['viewsUnique', 'views', 'clicks', 'bounces', 'unsubscribes', 'links'];
     },
   },
 
