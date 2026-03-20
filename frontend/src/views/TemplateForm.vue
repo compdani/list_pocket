@@ -29,6 +29,15 @@
       </header>
 
       <section class="admin-dialog-body modal-card-body template-dialog-body">
+        <v-alert
+          v-if="formError"
+          type="error"
+          variant="tonal"
+          class="mb-4"
+        >
+          {{ formError }}
+        </v-alert>
+
         <v-row class="mb-1">
           <v-col cols="12" md="8">
             <v-text-field
@@ -177,6 +186,7 @@ export default {
   data() {
     return {
       form: baseForm(),
+      formError: '',
       previewItem: null,
       egPlaceholder: '{{ template "content" . }}',
     };
@@ -195,6 +205,18 @@ export default {
   },
 
   methods: {
+    extractErrorMessage(err) {
+      if (err && err.response && err.response.message) {
+        return err.response.message;
+      }
+
+      if (err && err.message) {
+        return err.message;
+      }
+
+      return 'Something went wrong while processing your request.';
+    },
+
     normalizeForm(data = {}) {
       return {
         ...baseForm(),
@@ -216,6 +238,8 @@ export default {
     },
 
     onSubmit() {
+      this.formError = '';
+
       if (this.isEditing) {
         this.updateTemplate();
         return;
@@ -238,6 +262,8 @@ export default {
         this.$emit('finished');
         this.$emit('close');
         this.$utils.toast(this.$t('globals.messages.created', { name: resp.name }));
+      }).catch((err) => {
+        this.formError = this.extractErrorMessage(err);
       });
     },
 
@@ -255,10 +281,13 @@ export default {
         this.$emit('finished');
         this.$emit('close');
         this.$utils.toast(`'${resp.name}' updated`);
+      }).catch((err) => {
+        this.formError = this.extractErrorMessage(err);
       });
     },
 
     onChangeVisualEditor({ source, body }) {
+      this.formError = '';
       this.form.body = body;
       this.form.bodySource = source;
     },
