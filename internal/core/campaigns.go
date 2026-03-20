@@ -654,7 +654,9 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		0 AS views, 0 AS clicks, 0 AS bounces
+		(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
+		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 	FROM campaigns c
 	LEFT JOIN templates tpl ON tpl.id = c.template_id
 	LEFT JOIN templates atpl ON atpl.id = c.archive_template_id
@@ -749,7 +751,9 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		0 AS views, 0 AS clicks, 0 AS bounces
+		(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
+		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 	FROM campaigns c
 	LEFT JOIN templates tpl ON tpl.id = c.template_id
 	LEFT JOIN templates atpl ON atpl.id = c.archive_template_id
@@ -799,9 +803,9 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 				WHERE cl.campaign_id = c.id
 			), '[]') AS lists,
 			'[]' AS media,
-			0 AS views,
-			0 AS clicks,
-			0 AS bounces,
+			(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
+			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces,
 			0 AS total
 		FROM campaigns c
 		LEFT JOIN templates tpl ON tpl.id = c.template_id
@@ -831,9 +835,9 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 			'[]' AS lists,
 			'[]' AS media,
-			0 AS views,
-			0 AS clicks,
-			0 AS bounces
+			(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
+			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 		FROM campaigns c
 		LEFT JOIN templates tpl ON tpl.id = c.template_id
 		LEFT JOIN templates atpl ON atpl.id = c.archive_template_id
@@ -1279,22 +1283,35 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 		groupFmt = "%Y-%m-%d 00:00:00"
 	}
 
+	recordIDs, err := c.ResolveCampaignRecordIDs(campIDs)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+	if len(recordIDs) == 0 {
+		return []models.CampaignAnalyticsCount{}, nil
+	}
+
 	q := `
 		SELECT campaign_id, COUNT(*) AS count, strftime(? , created) AS ts
 		FROM ` + table + `
-		WHERE campaign_id IN (` + sqlitePlaceholders(len(campIDs)) + `)
+		WHERE campaign_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)
 		  AND created >= ?
 		  AND created <= ?
 		GROUP BY campaign_id, ts
 		ORDER BY ts ASC`
 
 	args := []any{groupFmt}
-	for _, id := range campIDs {
+	for _, id := range recordIDs {
 		args = append(args, id)
 	}
 	args = append(args, fromSQL, toSQL)
 
-	var rows []campaignAnalyticsSQLiteRow
+	var rows []struct {
+		CampaignID string `db:"campaign_id"`
+		Count      int    `db:"count"`
+		TS         string `db:"ts"`
+	}
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching campaign %s: %v", typ, err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1302,19 +1319,13 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 
 	out := make([]models.CampaignAnalyticsCount, 0, len(rows))
-	recordIDs, err := c.ResolveCampaignRecordIDs(extractCampaignIDs(rows))
-	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
-	}
-	recordMap := campaignAnalyticsIDMap(extractCampaignIDs(rows), recordIDs)
 	for _, r := range rows {
 		t, err := time.Parse("2006-01-02 15:04:05", r.TS)
 		if err != nil {
 			continue
 		}
 		out = append(out, models.CampaignAnalyticsCount{
-			CampaignID: recordMap[r.CampaignID],
+			CampaignID: r.CampaignID,
 			Count:      r.Count,
 			Timestamp:  t,
 		})
@@ -1337,19 +1348,28 @@ func (c *Core) getCampaignAnalyticsLinksSQLite(campIDs []int, fromDate, toDate s
 		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
 	}
 
+	recordIDs, err := c.ResolveCampaignRecordIDs(campIDs)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+	}
+	if len(recordIDs) == 0 {
+		return []models.CampaignAnalyticsLink{}, nil
+	}
+
 	q := `
 		SELECT COUNT(*) AS count, links.url
 		FROM link_clicks
 		LEFT JOIN links ON link_clicks.link_id = links.id
-		WHERE campaign_id IN (` + sqlitePlaceholders(len(campIDs)) + `)
+		WHERE campaign_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)
 		  AND link_clicks.created >= ?
 		  AND link_clicks.created <= ?
 		GROUP BY links.url
 		ORDER BY count DESC
 		LIMIT 50`
 
-	args := make([]any, 0, len(campIDs)+2)
-	for _, id := range campIDs {
+	args := make([]any, 0, len(recordIDs)+2)
+	for _, id := range recordIDs {
 		args = append(args, id)
 	}
 	args = append(args, fromSQL, toSQL)
