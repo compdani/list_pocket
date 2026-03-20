@@ -38,6 +38,10 @@ func sqliteCampaignTimeValue(v null.Time) string {
 	return ""
 }
 
+func sqliteUniqueCampaignViewsExpr(alias string) string {
+	return "COUNT(DISTINCT COALESCE(CAST(" + alias + ".subscriber_id AS TEXT), 'anon:' || " + alias + ".rowid))"
+}
+
 func normalizeAnalyticsDateInput(value string, endOfDay bool) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -654,7 +658,7 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
 		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 	FROM campaigns c
@@ -751,7 +755,7 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
 		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 	FROM campaigns c
@@ -803,7 +807,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 				WHERE cl.campaign_id = c.id
 			), '[]') AS lists,
 			'[]' AS media,
-			(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
 			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces,
 			0 AS total
@@ -835,7 +839,7 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 			'[]' AS lists,
 			'[]' AS media,
-			(SELECT COUNT(*) FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
 			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 		FROM campaigns c
@@ -1257,9 +1261,13 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 
 	table := ""
+	countExpr := "COUNT(*)"
 	switch typ {
 	case "views":
 		table = "campaign_views"
+	case "views_unique":
+		table = "campaign_views"
+		countExpr = sqliteUniqueCampaignViewsExpr(table)
 	case "clicks":
 		table = "link_clicks"
 	case "bounces":
@@ -1296,7 +1304,7 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	q := `
 			SELECT
 				campaign_id,
-				COUNT(*) AS count,
+				` + countExpr + ` AS count,
 				CASE
 					WHEN created >= ? THEN 'hour'
 					ELSE 'day'

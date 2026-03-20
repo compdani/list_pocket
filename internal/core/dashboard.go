@@ -66,7 +66,7 @@ func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error
 		'campaign_views', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(*) AS count, DATE(datetime(created, ?)) AS date
+				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
 				FROM campaign_views
 				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
 				GROUP BY DATE(datetime(created, ?))
