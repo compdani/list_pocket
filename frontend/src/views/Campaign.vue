@@ -222,7 +222,7 @@
 
             <v-divider class="my-6" />
 
-            <v-row class="align-center">
+            <v-row class="align-start">
               <v-col cols="12" md="4">
                 <div data-cy="btn-send-later">
                   <v-checkbox
@@ -235,7 +235,7 @@
                 </div>
               </v-col>
               <v-col cols="12" md="8">
-                <div v-if="form.sendLater" data-cy="send_at">
+                <div v-if="form.sendLater" data-cy="send_at" class="send-at-field">
                   <v-text-field
                     :model-value="toDateTimeLocal(form.sendAtDate)"
                     :disabled="!canEdit"
@@ -246,7 +246,7 @@
                     density="comfortable"
                     @update:model-value="onSendAtInput"
                   />
-                  <p v-if="form.sendAtDate" class="form-help">
+                  <p v-if="form.sendAtDate" class="form-help send-at-help">
                     {{ $utils.duration(Date(), form.sendAtDate) }}
                   </p>
                 </div>
@@ -1241,6 +1241,7 @@ export default {
 
     batchRepeatUnits() {
       return [
+        { title: this.$t('campaigns.batchRepeatQuarterHours'), value: 'quarter_hours' },
         { title: this.$t('campaigns.batchRepeatHours'), value: 'hours' },
         { title: this.$t('campaigns.batchRepeatDays'), value: 'days' },
       ];
@@ -1470,6 +1471,16 @@ export default {
 .inline-meta {
   color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 0.8rem;
+}
+
+.send-at-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.send-at-help {
+  margin-top: -6px;
+  padding-left: 4px;
 }
 
 .form-help {

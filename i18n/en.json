@@ -46,6 +46,7 @@
     "campaigns.batchEndTime": "Ends at",
     "campaigns.batchRepeatDays": "Days",
     "campaigns.batchRepeatHours": "Hours",
+    "campaigns.batchRepeatQuarterHours": "15 mins",
     "campaigns.batchRepeatUnit": "Repeat unit",
     "campaigns.batchRepeatValue": "Repeat after",
     "campaigns.batchSize": "Batch quantity",
