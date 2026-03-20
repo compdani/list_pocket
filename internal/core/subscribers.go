@@ -598,8 +598,31 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
+	tx, err := c.db.Beginx()
+	if err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+	defer tx.Rollback()
+
+	var hasCampaignSubscriptions bool
+	if err := tx.Get(&hasCampaignSubscriptions, `
+		SELECT EXISTS(
+			SELECT 1
+			FROM subscriber_lists sl
+			INNER JOIN campaign_lists cl ON cl.list_id = sl.list_id
+			WHERE sl.subscriber_id = ?
+			  AND cl.campaign_id = ?
+			  AND sl.status != 'unsubscribed'
+		)`, subRecID, campRecID); err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+
 	if blocklist {
-		if _, err := c.db.Exec(`UPDATE subscribers
+		if _, err := tx.Exec(`UPDATE subscribers
 			SET status = 'blocklisted',
 			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id = ?`, subRecID); err != nil {
@@ -608,7 +631,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
-		if _, err := c.db.Exec(`UPDATE subscriber_lists
+		if _, err := tx.Exec(`UPDATE subscriber_lists
 			SET status = 'unsubscribed',
 			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id = ?
@@ -618,10 +641,24 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
+		if hasCampaignSubscriptions {
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO campaign_unsubscribes (campaign_id, subscriber_id, created, updated)
+				VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))`, campRecID, subRecID); err != nil {
+				c.log.Printf("error recording campaign unsubscribe: %v", err)
+				return echo.NewHTTPError(http.StatusInternalServerError,
+					c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			c.log.Printf("error unsubscribing: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		}
 		return nil
 	}
 
-	if _, err := c.db.Exec(`UPDATE subscriber_lists
+	res, err := tx.Exec(`UPDATE subscriber_lists
 		SET status = 'unsubscribed',
 		    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 		WHERE subscriber_id = ?
@@ -630,7 +667,25 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		    SELECT list_id
 		    FROM campaign_lists
 		    WHERE campaign_id = ?
-		  )`, subRecID, campRecID); err != nil {
+		  )`, subRecID, campRecID)
+	if err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+
+	if hasCampaignSubscriptions {
+		if n, _ := res.RowsAffected(); n > 0 {
+			if _, err := tx.Exec(`INSERT OR IGNORE INTO campaign_unsubscribes (campaign_id, subscriber_id, created, updated)
+				VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))`, campRecID, subRecID); err != nil {
+				c.log.Printf("error recording campaign unsubscribe: %v", err)
+				return echo.NewHTTPError(http.StatusInternalServerError,
+					c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))

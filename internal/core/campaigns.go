@@ -553,6 +553,11 @@ func (c *Core) DeleteCampaign(recordID string) error {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
 	}
+	if _, err := c.db.Exec(`DELETE FROM campaign_unsubscribes WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
 
 	res, err := c.db.Exec(`DELETE FROM campaigns WHERE id = ?`, recordID)
 	if err != nil {
@@ -807,7 +812,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 				WHERE cl.campaign_id = c.id
 			), '[]') AS lists,
 			'[]' AS media,
-			(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
 			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces,
 			0 AS total
@@ -839,7 +844,7 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 			'[]' AS lists,
 			'[]' AS media,
-			(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
 			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 		FROM campaigns c
@@ -1272,6 +1277,8 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 		table = "link_clicks"
 	case "bounces":
 		table = "bounces"
+	case "unsubscribes":
+		table = "campaign_unsubscribes"
 	default:
 		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("globals.messages.invalidData"))
 	}

@@ -11,6 +11,7 @@
     "analytics.trackingDisabled": "E-mail tracking is globally disabled. No new views or clicks are being recorded.",
     "analytics.title": "Analytics",
     "analytics.toDate": "To",
+    "analytics.unsubscribes": "Unsubscribes",
     "analytics.uniqueViews": "Unique views",
     "bounces.complaint": "Complaint",
     "bounces.hard": "Hard",
