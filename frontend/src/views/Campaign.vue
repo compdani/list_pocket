@@ -744,11 +744,28 @@ export default {
     },
 
     toDateTimeLocal(value) {
-      return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
+      if (!value) {
+        return '';
+      }
+
+      const parsed = dayjs(value);
+      return parsed.isValid() ? parsed.format('YYYY-MM-DDTHH:mm') : '';
     },
 
     onSendAtInput(value) {
-      this.form.sendAtDate = value ? dayjs(value).toDate() : null;
+      const rawValue = typeof value === 'string'
+        ? value
+        : value && typeof value === 'object' && 'target' in value
+          ? value.target?.value
+          : '';
+
+      if (!rawValue) {
+        this.form.sendAtDate = null;
+        return;
+      }
+
+      const parsed = dayjs(rawValue);
+      this.form.sendAtDate = parsed.isValid() ? parsed.toDate() : null;
     },
 
     onListsChange(selectedIDs = []) {
