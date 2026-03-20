@@ -31,11 +31,13 @@
               :label="$t('globals.terms.campaigns')"
               item-title="name"
               item-value="id"
+              return-object
               multiple
               chips
               closable-chips
               :placeholder="$t('globals.terms.campaigns')"
               :loading="isSearchLoading"
+              @focus="ensureCampaignOptions"
               @update:search="queryCampaigns"
             />
           </v-col>
@@ -188,6 +190,29 @@ export default {
   },
 
   methods: {
+    formatCampaignOption(campaign) {
+      return {
+        ...campaign,
+        name: `#${campaign.id}: ${campaign.name}`,
+      };
+    },
+
+    mergeCampaignOptions(campaigns = []) {
+      const merged = [...this.queriedCampaigns];
+      const seen = new Set(merged.map((item) => item.id));
+
+      campaigns.forEach((campaign) => {
+        if (!campaign || !campaign.id || seen.has(campaign.id)) {
+          return;
+        }
+
+        merged.push(campaign);
+        seen.add(campaign.id);
+      });
+
+      this.queriedCampaigns = merged;
+    },
+
     parseDateTimeLocal(value) {
       return value ? dayjs(value).toDate() : null;
     },
@@ -223,6 +248,7 @@ export default {
     },
 
     makeLinksChart(typ, camps, data) {
+      this.urls = [];
       const labels = data.map((l) => {
         try {
           this.urls.push(l.url);
@@ -292,19 +318,28 @@ export default {
       this.$router.push({ query: { id: this.form.campaigns.map((c) => c.id), from: dayjs(this.form.from).unix(), to: dayjs(this.form.to).unix() } });
     },
 
-    queryCampaigns(q) {
+    queryCampaigns(q = '') {
       this.isSearchLoading = true;
       this.$api.getCampaigns({
-        query: q,
+        query: (q || '').trim(),
         order_by: 'created_at',
         order: 'DESC',
+        per_page: 20,
       }).then((data) => {
+        const options = (data.results || []).map((c) => this.formatCampaignOption(c));
+        this.queriedCampaigns = [];
+        this.mergeCampaignOptions([...this.form.campaigns, ...options]);
+      }).finally(() => {
         this.isSearchLoading = false;
-        this.queriedCampaigns = data.results.map((c) => ({
-          ...c,
-          name: `#${c.id}: ${c.name}`,
-        }));
       });
+    },
+
+    ensureCampaignOptions() {
+      if (this.queriedCampaigns.length > 0) {
+        return;
+      }
+
+      this.queryCampaigns('');
     },
 
     getData(typ, camps) {
@@ -359,14 +394,14 @@ export default {
           }
 
           const camp = {
-            ...d.value,
-            name: `#${d.value.id}: ${d.value.name}`,
+            ...this.formatCampaignOption(d.value),
           };
           this.form.campaigns.push(camp);
         });
 
         this.$nextTick(() => {
           this.isSearchLoading = false;
+          this.mergeCampaignOptions(this.form.campaigns);
 
           // Fetch count for each analytics type (views, counts, bounces);
           Object.keys(this.charts).forEach((k) => {
@@ -378,6 +413,8 @@ export default {
           });
         });
       });
+    } else {
+      this.ensureCampaignOptions();
     }
   },
 };
