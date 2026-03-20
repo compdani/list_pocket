@@ -1,6 +1,10 @@
 package main
 
-import "github.com/compdani/list_pocket/models"
+import (
+	"strings"
+
+	"github.com/compdani/list_pocket/models"
+)
 
 type campaignBatchingReq struct {
 	Enabled     bool     `json:"enabled"`
@@ -17,7 +21,7 @@ func (r campaignBatchingReq) toModel() models.CampaignBatching {
 		Enabled:     r.Enabled,
 		BatchSize:   r.BatchSize,
 		RepeatValue: r.RepeatValue,
-		RepeatUnit:  r.RepeatUnit,
+		RepeatUnit:  strings.ToLower(strings.TrimSpace(r.RepeatUnit)),
 		Days:        r.Days,
 		StartTime:   r.StartTime,
 		EndTime:     r.EndTime,

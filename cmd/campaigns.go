@@ -968,8 +968,8 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 		if batching.RepeatValue < 1 {
 			return c, errors.New("batch repeat value must be greater than 0")
 		}
-		if batching.RepeatUnit != "hours" && batching.RepeatUnit != "days" {
-			return c, errors.New("batch repeat unit must be hours or days")
+		if batching.RepeatUnit != "quarter_hours" && batching.RepeatUnit != "hours" && batching.RepeatUnit != "days" {
+			return c, errors.New("batch repeat unit must be 15 mins, hours, or days")
 		}
 	}
 
