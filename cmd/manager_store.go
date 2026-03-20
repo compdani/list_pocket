@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/compdani/list_pocket/internal/core"
+	"github.com/compdani/list_pocket/internal/events"
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/internal/media"
 	"github.com/compdani/list_pocket/internal/pbdb"
@@ -26,6 +27,7 @@ type store struct {
 	core    *core.Core
 	media   media.Store
 	log     *log.Logger
+	events  *events.Events
 }
 
 type runningCamp struct {
@@ -47,7 +49,7 @@ type sqliteStoreSubscriberRow struct {
 	Status    string `db:"status"`
 }
 
-func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger) *store {
+func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger, ev *events.Events) *store {
 	return &store{
 		queries: q,
 		db:      db,
@@ -55,6 +57,23 @@ func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store
 		core:    c,
 		media:   m,
 		log:     l,
+		events:  ev,
+	}
+}
+
+func (s *store) publishCampaignStatsEvent(reason string, campaignID int) {
+	if s.events == nil {
+		return
+	}
+
+	if err := s.events.Publish(events.Event{
+		Type: events.TypeCampaignStats,
+		Data: map[string]any{
+			"campaign_id": campaignID,
+			"reason":      reason,
+		},
+	}); err != nil {
+		s.log.Printf("error publishing campaign stats event: %v", err)
 	}
 }
 
@@ -193,10 +212,16 @@ func (s *store) UpdateCampaignStatus(campID int, status string) error {
 			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid = ?`,
 			status, status, campID)
+		if err == nil {
+			s.publishCampaignStatsEvent("status", campID)
+		}
 		return err
 	}
 
 	_, err := s.queries.UpdateCampaignStatus.Exec(campID, status)
+	if err == nil {
+		s.publishCampaignStatsEvent("status", campID)
+	}
 	return err
 }
 
@@ -209,6 +234,9 @@ func (s *store) ScheduleCampaignBatch(campID int, sendAt time.Time) error {
 			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid = ?`,
 			sendAt.UTC().Format("2006-01-02 15:04:05.000Z"), campID)
+		if err == nil {
+			s.publishCampaignStatsEvent("schedule-batch", campID)
+		}
 		return err
 	}
 
@@ -216,6 +244,9 @@ func (s *store) ScheduleCampaignBatch(campID int, sendAt time.Time) error {
 		UPDATE campaigns
 		SET status='scheduled', send_at=$1, updated_at=NOW()
 		WHERE id=$2`, sendAt.UTC(), campID)
+	if err == nil {
+		s.publishCampaignStatsEvent("schedule-batch", campID)
+	}
 	return err
 }
 
@@ -230,14 +261,22 @@ func (s *store) UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID
 				updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid=?`,
 			toSend, toSend, sent, lastSubID, lastSubID, campID)
+		if err == nil {
+			s.publishCampaignStatsEvent("counts", campID)
+		}
 		return err
 	}
 
 	_, err := s.queries.UpdateCampaignCounts.Exec(campID, toSend, sent, lastSubID)
+	if err == nil {
+		s.publishCampaignStatsEvent("counts", campID)
+	}
 	return err
 }
 
 func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*models.Campaign, error) {
+	statsChanged := false
+
 	for i, id := range currentIDs {
 		if i >= len(sentCounts) || sentCounts[i] == 0 {
 			continue
@@ -251,6 +290,7 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			sentCounts[i], id); err != nil {
 			return nil, err
 		}
+		statsChanged = true
 	}
 
 	base := `
@@ -325,16 +365,17 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 		s.log.Printf("manager store sqlite: campaign rowid=%d record_id=%q type=%q to_send=%d max_subscriber_id=%d", c.ID, campaignRecID, c.Type, meta.ToSend, meta.MaxID)
 
 		if _, err := s.db.Exec(`
-			UPDATE campaigns
-			SET to_send = ?,
-			    status = (CASE WHEN status != 'running' THEN 'running' ELSE status END),
-			    max_subscriber_id = ?,
-			    started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
-			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE rowid = ?`,
+				UPDATE campaigns
+				SET to_send = ?,
+				    status = (CASE WHEN status != 'running' THEN 'running' ELSE status END),
+				    max_subscriber_id = ?,
+				    started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
+				    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+				WHERE rowid = ?`,
 			meta.ToSend, meta.MaxID, c.ID); err != nil {
 			return nil, err
 		}
+		statsChanged = true
 		c.ToSend = meta.ToSend
 
 		var mediaIDs []int64
@@ -347,6 +388,10 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			return nil, err
 		}
 		c.MediaIDs = mediaIDs
+	}
+
+	if statsChanged {
+		s.publishCampaignStatsEvent("scan", 0)
 	}
 
 	return campaigns, nil

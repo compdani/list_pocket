@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	TypeError = "error"
+	TypeError         = "error"
+	TypeCampaignStats = "campaign-stats"
 )
 
 // Event represents a single event in the system.
