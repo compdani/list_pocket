@@ -7,6 +7,47 @@
 <script>
 import Chart from 'chart.js/auto';
 
+const transitionMarkerPlugin = {
+  id: 'transition-marker',
+  afterDatasetsDraw(chart) {
+    const transitionLabel = chart?.config?.data?.transitionLabel;
+    if (!transitionLabel || chart.config.type !== 'line') {
+      return;
+    }
+
+    const xScale = chart.scales?.x;
+    const chartArea = chart.chartArea;
+    if (!xScale || !chartArea) {
+      return;
+    }
+
+    const x = xScale.getPixelForValue(transitionLabel);
+    if (!Number.isFinite(x)) {
+      return;
+    }
+
+    const { ctx } = chart;
+    ctx.save();
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = 'rgba(0, 85, 212, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(0, 85, 212, 0.8)';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Hourly detail', Math.min(x + 8, chartArea.right - 80), chartArea.top + 6);
+    ctx.restore();
+  },
+};
+
+Chart.register(transitionMarkerPlugin);
+
 const DEFAULT_DONUT = {
   type: 'doughnut',
   data: {},
@@ -75,6 +116,10 @@ const DEFAULT_LINE = {
       x: {
         grid: {
           display: false,
+        },
+        ticks: {
+          maxRotation: 0,
+          autoSkip: true,
         },
       },
       y: {

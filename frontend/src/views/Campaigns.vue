@@ -375,7 +375,6 @@
 
     <campaign-preview
       v-if="previewItem"
-      is-post
       type="campaign"
       :id="previewItem.id"
       :title="previewItem.name"
