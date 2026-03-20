@@ -46,7 +46,12 @@
     <v-dialog v-model="isMediaVisible" max-width="900">
       <v-card>
         <v-card-text class="pt-0">
-          <media is-modal type="pictures" @selected="onMediaSelect" />
+          <media
+            is-modal
+            type="pictures"
+            @selected="onMediaSelect"
+            @close="isMediaVisible = false"
+          />
         </v-card-text>
       </v-card>
     </v-dialog>
@@ -260,6 +265,7 @@ export default {
 
     onMediaSelect(media) {
       this.imageCallack(media.url);
+      this.isMediaVisible = false;
     },
 
     beautifyHTML(str) {

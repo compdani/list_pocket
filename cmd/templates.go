@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"html/template"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -30,6 +33,44 @@ const (
 var (
 	regexpTplTag = regexp.MustCompile(`{{(\s+)?template\s+?"content"(\s+)?\.(\s+)?}}`)
 )
+
+func bindTemplateReq(c echo.Context, out *models.Template) error {
+	body, err := io.ReadAll(c.Request().Body)
+	if err != nil {
+		return err
+	}
+
+	normalized, err := normalizeTemplateReqBody(body)
+	if err != nil {
+		return err
+	}
+
+	return json.Unmarshal(normalized, out)
+}
+
+func normalizeTemplateReqBody(body []byte) ([]byte, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return body, nil
+	}
+
+	payload := map[string]json.RawMessage{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+
+	if raw, ok := payload["body_source"]; ok {
+		raw = bytes.TrimSpace(raw)
+		if len(raw) > 0 && raw[0] != '"' && string(raw) != "null" {
+			encoded, err := json.Marshal(string(raw))
+			if err != nil {
+				return nil, err
+			}
+			payload["body_source"] = encoded
+		}
+	}
+
+	return json.Marshal(payload)
+}
 
 func templateRouteRecordID(c echo.Context) (string, error) {
 	recordID := strings.TrimSpace(c.Param("id"))
@@ -121,7 +162,7 @@ func (a *App) PreviewTemplateBody(c echo.Context) error {
 // CreateTemplate handles template creation.
 func (a *App) CreateTemplate(c echo.Context) error {
 	var o models.Template
-	if err := c.Bind(&o); err != nil {
+	if err := bindTemplateReq(c, &o); err != nil {
 		return err
 	}
 	if err := a.validateTemplate(o); err != nil {
@@ -161,7 +202,7 @@ func (a *App) CreateTemplate(c echo.Context) error {
 // UpdateTemplate handles template modification.
 func (a *App) UpdateTemplate(c echo.Context) error {
 	var o models.Template
-	if err := c.Bind(&o); err != nil {
+	if err := bindTemplateReq(c, &o); err != nil {
 		return err
 	}
 	if err := a.validateTemplate(o); err != nil {

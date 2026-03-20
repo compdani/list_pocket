@@ -11,7 +11,12 @@
     <v-dialog v-model="isMediaVisible" max-width="900">
       <v-card>
         <v-card-text class="pt-0">
-          <media is-modal type="pictures" @selected="onMediaSelect" />
+          <media
+            is-modal
+            type="pictures"
+            @selected="onMediaSelect"
+            @close="isMediaVisible = false"
+          />
         </v-card-text>
       </v-card>
     </v-dialog>
@@ -115,6 +120,8 @@ export default {
         const inputEvent = new Event('input', { bubbles: true });
         input.dispatchEvent(inputEvent);
       }
+
+      this.isMediaVisible = false;
     },
 
     // Observe DOM changes in the iframe to inject media selector

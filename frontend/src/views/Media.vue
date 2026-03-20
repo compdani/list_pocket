@@ -147,6 +147,8 @@ import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
 export default {
+  emits: ['selected', 'close'],
+
   components: {
     EmptyPlaceholder,
   },
@@ -241,7 +243,7 @@ export default {
       if (this.isModal) {
         e.preventDefault();
         this.$emit('selected', m);
-        this.$parent.close();
+        this.$emit('close');
       }
     },
 
