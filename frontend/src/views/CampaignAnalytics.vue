@@ -259,8 +259,15 @@ export default {
       }
     },
 
-    formatDateTime(s) {
-      return dayjs(s).format('YYYY-MM-DD HH:mm');
+    formatDateTime(point) {
+      const parsed = dayjs(point?.timestamp || point);
+      if (!parsed.isValid()) {
+        return '';
+      }
+
+      return point?.bucket === 'hour'
+        ? parsed.format('MMM D, h:mm A')
+        : parsed.format('MMM D, YYYY');
     },
 
     makeLinksChart(typ, camps, data) {
@@ -299,13 +306,17 @@ export default {
         return out;
       }, {});
       const campIDs = Object.keys(camps);
+      const labels = [...new Set(data.map((item) => this.formatDateTime(item)))];
+      const firstHourlyPoint = data.find((item) => item.bucket === 'hour');
+      const transitionLabel = firstHourlyPoint ? this.formatDateTime(firstHourlyPoint) : null;
+
       // datasets[] array for line chart.
       const lines = campIDs.map((id, n) => {
         const points = data.filter((item) => item.campaignId === id);
 
         return {
           label: camps[id].name,
-          data: points.map((item) => ({ x: this.formatDateTime(item.timestamp), y: item.count })),
+          data: points.map((item) => ({ x: this.formatDateTime(item), y: item.count })),
           borderColor: chartColors[n % campIDs.length],
           borderWidth: 2,
           pointHoverBorderWidth: 5,
@@ -314,20 +325,27 @@ export default {
       });
 
       // Donut.
-      const labels = [];
+      const donutLabels = [];
       const points = campIDs.map((id) => {
-        labels.push(camps[id].name);
+        donutLabels.push(camps[id].name);
         const sum = data.reduce((a, item) => (item.campaignId === id ? a + item.count : a), 0);
         return sum;
       });
 
       const donut = {
-        labels,
+        labels: donutLabels,
         datasets: [{
           data: points, backgroundColor: chartColors, borderWidth: 6,
         }],
       };
-      return { points: { datasets: lines }, donut };
+      return {
+        points: {
+          labels,
+          datasets: lines,
+          transitionLabel,
+        },
+        donut,
+      };
     },
 
     onSubmit() {

@@ -1278,10 +1278,11 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 	fromTime, _ := time.Parse("2006-01-02 15:04:05", fromSQL)
 	toTime, _ := time.Parse("2006-01-02 15:04:05", toSQL)
-	groupFmt := "%Y-%m-%d %H:00:00"
-	if toTime.Sub(fromTime).Hours()/24 >= 7 {
-		groupFmt = "%Y-%m-%d 00:00:00"
+	splitTime := fromTime
+	if candidate := toTime.Add(-12 * time.Hour); candidate.After(fromTime) {
+		splitTime = candidate
 	}
+	splitSQL := splitTime.Format("2006-01-02 15:04:05")
 
 	recordIDs, err := c.ResolveCampaignRecordIDs(campIDs)
 	if err != nil {
@@ -1293,15 +1294,25 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 
 	q := `
-		SELECT campaign_id, COUNT(*) AS count, strftime(? , created) AS ts
-		FROM ` + table + `
-		WHERE campaign_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)
-		  AND created >= ?
-		  AND created <= ?
-		GROUP BY campaign_id, ts
-		ORDER BY ts ASC`
+			SELECT
+				campaign_id,
+				COUNT(*) AS count,
+				CASE
+					WHEN created >= ? THEN 'hour'
+					ELSE 'day'
+				END AS bucket,
+				CASE
+					WHEN created >= ? THEN strftime('%Y-%m-%d %H:00:00', created)
+					ELSE strftime('%Y-%m-%d 00:00:00', created)
+				END AS ts
+			FROM ` + table + `
+			WHERE campaign_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)
+			  AND created >= ?
+			  AND created <= ?
+			GROUP BY campaign_id, bucket, ts
+			ORDER BY ts ASC`
 
-	args := []any{groupFmt}
+	args := []any{splitSQL, splitSQL}
 	for _, id := range recordIDs {
 		args = append(args, id)
 	}
@@ -1309,6 +1320,7 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 
 	var rows []struct {
 		CampaignID string `db:"campaign_id"`
+		Bucket     string `db:"bucket"`
 		Count      int    `db:"count"`
 		TS         string `db:"ts"`
 	}
@@ -1326,6 +1338,7 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 		}
 		out = append(out, models.CampaignAnalyticsCount{
 			CampaignID: r.CampaignID,
+			Bucket:     r.Bucket,
 			Count:      r.Count,
 			Timestamp:  t,
 		})
