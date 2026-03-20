@@ -157,13 +157,13 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.DELETE("/media/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteMedia), "media:manage")))
 
 	api.GET("/templates", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetTemplates, "templates:get")))
-	api.GET("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.GetTemplate), "templates:get")))
-	api.GET("/templates/{id}/preview", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.PreviewTemplate), "templates:get")))
+	api.GET("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetTemplate, "templates:get")))
+	api.GET("/templates/{id}/preview", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.PreviewTemplate, "templates:get")))
 	api.POST("/templates/preview", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.PreviewTemplateBody, "templates:get")))
 	api.POST("/templates", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateTemplate, "templates:manage")))
-	api.PUT("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.UpdateTemplate), "templates:manage")))
-	api.PUT("/templates/{id}/default", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.TemplateSetDefault), "templates:manage")))
-	api.DELETE("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(hasID(a.DeleteTemplate), "templates:manage")))
+	api.PUT("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateTemplate, "templates:manage")))
+	api.PUT("/templates/{id}/default", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.TemplateSetDefault, "templates:manage")))
+	api.DELETE("/templates/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteTemplate, "templates:manage")))
 
 	api.DELETE("/maintenance/subscribers/{type}", wrapEcho(a, tpl, cfg, urlCfg, []string{"type"}, pm(a.GCSubscribers, "settings:maintain")))
 	api.DELETE("/maintenance/analytics/{type}", wrapEcho(a, tpl, cfg, urlCfg, []string{"type"}, pm(a.GCCampaignAnalytics, "settings:maintain")))
