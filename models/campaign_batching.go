@@ -15,6 +15,7 @@ type CampaignBatching struct {
 	Days        []string
 	StartTime   string
 	EndTime     string
+	Timezone    string
 }
 
 func (c Campaign) Batching() CampaignBatching {
@@ -43,6 +44,7 @@ func ParseCampaignBatching(attribs JSON) CampaignBatching {
 	out.RepeatUnit = strings.ToLower(strings.TrimSpace(asBatchString(obj["repeat_unit"])))
 	out.StartTime = strings.TrimSpace(asBatchString(obj["start_time"]))
 	out.EndTime = strings.TrimSpace(asBatchString(obj["end_time"]))
+	out.Timezone = strings.TrimSpace(asBatchString(obj["timezone"]))
 	out.Days = normalizeBatchDays(asBatchStrings(obj["days"]))
 	return out
 }
@@ -61,6 +63,7 @@ func MergeCampaignBatching(attribs JSON, cfg CampaignBatching) JSON {
 		"days":         normalizeBatchDays(cfg.Days),
 		"start_time":   strings.TrimSpace(cfg.StartTime),
 		"end_time":     strings.TrimSpace(cfg.EndTime),
+		"timezone":     strings.TrimSpace(cfg.Timezone),
 	}
 
 	return out

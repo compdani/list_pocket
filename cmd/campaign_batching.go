@@ -14,6 +14,7 @@ type campaignBatchingReq struct {
 	Days        []string `json:"days"`
 	StartTime   string   `json:"start_time"`
 	EndTime     string   `json:"end_time"`
+	Timezone    string   `json:"timezone"`
 }
 
 func (r campaignBatchingReq) toModel() models.CampaignBatching {
@@ -25,5 +26,6 @@ func (r campaignBatchingReq) toModel() models.CampaignBatching {
 		Days:        r.Days,
 		StartTime:   r.StartTime,
 		EndTime:     r.EndTime,
+		Timezone:    strings.TrimSpace(r.Timezone),
 	}
 }
