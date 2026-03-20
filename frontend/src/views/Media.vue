@@ -1,10 +1,17 @@
 <template>
   <section class="media-files">
-    <h1 class="text-h6">
-      {{ heading }}
-      <span v-if="items.length > 0">({{ items.length }})</span>
-      <span class="text-medium-emphasis"> / {{ providerLabel }}</span>
-    </h1>
+    <div class="media-header">
+      <div>
+        <h1 class="text-h6 media-title">
+          {{ heading }}
+          <span v-if="items.length > 0">({{ items.length }})</span>
+          <span class="text-medium-emphasis"> / {{ providerLabel }}</span>
+        </h1>
+        <p class="media-subtitle">
+          {{ isModal ? 'Pick an asset to insert into your content.' : 'Browse and manage uploaded assets.' }}
+        </p>
+      </div>
+    </div>
 
     <v-progress-linear
       v-if="isProcessing || isLoading"
@@ -13,11 +20,11 @@
       class="my-3"
     />
 
-    <section class="wrap gallery mt-6">
-      <v-row class="mb-2" dense>
-        <v-col cols="12" md="8">
+    <section class="media-shell gallery">
+      <v-row class="media-toolbar" dense>
+        <v-col cols="12" md="9">
           <v-form @submit.prevent="onQueryMedia" class="search">
-            <div class="d-flex ga-2">
+            <div class="media-search-row">
               <v-text-field
                 v-model="queryParams.query"
                 name="query"
@@ -33,34 +40,48 @@
           </v-form>
         </v-col>
         <v-col v-if="$can('media:manage')" cols="12" md="auto">
-          <v-btn @click="onToggleForm" prepend-icon="mdi-file-upload-outline" data-cy="btn-toggle-upload">
+          <v-btn
+            @click="onToggleForm"
+            prepend-icon="mdi-file-upload-outline"
+            color="primary"
+            variant="tonal"
+            class="media-upload-toggle"
+            data-cy="btn-toggle-upload"
+          >
             {{ $t('media.upload') }}
           </v-btn>
         </v-col>
       </v-row>
 
       <v-expand-transition>
-        <div v-if="$can('media:manage') && showUploadForm">
-          <v-form @submit.prevent="onSubmit" class="mb-6" data-cy="upload">
+        <div v-if="$can('media:manage') && showUploadForm" class="upload-panel">
+          <v-form @submit.prevent="onSubmit" data-cy="upload">
+            <div class="upload-panel__header">
+              <div>
+                <h2 class="upload-panel__title">{{ $t('media.upload') }}</h2>
+                <p class="upload-panel__help">{{ $t('media.uploadHelp') }}</p>
+              </div>
+            </div>
+
             <v-file-input
               v-model="form.files"
               :label="$t('media.upload')"
-              :hint="$t('media.uploadHelp')"
-              persistent-hint
+              :hint="null"
               variant="outlined"
               density="comfortable"
               prepend-icon="mdi-file-upload-outline"
               accept=".png,.jpg,.jpeg,.gif,.svg"
               multiple
               show-size
+              class="upload-input"
             />
 
-            <div class="mb-4" v-if="uploadFiles.length > 0">
+            <div class="upload-chip-list" v-if="uploadFiles.length > 0">
               <v-chip
                 v-for="(f, i) in uploadFiles"
                 :key="`${f.name}-${i}`"
                 size="small"
-                class="ma-1"
+                class="upload-chip"
                 closable
                 @click:close="removeUploadFile(i)"
               >
@@ -68,15 +89,17 @@
               </v-chip>
             </div>
 
-            <v-btn
-              type="submit"
-              color="primary"
-              prepend-icon="mdi-file-upload-outline"
-              :disabled="uploadFiles.length === 0"
-              :loading="isProcessing"
-            >
-              {{ $tc('media.upload') }}
-            </v-btn>
+            <div class="upload-panel__actions">
+              <v-btn
+                type="submit"
+                color="primary"
+                prepend-icon="mdi-file-upload-outline"
+                :disabled="uploadFiles.length === 0"
+                :loading="isProcessing"
+              >
+                {{ $tc('media.upload') }}
+              </v-btn>
+            </div>
           </v-form>
         </div>
       </v-expand-transition>
