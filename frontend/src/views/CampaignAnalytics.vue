@@ -214,11 +214,27 @@ export default {
     },
 
     parseDateTimeLocal(value) {
-      return value ? dayjs(value).toDate() : null;
+      const rawValue = typeof value === 'string'
+        ? value
+        : value && typeof value === 'object' && 'target' in value
+          ? value.target?.value
+          : '';
+
+      if (!rawValue) {
+        return null;
+      }
+
+      const parsed = dayjs(rawValue);
+      return parsed.isValid() ? parsed.toDate() : null;
     },
 
     toDateTimeLocal(value) {
-      return value ? dayjs(value).format('YYYY-MM-DDTHH:mm') : '';
+      if (!value) {
+        return '';
+      }
+
+      const parsed = dayjs(value);
+      return parsed.isValid() ? parsed.format('YYYY-MM-DDTHH:mm') : '';
     },
 
     onFromInput(value) {
@@ -375,8 +391,10 @@ export default {
   created() {
     const now = dayjs().set('hour', 23).set('minute', 59).set('seconds', 0);
     const weekAgo = now.subtract(7, 'day').set('hour', 0).set('minute', 0);
-    const from = this.$route.query.from ? dayjs.unix(this.$route.query.from) : weekAgo;
-    const to = this.$route.query.to ? dayjs.unix(this.$route.query.to) : now;
+    const fromUnix = Number(this.$route.query.from);
+    const toUnix = Number(this.$route.query.to);
+    const from = Number.isFinite(fromUnix) && fromUnix > 0 ? dayjs.unix(fromUnix) : weekAgo;
+    const to = Number.isFinite(toUnix) && toUnix > 0 ? dayjs.unix(toUnix) : now;
     this.form.from = from.toDate();
     this.form.to = to.toDate();
   },
