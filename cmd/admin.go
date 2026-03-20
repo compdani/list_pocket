@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -136,8 +137,10 @@ func (a *App) GetServerConfig(c echo.Context) error {
 
 // GetDashboardCharts returns chart data points to render ont he dashboard.
 func (a *App) GetDashboardCharts(c echo.Context) error {
+	tzOffsetMins, _ := strconv.Atoi(c.QueryParam("tz_offset"))
+
 	// Get the chart data from the DB.
-	out, err := a.core.GetDashboardCharts()
+	out, err := a.core.GetDashboardCharts(tzOffsetMins)
 	if err != nil {
 		return err
 	}

@@ -2,15 +2,16 @@ package core
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/jmoiron/sqlx/types"
 	"github.com/labstack/echo/v4"
 )
 
 // GetDashboardCharts returns chart data points to render on the dashboard.
-func (c *Core) GetDashboardCharts() (types.JSONText, error) {
+func (c *Core) GetDashboardCharts(tzOffsetMins int) (types.JSONText, error) {
 	if c.isSQLite() {
-		return c.getDashboardChartsSQLite()
+		return c.getDashboardChartsSQLite(tzOffsetMins)
 	}
 
 	_ = c.refreshCache(matDashboardCharts, false)
@@ -41,33 +42,46 @@ func (c *Core) GetDashboardCounts() (types.JSONText, error) {
 	return out, nil
 }
 
-func (c *Core) getDashboardChartsSQLite() (types.JSONText, error) {
+func sqliteTimezoneModifier(tzOffsetMins int) string {
+	if tzOffsetMins == 0 {
+		return "0 minutes"
+	}
+
+	return strconv.Itoa(-tzOffsetMins) + " minutes"
+}
+
+func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error) {
 	const q = `
 	SELECT json_object(
 		'link_clicks', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(*) AS count, DATE(created) AS date
+				SELECT COUNT(*) AS count, DATE(datetime(created, ?)) AS date
 				FROM link_clicks
-				WHERE DATE(created) >= DATE('now', '-30 day')
-				GROUP BY DATE(created)
-				ORDER BY DATE(created)
+				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
+				GROUP BY DATE(datetime(created, ?))
+				ORDER BY DATE(datetime(created, ?))
 			)
 		), '[]'),
 		'campaign_views', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(*) AS count, DATE(created) AS date
+				SELECT COUNT(*) AS count, DATE(datetime(created, ?)) AS date
 				FROM campaign_views
-				WHERE DATE(created) >= DATE('now', '-30 day')
-				GROUP BY DATE(created)
-				ORDER BY DATE(created)
+				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
+				GROUP BY DATE(datetime(created, ?))
+				ORDER BY DATE(datetime(created, ?))
 			)
 		), '[]')
 	) AS data`
 
+	tzModifier := sqliteTimezoneModifier(tzOffsetMins)
+
 	var out types.JSONText
-	if err := c.db.Get(&out, q); err != nil {
+	if err := c.db.Get(&out, q,
+		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
+		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
+	); err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
 	}
