@@ -18,7 +18,7 @@ func init() {
 			&core.SelectField{
 				Name:     "type",
 				Required: true,
-				Values:   []string{"campaign", "tx"},
+				Values:   []string{"campaign", "campaign_visual", "tx"},
 			},
 			&core.TextField{
 				Name:     "subject",
