@@ -228,7 +228,7 @@ func (p *pipe) cleanup() {
 	}
 
 	if p.batchHasMore {
-		nextAt := nextBatchScheduleTime(time.Now(), p.camp.Batching())
+		nextAt := nextBatchScheduleTime(p.camp.SendAt.Time, time.Now(), p.camp.Batching())
 		if err := p.m.store.ScheduleCampaignBatch(p.camp.ID, nextAt); err != nil {
 			p.m.log.Printf("error scheduling next campaign batch (%s): %v", p.camp.Name, err)
 			return
@@ -261,32 +261,44 @@ func (p *pipe) cleanup() {
 	_ = p.m.sendNotif(c, c.Status, "")
 }
 
-func nextBatchScheduleTime(from time.Time, cfg models.CampaignBatching) time.Time {
+func nextBatchScheduleTime(anchor time.Time, now time.Time, cfg models.CampaignBatching) time.Time {
 	if !cfg.Enabled || cfg.RepeatValue < 1 {
-		return from
+		return now
 	}
 
-	next := from
-	switch cfg.RepeatUnit {
-	case "days":
-		next = next.AddDate(0, 0, cfg.RepeatValue)
-	default:
-		next = next.Add(time.Duration(cfg.RepeatValue) * time.Hour)
+	next := anchor
+	if next.IsZero() {
+		next = now
 	}
 
-	for i := 0; i < 14; i++ {
+	for i := 0; i < 4096; i++ {
 		if !batchDayAllowed(next, cfg.Days) {
 			next = startOfNextDay(next, cfg.StartTime)
 			continue
 		}
 
 		if adjusted, ok := batchWindowAdjusted(next, cfg.StartTime, cfg.EndTime); ok {
-			return adjusted
+			if adjusted.After(now) {
+				return adjusted
+			}
+			next = addBatchInterval(adjusted, cfg)
+			continue
 		}
 		next = startOfNextDay(next, cfg.StartTime)
 	}
 
 	return next
+}
+
+func addBatchInterval(t time.Time, cfg models.CampaignBatching) time.Time {
+	switch cfg.RepeatUnit {
+	case "days":
+		return t.AddDate(0, 0, cfg.RepeatValue)
+	case "quarter_hours":
+		return t.Add(time.Duration(cfg.RepeatValue*15) * time.Minute)
+	default:
+		return t.Add(time.Duration(cfg.RepeatValue) * time.Hour)
+	}
 }
 
 func batchDayAllowed(t time.Time, days []string) bool {
