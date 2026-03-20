@@ -387,11 +387,14 @@
 <script>
 import dayjs from 'dayjs';
 import { mapState } from 'vuex';
+import { pb } from '../api';
 import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 
 export default {
+  campaignStatsTopic: 'events/campaign-stats',
+
   components: {
     CampaignPreview,
     EmptyPlaceholder,
@@ -407,8 +410,8 @@ export default {
         orderBy: 'created_at',
         order: 'desc',
       },
-      pollID: null,
       campaignStatsData: {},
+      campaignStatsRefreshTimer: null,
 
       // Table bulk row selection states.
       bulk: {
@@ -535,39 +538,50 @@ export default {
       return c;
     },
 
-    pollStats() {
-      // Clear any running status polls.
-      clearInterval(this.pollID);
-
-      // Poll for the status as long as the import is running.
-      this.pollID = setInterval(() => {
-        this.$api.getCampaignStats().then((data) => {
-          // Stop polling. No running campaigns.
-          if (data.length === 0) {
-            clearInterval(this.pollID);
-
-            // There were running campaigns and stats earlier. Clear them
-            // and refetch the campaigns list with up-to-date fields.
-            if (Object.keys(this.campaignStatsData).length > 0) {
-              this.getCampaigns();
-              this.campaignStatsData = {};
-            }
-          } else {
-            // Turn the list of campaigns [{id: 1, ...}, {id: 2, ...}] into
-            // a map indexed by the id: {1: {}, 2: {}}.
-            this.campaignStatsData = data.reduce((obj, cur) => ({ ...obj, [cur.id]: cur }), {});
+    refreshCampaignStats() {
+      this.$api.getCampaignStats().then((data) => {
+        if (data.length === 0) {
+          if (Object.keys(this.campaignStatsData).length > 0) {
+            this.getCampaigns();
+            this.campaignStatsData = {};
           }
-        }, () => {
-          clearInterval(this.pollID);
+          return;
+        }
+
+        this.campaignStatsData = data.reduce((obj, cur) => ({ ...obj, [cur.id]: cur }), {});
+      });
+    },
+
+    queueCampaignStatsRefresh() {
+      window.clearTimeout(this.campaignStatsRefreshTimer);
+      this.campaignStatsRefreshTimer = window.setTimeout(() => {
+        this.campaignStatsRefreshTimer = null;
+        this.refreshCampaignStats();
+      }, 150);
+    },
+
+    async subscribeCampaignStats() {
+      try {
+        await pb.realtime.subscribe(this.$options.campaignStatsTopic, () => {
+          this.queueCampaignStatsRefresh();
         });
-      }, 1000);
+      } catch (err) {
+        const msg = err?.response?.message || err?.message || 'Campaign realtime connection failed';
+        this.$utils.toast(msg, 'is-danger', 5000, false);
+      }
+    },
+
+    unsubscribeCampaignStats() {
+      window.clearTimeout(this.campaignStatsRefreshTimer);
+      this.campaignStatsRefreshTimer = null;
+      pb.realtime.unsubscribe(this.$options.campaignStatsTopic);
     },
 
     changeCampaignStatus(c, status) {
       this.$api.changeCampaignStatus(c.id, status).then(() => {
         this.$utils.toast(this.$t('campaigns.statusChanged', { name: c.name, status }));
         this.getCampaigns();
-        this.pollStats();
+        this.refreshCampaignStats();
       });
     },
 
@@ -718,12 +732,13 @@ export default {
 
   mounted() {
     this.getCampaigns();
-    this.pollStats();
+    this.refreshCampaignStats();
+    this.subscribeCampaignStats();
   },
 
-  destroyed() {
+  beforeUnmount() {
     this.$events.$off('page.refresh', this.getCampaigns);
-    clearInterval(this.pollID);
+    this.unsubscribeCampaignStats();
   },
 };
 </script>

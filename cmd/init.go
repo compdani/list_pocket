@@ -968,7 +968,7 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.
 		SlidingWindowRate:     ko.Int("app.message_sliding_window_rate"),
 		ScanInterval:          time.Second * 5,
 		ScanCampaigns:         false,
-	}, newManagerStore(q, db, co, md, lo), i, lo)
+	}, newManagerStore(q, db, co, md, lo, evStream), i, lo)
 
 	// Attach all messengers to the campaign manager.
 	for _, m := range msgrs {
