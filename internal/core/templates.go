@@ -35,19 +35,27 @@ func sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
 // GetTemplates retrieves all templates.
 func (c *Core) GetTemplates(status string, noBody bool) ([]models.Template, error) {
 	if c.isSQLite() {
-		bodySel := "body"
-		if noBody {
-			bodySel = "'' AS body"
-		}
-		out := []models.Template{}
-		if err := c.db.Select(&out, `
-			SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at,
-				name, subject, type, `+bodySel+`, body_source, is_default
-			FROM templates
-			ORDER BY created ASC`); err != nil {
+		pb := c.db.PocketBase()
+		if pb == nil {
 			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", pqErrMsg(err)))
+				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", "pocketbase unavailable"))
 		}
+
+		recs, err := pb.FindRecordsByFilter("templates", "", "created", 0, 0)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", err.Error()))
+		}
+
+		out := make([]models.Template, 0, len(recs))
+		for _, rec := range recs {
+			tpl := sqliteTemplateFromRecord(rec)
+			if noBody {
+				tpl.Body = ""
+			}
+			out = append(out, tpl)
+		}
+
 		return out, nil
 	}
 
@@ -63,19 +71,21 @@ func (c *Core) GetTemplates(status string, noBody bool) ([]models.Template, erro
 // GetTemplate retrieves a given template.
 func (c *Core) GetTemplate(recordID string, noBody bool) (models.Template, error) {
 	if c.isSQLite() {
-		bodySel := "body"
-		if noBody {
-			bodySel = "'' AS body"
+		pb := c.db.PocketBase()
+		if pb == nil {
+			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", "pocketbase unavailable"))
 		}
-		var out models.Template
-		if err := c.db.Get(&out, `
-			SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at,
-				name, subject, type, `+bodySel+`, body_source, is_default
-			FROM templates
-			WHERE id = ?
-			LIMIT 1`, recordID); err != nil {
+
+		rec, err := pb.FindRecordById("templates", recordID)
+		if err != nil {
 			return models.Template{}, echo.NewHTTPError(http.StatusBadRequest,
 				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
+		}
+
+		out := sqliteTemplateFromRecord(rec)
+		if noBody {
+			out.Body = ""
 		}
 		return out, nil
 	}
