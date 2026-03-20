@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/bounce/webhooks"
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 )
@@ -172,6 +174,9 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		case "Notification":
 			b, err := a.bounce.SES.ProcessBounce(rawReq)
 			if err != nil {
+				if errors.Is(err, webhooks.ErrNotificationNotBounce) {
+					return c.JSON(http.StatusOK, okResp{true})
+				}
 				a.log.Printf("error processing SES notification: %v", err)
 				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 			}

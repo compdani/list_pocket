@@ -24,7 +24,7 @@ type sendgridNotif struct {
 
 	// SendGrid flattens all X-headers and adds them to the bounce
 	// event notification.
-	CampaignUUID string `json:"XListmonkCampaign"`
+	CampaignUUID string `json:"XListpocketCampaign"`
 }
 
 // Sendgrid handles Sendgrid/SNS webhook notifications including confirming SNS topic subscription

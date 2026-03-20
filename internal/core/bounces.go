@@ -275,7 +275,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 	defer tx.Rollback()
 
 	var sub struct {
-		ID     int    `db:"id"`
+		ID     string `db:"id"`
 		Status string `db:"status"`
 	}
 
@@ -293,7 +293,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 		return err
 	}
 
-	campID := 0
+	campID := ""
 	if b.CampaignUUID != "" {
 		_ = tx.Get(&campID, `SELECT id FROM campaigns WHERE uuid = ? LIMIT 1`, b.CampaignUUID)
 	}
@@ -334,7 +334,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 
 		if _, err := tx.Exec(`
 			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
-			VALUES (?, NULLIF(?, 0), ?, ?, ?, ?)`,
+			VALUES (?, NULLIF(?, ''), ?, ?, ?, ?)`,
 			sub.ID, campID, b.Type, b.Source, meta, createdAt.UTC().Format("2006-01-02 15:04:05")); err != nil {
 			c.log.Printf("error recording bounce: %v", err)
 			return err
