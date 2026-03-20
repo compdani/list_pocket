@@ -266,10 +266,13 @@ func nextBatchScheduleTime(anchor time.Time, now time.Time, cfg models.CampaignB
 		return now
 	}
 
+	loc := batchLocation(anchor, cfg)
 	next := anchor
 	if next.IsZero() {
 		next = now
 	}
+	next = next.In(loc)
+	now = now.In(loc)
 
 	for i := 0; i < 4096; i++ {
 		if !batchDayAllowed(next, cfg.Days) {
@@ -299,6 +302,18 @@ func addBatchInterval(t time.Time, cfg models.CampaignBatching) time.Time {
 	default:
 		return t.Add(time.Duration(cfg.RepeatValue) * time.Hour)
 	}
+}
+
+func batchLocation(base time.Time, cfg models.CampaignBatching) *time.Location {
+	if strings.TrimSpace(cfg.Timezone) != "" {
+		if loc, err := time.LoadLocation(strings.TrimSpace(cfg.Timezone)); err == nil {
+			return loc
+		}
+	}
+	if !base.IsZero() && base.Location() != nil {
+		return base.Location()
+	}
+	return time.Local
 }
 
 func batchDayAllowed(t time.Time, days []string) bool {

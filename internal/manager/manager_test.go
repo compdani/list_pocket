@@ -127,3 +127,22 @@ func TestNextBatchScheduleTimeRespectsDailyWindow(t *testing.T) {
 		t.Fatalf("expected next batch at %s, got %s", want, next)
 	}
 }
+
+func TestNextBatchScheduleTimeAppliesBatchWindowInConfiguredTimezone(t *testing.T) {
+	anchor := time.Date(2026, time.March, 21, 7, 0, 0, 0, time.UTC)
+	now := time.Date(2026, time.March, 21, 7, 1, 0, 0, time.UTC)
+
+	next := nextBatchScheduleTime(anchor, now, models.CampaignBatching{
+		Enabled:     true,
+		RepeatValue: 1,
+		RepeatUnit:  "hours",
+		StartTime:   "07:00",
+		EndTime:     "22:00",
+		Timezone:    "America/Chicago",
+	})
+
+	want := time.Date(2026, time.March, 21, 12, 0, 0, 0, time.UTC)
+	if !next.Equal(want) {
+		t.Fatalf("expected next batch at %s, got %s", want, next)
+	}
+}

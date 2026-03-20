@@ -732,6 +732,7 @@ export default {
           days: [],
           startTime: '',
           endTime: '',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
         },
       },
       lastAutoFromEmail: '',
@@ -842,6 +843,7 @@ export default {
           days: [],
           startTime: '',
           endTime: '',
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
         };
       }
 
@@ -853,6 +855,7 @@ export default {
         days: Array.isArray(value.days) ? value.days : [],
         startTime: value.startTime || '',
         endTime: value.endTime || '',
+        timezone: value.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || '',
       };
     },
 
@@ -1055,6 +1058,7 @@ export default {
           days: this.form.batching.days,
           start_time: this.form.batching.startTime,
           end_time: this.form.batching.endTime,
+          timezone: this.form.batching.timezone,
         },
         media: this.form.media.map((m) => m.id),
       };
@@ -1088,6 +1092,7 @@ export default {
           days: this.form.batching.days,
           start_time: this.form.batching.startTime,
           end_time: this.form.batching.endTime,
+          timezone: this.form.batching.timezone,
         },
         template_id: this.form.content.templateId,
         content_type: this.form.content.contentType,
