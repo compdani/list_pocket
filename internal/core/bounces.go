@@ -14,6 +14,47 @@ import (
 
 var bounceQuerySortFields = []string{"email", "campaign_name", "source", "created_at", "type"}
 
+type sqliteBounceRow struct {
+	ID               string `db:"id"`
+	Type             string `db:"type"`
+	Source           string `db:"source"`
+	Meta             []byte `db:"meta"`
+	CreatedAt        string `db:"created_at"`
+	Email            string `db:"email"`
+	SubscriberUUID   string `db:"subscriber_uuid"`
+	SubscriberID     string `db:"subscriber_id"`
+	SubscriberStatus string `db:"subscriber_status"`
+	Campaign         []byte `db:"campaign"`
+	Total            int    `db:"total"`
+}
+
+func sqliteBounceRowToModel(row sqliteBounceRow) models.Bounce {
+	var campaign *json.RawMessage
+	if len(row.Campaign) > 0 && string(row.Campaign) != "null" {
+		raw := json.RawMessage(append([]byte(nil), row.Campaign...))
+		campaign = &raw
+	}
+
+	createdAt := time.Time{}
+	if parsed := parseNullTime(row.CreatedAt); parsed.Valid {
+		createdAt = parsed.Time
+	}
+
+	return models.Bounce{
+		ID:               row.ID,
+		Type:             row.Type,
+		Source:           row.Source,
+		Meta:             json.RawMessage(row.Meta),
+		CreatedAt:        createdAt,
+		Email:            row.Email,
+		SubscriberUUID:   row.SubscriberUUID,
+		SubscriberID:     row.SubscriberID,
+		SubscriberStatus: row.SubscriberStatus,
+		Campaign:         campaign,
+		Total:            row.Total,
+	}
+}
+
 // QueryBounces retrieves paginated bounce entries based on the given params.
 // It also returns the total number of bounce records in the DB.
 func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, offset, limit int) ([]models.Bounce, int, error) {
@@ -248,16 +289,18 @@ func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order stri
 		args = append(args, limit, offset)
 	}
 
-	out := []models.Bounce{}
-	if err := c.db.Select(&out, q, args...); err != nil {
+	rows := []sqliteBounceRow{}
+	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching bounces: %v", err)
 		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.bounce}", "error", pqErrMsg(err)))
 	}
 
+	out := make([]models.Bounce, 0, len(rows))
 	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
+	for _, row := range rows {
+		out = append(out, sqliteBounceRowToModel(row))
+		total = row.Total
 	}
 	return out, total, nil
 }
