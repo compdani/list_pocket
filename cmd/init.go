@@ -1475,6 +1475,24 @@ func awaitReload(sigChan chan os.Signal, closerWait chan bool, closer func()) ch
 // functions and sprig template functions.
 func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 	funcs := template.FuncMap{
+		"TrackView": func(...any) template.HTML {
+			return template.HTML("")
+		},
+		"UnsubscribeURL": func(...any) string {
+			return ""
+		},
+		"ManageURL": func(...any) string {
+			return ""
+		},
+		"OptinURL": func(...any) string {
+			return ""
+		},
+		"MessageURL": func(...any) string {
+			return ""
+		},
+		"ArchiveURL": func(...any) string {
+			return ""
+		},
 		"RootURL": func() string {
 			return u.RootURL
 		},

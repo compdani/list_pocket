@@ -623,6 +623,24 @@ func (m *Manager) sendNotif(c *models.Campaign, status, reason string) error {
 // functions and sprig template functions.
 func (m *Manager) makeGnericFuncMap() template.FuncMap {
 	funcs := template.FuncMap{
+		"TrackView": func(...any) template.HTML {
+			return template.HTML("")
+		},
+		"UnsubscribeURL": func(...any) string {
+			return ""
+		},
+		"ManageURL": func(...any) string {
+			return ""
+		},
+		"OptinURL": func(...any) string {
+			return ""
+		},
+		"MessageURL": func(...any) string {
+			return ""
+		},
+		"ArchiveURL": func(...any) string {
+			return ""
+		},
 		"Date": func(layout string) string {
 			if layout == "" {
 				layout = time.ANSIC
