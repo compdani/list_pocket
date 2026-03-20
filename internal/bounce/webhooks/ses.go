@@ -18,6 +18,8 @@ import (
 	"github.com/compdani/list_pocket/models"
 )
 
+var ErrNotificationNotBounce = errors.New("notification type is not bounce")
+
 // AWS signature/validation logic borrowed from @cavnit's contrib:
 // https://gist.github.com/cavnit/f4d63ba52b3aa05406c07dcbca2ca6cf
 
@@ -124,7 +126,7 @@ func (s *SES) ProcessBounce(b []byte) (models.Bounce, error) {
 
 	if (m.EventType != "" && m.EventType != "Bounce") ||
 		(m.NotifType != "" && (m.NotifType != "Bounce" && m.NotifType != "Complaint")) {
-		return bounce, errors.New("notification type is not bounce")
+		return bounce, ErrNotificationNotBounce
 	}
 
 	if len(m.Mail.Destination) == 0 {
