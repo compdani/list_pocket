@@ -89,7 +89,7 @@ export default {
         method: this.isPost ? 'POST' : 'GET',
         headers: {
           Accept: 'text/html',
-          ...(token ? { Authorization: token } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       };
 
@@ -119,16 +119,25 @@ export default {
           credentials: 'omit',
         });
         const html = await response.text();
-        this.previewHTML = html;
+        this.previewHTML = response.ok
+          ? html
+          : `<pre>${this.escapeHTML(html || `${response.status} ${response.statusText}`)}</pre>`;
 
         this.previewLoaded = true;
         this.isLoading = false;
       } catch (err) {
         const message = err && err.response ? JSON.stringify(err.response) : String(err);
-        this.previewHTML = message;
+        this.previewHTML = `<pre>${this.escapeHTML(message)}</pre>`;
         this.previewLoaded = true;
         this.isLoading = false;
       }
+    },
+
+    escapeHTML(value = '') {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
     },
   },
 
