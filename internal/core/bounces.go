@@ -59,7 +59,34 @@ func sqliteBounceRowToModel(row sqliteBounceRow) models.Bounce {
 // It also returns the total number of bounce records in the DB.
 func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, offset, limit int) ([]models.Bounce, int, error) {
 	if c.isSQLite() {
-		return c.queryBouncesSQLite(campID, subID, source, orderBy, order, offset, limit)
+		var (
+			campRecordID string
+			subRecordID  string
+		)
+
+		if campID > 0 {
+			recordIDs, err := c.ResolveCampaignRecordIDs([]int{campID})
+			if err != nil {
+				return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
+					c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
+			}
+			if len(recordIDs) > 0 {
+				campRecordID = recordIDs[0]
+			}
+		}
+
+		if subID > 0 {
+			recordIDs, err := c.ResolveSubscriberRecordIDs([]int{subID})
+			if err != nil {
+				return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
+					c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
+			}
+			if len(recordIDs) > 0 {
+				subRecordID = recordIDs[0]
+			}
+		}
+
+		return c.queryBouncesSQLite(campRecordID, subRecordID, source, orderBy, order, offset, limit)
 	}
 
 	if !strSliceContains(orderBy, bounceQuerySortFields) {
@@ -88,7 +115,7 @@ func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, of
 // GetBounce retrieves bounce entries based on the given params.
 func (c *Core) GetBounce(id string) (models.Bounce, error) {
 	if c.isSQLite() {
-		out, _, err := c.queryBouncesSQLite(0, 0, "", "id", SortAsc, 0, 1, id)
+		out, _, err := c.queryBouncesSQLite("", "", "", "id", SortAsc, 0, 1, id)
 		if err != nil {
 			return models.Bounce{}, err
 		}
@@ -224,7 +251,7 @@ func (c *Core) DeleteBounces(ids []string, all bool) error {
 	return nil
 }
 
-func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order string, offset, limit int, onlyIDs ...string) ([]models.Bounce, int, error) {
+func (c *Core) queryBouncesSQLite(campRecordID, subRecordID, source, orderBy, order string, offset, limit int, onlyIDs ...string) ([]models.Bounce, int, error) {
 	if !strSliceContains(orderBy, bounceQuerySortFields) {
 		orderBy = "created_at"
 	}
@@ -270,13 +297,13 @@ func (c *Core) queryBouncesSQLite(campID, subID int, source, orderBy, order stri
 		q += ` AND b.id = ?`
 		args = append(args, onlyIDs[0])
 	}
-	if campID > 0 {
+	if campRecordID != "" {
 		q += ` AND b.campaign_id = ?`
-		args = append(args, campID)
+		args = append(args, campRecordID)
 	}
-	if subID > 0 {
+	if subRecordID != "" {
 		q += ` AND b.subscriber_id = ?`
-		args = append(args, subID)
+		args = append(args, subRecordID)
 	}
 	if source != "" {
 		q += ` AND b.source = ?`
