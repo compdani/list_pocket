@@ -3,18 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
-
-	"github.com/compdani/list_pocket/internal/pbdb"
 )
-
-// recordMigrationVersion inserts the given version (of DB migration) into the
-// `migrations` array in the settings table.
-func recordMigrationVersion(ver string, db *pbdb.DB) error {
-	_, err := db.Exec(fmt.Sprintf(`INSERT INTO settings (key, value)
-	VALUES('migrations', '["%s"]'::JSONB)
-	ON CONFLICT (key) DO UPDATE SET value = settings.value || EXCLUDED.value`, ver))
-	return err
-}
 
 func newConfigFile(path string) error {
 	if _, err := os.Stat(path); !os.IsNotExist(err) {

@@ -9,26 +9,11 @@ import (
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
-	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	pbcore "github.com/pocketbase/pocketbase/core"
-)
-
-var (
-	allowedSubQueryTables = map[string]struct{}{
-		"subscribers":       {},
-		"lists":             {},
-		"subscribers_lists": {},
-		"campaigns":         {},
-		"campaign_lists":    {},
-		"campaign_views":    {},
-		"links":             {},
-		"link_clicks":       {},
-		"bounces":           {},
-	}
 )
 
 type sqliteSubscriberRow struct {
@@ -1378,74 +1363,4 @@ func (c *Core) subscriberFilterSQLite(searchStr, queryExp string, listIDs []int,
 	}
 
 	return strings.Join(where, " AND "), args
-}
-
-// validateQueryTables checks if the query accesses only allowed tables.
-func validateQueryTables(db *pbdb.DB, query string, allowedTables map[string]struct{}) error {
-	// Get the EXPLAIN (FORMAT JSON) output.
-	tx, err := db.BeginTxx(context.Background(), &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var plan string
-	if err = tx.QueryRow("EXPLAIN (FORMAT JSON) "+query, nil, models.SubscriberStatusEnabled, "", 0, 10).Scan(&plan); err != nil {
-		return err
-	}
-
-	// Extract all relation names from the JSON plan.
-	tables, err := getTablesFromQueryPlan(plan)
-	if err != nil {
-		return fmt.Errorf("error getting tables from query: %v", err)
-	}
-
-	// Validate against allowed tables.
-	for _, table := range tables {
-		if _, ok := allowedTables[table]; !ok {
-			return fmt.Errorf("table '%s' is not allowed", table)
-		}
-	}
-
-	return nil
-}
-
-// getTablesFromQueryPlan parses the EXPLAIN JSON to find all "Relation Name" entries.
-func getTablesFromQueryPlan(explainJSON string) ([]string, error) {
-	var plans []map[string]any
-	if err := json.Unmarshal([]byte(explainJSON), &plans); err != nil {
-		return nil, err
-	}
-
-	// Collect table names in `tables` recursively.
-	tables := make(map[string]struct{})
-	for _, plan := range plans {
-		traverseQueryPlan(plan, tables)
-	}
-
-	result := make([]string, 0, len(tables))
-	for table := range tables {
-		result = append(result, table)
-	}
-	return result, nil
-}
-
-func traverseQueryPlan(node map[string]any, tables map[string]struct{}) {
-	if relName, ok := node["Relation Name"].(string); ok {
-		tables[relName] = struct{}{}
-	}
-
-	// Recursively check nested plans (e.g., subqueries, CTEs).
-	for _, v := range node {
-		switch v := v.(type) {
-		case map[string]any:
-			traverseQueryPlan(v, tables)
-		case []any:
-			for _, item := range v {
-				if m, ok := item.(map[string]any); ok {
-					traverseQueryPlan(m, tables)
-				}
-			}
-		}
-	}
 }

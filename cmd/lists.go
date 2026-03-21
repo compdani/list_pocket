@@ -19,24 +19,6 @@ func (a *App) resolveListRouteID(c echo.Context) (string, error) {
 	return recordID, nil
 }
 
-func (a *App) resolveListRoutePermID(c echo.Context) (int, error) {
-	recordID, err := a.resolveListRouteID(c)
-	if err != nil {
-		return 0, err
-	}
-
-	ids, err := a.core.ResolveListIDs(nil, []string{recordID})
-	if err != nil {
-		return 0, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
-	if len(ids) != 1 || ids[0] < 1 {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
-	}
-
-	return ids[0], nil
-}
-
 func (a *App) resolveListRequestIDs(recordIDs []string) ([]int, error) {
 	ids, err := a.core.ResolveListIDs(nil, recordIDs)
 	if err != nil {

@@ -282,29 +282,6 @@ func (c *Core) ResolveCampaignRecordIDs(campaignIDs []int) ([]string, error) {
 	return resolved, nil
 }
 
-func campaignAnalyticsIDMap(ids []int, recordIDs []string) map[int]string {
-	out := make(map[int]string, len(ids))
-	for i, id := range ids {
-		if i < len(recordIDs) {
-			out[id] = recordIDs[i]
-		}
-	}
-	return out
-}
-
-func extractCampaignIDs(rows []campaignAnalyticsSQLiteRow) []int {
-	out := make([]int, 0, len(rows))
-	seen := map[int]struct{}{}
-	for _, row := range rows {
-		if _, ok := seen[row.CampaignID]; ok {
-			continue
-		}
-		seen[row.CampaignID] = struct{}{}
-		out = append(out, row.CampaignID)
-	}
-	return out
-}
-
 func sqliteCampaignRowsToModels(rows []sqliteCampaignRow) models.Campaigns {
 	out := make(models.Campaigns, 0, len(rows))
 	for _, row := range rows {
