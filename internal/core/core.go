@@ -13,10 +13,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jmoiron/sqlx/types"
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
+	"github.com/jmoiron/sqlx/types"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 )
@@ -80,8 +80,6 @@ var (
 var (
 	regexFullTextQuery  = regexp.MustCompile(`\s+`)
 	regexpSpaces        = regexp.MustCompile(`[\s]+`)
-	campQuerySortFields = []string{"name", "status", "created_at", "updated_at"}
-	subQuerySortFields  = []string{"email", "status", "name", "created_at", "updated_at"}
 	listQuerySortFields = []string{"name", "status", "created_at", "updated_at", "subscriber_count"}
 )
 
@@ -152,25 +150,6 @@ func pqErrMsg(err error) string {
 		}
 	}
 	return err.Error()
-}
-
-// makeSearchQuery cleans an optional search string and prepares the
-// query SQL statement (string interpolated) and returns the
-// search query string along with the SQL expression.
-func makeSearchQuery(searchStr, orderBy, order, query string, querySortFields []string) (string, string) {
-	searchStr = makeSearchString(searchStr)
-
-	// Sort params.
-	if !strSliceContains(orderBy, querySortFields) {
-		orderBy = "created_at"
-	}
-	if order != SortAsc && order != SortDesc {
-		order = SortDesc
-	}
-
-	query = strings.ReplaceAll(query, "%order%", orderBy+" "+order)
-
-	return searchStr, query
 }
 
 // makeSearchString prepares a search string for use in both tsquery and ILIKE queries.

@@ -234,7 +234,7 @@ func (a *App) OIDCFinish(c echo.Context) error {
 	}
 
 	// Validate the OIDC token.
-	oidcToken, claims, err := a.auth.ExchangeOIDCToken(c.Request().URL.Query().Get("code"), nonce.Value)
+	_, claims, err := a.auth.ExchangeOIDCToken(c.Request().URL.Query().Get("code"), nonce.Value)
 	if err != nil {
 		return a.renderLoginPage(c, err)
 	}
@@ -271,7 +271,7 @@ func (a *App) OIDCFinish(c echo.Context) error {
 	if userErr != nil {
 		// If the user doesn't exist, and auto-creation is enabled, create a new user.
 		if httpErr, ok := userErr.(*echo.HTTPError); ok && httpErr.Code == http.StatusNotFound && a.cfg.Security.OIDC.AutoCreateUsers {
-			u, err := a.createOIDCUser(claims, c)
+			u, err := a.createOIDCUser(claims)
 			if err != nil {
 				return a.renderLoginPage(c, err)
 			}
@@ -287,7 +287,7 @@ func (a *App) OIDCFinish(c echo.Context) error {
 		return a.renderLoginPage(c, err)
 	}
 
-	if err := a.completeAuth(c, user, oidcToken, utils.SanitizeURI(state.Next)); err != nil {
+	if err := a.completeAuth(c, user, utils.SanitizeURI(state.Next)); err != nil {
 		return a.renderLoginPage(c, err)
 	}
 
@@ -440,7 +440,7 @@ func (a *App) renderLoginSetupPage(c echo.Context, loginErr error) error {
 }
 
 // createOIDCUser creates a new user in the DB with the OIDC claims.
-func (a *App) createOIDCUser(claims auth.OIDCclaim, c echo.Context) (auth.User, error) {
+func (a *App) createOIDCUser(claims auth.OIDCclaim) (auth.User, error) {
 	name := claims.Name
 	if name == "" {
 		name = strings.TrimSpace(claims.PreferredUsername)
@@ -529,7 +529,7 @@ func (a *App) doLogin(c echo.Context) error {
 		return c.Redirect(http.StatusFound, fmt.Sprintf("%s/login/twofa?token=%s&next=%s", uriAdmin, token, url.QueryEscape(next)))
 	}
 
-	return a.completeAuth(c, user, "", utils.SanitizeURI(c.FormValue("next")))
+	return a.completeAuth(c, user, utils.SanitizeURI(c.FormValue("next")))
 }
 
 // doFirstTimeSetup sets a user up for the first time.
@@ -613,7 +613,7 @@ func (a *App) doFirstTimeSetup(c echo.Context) error {
 	_ = authUser
 	a.log.Printf("first-time setup: finalized auth record for username=%q user_id=%d", user.Username, user.ID)
 
-	if err := a.completeAuth(c, user, "", utils.SanitizeURI(c.FormValue("next"))); err != nil {
+	if err := a.completeAuth(c, user, utils.SanitizeURI(c.FormValue("next"))); err != nil {
 		a.log.Printf("first-time setup: save session failed for username=%q user_id=%d: %v", user.Username, user.ID, err)
 		return err
 	}
@@ -743,7 +743,7 @@ func (a *App) doResetPassword(c echo.Context, token, email string) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
 	}
 
-	return a.completeAuth(c, user, "", uriAdmin)
+	return a.completeAuth(c, user, uriAdmin)
 }
 
 // renderTwofaPage renders the 2FA verification page.
@@ -787,10 +787,10 @@ func (a *App) doTwofaVerify(c echo.Context, token string, userRecordID string, n
 	// Invalidate the token.
 	tmptokens.Delete(token)
 
-	return a.completeAuth(c, user, "", next)
+	return a.completeAuth(c, user, next)
 }
 
-func (a *App) completeAuth(c echo.Context, user auth.User, oidcToken, next string) error {
+func (a *App) completeAuth(c echo.Context, user auth.User, next string) error {
 	next = adminRedirectPath(next)
 
 	a.log.Printf("auth bridge: issuing PocketBase auth for username=%q user_id=%d next=%q", user.Username, user.ID, next)
