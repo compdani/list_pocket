@@ -81,6 +81,8 @@ function defaultNodeLabel(type, config = {}) {
       return "HTTP Request";
     case "pb_update":
       return "Update Record";
+    case "send_transactional_email":
+      return "Send Transactional Email";
     case "pb_query":
       return "Query Record";
     case "campaign_launch":
@@ -239,6 +241,53 @@ function buildNodeTemplate(type, index) {
             { ...schema("fieldMap", "Field Map", "kv_map"), description: "Map PocketBase fields to workflow values or literals. Values can reference previous.*, run.*, contact.*, or company.*." },
           ],
           contactMode: "writeback",
+        },
+      };
+    case "send_transactional_email":
+      return {
+        ...base,
+        type: "workflow",
+        data: {
+          label: "Send Transactional Email",
+          type,
+          description: "Renders a transactional template, records the send, and tracks opens and link clicks.",
+          config: {
+            templateId: "",
+            templateIdPath: "",
+            subscriberEmailPath: "contact.email",
+            subscriberIdPath: "contact.id",
+            firstNamePath: "contact.firstName",
+            lastNamePath: "contact.lastName",
+            subscriberNamePath: "",
+            phonePath: "contact.phone",
+            fromEmail: "",
+            fromEmailPath: "",
+            subject: "",
+            subjectPath: "",
+            contentType: "html",
+            messenger: "email",
+            dataPath: "previous",
+            dataMap: {},
+          },
+          schema: [
+            { ...schema("templateId", "Template Record ID", "text"), description: "PocketBase template record id only. Legacy numeric ids are not supported here.", placeholder: "abc123def456ghi" },
+            { ...schema("templateIdPath", "Template ID Path", "text"), description: "Optional runtime path that resolves a template record id.", placeholder: "previous.templateId" },
+            { ...schema("subscriberEmailPath", "Recipient Email Path", "text"), description: "Defaults to the current contact email.", placeholder: "contact.email" },
+            { ...schema("subscriberIdPath", "Subscriber ID Path", "text"), description: "Optional subscriber record id for linking the send back to a subscriber. Legacy numeric ids are not supported here.", placeholder: "contact.id" },
+            { ...schema("firstNamePath", "First Name Path", "text"), description: "Used to populate subscriber template fields.", placeholder: "contact.firstName" },
+            { ...schema("lastNamePath", "Last Name Path", "text"), description: "Used to populate subscriber template fields.", placeholder: "contact.lastName" },
+            { ...schema("subscriberNamePath", "Full Name Path", "text"), description: "Optional full-name override.", placeholder: "contact.name" },
+            { ...schema("phonePath", "Phone Path", "text"), description: "Optional phone field for subscriber context.", placeholder: "contact.phone" },
+            { ...schema("fromEmail", "From Email Override", "text"), description: "Optional explicit From address. Leave blank to use app default.", placeholder: "Team <team@example.com>" },
+            { ...schema("fromEmailPath", "From Email Path", "text"), description: "Optional runtime path for the From address.", placeholder: "previous.fromEmail" },
+            { ...schema("subject", "Subject Override", "text"), description: "Optional subject override. Leave blank to use the template subject.", placeholder: "Your order is confirmed" },
+            { ...schema("subjectPath", "Subject Path", "text"), description: "Optional runtime path for the subject override.", placeholder: "previous.subject" },
+            { ...schema("contentType", "Content Type", "select", ["html", "markdown", "plain"]), description: "Message content type." },
+            { ...schema("messenger", "Messenger", "text"), description: "Messenger backend to use.", placeholder: "email" },
+            { ...schema("dataPath", "Template Data Path", "text"), description: "Object from the run context exposed as Tx.Data.", placeholder: "previous" },
+            { ...schema("dataMap", "Template Data Overrides", "kv_map"), description: "Optional extra Tx.Data values. Values can reference previous.*, run.*, contact.*, or company.*." },
+          ],
+          contactMode: "transactional-email",
         },
       };
     case "pb_query":

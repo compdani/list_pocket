@@ -80,6 +80,12 @@ const routes = [
     component: () => import('../views/Templates.vue'),
   },
   {
+    path: '/campaigns/transactional',
+    name: 'txMessages',
+    meta: { title: 'Transactional Messages', group: 'campaigns' },
+    component: () => import('../views/TxMessages.vue'),
+  },
+  {
     path: '/campaigns/analytics',
     name: 'campaignAnalytics',
     meta: { title: 'analytics.title', group: 'campaigns' },

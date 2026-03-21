@@ -20,8 +20,14 @@ func (testStore) UpdateCampaignStatus(int, string) error                      { 
 func (testStore) ScheduleCampaignBatch(int, time.Time) error                  { return nil }
 func (testStore) UpdateCampaignCounts(int, int, int, int) error               { return nil }
 func (testStore) CreateLink(url string) (string, error)                       { return "link-uuid", nil }
-func (testStore) BlocklistSubscriber(int64) error                             { return nil }
-func (testStore) DeleteSubscriber(int64) error                                { return nil }
+func (testStore) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
+	return msg, nil
+}
+func (testStore) UpdateTransactionalMessageStatus(string, string, string, bool) error {
+	return nil
+}
+func (testStore) BlocklistSubscriber(int64) error { return nil }
+func (testStore) DeleteSubscriber(int64) error    { return nil }
 
 func TestGenericTemplateFuncsAllowCampaignPlaceholdersInTransactionalTemplates(t *testing.T) {
 	m := New(Config{}, nil, nil, log.New(io.Discard, "", 0))

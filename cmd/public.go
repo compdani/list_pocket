@@ -609,6 +609,42 @@ func (a *App) RegisterCampaignView(c echo.Context) error {
 	return c.Blob(http.StatusOK, "image/png", pixelPNG)
 }
 
+func (a *App) TxLinkRedirect(c echo.Context) error {
+	linkUUID := c.Param("linkUUID")
+	msgUUID := c.Param("msgUUID")
+
+	if a.cfg.Privacy.DisableTracking {
+		url, err := a.core.GetLinkURL(linkUUID)
+		if err != nil {
+			e := err.(*echo.HTTPError)
+			return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", e.Error()))
+		}
+		return c.Redirect(http.StatusTemporaryRedirect, url)
+	}
+
+	url, err := a.core.RegisterTransactionalLinkClick(linkUUID, msgUUID)
+	if err != nil {
+		e := err.(*echo.HTTPError)
+		return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", e.Error()))
+	}
+
+	return c.Redirect(http.StatusTemporaryRedirect, url)
+}
+
+func (a *App) RegisterTxMessageView(c echo.Context) error {
+	if a.cfg.Privacy.DisableTracking {
+		c.Response().Header().Set("Cache-Control", "no-cache")
+		return c.Blob(http.StatusOK, "image/png", pixelPNG)
+	}
+
+	if err := a.core.RegisterTransactionalMessageView(c.Param("msgUUID")); err != nil {
+		a.log.Printf("error registering transactional message view: %s", err)
+	}
+
+	c.Response().Header().Set("Cache-Control", "no-cache")
+	return c.Blob(http.StatusOK, "image/png", pixelPNG)
+}
+
 // SelfExportSubscriberData pulls the subscriber's profile, list subscriptions,
 // campaign views and clicks and produces a JSON report that is then e-mailed
 // to the subscriber. This is a privacy feature and the data that's exported

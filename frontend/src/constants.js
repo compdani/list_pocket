@@ -9,6 +9,7 @@ export const models = Object.freeze({
   // context (subscriber counts), which can be slow and expensive.
   listsFull: 'listsFull',
   subscribers: 'subscribers',
+  txMessages: 'txMessages',
   campaigns: 'campaigns',
   templates: 'templates',
   media: 'media',

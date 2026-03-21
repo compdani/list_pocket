@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/compdani/list_pocket/internal/workflow/executor"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -12,10 +13,13 @@ import (
 )
 
 type Config struct {
-	FrontendDir string
+	FrontendDir       string
+	SendTransactional executor.TransactionalEmailSendFunc
 }
 
 func Register(pb *pocketbase.PocketBase, cfg Config) {
+	transactionalEmailSender = cfg.SendTransactional
+
 	pb.OnRecordAfterUpdateSuccess("subscribers").BindFunc(func(e *core.RecordEvent) error {
 		if err := e.Next(); err != nil {
 			return err

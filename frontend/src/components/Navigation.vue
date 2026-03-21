@@ -223,6 +223,12 @@ const navItems = computed(() => {
       icon: 'mdi-file-image-outline',
       route: { name: 'templates' },
     } : null,
+    $can('tx:get') ? {
+      key: 'txMessages',
+      label: 'Transactional',
+      icon: 'mdi-email-outline',
+      route: { name: 'txMessages' },
+    } : null,
     $can('campaigns:get_analytics') ? {
       key: 'campaignAnalytics',
       label: $t('globals.terms.analytics'),

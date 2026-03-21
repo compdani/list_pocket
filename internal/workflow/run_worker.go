@@ -14,6 +14,7 @@ import (
 )
 
 var runWorkerOnce sync.Once
+var transactionalEmailSender executor.TransactionalEmailSendFunc
 
 func newRunEngineForApp(app core.App) *executor.Engine {
 	return executor.NewEngine(
@@ -24,6 +25,7 @@ func newRunEngineForApp(app core.App) *executor.Engine {
 		executor.EventStartExecutor{},
 		executor.HTTPExecutor{},
 		executor.PocketBaseExecutor{},
+		executor.TransactionalEmailExecutor{Send: transactionalEmailSender},
 		executor.CampaignLaunchExecutor{},
 		executor.WaitExecutor{},
 	)

@@ -8,4 +8,4 @@ The [subscriber APIs](apis/subscribers.md) offers several APIs to manipulate the
 
 ## Interacting directly with the DB
 
-listmonk uses tables with simple schemas to represent subscribers (`subscribers`), lists (`lists`), and subscriptions (`subscriber_lists`). It is easy to add, update, and delete subscriber information directly with the database tables for advanced usecases. See the [table schemas](https://github.com/knadh/listmonk/blob/master/schema.sql) for more information.
+listpocket stores subscribers, lists, and subscriptions in PocketBase collections. For advanced integrations in this fork, use the app APIs and PocketBase collection definitions rather than the old SQL schema from upstream listmonk.

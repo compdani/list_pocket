@@ -15,6 +15,7 @@ const nodeLibrary = [
   { label: "Wait", type: "wait_until", description: "Pause until a computed time" },
   { label: "HTTP", type: "http_request", description: "Call external service" },
   { label: "PocketBase", type: "pb_update", description: "Query or update records" },
+  { label: "Transactional Email", type: "send_transactional_email", description: "Send tracked transactional email" },
   { label: "Launch Campaign", type: "campaign_launch", description: "Start an existing campaign" },
 ];
 </script>

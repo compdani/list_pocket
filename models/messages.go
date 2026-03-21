@@ -7,6 +7,8 @@ import (
 	"net/textproto"
 	"strings"
 	txttpl "text/template"
+
+	null "gopkg.in/volatiletech/null.v6"
 )
 
 // Message is the message pushed to a Messenger.
@@ -27,6 +29,9 @@ type Message struct {
 
 	// Messenger is the messenger backend to use: email|postback.
 	Messenger string
+
+	// TxMessage is set for persisted transactional sends.
+	TxMessage *TransactionalMessage
 }
 
 // Attachment represents a file or blob attachment that can be
@@ -68,6 +73,35 @@ type TxMessage struct {
 	Body       []byte             `json:"-"`
 	Tpl        *template.Template `json:"-"`
 	SubjectTpl *txttpl.Template   `json:"-"`
+}
+
+type TransactionalMessage struct {
+	Base
+
+	UUID string `db:"uuid" json:"uuid"`
+
+	SubscriberID    string                  `db:"subscriber_record_id" json:"subscriber_id,omitempty"`
+	SubscriberEmail string                  `db:"subscriber_email" json:"subscriber_email"`
+	TemplateID      string                  `db:"template_record_id" json:"template_id,omitempty"`
+	TemplateName    string                  `db:"template_name" json:"template_name,omitempty"`
+	FromEmail       string                  `db:"from_email" json:"from_email"`
+	Subject         string                  `db:"subject" json:"subject"`
+	ContentType     string                  `db:"content_type" json:"content_type"`
+	Messenger       string                  `db:"messenger" json:"messenger"`
+	Status          string                  `db:"status" json:"status"`
+	Error           string                  `db:"error" json:"error,omitempty"`
+	Body            string                  `db:"body" json:"body,omitempty"`
+	Data            JSON                    `db:"data" json:"data,omitempty"`
+	Headers         JSON                    `db:"headers" json:"headers,omitempty"`
+	Views           int                     `db:"views" json:"views"`
+	Clicks          int                     `db:"clicks" json:"clicks"`
+	SentAt          null.Time               `db:"sent_at" json:"sent_at,omitempty"`
+	LinkStats       []TransactionalLinkStat `db:"-" json:"link_stats,omitempty"`
+}
+
+type TransactionalLinkStat struct {
+	URL   string `db:"url" json:"url"`
+	Count int    `db:"count" json:"count"`
 }
 
 func (m *TxMessage) Render(sub Subscriber, tpl *Template) error {
