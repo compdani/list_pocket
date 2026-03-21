@@ -38,6 +38,10 @@ type workflowCreateRequest struct {
 	Name string `json:"name"`
 }
 
+type workflowRunRequest struct {
+	ContactID string `json:"contactId"`
+}
+
 func createWorkflowHandler(re *core.RequestEvent) error {
 	collection, err := re.App.FindCollectionByNameOrId("workflows")
 	if err != nil {
@@ -216,6 +220,9 @@ func publishWorkflowHandler(re *core.RequestEvent) error {
 }
 
 func runWorkflowHandler(re *core.RequestEvent) error {
+	req := workflowRunRequest{}
+	_ = re.BindBody(&req)
+
 	workflow, err := re.App.FindRecordById("workflows", re.Request.PathValue("id"))
 	if err != nil {
 		return re.JSON(http.StatusNotFound, map[string]string{"error": "workflow not found"})
@@ -236,6 +243,7 @@ func runWorkflowHandler(re *core.RequestEvent) error {
 	contactKey := "email"
 	triggerTag := ""
 	testWebhookPayload := ""
+	demoContactID := ""
 	if triggerNode != nil {
 		config := toStringAnyMap(triggerNode.Get("config"))
 		if value, ok := config["mode"].(string); ok && value != "" {
@@ -253,18 +261,32 @@ func runWorkflowHandler(re *core.RequestEvent) error {
 		if value, ok := config["samplePayload"].(string); ok && value != "" {
 			testWebhookPayload = value
 		}
+		if value, ok := config["demoContactId"].(string); ok && value != "" {
+			demoContactID = strings.TrimSpace(value)
+		}
 	}
 
 	var contact *core.Record
 	triggerPayload := map[string]any{"mode": "manual_test", "source": "builder"}
 
 	if triggerMode == "tag_added" || triggerMode == "tag_removed" {
-		contacts, findErr := re.App.FindRecordsByFilter("subscribers", "", "-updated", 1, 0)
-		if findErr != nil || len(contacts) == 0 {
-			return re.JSON(http.StatusInternalServerError, map[string]string{"error": "no contact available for tag-triggered test run"})
+		selectedContactID := strings.TrimSpace(req.ContactID)
+		if selectedContactID == "" {
+			selectedContactID = demoContactID
 		}
-
-		contact = contacts[0]
+		if selectedContactID != "" {
+			contact, err = re.App.FindRecordById("subscribers", selectedContactID)
+			if err != nil {
+				return re.JSON(http.StatusBadRequest, map[string]string{"error": "selected demo contact was not found"})
+			}
+		}
+		if contact == nil {
+			contacts, findErr := re.App.FindRecordsByFilter("subscribers", "", "-updated", 1, 0)
+			if findErr != nil || len(contacts) == 0 {
+				return re.JSON(http.StatusInternalServerError, map[string]string{"error": "no contact available for tag-triggered test run"})
+			}
+			contact = contacts[0]
+		}
 		if triggerTag == "" {
 			existingTags := toStringSlice(toStringAnyMap(contact.Get("attribs"))["tags"])
 			if len(existingTags) > 0 {
@@ -290,11 +312,23 @@ func runWorkflowHandler(re *core.RequestEvent) error {
 		triggerPayload["tagsAfter"] = afterTags
 		triggerPayload["mode"] = triggerMode
 	} else if contactStrategy != "deferred" {
-		contacts, findErr := re.App.FindRecordsByFilter("subscribers", "", "-updated", 1, 0)
-		if findErr != nil || len(contacts) == 0 {
-			return re.JSON(http.StatusInternalServerError, map[string]string{"error": "no contact available for contact-bound test run"})
+		selectedContactID := strings.TrimSpace(req.ContactID)
+		if selectedContactID == "" {
+			selectedContactID = demoContactID
 		}
-		contact = contacts[0]
+		if selectedContactID != "" {
+			contact, err = re.App.FindRecordById("subscribers", selectedContactID)
+			if err != nil {
+				return re.JSON(http.StatusBadRequest, map[string]string{"error": "selected demo contact was not found"})
+			}
+		}
+		if contact == nil {
+			contacts, findErr := re.App.FindRecordsByFilter("subscribers", "", "-updated", 1, 0)
+			if findErr != nil || len(contacts) == 0 {
+				return re.JSON(http.StatusInternalServerError, map[string]string{"error": "no contact available for contact-bound test run"})
+			}
+			contact = contacts[0]
+		}
 		triggerPayload["contactId"] = contact.Id
 		triggerPayload["lookupField"] = contactKey
 		triggerPayload["lookupValue"] = contact.GetString(contactKey)

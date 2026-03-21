@@ -229,6 +229,7 @@ export default {
         subject: '',
         body: '',
         bodySource: '',
+        ...(this.curItem || {}),
       };
     },
 
@@ -252,7 +253,7 @@ export default {
 
   methods: {
     fetchTemplates() {
-      this.$api.getTemplates();
+      return this.$api.getTemplates();
     },
 
     templateTypeLabel(type) {
@@ -273,10 +274,26 @@ export default {
       this.isEditing = true;
     },
 
-    showNewForm() {
-      this.curItem = null;
+    showNewForm(type = 'campaign') {
+      const nextType = typeof type === 'string' && type ? type : 'campaign';
+      this.curItem = { type: nextType };
       this.isFormVisible = true;
       this.isEditing = false;
+    },
+
+    applyRouteAction(templatesData = this.templates) {
+      const { open, type, edit } = this.$route.query;
+      if (typeof edit === 'string' && edit) {
+        const match = (templatesData || []).find((item) => item.id === edit);
+        if (match) {
+          this.showEditForm(match);
+        }
+        return;
+      }
+
+      if (open === 'new') {
+        this.showNewForm(typeof type === 'string' && type ? type : 'campaign');
+      }
     },
 
     formFinished() {
@@ -342,7 +359,9 @@ export default {
   },
 
   mounted() {
-    this.fetchTemplates();
+    this.fetchTemplates().then((data) => {
+      this.applyRouteAction(data);
+    });
   },
 };
 </script>
@@ -419,12 +438,13 @@ export default {
   background: transparent;
   box-shadow: none;
   max-height: calc(100vh - 32px);
-  overflow: visible;
+  overflow: hidden;
   width: auto;
 }
 
 .template-dialog-frame {
   display: flex;
+  max-height: calc(100vh - 32px);
 }
 
 @media (max-width: 960px) {

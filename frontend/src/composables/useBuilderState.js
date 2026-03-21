@@ -115,6 +115,7 @@ function buildNodeTemplate(type, index) {
             path: "/new-workflow",
             tagEvent: "tag_added",
             tagName: "demo-booked",
+            demoContactId: "",
             payloadField: "body",
             samplePayload: JSON.stringify({
               email: "new-lead@example.com",
@@ -205,13 +206,20 @@ function buildNodeTemplate(type, index) {
           config: {
             url: "https://api.example.com",
             method: "POST",
+            bodyMode: "source_path",
             sourcePath: "previous",
+            bodyMap: {
+              email: "contact.email",
+              score: "previous.score",
+            },
             authMode: "secret_header",
           },
           schema: [
             { ...schema("url", "URL", "text"), description: "Destination endpoint.", placeholder: "https://api.example.com" },
             { ...schema("method", "Method", "select", ["GET", "POST", "PATCH"]), description: "HTTP method." },
-            { ...schema("sourcePath", "Payload Source", "text"), description: "Which part of the workflow context to send.", placeholder: "previous" },
+            { ...schema("bodyMode", "Request Body Mode", "select", ["source_path", "custom_map"]), description: "Send a resolved context object or build a custom JSON body field-by-field." },
+            { ...schema("sourcePath", "Payload Source", "text"), description: "Which part of the workflow context to send when using source-path mode.", placeholder: "previous" },
+            { ...schema("bodyMap", "Request Body Fields", "kv_map"), description: "Build a custom JSON body. Values can reference previous.*, run.*, contact.*, company.*, or events.*." },
             { ...schema("authMode", "Security Mode", "select", ["none", "secret_header", "bearer"]), description: "Approved authentication strategy for this request." },
           ],
           contactMode: "enrich",
@@ -268,6 +276,7 @@ function buildNodeTemplate(type, index) {
             messenger: "email",
             dataPath: "previous",
             dataMap: {},
+            contentTemplate: "",
           },
           schema: [
             { ...schema("templateId", "Template Record ID", "text"), description: "PocketBase template record id only. Legacy numeric ids are not supported here.", placeholder: "abc123def456ghi" },
@@ -286,6 +295,7 @@ function buildNodeTemplate(type, index) {
             { ...schema("messenger", "Messenger", "text"), description: "Messenger backend to use.", placeholder: "email" },
             { ...schema("dataPath", "Template Data Path", "text"), description: "Object from the run context exposed as Tx.Data.", placeholder: "previous" },
             { ...schema("dataMap", "Template Data Overrides", "kv_map"), description: "Optional extra Tx.Data values. Values can reference previous.*, run.*, contact.*, or company.*." },
+            { ...schema("contentTemplate", "Content Template", "richtext"), description: "Optional HTML fragment rendered as {{ template \"content\" . }} inside the selected transactional template.", placeholder: "<p>Hi {{ .Subscriber.FirstName }}</p>" },
           ],
           contactMode: "transactional-email",
         },

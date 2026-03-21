@@ -30,6 +30,7 @@ type Request struct {
 	ContentType string
 	Messenger   string
 	Subject     string
+	ContentTpl  string
 	Attachments []models.Attachment
 }
 
@@ -37,6 +38,7 @@ type Sender struct {
 	Core             *core.Core
 	Manager          *manager.Manager
 	DefaultFromEmail string
+	ResolveFromEmail func(string) string
 	Log              *log.Logger
 }
 
@@ -50,11 +52,6 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 		return models.TransactionalMessage{}, fmt.Errorf("subscriber email is required")
 	}
 
-	fromEmail := strings.TrimSpace(req.FromEmail)
-	if fromEmail == "" {
-		fromEmail = s.DefaultFromEmail
-	}
-
 	contentType := strings.TrimSpace(req.ContentType)
 	if contentType == "" {
 		contentType = "html"
@@ -63,6 +60,17 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 	messengerName := strings.TrimSpace(req.Messenger)
 	if messengerName == "" {
 		messengerName = "email"
+	}
+
+	fromEmail := strings.TrimSpace(req.FromEmail)
+	if fromEmail == "" && s.ResolveFromEmail != nil {
+		fromEmail = strings.TrimSpace(s.ResolveFromEmail(messengerName))
+	}
+	if fromEmail == "" {
+		fromEmail = s.DefaultFromEmail
+	}
+	if fromEmail == "" {
+		return models.TransactionalMessage{}, fmt.Errorf("no from email configured for messenger %q", messengerName)
 	}
 
 	var (
@@ -126,7 +134,10 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 	}
 
 	renderTpl := tpl
-	if err := renderTpl.Compile(s.Manager.TxTemplateFuncs(&record)); err != nil {
+	if strings.TrimSpace(req.ContentTpl) != "" {
+		renderTpl.Body = renderTpl.Body + `{{ define "content" }}` + req.ContentTpl + `{{ end }}`
+	}
+	if err := renderTpl.Compile(models.TxAliasTemplateFuncs(s.Manager.TxTemplateFuncs(&record), sub, &tx)); err != nil {
 		return models.TransactionalMessage{}, err
 	}
 	if err := tx.Render(sub, &renderTpl); err != nil {

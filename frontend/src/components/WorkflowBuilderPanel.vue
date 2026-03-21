@@ -14,6 +14,7 @@ import NodeInspector from "./NodeInspector.vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 
 const props = defineProps({
+  contacts: { type: Array, default: () => [] },
   onSaveRequest: { type: Function, default: null },
   saveMessage: { type: String, default: "" },
   saveState: { type: String, default: "idle" },
@@ -34,6 +35,7 @@ const nodeTypes = { workflow: WorkflowNodeCard };
 
 const selectedNode = computed(() => builder.nodes.value.find((node) => node.id === builder.selectedNodeId.value));
 const selectedEdge = computed(() => builder.edges.value.find((edge) => edge.id === builder.selectedEdgeId.value));
+const selectedNodeDescription = computed(() => selectedNode.value?.data?.description ?? "");
 const currentSignature = computed(() => builder.graphSignature());
 const selectedEdgeExpression = computed(() => selectedEdge.value?.data?.condition?.expression ?? "");
 const webhookEndpoint = computed(() => {
@@ -60,6 +62,7 @@ const decoratedNodes = computed(() => builder.nodes.value.map((node) => ({ ...no
 const decoratedEdges = computed(() => builder.edges.value.map((edge) => ({ ...edge, class: edgeFindingIds.value.has(edge.id) ? "flow-edge-invalid" : undefined })));
 const showNodeModal = computed(() => Boolean(selectedNode.value));
 const selectedNodeLabel = computed(() => selectedNode.value?.data?.label ?? "Selected Node");
+const canCaptureSelectedNodeSchema = computed(() => selectedNode.value?.data?.type === "trigger" && String(selectedNode.value?.data?.config?.mode ?? "manual") === "webhook");
 
 watch(
   () => props.workflow,
@@ -324,14 +327,20 @@ defineExpose({
           <div>
             <span class="builder-eyebrow">Node Settings</span>
             <h2>{{ selectedNodeLabel }}</h2>
+            <p v-if="selectedNodeDescription" class="field-help">{{ selectedNodeDescription }}</p>
           </div>
-          <button type="button" class="ghost-button" @click="closeNodeModal">Close</button>
+          <div class="node-modal-actions">
+            <button v-if="canCaptureSelectedNodeSchema" type="button" class="ghost-button" @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)">
+              Infer Schema
+            </button>
+            <button type="button" class="danger-button" @click="removeSelectedNode">Delete Node</button>
+            <button type="button" class="ghost-button" @click="closeNodeModal">Close</button>
+          </div>
         </div>
 
         <NodeInspector
+          :contacts="contacts"
           :node="selectedNode"
-          @capture-schema="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)"
-          @remove="removeSelectedNode"
           @save="saveNodeConfig"
           @save-label="saveNodeLabel"
         />

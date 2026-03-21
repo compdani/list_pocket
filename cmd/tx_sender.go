@@ -11,6 +11,7 @@ func (a *App) newTransactionalSender() *txemail.Sender {
 		Core:             a.core,
 		Manager:          a.manager,
 		DefaultFromEmail: a.cfg.FromEmail,
+		ResolveFromEmail: a.defaultCampaignFromEmail,
 		Log:              a.log,
 	}
 }
@@ -30,5 +31,6 @@ func txRequestFromWorkflow(req workflow.ExecutorTransactionalEmailRequest) txema
 		Subject:         req.Subject,
 		ContentType:     req.ContentType,
 		Messenger:       req.Messenger,
+		ContentTpl:      req.ContentTpl,
 	}
 }
