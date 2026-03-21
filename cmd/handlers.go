@@ -169,6 +169,8 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.DELETE("/maintenance/analytics/{type}", wrapEcho(a, tpl, cfg, urlCfg, []string{"type"}, pm(a.GCCampaignAnalytics, "settings:maintain")))
 	api.DELETE("/maintenance/subscriptions/unconfirmed", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GCSubscriptions, "settings:maintain")))
 
+	api.GET("/tx", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetTxMessages, "tx:get")))
+	api.GET("/tx/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetTxMessage, "tx:get")))
 	api.POST("/tx", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.SendTxMessage, "tx:send")))
 
 	api.GET("/profile", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetUserProfile))
@@ -223,6 +225,8 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	public.POST("/subscription/export/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.SelfExportSubscriberData), "subUUID")))
 	public.POST("/subscription/wipe/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.WipeSubscriberData), "subUUID")))
 	public.GET("/link/{linkUUID}/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"linkUUID", "campUUID", "subUUID"}, noIndex(a.hasUUID(a.LinkRedirect, "linkUUID", "campUUID", "subUUID"))))
+	public.GET("/tx/link/{linkUUID}/{msgUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"linkUUID", "msgUUID"}, noIndex(a.hasUUID(a.TxLinkRedirect, "linkUUID", "msgUUID"))))
+	public.GET("/tx/{msgUUID}/px.png", wrapEcho(a, tpl, cfg, urlCfg, []string{"msgUUID"}, noIndex(a.hasUUID(a.RegisterTxMessageView, "msgUUID"))))
 	public.GET("/campaign/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.ViewCampaignMessage, "campUUID", "subUUID"))))
 	public.GET("/campaign/{campUUID}/{subUUID}/px.png", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.RegisterCampaignView, "campUUID", "subUUID"))))
 

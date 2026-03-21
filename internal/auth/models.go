@@ -51,6 +51,7 @@ const (
 	PermSubscribersManage     = "subscribers:manage"
 	PermSubscribersImport     = "subscribers:import"
 	PermSubscribersSqlQuery   = "subscribers:sql_query"
+	PermTxGet                 = "tx:get"
 	PermTxSend                = "tx:send"
 	PermCampaignsGet          = "campaigns:get"
 	PermCampaignsGetAll       = "campaigns:get_all"
@@ -115,12 +116,12 @@ type User struct {
 		Permissions []string `db:"-" json:"permissions"`
 	} `db:"-" json:"user_role"`
 
-	ListRole           *ListRolePermissions        `db:"-" json:"list_role"`
-	PermissionsMap     map[string]struct{}         `db:"-" json:"-"`
+	ListRole           *ListRolePermissions           `db:"-" json:"list_role"`
+	PermissionsMap     map[string]struct{}            `db:"-" json:"-"`
 	ListPermissionsMap map[string]map[string]struct{} `db:"-" json:"-"`
 	GetListIDs         []string                       `db:"-" json:"-"`
 	ManageListIDs      []string                       `db:"-" json:"-"`
-	HasPassword        bool                        `db:"-" json:"-"`
+	HasPassword        bool                           `db:"-" json:"-"`
 }
 
 type ListPermission struct {

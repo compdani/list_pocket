@@ -548,6 +548,112 @@ func (s *store) CreateLink(url string) (string, error) {
 	return out, nil
 }
 
+func (s *store) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
+	dataJSON := msg.Data
+	if dataJSON == nil {
+		dataJSON = models.JSON{}
+	}
+
+	headersJSON := msg.Headers
+	if headersJSON == nil {
+		headersJSON = models.JSON{}
+	}
+
+	if strings.TrimSpace(msg.UUID) == "" {
+		uu, err := uuid.NewV4()
+		if err != nil {
+			return models.TransactionalMessage{}, err
+		}
+		msg.UUID = uu.String()
+	}
+
+	subscriberID := null.String{}
+	if val := strings.TrimSpace(msg.SubscriberID); val != "" {
+		subscriberID = null.StringFrom(val)
+	}
+
+	templateID := null.String{}
+	if val := strings.TrimSpace(msg.TemplateID); val != "" {
+		templateID = null.StringFrom(val)
+	}
+
+	row := struct {
+		ID              int    `db:"id"`
+		RecordID        string `db:"record_id"`
+		CreatedAt       string `db:"created_at"`
+		UpdatedAt       string `db:"updated_at"`
+		UUID            string `db:"uuid"`
+		SubscriberID    string `db:"subscriber_record_id"`
+		SubscriberEmail string `db:"subscriber_email"`
+		TemplateID      string `db:"template_record_id"`
+		FromEmail       string `db:"from_email"`
+		Subject         string `db:"subject"`
+		ContentType     string `db:"content_type"`
+		Messenger       string `db:"messenger"`
+		Status          string `db:"status"`
+		Error           string `db:"error"`
+		Body            string `db:"body"`
+	}{}
+
+	if err := s.db.Get(&row, `
+		INSERT INTO transactional_messages (
+			uuid, subscriber_id, to_email, template_id, from_email, subject,
+			content_type, messenger, status, error, body, data, headers
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING rowid AS id, id AS record_id, created AS created_at, updated AS updated_at,
+			uuid, subscriber_id AS subscriber_record_id, to_email AS subscriber_email,
+			template_id AS template_record_id, from_email, subject, content_type, messenger, status, error, body
+	`,
+		msg.UUID,
+		subscriberID,
+		msg.SubscriberEmail,
+		templateID,
+		msg.FromEmail,
+		msg.Subject,
+		msg.ContentType,
+		msg.Messenger,
+		msg.Status,
+		msg.Error,
+		msg.Body,
+		string(mustJSON(dataJSON)),
+		string(mustJSON(headersJSON)),
+	); err != nil {
+		return models.TransactionalMessage{}, err
+	}
+
+	msg.Base = models.Base{
+		ID:        row.ID,
+		RecordID:  row.RecordID,
+		CreatedAt: parseStoreNullTime(row.CreatedAt),
+		UpdatedAt: parseStoreNullTime(row.UpdatedAt),
+	}
+	msg.UUID = row.UUID
+	return msg, nil
+}
+
+func (s *store) UpdateTransactionalMessageStatus(recordID, status, errorMessage string, sent bool) error {
+	if sent {
+		_, err := s.db.Exec(`
+			UPDATE transactional_messages
+			SET status = ?, error = ?, sent_at = (strftime('%Y-%m-%d %H:%M:%fZ')), updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE id = ?
+		`, status, errorMessage, recordID)
+		return err
+	}
+
+	_, err := s.db.Exec(`
+		UPDATE transactional_messages
+		SET status = ?, error = ?, updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE id = ?
+	`, status, errorMessage, recordID)
+	return err
+}
+
+func mustJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
+
 // RecordBounce records a bounce event and returns the bounce count.
 func (s *store) RecordBounce(b models.Bounce) (int64, int, error) {
 	if s.sqlite {

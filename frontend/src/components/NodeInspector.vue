@@ -100,6 +100,8 @@ function describeContextTokens(type, mode) {
       return ["ctx.run.events", "ctx.previous", "ctx.run.triggerPayload"];
     case "campaign_launch":
       return ["ctx.previous.campaignId", "ctx.run.triggerPayload", "ctx.contact"];
+    case "send_transactional_email":
+      return ["ctx.contact.id", "ctx.contact.email", "ctx.previous", "ctx.run.triggerPayload", "ctx.run.events"];
     default:
       return shared;
   }

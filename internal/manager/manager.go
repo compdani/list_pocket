@@ -41,6 +41,8 @@ type Store interface {
 	ScheduleCampaignBatch(campID int, sendAt time.Time) error
 	UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID int) error
 	CreateLink(url string) (string, error)
+	CreateTransactionalMessage(models.TransactionalMessage) (models.TransactionalMessage, error)
+	UpdateTransactionalMessageStatus(recordID, status, errorMessage string, sent bool) error
 	BlocklistSubscriber(id int64) error
 	DeleteSubscriber(id int64) error
 }
@@ -126,10 +128,12 @@ type Config struct {
 	IndividualTracking    bool
 	DisableTracking       bool
 	LinkTrackURL          string
+	TxLinkTrackURL        string
 	UnsubURL              string
 	OptinURL              string
 	MessageURL            string
 	ViewTrackURL          string
+	TxViewTrackURL        string
 	ArchiveURL            string
 	RootURL               string
 	UnsubHeader           bool
@@ -416,8 +420,40 @@ func (m *Manager) TemplateFuncs(c *models.Campaign) template.FuncMap {
 	return f
 }
 
+func (m *Manager) TxTemplateFuncs(msg *models.TransactionalMessage) template.FuncMap {
+	f := template.FuncMap{}
+	maps.Copy(f, m.tplFuncs)
+
+	fns := template.FuncMap{
+		"TrackLink": func(url string) string {
+			if m.cfg.DisableTracking || msg == nil {
+				return url
+			}
+			return m.trackTxLink(url, msg.UUID)
+		},
+		"TrackView": func() template.HTML {
+			if m.cfg.DisableTracking || msg == nil {
+				return template.HTML("")
+			}
+			return template.HTML(fmt.Sprintf(`<img src="%s" alt="" />`,
+				fmt.Sprintf(m.cfg.TxViewTrackURL, msg.UUID)))
+		},
+	}
+	maps.Copy(f, fns)
+
+	return f
+}
+
 func (m *Manager) GenericTemplateFuncs() template.FuncMap {
 	return m.tplFuncs
+}
+
+func (m *Manager) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
+	return m.store.CreateTransactionalMessage(msg)
+}
+
+func (m *Manager) UpdateTransactionalMessageStatus(recordID, status, errorMessage string, sent bool) error {
+	return m.store.UpdateTransactionalMessageStatus(recordID, status, errorMessage, sent)
 }
 
 // StopCampaign marks a running campaign as stopped so that all its queued messages are ignored.
@@ -544,6 +580,15 @@ func (m *Manager) worker() {
 			// Push the message to the messenger.
 			if err := m.messengers[msg.Messenger].Push(msg); err != nil {
 				m.log.Printf("error sending message '%s': %v", msg.Subject, err)
+				if msg.TxMessage != nil {
+					if updateErr := m.store.UpdateTransactionalMessageStatus(msg.TxMessage.RecordID, "failed", err.Error(), false); updateErr != nil {
+						m.log.Printf("error updating transactional message status '%s': %v", msg.TxMessage.RecordID, updateErr)
+					}
+				}
+			} else if msg.TxMessage != nil {
+				if updateErr := m.store.UpdateTransactionalMessageStatus(msg.TxMessage.RecordID, "sent", "", true); updateErr != nil {
+					m.log.Printf("error updating transactional message status '%s': %v", msg.TxMessage.RecordID, updateErr)
+				}
 			}
 		}
 	}
@@ -604,6 +649,33 @@ func (m *Manager) trackLink(url, campUUID, subUUID string) string {
 	return fmt.Sprintf(m.cfg.LinkTrackURL, uu, campUUID, subUUID)
 }
 
+func (m *Manager) trackTxLink(url, msgUUID string) string {
+	if m.cfg.DisableTracking {
+		return url
+	}
+
+	url = strings.ReplaceAll(url, "&amp;", "&")
+
+	m.linksMut.RLock()
+	if uu, ok := m.links[url]; ok {
+		m.linksMut.RUnlock()
+		return fmt.Sprintf(m.cfg.TxLinkTrackURL, uu, msgUUID)
+	}
+	m.linksMut.RUnlock()
+
+	uu, err := m.store.CreateLink(url)
+	if err != nil {
+		m.log.Printf("error registering tracking for transactional link '%s': %v", url, err)
+		return url
+	}
+
+	m.linksMut.Lock()
+	m.links[url] = uu
+	m.linksMut.Unlock()
+
+	return fmt.Sprintf(m.cfg.TxLinkTrackURL, uu, msgUUID)
+}
+
 // sendNotif sends a notification to registered admin e-mails.
 func (m *Manager) sendNotif(c *models.Campaign, status, reason string) error {
 	var (
@@ -627,6 +699,9 @@ func (m *Manager) makeGnericFuncMap() template.FuncMap {
 	funcs := template.FuncMap{
 		"TrackView": func(...any) template.HTML {
 			return template.HTML("")
+		},
+		"TrackLink": func(url string, _ ...any) string {
+			return url
 		},
 		"UnsubscribeURL": func(...any) string {
 			return ""

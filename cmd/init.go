@@ -65,16 +65,18 @@ const (
 
 // UrlConfig contains various URL constants used in the app.
 type UrlConfig struct {
-	RootURL      string `koanf:"root_url"`
-	LogoURL      string `koanf:"logo_url"`
-	FaviconURL   string `koanf:"favicon_url"`
-	LoginURL     string `koanf:"login_url"`
-	UnsubURL     string
-	LinkTrackURL string
-	ViewTrackURL string
-	OptinURL     string
-	MessageURL   string
-	ArchiveURL   string
+	RootURL        string `koanf:"root_url"`
+	LogoURL        string `koanf:"logo_url"`
+	FaviconURL     string `koanf:"favicon_url"`
+	LoginURL       string `koanf:"login_url"`
+	UnsubURL       string
+	LinkTrackURL   string
+	TxLinkTrackURL string
+	ViewTrackURL   string
+	TxViewTrackURL string
+	OptinURL       string
+	MessageURL     string
+	ArchiveURL     string
 }
 
 // Config contains static, constant config values required by arbitrary handlers and functions.
@@ -214,7 +216,6 @@ func initFS(appDir, frontendDir, staticDir, i18nDir string) stuffbin.FileSystem 
 		appFiles = []string{
 			"./config.toml.sample:config.toml.sample",
 			"./queries:queries",
-			"./schema.sql:schema.sql",
 			"./permissions.json:permissions.json",
 		}
 
@@ -817,6 +818,9 @@ func initUrlConfig(ko *koanf.Koanf) *UrlConfig {
 		// url.com/link/{campaign_uuid}/{subscriber_uuid}/{link_uuid}
 		LinkTrackURL: fmt.Sprintf("%s/link/%%s/%%s/%%s", root),
 
+		// url.com/tx/link/{link_uuid}/{message_uuid}
+		TxLinkTrackURL: fmt.Sprintf("%s/tx/link/%%s/%%s", root),
+
 		// url.com/link/{campaign_uuid}/{subscriber_uuid}
 		MessageURL: fmt.Sprintf("%s/campaign/%%s/%%s", root),
 
@@ -825,6 +829,9 @@ func initUrlConfig(ko *koanf.Koanf) *UrlConfig {
 
 		// url.com/campaign/{campaign_uuid}/{subscriber_uuid}/px.png
 		ViewTrackURL: fmt.Sprintf("%s/campaign/%%s/%%s/px.png", root),
+
+		// url.com/tx/{message_uuid}/px.png
+		TxViewTrackURL: fmt.Sprintf("%s/tx/%%s/px.png", root),
 	}
 }
 
@@ -958,7 +965,9 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.
 		UnsubURL:              u.UnsubURL,
 		OptinURL:              u.OptinURL,
 		LinkTrackURL:          u.LinkTrackURL,
+		TxLinkTrackURL:        u.TxLinkTrackURL,
 		ViewTrackURL:          u.ViewTrackURL,
+		TxViewTrackURL:        u.TxViewTrackURL,
 		MessageURL:            u.MessageURL,
 		ArchiveURL:            u.ArchiveURL,
 		RootURL:               u.RootURL,
@@ -1323,6 +1332,22 @@ func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.Fi
 
 	workflow.Register(pb, workflow.Config{
 		FrontendDir: "../frontend/dist",
+		SendTransactional: func(ctx context.Context, req workflow.ExecutorTransactionalEmailRequest) (workflow.ExecutorTransactionalEmailResult, error) {
+			record, err := app.newTransactionalSender().Send(txRequestFromWorkflow(req))
+			if err != nil {
+				return workflow.ExecutorTransactionalEmailResult{}, err
+			}
+			return workflow.ExecutorTransactionalEmailResult{
+				RecordID:        record.RecordID,
+				UUID:            record.UUID,
+				SubscriberID:    record.SubscriberID,
+				SubscriberEmail: record.SubscriberEmail,
+				TemplateID:      record.TemplateID,
+				TemplateName:    record.TemplateName,
+				Status:          record.Status,
+				Subject:         record.Subject,
+			}, nil
+		},
 	})
 
 	// Register all routes using PocketBase's router.

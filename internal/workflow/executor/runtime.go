@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +43,37 @@ type NodeExecutor interface {
 	Type() string
 	Execute(ctx context.Context, executionCtx ExecutionContext) (NodeResult, error)
 }
+
+var reLegacyNumericID = regexp.MustCompile(`^\d+$`)
+
+type TransactionalEmailRequest struct {
+	TemplateID      string
+	SubscriberID    string
+	SubscriberEmail string
+	SubscriberName  string
+	FirstName       string
+	LastName        string
+	Phone           string
+	Attribs         map[string]any
+	Data            map[string]any
+	FromEmail       string
+	Subject         string
+	ContentType     string
+	Messenger       string
+}
+
+type TransactionalEmailResult struct {
+	RecordID        string
+	UUID            string
+	SubscriberID    string
+	SubscriberEmail string
+	TemplateID      string
+	TemplateName    string
+	Status          string
+	Subject         string
+}
+
+type TransactionalEmailSendFunc func(ctx context.Context, req TransactionalEmailRequest) (TransactionalEmailResult, error)
 
 type TriggerExecutor struct{}
 
@@ -395,6 +427,111 @@ func (CampaignLaunchExecutor) Execute(ctx context.Context, executionCtx Executio
 	return NodeResult{
 		Output: output,
 		Logs:   []string{fmt.Sprintf("campaign %s launched", campaign.GetString("name"))},
+		Branch: "next",
+	}, nil
+}
+
+type TransactionalEmailExecutor struct {
+	Send TransactionalEmailSendFunc
+}
+
+func (TransactionalEmailExecutor) Type() string { return "send_transactional_email" }
+func (e TransactionalEmailExecutor) Execute(ctx context.Context, executionCtx ExecutionContext) (NodeResult, error) {
+	if e.Send == nil {
+		return NodeResult{}, errors.New("transactional email sender is not configured")
+	}
+
+	templateID := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["templateIdPath"], ""), executionCtx), ""))
+	if templateID == "" {
+		templateID = strings.TrimSpace(asString(executionCtx.Node.Config["templateId"], ""))
+	}
+	if templateID == "" {
+		return NodeResult{}, errors.New("transactional email node requires config.templateId or config.templateIdPath")
+	}
+	if reLegacyNumericID.MatchString(templateID) {
+		return NodeResult{}, errors.New("transactional email node requires a template record id, not a legacy numeric id")
+	}
+
+	subscriberEmail := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["subscriberEmailPath"], "contact.email"), executionCtx), ""))
+	if subscriberEmail == "" {
+		return NodeResult{}, errors.New("transactional email node could not resolve a recipient email")
+	}
+
+	subscriberID := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["subscriberIdPath"], "contact.id"), executionCtx), ""))
+	if subscriberID != "" && reLegacyNumericID.MatchString(subscriberID) {
+		return NodeResult{}, errors.New("transactional email node requires a subscriber record id, not a legacy numeric id")
+	}
+	firstName := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["firstNamePath"], "contact.firstName"), executionCtx), ""))
+	lastName := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["lastNamePath"], "contact.lastName"), executionCtx), ""))
+	subscriberName := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["subscriberNamePath"], ""), executionCtx), ""))
+	if subscriberName == "" {
+		subscriberName = strings.TrimSpace(strings.Join([]string{firstName, lastName}, " "))
+	}
+
+	phone := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["phonePath"], "contact.phone"), executionCtx), ""))
+	fromEmail := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["fromEmailPath"], ""), executionCtx), ""))
+	if fromEmail == "" {
+		fromEmail = strings.TrimSpace(asString(executionCtx.Node.Config["fromEmail"], ""))
+	}
+
+	subject := strings.TrimSpace(asString(resolveConfiguredValue(asString(executionCtx.Node.Config["subjectPath"], ""), executionCtx), ""))
+	if subject == "" {
+		subject = strings.TrimSpace(asString(executionCtx.Node.Config["subject"], ""))
+	}
+
+	contentType := strings.TrimSpace(asString(executionCtx.Node.Config["contentType"], "html"))
+	messengerName := strings.TrimSpace(asString(executionCtx.Node.Config["messenger"], "email"))
+	dataPath := strings.TrimSpace(asString(executionCtx.Node.Config["dataPath"], "previous"))
+
+	data := map[string]any{}
+	if resolved := resolveConfiguredValue(dataPath, executionCtx); resolved != nil {
+		if typed, ok := resolved.(map[string]any); ok {
+			data = copyMap(typed)
+		}
+	}
+	for key, rawValue := range toStringMap(executionCtx.Node.Config["dataMap"]) {
+		data[key] = resolveConfiguredValue(rawValue, executionCtx)
+	}
+
+	attribs := map[string]any{}
+	if executionCtx.Contact != nil && executionCtx.Contact.Attributes != nil {
+		attribs = copyMap(executionCtx.Contact.Attributes)
+	}
+
+	sent, err := e.Send(ctx, TransactionalEmailRequest{
+		TemplateID:      templateID,
+		SubscriberID:    subscriberID,
+		SubscriberEmail: subscriberEmail,
+		SubscriberName:  subscriberName,
+		FirstName:       firstName,
+		LastName:        lastName,
+		Phone:           phone,
+		Attribs:         attribs,
+		Data:            data,
+		FromEmail:       fromEmail,
+		Subject:         subject,
+		ContentType:     contentType,
+		Messenger:       messengerName,
+	})
+	if err != nil {
+		return NodeResult{}, err
+	}
+
+	output := copyMap(executionCtx.Input)
+	output["transactionalEmail"] = map[string]any{
+		"id":              sent.RecordID,
+		"uuid":            sent.UUID,
+		"subscriberId":    sent.SubscriberID,
+		"subscriberEmail": sent.SubscriberEmail,
+		"templateId":      sent.TemplateID,
+		"templateName":    sent.TemplateName,
+		"status":          sent.Status,
+		"subject":         sent.Subject,
+	}
+
+	return NodeResult{
+		Output: output,
+		Logs:   []string{fmt.Sprintf("transactional email queued for %s", sent.SubscriberEmail)},
 		Branch: "next",
 	}, nil
 }

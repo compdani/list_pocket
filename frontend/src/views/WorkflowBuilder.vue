@@ -57,6 +57,7 @@ const nodeLibrary = [
   { label: "Wait", type: "wait_until" },
   { label: "HTTP", type: "http_request" },
   { label: "PocketBase", type: "pb_update" },
+  { label: "Transactional Email", type: "send_transactional_email" },
   { label: "Launch Campaign", type: "campaign_launch" },
 ];
 
@@ -1206,6 +1207,11 @@ onBeforeUnmount(() => {
 .workflow-route .workflow-node-card[data-kind="pb_update"] .workflow-node-badge {
   background: #fff4d6;
   color: #9a6700;
+}
+
+.workflow-route .workflow-node-card[data-kind="send_transactional_email"] .workflow-node-badge {
+  background: #fef3e6;
+  color: #b45309;
 }
 
 .workflow-route .workflow-node-card[data-kind="campaign_launch"] .workflow-node-badge {

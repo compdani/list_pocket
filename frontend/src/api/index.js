@@ -433,6 +433,20 @@ export const sendSubscriberOptin = (idOrRecordId) => http.post(
   { loading: models.subscribers },
 );
 
+export const getTxMessages = async (params) => http.get(
+  '/api/tx',
+  {
+    params,
+    loading: models.txMessages,
+    store: models.txMessages,
+  },
+);
+
+export const getTxMessage = async (idOrRecordId) => http.get(
+  `/api/tx/${idOrRecordId}`,
+  { loading: models.txMessages },
+);
+
 export const deleteSubscriber = (idOrRecordId) => http.delete(
   `/api/subscribers/${idOrRecordId}`,
   { loading: models.subscribers },

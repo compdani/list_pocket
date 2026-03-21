@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/textproto"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/manager"
+	"github.com/compdani/list_pocket/internal/txemail"
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 )
@@ -69,13 +69,6 @@ func (a *App) SendTxMessage(c echo.Context) error {
 		m = r
 	}
 
-	// Get the cached tx template.
-	tpl, err := a.manager.GetTpl(m.TemplateID)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.notFound", "name", fmt.Sprintf("template %d", m.TemplateID)))
-	}
-
 	var (
 		num      = len(m.SubscriberEmails)
 		isEmails = true
@@ -128,41 +121,24 @@ func (a *App) SendTxMessage(c echo.Context) error {
 			}
 		}
 
-		// Render the message.
-		if err := m.Render(sub, tpl); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorFetching", "name"))
-		}
-
-		// Prepare the final message.
-		msg := models.Message{}
-		msg.Subscriber = sub
-		msg.To = []string{sub.Email}
-		msg.From = m.FromEmail
-		msg.Subject = m.Subject
-		msg.ContentType = m.ContentType
-		msg.Messenger = m.Messenger
-		msg.Body = m.Body
-		for _, a := range m.Attachments {
-			msg.Attachments = append(msg.Attachments, models.Attachment{
-				Name:    a.Name,
-				Header:  a.Header,
-				Content: a.Content,
-			})
-		}
-
-		// Optional headers.
-		if len(m.Headers) != 0 {
-			msg.Headers = make(textproto.MIMEHeader, len(m.Headers))
-			for _, set := range m.Headers {
-				for hdr, val := range set {
-					msg.Headers.Add(hdr, val)
-				}
-			}
-		}
-
-		if err := a.manager.PushMessage(msg); err != nil {
-			a.log.Printf("error sending message (%s): %v", msg.Subject, err)
+		if _, err := a.newTransactionalSender().Send(txemail.Request{
+			TemplateLegacyID: m.TemplateID,
+			SubscriberID:     sub.RecordID,
+			SubscriberEmail:  sub.Email,
+			SubscriberName:   sub.Name,
+			FirstName:        sub.FirstName,
+			LastName:         sub.LastName,
+			Phone:            sub.Phone,
+			Attribs:          sub.Attribs,
+			Data:             m.Data,
+			FromEmail:        m.FromEmail,
+			Headers:          m.Headers,
+			ContentType:      m.ContentType,
+			Messenger:        m.Messenger,
+			Subject:          m.Subject,
+			Attachments:      m.Attachments,
+		}); err != nil {
+			a.log.Printf("error sending transactional message (%s): %v", sub.Email, err)
 			return err
 		}
 	}

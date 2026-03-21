@@ -23,7 +23,7 @@ COPY models/ ./models/
 COPY queries/ ./queries/
 COPY i18n/ ./i18n/
 COPY static/ ./static/
-COPY schema.sql permissions.json config.toml.sample ./
+COPY permissions.json config.toml.sample ./
 
 RUN go build -trimpath -ldflags="-s -w" -o /out/listpocket ./cmd
 
@@ -38,7 +38,6 @@ WORKDIR /app
 
 COPY --from=go-builder /out/listpocket /app/listpocket
 COPY --from=go-builder /src/queries /app/queries
-COPY --from=go-builder /src/schema.sql /app/schema.sql
 COPY --from=go-builder /src/permissions.json /app/permissions.json
 COPY --from=go-builder /src/config.toml.sample /app/config.toml.sample
 COPY --from=go-builder /src/static /app/static

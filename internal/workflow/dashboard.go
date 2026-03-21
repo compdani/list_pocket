@@ -297,6 +297,8 @@ func describeNode(nodeType string, contactMode string) string {
 		return "Anchors a named event date for later wait calculations."
 	case "pb_update":
 		return "Writes workflow outcomes back into the CRM record."
+	case "send_transactional_email":
+		return "Sends a tracked transactional email and records engagement."
 	case "campaign_launch":
 		return "Launches an existing campaign so waits can drive drip steps."
 	case "wait_until":

@@ -20,6 +20,7 @@ export default createStore({
   getters: {
     [models.lists]: (state) => state[models.lists],
     [models.subscribers]: (state) => state[models.subscribers],
+    [models.txMessages]: (state) => state[models.txMessages],
     [models.campaigns]: (state) => state[models.campaigns],
     [models.media]: (state) => state[models.media],
     [models.templates]: (state) => state[models.templates],
