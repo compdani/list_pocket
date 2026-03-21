@@ -294,9 +294,10 @@ export const validateWorkflow = (workflowId) => sendControlPlane(
   `/api/control-plane/workflows/${workflowId}/validate`,
 );
 
-export const runWorkflow = (workflowId) => sendControlPlane(
+export const runWorkflow = (workflowId, data = {}) => sendControlPlane(
   'POST',
   `/api/control-plane/workflows/${workflowId}/run`,
+  data,
 );
 
 export const armWorkflowWebhookCapture = (workflowId, mode) => sendControlPlane(
@@ -376,6 +377,15 @@ export const getSubscribers = async (params) => http.get(
     params,
     loading: models.subscribers,
     store: models.subscribers,
+    camelCase: (keyPath) => !keyPath.startsWith('.results.*.attribs'),
+  },
+);
+
+export const searchSubscribers = async (params) => http.get(
+  '/api/subscribers',
+  {
+    params,
+    disableToast: true,
     camelCase: (keyPath) => !keyPath.startsWith('.results.*.attribs'),
   },
 );

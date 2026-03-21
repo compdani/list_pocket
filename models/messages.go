@@ -127,7 +127,7 @@ func (m *TxMessage) Render(sub Subscriber, tpl *Template) error {
 	if subject != "" {
 		if strings.Contains(m.Subject, "{{") {
 			// If the subject has a template string, render that.
-			s, err := txttpl.New(BaseTpl).Funcs(txttpl.FuncMap(nil)).Parse(m.Subject)
+			s, err := txttpl.New(BaseTpl).Funcs(TxAliasTextFuncs(txttpl.FuncMap{}, sub, m)).Parse(m.Subject)
 			if err != nil {
 				return fmt.Errorf("error compiling subject: %v", err)
 			}

@@ -83,18 +83,50 @@
           </v-col>
         </v-row>
 
+        <v-row v-if="form.type === 'tx'" class="mb-1">
+          <v-col cols="12" md="4">
+            <v-select
+              v-model="editorMode"
+              :items="editorModeOptions"
+              item-title="title"
+              item-value="value"
+              label="Editor"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+        </v-row>
+
         <div class="editor-shell">
-          <div class="editor-label">
-            {{ form.type === 'campaign_visual' ? $t('templates.typeCampaignVisual') : $t('templates.rawHTML') }}
+          <div class="editor-shell-head">
+            <div class="editor-label">
+              {{ currentEditorLabel }}
+            </div>
+            <v-btn
+              v-if="form.type === 'tx'"
+              type="button"
+              size="small"
+              variant="text"
+              prepend-icon="mdi-code-braces"
+              @click="insertContentPlaceholder"
+            >
+              Insert Content Placeholder
+            </v-btn>
           </div>
 
           <div class="editor-surface">
             <visual-editor
-              v-if="form.type === 'campaign_visual'"
+              v-if="useVisualEditor"
               name="body"
               :source="form.bodySource"
               height="62vh"
               @change="onChangeVisualEditor"
+            />
+
+            <richtext-editor
+              v-else-if="useRichtextEditor"
+              v-model="form.body"
+              :preserve-go-template="true"
             />
 
             <code-editor
@@ -156,6 +188,7 @@
 import { mapState } from 'vuex';
 import CampaignPreview from '../components/CampaignPreview.vue';
 import CodeEditor from '../components/CodeEditor.vue';
+import RichtextEditor from '../components/RichtextEditor.vue';
 import VisualEditor from '../components/VisualEditor.vue';
 import CopyText from '../components/CopyText.vue';
 
@@ -175,6 +208,7 @@ export default {
     CampaignPreview,
     CopyText,
     'code-editor': CodeEditor,
+    'richtext-editor': RichtextEditor,
     'visual-editor': VisualEditor,
   },
 
@@ -189,6 +223,7 @@ export default {
       formError: '',
       previewItem: null,
       egPlaceholder: '{{ template "content" . }}',
+      editorMode: 'html',
     };
   },
 
@@ -201,6 +236,32 @@ export default {
         { title: this.$tc('templates.typeCampaignVisual'), value: 'campaign_visual' },
         { title: this.$tc('templates.typeTransactional'), value: 'tx' },
       ];
+    },
+
+    editorModeOptions() {
+      return [
+        { title: this.$t('templates.rawHTML'), value: 'html' },
+        { title: 'TinyMCE', value: 'richtext' },
+        { title: this.$tc('templates.typeCampaignVisual'), value: 'visual' },
+      ];
+    },
+
+    useVisualEditor() {
+      return this.form.type === 'campaign_visual' || (this.form.type === 'tx' && this.editorMode === 'visual');
+    },
+
+    useRichtextEditor() {
+      return this.form.type === 'tx' && this.editorMode === 'richtext';
+    },
+
+    currentEditorLabel() {
+      if (this.useVisualEditor) {
+        return this.$t('templates.typeCampaignVisual');
+      }
+      if (this.useRichtextEditor) {
+        return 'TinyMCE';
+      }
+      return this.$t('templates.rawHTML');
     },
   },
 
@@ -218,11 +279,13 @@ export default {
     },
 
     normalizeForm(data = {}) {
+      const hasBodySource = typeof data.bodySource === 'string' && data.bodySource.trim() !== '';
       return {
         ...baseForm(),
         ...data,
         body: data.body ?? '',
         bodySource: data.bodySource ?? '',
+        editorMode: data.type === 'campaign_visual' || (data.type === 'tx' && hasBodySource) ? 'visual' : 'html',
       };
     },
 
@@ -239,6 +302,16 @@ export default {
 
     onSubmit() {
       this.formError = '';
+
+      if (!this.form.name.trim()) {
+        this.formError = this.$t('campaigns.fieldInvalidName');
+        return;
+      }
+
+      if (this.form.type === 'tx' && !this.form.subject.trim()) {
+        this.formError = this.$t('globals.messages.missingFields', { name: 'subject' });
+        return;
+      }
 
       if (this.isEditing) {
         this.updateTemplate();
@@ -291,10 +364,19 @@ export default {
       this.form.body = body;
       this.form.bodySource = source;
     },
+
+    insertContentPlaceholder() {
+      const placeholder = '{{ template "content" . }}';
+      if (this.form.body.includes(placeholder)) {
+        return;
+      }
+      this.form.body = this.form.body ? `${this.form.body}\n${placeholder}` : placeholder;
+    },
   },
 
   mounted() {
     this.form = this.normalizeForm(this.data);
+    this.editorMode = this.form.editorMode || 'html';
 
     this.$nextTick(() => {
       if (this.$refs.focus?.focus) {
@@ -307,6 +389,27 @@ export default {
 
   beforeUnmount() {
     window.removeEventListener('keydown', this.onPreviewShortcut);
+  },
+
+  watch: {
+    editorMode(nextMode) {
+      if (this.form.type !== 'tx') {
+        return;
+      }
+      if (nextMode !== 'visual') {
+        this.form.bodySource = '';
+      }
+    },
+
+    'form.type'(nextType) {
+      if (nextType === 'campaign_visual') {
+        this.editorMode = 'visual';
+      } else if (nextType === 'tx') {
+        this.editorMode = this.form.bodySource ? 'visual' : 'html';
+      } else {
+        this.editorMode = 'html';
+      }
+    },
   },
 };
 </script>
@@ -348,6 +451,7 @@ export default {
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-height: 0;
   overflow: auto;
   padding: 24px 20px;
 }
@@ -359,8 +463,15 @@ export default {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-height: 420px;
+  min-height: 0;
   padding: 14px;
+}
+
+.editor-shell-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
 }
 
 .editor-label {
@@ -373,6 +484,7 @@ export default {
 .editor-surface {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .admin-dialog-foot {
@@ -411,6 +523,8 @@ export default {
   background: #fff;
   border-color: #d7e0ee;
   border-radius: 10px;
+  height: min(62vh, calc(100vh - 360px));
+  min-height: 420px;
   overflow: hidden;
 }
 

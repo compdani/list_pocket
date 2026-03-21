@@ -60,6 +60,7 @@ type TransactionalEmailRequest struct {
 	Subject         string
 	ContentType     string
 	Messenger       string
+	ContentTpl      string
 }
 
 type TransactionalEmailResult struct {
@@ -204,6 +205,7 @@ func (HTTPExecutor) Type() string { return "http_request" }
 func (HTTPExecutor) Execute(ctx context.Context, executionCtx ExecutionContext) (NodeResult, error) {
 	url, _ := executionCtx.Node.Config["url"].(string)
 	method, _ := executionCtx.Node.Config["method"].(string)
+	bodyMode, _ := executionCtx.Node.Config["bodyMode"].(string)
 	sourcePath, _ := executionCtx.Node.Config["sourcePath"].(string)
 	authMode, _ := executionCtx.Node.Config["authMode"].(string)
 	secretRef, _ := executionCtx.Node.Config["secretRef"].(string)
@@ -214,11 +216,25 @@ func (HTTPExecutor) Execute(ctx context.Context, executionCtx ExecutionContext) 
 	if method == "" {
 		method = http.MethodPost
 	}
+	if bodyMode == "" {
+		bodyMode = "source_path"
+	}
 	if sourcePath == "" {
 		sourcePath = "previous"
 	}
 
-	payload := resolveValue(sourcePath, executionCtx)
+	var payload any
+	switch bodyMode {
+	case "custom_map":
+		fieldMap := toStringMap(executionCtx.Node.Config["bodyMap"])
+		resolvedFields := make(map[string]any, len(fieldMap))
+		for field, rawValue := range fieldMap {
+			resolvedFields[field] = resolveConfiguredValue(rawValue, executionCtx)
+		}
+		payload = resolvedFields
+	default:
+		payload = resolveValue(sourcePath, executionCtx)
+	}
 	bodyBytes := []byte("{}")
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
@@ -261,10 +277,11 @@ func (HTTPExecutor) Execute(ctx context.Context, executionCtx ExecutionContext) 
 
 	return NodeResult{
 		Output: map[string]any{
-			"status": resp.StatusCode,
-			"body":   responseBody,
-			"url":    url,
-			"method": strings.ToUpper(method),
+			"status":   resp.StatusCode,
+			"body":     responseBody,
+			"url":      url,
+			"method":   strings.ToUpper(method),
+			"bodyMode": bodyMode,
 		},
 		Logs:   []string{fmt.Sprintf("http request completed with status %d", resp.StatusCode)},
 		Branch: "next",
@@ -482,6 +499,7 @@ func (e TransactionalEmailExecutor) Execute(ctx context.Context, executionCtx Ex
 	contentType := strings.TrimSpace(asString(executionCtx.Node.Config["contentType"], "html"))
 	messengerName := strings.TrimSpace(asString(executionCtx.Node.Config["messenger"], "email"))
 	dataPath := strings.TrimSpace(asString(executionCtx.Node.Config["dataPath"], "previous"))
+	contentTpl := asString(executionCtx.Node.Config["contentTemplate"], "")
 
 	data := map[string]any{}
 	if resolved := resolveConfiguredValue(dataPath, executionCtx); resolved != nil {
@@ -512,6 +530,7 @@ func (e TransactionalEmailExecutor) Execute(ctx context.Context, executionCtx Ex
 		Subject:         subject,
 		ContentType:     contentType,
 		Messenger:       messengerName,
+		ContentTpl:      contentTpl,
 	})
 	if err != nil {
 		return NodeResult{}, err

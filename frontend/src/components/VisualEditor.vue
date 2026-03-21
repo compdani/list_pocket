@@ -185,6 +185,7 @@ export default {
 .visual-editor-wrapper {
   width: 100%;
   border: 1px solid #eaeaea;
+  height: 100%;
   max-width: 100vw;
 }
 
@@ -192,6 +193,7 @@ export default {
   position: relative;
   border: none;
   width: 100%;
-  min-height: 500px;
+  height: 100%;
+  min-height: 420px;
 }
 </style>

@@ -2,7 +2,6 @@
 /* eslint-disable */
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import ContactsPanel from "../components/ContactsPanel.vue";
 import RunHistory from "../components/RunHistory.vue";
 import WorkflowBuilderPanel from "../components/WorkflowBuilderPanel.vue";
 import {
@@ -285,7 +284,14 @@ async function runWorkflow(workflowId) {
   saveState.value = "saving";
   saveMessage.value = "Queueing test run...";
   try {
-    replaceDashboard(await runWorkflowRequest(workflowId));
+    const runPayload = {};
+    if (triggerMode === "tag_added" || triggerMode === "tag_removed") {
+      const demoContactId = String(trigger?.config?.demoContactId ?? "").trim();
+      if (demoContactId) {
+        runPayload.contactId = demoContactId;
+      }
+    }
+    replaceDashboard(await runWorkflowRequest(workflowId, runPayload));
     saveState.value = "saved";
     saveMessage.value = "Test run queued";
   } catch (nextError) {
@@ -573,6 +579,7 @@ onBeforeUnmount(() => {
       </section>
 
       <WorkflowBuilderPanel
+        :contacts="contacts"
         ref="builderRef"
         :key="activeWorkflow?.workflow?.id ?? 'empty'"
         :on-save-request="saveWorkflow"
@@ -590,7 +597,6 @@ onBeforeUnmount(() => {
       />
 
       <section class="bottom-grid">
-        <ContactsPanel :contacts="contacts" />
         <RunHistory
           :active-workflow-id="activeWorkflow?.workflow.id"
           :runs="runLogs"
@@ -999,7 +1005,7 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .bottom-grid {
-  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .workflow-route .modal-backdrop {
@@ -1037,34 +1043,18 @@ onBeforeUnmount(() => {
   font-size: 1.55rem;
 }
 
+.workflow-route .node-modal-actions,
+.workflow-route .template-picker-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .workflow-route .node-inspector {
   border: none;
   box-shadow: none;
   background: transparent;
   padding: 0;
-}
-
-.workflow-route .node-summary {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 16px;
-  padding: 4px 2px 0;
-}
-
-.workflow-route .node-summary-copy {
-  display: grid;
-  gap: 8px;
-}
-
-.workflow-route .node-summary-copy p {
-  max-width: 64ch;
-}
-
-.workflow-route .node-summary-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .workflow-route .inspector-fields {
@@ -1324,6 +1314,22 @@ onBeforeUnmount(() => {
 .workflow-route .context-help {
   grid-column: 1 / -1;
   background: linear-gradient(180deg, #f8fbff, #f3f7fc);
+}
+
+.workflow-route .demo-contact-hint {
+  padding: 10px 14px;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.workflow-route .demo-contact-selection {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+}
+
+.workflow-route .form-field-card .v-input {
+  width: 100%;
 }
 
 .workflow-route .context-token {

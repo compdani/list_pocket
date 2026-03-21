@@ -63,31 +63,68 @@ import { html } from 'js-beautify';
 import { mapState } from 'vuex';
 
 import TinyMce from '@tinymce/tinymce-vue';
-import 'tinymce';
-import 'tinymce/models/dom';
-import 'tinymce/icons/default';
-import 'tinymce/plugins/anchor';
-import 'tinymce/plugins/autolink';
-import 'tinymce/plugins/autoresize';
-import 'tinymce/plugins/charmap';
-import 'tinymce/plugins/emoticons';
-import 'tinymce/plugins/emoticons/js/emojis';
-import 'tinymce/plugins/fullscreen';
-import 'tinymce/plugins/help';
-import 'tinymce/plugins/image';
-import 'tinymce/plugins/link';
-import 'tinymce/plugins/lists';
-import 'tinymce/plugins/searchreplace';
-import 'tinymce/plugins/table';
-import 'tinymce/plugins/visualblocks';
-import 'tinymce/plugins/visualchars';
-import 'tinymce/plugins/wordcount';
 import 'tinymce/skins/ui/oxide/skin.css';
-import 'tinymce/themes/silver';
 
 import { colors, uris } from '../constants';
 import CodeEditor from './CodeEditor.vue';
 import Media from '../views/Media.vue';
+
+let tinyMceLoader;
+const GO_TEMPLATE_PATTERN = /\{\{[\s\S]*?\}\}/g;
+
+function encodeGoTemplates(html = '') {
+  return String(html).replace(GO_TEMPLATE_PATTERN, (match) => (
+    match
+      .replace(/\{/g, '&#123;')
+      .replace(/\}/g, '&#125;')
+  ));
+}
+
+function decodeGoTemplates(html = '') {
+  return String(html)
+    .replace(/&#123;|&lbrace;/g, '{')
+    .replace(/&#125;|&rbrace;/g, '}');
+}
+
+function loadTinyMceRuntime() {
+  if (!tinyMceLoader) {
+    tinyMceLoader = (async () => {
+      const { default: tinymce } = await import('tinymce/tinymce');
+      if (typeof window !== 'undefined') {
+        window.tinymce = tinymce;
+      }
+      if (typeof globalThis !== 'undefined') {
+        globalThis.tinymce = tinymce;
+      }
+
+      await Promise.all([
+        import('tinymce/models/dom'),
+        import('tinymce/icons/default'),
+        import('tinymce/themes/silver'),
+        import('tinymce/plugins/anchor'),
+        import('tinymce/plugins/autolink'),
+        import('tinymce/plugins/autoresize'),
+        import('tinymce/plugins/charmap'),
+        import('tinymce/plugins/emoticons'),
+        import('tinymce/plugins/emoticons/js/emojis'),
+        import('tinymce/plugins/fullscreen'),
+        import('tinymce/plugins/help'),
+        import('tinymce/plugins/image'),
+        import('tinymce/plugins/link'),
+        import('tinymce/plugins/lists'),
+        import('tinymce/plugins/searchreplace'),
+        import('tinymce/plugins/table'),
+        import('tinymce/plugins/visualblocks'),
+        import('tinymce/plugins/visualchars'),
+        import('tinymce/plugins/wordcount'),
+      ]);
+
+      return tinymce;
+    })();
+  }
+
+  return tinyMceLoader;
+}
 
 // Map of listmonk language codes to corresponding TinyMCE language files.
 const LANGS = {
@@ -114,6 +151,7 @@ export default {
 
   props: {
     disabled: { type: Boolean, default: false },
+    preserveGoTemplate: { type: Boolean, default: false },
     modelValue: {
       type: String,
       default: '',
@@ -137,7 +175,16 @@ export default {
   },
 
   methods: {
-    initRichtextEditor() {
+    encodeEditorValue(value) {
+      return this.preserveGoTemplate ? encodeGoTemplates(value) : value;
+    },
+
+    decodeEditorValue(value) {
+      return this.preserveGoTemplate ? decodeGoTemplates(value) : value;
+    },
+
+    async initRichtextEditor() {
+      await loadTinyMceRuntime();
       const { lang } = this.serverConfig;
 
       this.richtextConf = {
@@ -180,6 +227,8 @@ export default {
         toolbar_sticky: true,
         entity_encoding: 'raw',
         convert_urls: true,
+        verify_html: !this.preserveGoTemplate,
+        extended_valid_elements: this.preserveGoTemplate ? '*[*]' : undefined,
         plugins: [
           'anchor', 'autoresize', 'autolink', 'charmap', 'emoticons', 'fullscreen',
           'help', 'image', 'link', 'lists', 'searchreplace',
@@ -234,7 +283,7 @@ export default {
     },
 
     onRichtextViewSource() {
-      this.richTextSourceBody = this.computedValue;
+      this.richTextSourceBody = this.decodeEditorValue(this.modelValue);
       this.isRichtextSourceVisible = true;
     },
 
@@ -244,7 +293,7 @@ export default {
 
     onInsertHTML() {
       this.isInsertHTMLVisible = false;
-      window.tinymce.activeEditor?.execCommand('mceInsertContent', false, this.insertHTMLSnippet);
+      window.tinymce.activeEditor?.execCommand('mceInsertContent', false, this.encodeEditorValue(this.insertHTMLSnippet));
       this.insertHTMLSnippet = '';
     },
 
@@ -257,8 +306,9 @@ export default {
     },
 
     onSaveRichTextSource() {
-      this.computedValue = this.richTextSourceBody;
-      window.tinymce.activeEditor?.setContent(this.computedValue);
+      const decoded = this.decodeEditorValue(this.richTextSourceBody);
+      this.computedValue = decoded;
+      window.tinymce.activeEditor?.setContent(this.encodeEditorValue(decoded));
       this.richTextSourceBody = '';
       this.isRichtextSourceVisible = false;
     },
@@ -300,7 +350,7 @@ export default {
   },
 
   mounted() {
-    this.initRichtextEditor();
+    void this.initRichtextEditor();
   },
 
   computed: {
@@ -308,10 +358,10 @@ export default {
 
     computedValue: {
       get() {
-        return this.modelValue;
+        return this.encodeEditorValue(this.modelValue);
       },
       set(newValue) {
-        this.$emit('update:modelValue', newValue);
+        this.$emit('update:modelValue', this.decodeEditorValue(newValue));
       },
     },
   },

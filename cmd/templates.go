@@ -176,7 +176,8 @@ func (a *App) CreateTemplate(c echo.Context) error {
 		o.Subject = ""
 		funcs = a.manager.TemplateFuncs(nil)
 	} else {
-		funcs = a.manager.GenericTemplateFuncs()
+		txMsg := models.TxMessage{}
+		funcs = models.TxAliasTemplateFuncs(a.manager.GenericTemplateFuncs(), dummySubscriber, &txMsg)
 	}
 
 	// Compile the template and validate.
@@ -216,7 +217,8 @@ func (a *App) UpdateTemplate(c echo.Context) error {
 		o.Subject = ""
 		funcs = a.manager.TemplateFuncs(nil)
 	} else {
-		funcs = a.manager.GenericTemplateFuncs()
+		txMsg := models.TxMessage{}
+		funcs = models.TxAliasTemplateFuncs(a.manager.GenericTemplateFuncs(), dummySubscriber, &txMsg)
 	}
 
 	// Compile the template and validate.
@@ -323,13 +325,13 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 		}
 		out = msg.Body()
 	} else {
-		// Compile transactional template.
-		if err := tpl.Compile(a.manager.GenericTemplateFuncs()); err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		}
-
 		m := models.TxMessage{
 			Subject: tpl.Subject,
+		}
+
+		// Compile transactional template.
+		if err := tpl.Compile(models.TxAliasTemplateFuncs(a.manager.GenericTemplateFuncs(), dummySubscriber, &m)); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
 		// Render the message.
