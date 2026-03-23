@@ -1,82 +1,132 @@
 <template>
-  <div :id="containerId" class="grapes-editor-root" />
+  <div class="grapes-editor-wrapper">
+    <div :id="containerId" class="grapes-editor-root" />
+
+    <v-dialog v-model="isMediaVisible" max-width="900">
+      <v-card>
+        <v-card-text class="pt-0">
+          <media
+            is-modal
+            type="pictures"
+            @selected="onMediaSelect"
+            @close="isMediaVisible = false"
+          />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+  </div>
 </template>
 
-<script>
+<script setup>
+import { ref, onBeforeUnmount, onMounted } from 'vue';
 import 'grapesjs/dist/css/grapes.min.css';
 import grapesJS from 'grapesjs';
 import grapesJSMJML from 'grapesjs-mjml';
+import Media from '../views/Media.vue';
 
-export default {
-  name: 'GrapesMjmlEditor',
-  props: {
-    source: { type: String, default: '' },
-    data: { type: String, default: '' },
-    height: { type: String, default: '65vh' },
-  },
-  emits: ['change', 'ready'],
-  data() {
-    return {
-      editor: null,
-      containerId: `gjs-${Math.random().toString(36).slice(2, 10)}`,
-    };
-  },
-  methods: {
-    loadContent() {
-      if (!this.editor) {
-        return;
-      }
+const BASIC_MJML_ROOT = '<mjml><mj-body><mj-section><mj-column><mj-text></mj-text></mj-column></mj-section></mj-body></mjml>';
 
-      const source = (this.source || '').trim();
-      const data = (this.data || '').trim();
-      if (source) {
-        this.editor.setComponents(source);
-      } else if (data) {
-        this.editor.setComponents(data);
-      }
+const props = defineProps({
+  source: { type: String, default: '' },
+  data: { type: String, default: '' },
+  height: { type: String, default: '65vh' },
+});
+
+const emit = defineEmits(['ready']);
+
+let editor = null;
+const containerId = `gjs-${Math.random().toString(36).slice(2, 10)}`;
+const isMediaVisible = ref(false);
+let assetSelectHandler = null;
+
+function runCommandSafe(command, fallbackValue) {
+  if (!editor) {
+    return fallbackValue;
+  }
+  try {
+    return editor.runCommand(command);
+  } catch {
+    return fallbackValue;
+  }
+}
+
+function loadMjml(newMjml) {
+  if (!editor) {
+    return;
+  }
+  const next = String(newMjml || '').trim() || BASIC_MJML_ROOT;
+  editor.setComponents(next);
+}
+
+function getMjml() {
+  return runCommandSafe('mjml-code', '') || '';
+}
+
+function getHTML() {
+  const htmlWithCss = runCommandSafe('mjml-code-to-html', {});
+  return htmlWithCss?.html || '';
+}
+
+function getCompiledContent() {
+  return {
+    source: getMjml(),
+    body: getHTML(),
+  };
+}
+
+function onMediaSelect(media) {
+  if (assetSelectHandler && media?.url) {
+    assetSelectHandler({ src: media.url }, true);
+  }
+  isMediaVisible.value = false;
+  assetSelectHandler = null;
+}
+
+onMounted(() => {
+  editor = grapesJS.init({
+    container: `#${containerId}`,
+    fromElement: false,
+    height: props.height,
+    width: 'auto',
+    plugins: [grapesJSMJML],
+    storageManager: false,
+    assetManager: {
+      custom: true,
     },
-    getMjml() {
-      if (!this.editor) {
-        return '';
-      }
-      return this.editor.runCommand('mjml-code') || '';
-    },
-    getHTML() {
-      if (!this.editor) {
-        return '';
-      }
-      const htmlWithCss = this.editor.runCommand('mjml-code-to-html');
-      return htmlWithCss?.html || '';
-    },
-  },
-  mounted() {
-    this.editor = grapesJS.init({
-      container: `#${this.containerId}`,
-      fromElement: false,
-      height: this.height,
-      width: 'auto',
-      plugins: [grapesJSMJML],
-      storageManager: false,
-    });
+  });
 
-    this.loadContent();
-
-    this.editor.on('update', () => {
-      this.$emit('change', { body: this.getHTML(), source: this.getMjml() });
-    });
-
-    this.$emit('ready', true);
-  },
-  beforeUnmount() {
-    if (this.editor) {
-      this.editor.destroy();
-      this.editor = null;
+  editor.on('asset:custom', (propsAM = {}) => {
+    if (!propsAM.open) {
+      isMediaVisible.value = false;
+      assetSelectHandler = null;
+      return;
     }
-  },
-};
+
+    assetSelectHandler = propsAM.select || null;
+    isMediaVisible.value = true;
+  });
+
+  const initial = (props.source || props.data || '').trim() || BASIC_MJML_ROOT;
+  editor.setComponents(initial);
+
+  emit('ready', true);
+});
+
+onBeforeUnmount(() => {
+  if (editor) {
+    editor.destroy();
+    editor = null;
+  }
+});
+
+defineExpose({ loadMjml, getMjml, getHTML, getCompiledContent });
 </script>
 
 <style scoped>
+.grapes-editor-wrapper {
+  width: 100%;
+}
+
 .grapes-editor-root {
   min-height: 420px;
 }

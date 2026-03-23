@@ -125,6 +125,7 @@
 
             <grapes-mjml-editor
               v-else-if="useGrapesEditor"
+              ref="grapesEditor"
               :source="form.bodySource"
               :data="form.body"
               height="62vh"
@@ -315,7 +316,24 @@ export default {
       };
     },
 
+    syncGrapesBeforeAction() {
+      if (!this.useGrapesEditor) {
+        return;
+      }
+      const compiled = this.$refs.grapesEditor?.getCompiledContent?.();
+      if (!compiled) {
+        return;
+      }
+      if (compiled.source) {
+        this.form.bodySource = compiled.source;
+      }
+      if (compiled.body) {
+        this.form.body = compiled.body;
+      }
+    },
+
     onTogglePreview() {
+      this.syncGrapesBeforeAction();
       this.previewItem = this.previewItem ? null : this.form;
     },
 
@@ -327,6 +345,7 @@ export default {
     },
 
     onSubmit() {
+      this.syncGrapesBeforeAction();
       this.formError = '';
 
       if (!this.form.name.trim()) {
@@ -387,7 +406,9 @@ export default {
 
     onChangeVisualEditor({ source, body }) {
       this.formError = '';
-      this.form.body = body;
+      if (typeof body === 'string') {
+        this.form.body = body;
+      }
       this.form.bodySource = source;
     },
 
