@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
@@ -30,6 +31,8 @@ type txMessageRow struct {
 	Data            []byte `db:"data"`
 	Headers         []byte `db:"headers"`
 	Views           int    `db:"views"`
+	RawViews        int    `db:"raw_views"`
+	SuspectedViews  int    `db:"suspected_views"`
 	Clicks          int    `db:"clicks"`
 	SentAt          string `db:"sent_at"`
 }
@@ -57,6 +60,8 @@ func txMessageRowToModel(row txMessageRow) models.TransactionalMessage {
 		Data:            models.JSON{},
 		Headers:         models.JSON{},
 		Views:           row.Views,
+		RawViews:        row.RawViews,
+		SuspectedViews:  row.SuspectedViews,
 		Clicks:          row.Clicks,
 		SentAt:          parseNullTime(row.SentAt),
 	}
@@ -110,7 +115,9 @@ func (c *Core) QueryTransactionalMessages(search string, offset, limit int) ([]m
 			'' AS body,
 			'{}' AS data,
 			'{}' AS headers,
-			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id) AS views,
+			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id AND COALESCE(tv.is_suspected_privacy_open, 0) = 0) AS views,
+			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id) AS raw_views,
+			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id AND COALESCE(tv.is_suspected_privacy_open, 0) = 1) AS suspected_views,
 			(SELECT COUNT(*) FROM tx_link_clicks tc WHERE tc.tx_message_id = tm.id) AS clicks,
 			COALESCE(tm.sent_at, '') AS sent_at
 		FROM transactional_messages tm
@@ -157,7 +164,9 @@ func (c *Core) GetTransactionalMessage(recordID string) (models.TransactionalMes
 			tm.body,
 			COALESCE(tm.data, '{}') AS data,
 			COALESCE(tm.headers, '{}') AS headers,
-			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id) AS views,
+			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id AND COALESCE(tv.is_suspected_privacy_open, 0) = 0) AS views,
+			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id) AS raw_views,
+			(SELECT COUNT(*) FROM tx_message_views tv WHERE tv.tx_message_id = tm.id AND COALESCE(tv.is_suspected_privacy_open, 0) = 1) AS suspected_views,
 			(SELECT COUNT(*) FROM tx_link_clicks tc WHERE tc.tx_message_id = tm.id) AS clicks,
 			COALESCE(tm.sent_at, '') AS sent_at
 		FROM transactional_messages tm
@@ -186,14 +195,41 @@ func (c *Core) GetTransactionalMessage(recordID string) (models.TransactionalMes
 	return out, nil
 }
 
-func (c *Core) RegisterTransactionalMessageView(msgUUID string) error {
-	if _, err := c.db.Exec(`
-		INSERT INTO tx_message_views (tx_message_id, subscriber_id)
-		SELECT tm.id, tm.subscriber_id
+func (c *Core) RegisterTransactionalMessageView(msgUUID string, event models.OpenEvent) error {
+	event = normalizeOpenEvent(event)
+
+	var row struct {
+		MessageID    string         `db:"message_id"`
+		SubscriberID sql.NullString `db:"subscriber_id"`
+		SentAt       string         `db:"sent_at"`
+	}
+	if err := c.db.Get(&row, `
+		SELECT tm.id AS message_id, tm.subscriber_id, COALESCE(tm.sent_at, '') AS sent_at
 		FROM transactional_messages tm
 		WHERE tm.uuid = ?
 		LIMIT 1
 	`, msgUUID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		c.log.Printf("error resolving transactional message view target: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+	}
+
+	sentAt := time.Time{}
+	if parsed := parseNullTime(row.SentAt); parsed.Valid {
+		sentAt = parsed.Time
+	}
+	suspected, meta, err := classifyPrivacyOpen(event, sentAt, "transactional_sent_at")
+	if err != nil {
+		c.log.Printf("error marshaling transactional view metadata: %v", err)
+		meta = "{}"
+	}
+
+	if _, err := c.db.Exec(`
+		INSERT INTO tx_message_views (tx_message_id, subscriber_id, meta, is_suspected_privacy_open, created)
+		VALUES (?, ?, ?, ?, ?)
+	`, row.MessageID, row.SubscriberID, meta, suspected, sqliteTimestampValue(event.OpenedAt)); err != nil {
 		c.log.Printf("error registering transactional message view: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}

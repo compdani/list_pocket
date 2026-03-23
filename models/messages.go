@@ -94,6 +94,8 @@ type TransactionalMessage struct {
 	Data            JSON                    `db:"data" json:"data,omitempty"`
 	Headers         JSON                    `db:"headers" json:"headers,omitempty"`
 	Views           int                     `db:"views" json:"views"`
+	RawViews        int                     `db:"raw_views" json:"raw_views"`
+	SuspectedViews  int                     `db:"suspected_views" json:"suspected_views"`
 	Clicks          int                     `db:"clicks" json:"clicks"`
 	SentAt          null.Time               `db:"sent_at" json:"sent_at,omitempty"`
 	LinkStats       []TransactionalLinkStat `db:"-" json:"link_stats,omitempty"`

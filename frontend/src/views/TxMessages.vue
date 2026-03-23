@@ -66,7 +66,10 @@
         </template>
 
         <template #[`item.views`]="{ item }">
-          <span class="metric">{{ item.views || 0 }}</span>
+            <div class="metric-stack">
+              <span class="metric">{{ item.views || 0 }}</span>
+              <span class="metric-detail">raw {{ item.rawViews || 0 }} / suspected {{ item.suspectedViews || 0 }}</span>
+            </div>
         </template>
 
         <template #[`item.clicks`]="{ item }">
@@ -113,8 +116,16 @@
         <v-card-text>
           <div class="detail-metrics">
             <v-sheet class="metric-card" border rounded>
-              <div class="text-overline">Views</div>
+              <div class="text-overline">Confirmed Opens</div>
               <div class="text-h5">{{ activeMessage.views || 0 }}</div>
+            </v-sheet>
+            <v-sheet class="metric-card" border rounded>
+              <div class="text-overline">Raw Opens</div>
+              <div class="text-h5">{{ activeMessage.rawViews || 0 }}</div>
+            </v-sheet>
+            <v-sheet class="metric-card" border rounded>
+              <div class="text-overline">Suspected Privacy Opens</div>
+              <div class="text-h5">{{ activeMessage.suspectedViews || 0 }}</div>
             </v-sheet>
             <v-sheet class="metric-card" border rounded>
               <div class="text-overline">Clicks</div>
@@ -280,9 +291,21 @@ export default {
   font-variant-numeric: tabular-nums;
 }
 
+.metric-stack {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.metric-detail {
+  font-size: 0.75rem;
+  color: rgba(33, 33, 33, 0.6);
+  white-space: nowrap;
+}
+
 .detail-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
 

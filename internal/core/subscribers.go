@@ -793,6 +793,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 		FROM campaign_views cv
 		LEFT JOIN campaigns c ON c.id = cv.campaign_id
 		WHERE cv.subscriber_id = ?
+		  AND COALESCE(cv.is_suspected_privacy_open, 0) = 0
 		GROUP BY c.id, c.subject
 		ORDER BY c.id`, sid); err != nil {
 		c.log.Printf("error fetching subscriber campaign views: %v", err)
@@ -842,6 +843,7 @@ func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, e
 		LEFT JOIN campaigns c ON c.id = cv.campaign_id
 		LEFT JOIN subscribers s ON s.id = cv.subscriber_id
 		WHERE s.rowid = ?
+		  AND COALESCE(cv.is_suspected_privacy_open, 0) = 0
 		GROUP BY c.id, c.uuid, c.name, c.subject
 		ORDER BY last_viewed_at DESC`, id); err != nil {
 		c.log.Printf("error fetching subscriber activity views: %v", err)
@@ -1012,7 +1014,7 @@ func (c *Core) hasSubscriberListsSQLite(subIDs, listIDs []int) (map[int]bool, er
 	}
 
 	q := `
-		SELECT s.id AS subscriber_id,
+		SELECT s.rowid AS subscriber_id,
 			CASE
 				WHEN EXISTS (
 					SELECT 1 FROM subscriber_lists sl
@@ -1021,7 +1023,7 @@ func (c *Core) hasSubscriberListsSQLite(subIDs, listIDs []int) (map[int]bool, er
 				) THEN 1 ELSE 0
 			END AS has
 		FROM subscribers s
-		WHERE s.id IN (` + sqlitePlaceholders(len(subIDs)) + `)
+		WHERE s.rowid IN (` + sqlitePlaceholders(len(subIDs)) + `)
 	`
 	args := make([]any, 0, len(listIDs)+len(subIDs))
 	for _, id := range listIDs {
@@ -1254,25 +1256,25 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, subIDs, listIDs 
 	id := 0
 	return func() ([]models.SubscriberExport, error) {
 		whereSQL, args := c.subscriberFilterSQLite(searchStr, cond, listIDs, subStatus)
-		whereSQL = `subscribers.id > ? AND ` + whereSQL
+		whereSQL = `subscribers.rowid > ? AND ` + whereSQL
 		args = append([]any{id}, args...)
 
 		if len(subIDs) > 0 {
-			whereSQL += ` AND subscribers.id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
+			whereSQL += ` AND subscribers.rowid IN (` + sqlitePlaceholders(len(subIDs)) + `)`
 			for _, sid := range subIDs {
 				args = append(args, sid)
 			}
 		}
 
 		q := `
-			SELECT subscribers.id, subscribers.uuid, subscribers.email, subscribers.phone, subscribers.name,
+			SELECT subscribers.rowid AS id, subscribers.uuid, subscribers.email, subscribers.phone, subscribers.name,
 			       subscribers.first_name, subscribers.last_name,
 			       subscribers.status, subscribers.attribs,
 			       subscribers.created AS created_at,
 			       subscribers.updated AS updated_at
 			FROM subscribers
 			WHERE ` + whereSQL + `
-			ORDER BY subscribers.id ASC`
+			ORDER BY subscribers.rowid ASC`
 		if batchSize > 0 {
 			q += ` LIMIT ?`
 			args = append(args, batchSize)

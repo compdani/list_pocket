@@ -9,8 +9,8 @@ import (
 	"strings"
 	txttpl "text/template"
 
-	"github.com/jmoiron/sqlx/types"
 	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/jmoiron/sqlx/types"
 	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
@@ -81,10 +81,12 @@ type Campaign struct {
 
 // CampaignMeta contains fields tracking a campaign's progress.
 type CampaignMeta struct {
-	CampaignID int `db:"campaign_id" json:"-"`
-	Views      int `db:"views" json:"views"`
-	Clicks     int `db:"clicks" json:"clicks"`
-	Bounces    int `db:"bounces" json:"bounces"`
+	CampaignID     int `db:"campaign_id" json:"-"`
+	Views          int `db:"views" json:"views"`
+	RawViews       int `db:"raw_views" json:"raw_views"`
+	SuspectedViews int `db:"suspected_views" json:"suspected_views"`
+	Clicks         int `db:"clicks" json:"clicks"`
+	Bounces        int `db:"bounces" json:"bounces"`
 
 	// This is a list of {list_id, name} pairs unlike Subscriber.Lists[]
 	// because lists can be deleted after a campaign is finished, resulting
