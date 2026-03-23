@@ -148,6 +148,19 @@
               class="mb-4"
             />
 
+            <v-text-field
+              v-model="form.preheader"
+              label="Preheader"
+              maxlength="200"
+              name="preheader"
+              :disabled="!canEdit"
+              placeholder="Optional inbox preview text"
+              type="text"
+              variant="outlined"
+              density="comfortable"
+              class="mb-4"
+            />
+
             <v-combobox
               v-model="form.fromEmail"
               :items="availableFromAddresses"
@@ -414,6 +427,7 @@
         ref="contentEditor"
         :key="editorKey"
         v-model="form.content"
+        :preheader="form.preheader"
         :id="data.id"
         :title="data.name"
         :disabled="!canEdit"
@@ -702,6 +716,7 @@ export default {
         archiveSlug: '',
         name: '',
         subject: '',
+        preheader: '',
         fromEmail: '',
         headersStr: '[]',
         headers: [],
@@ -738,6 +753,7 @@ export default {
         },
       },
       lastAutoFromEmail: '',
+      isHydratingCampaignForm: false,
     };
   },
 
@@ -799,7 +815,7 @@ export default {
       const smtpMeta = this.getSMTPMetaForMessenger(this.form.messenger);
       const nextDefault = (smtpMeta && smtpMeta.defaultFromEmail) || this.serverConfig.from_email || '';
       const current = (this.form.fromEmail || '').trim();
-      const shouldReplace = force || !current || current === this.lastAutoFromEmail || current === (this.serverConfig.from_email || '');
+      const shouldReplace = force || !current || current === this.lastAutoFromEmail;
 
       if (shouldReplace) {
         this.form.fromEmail = nextDefault;
@@ -966,6 +982,15 @@ export default {
           return;
         }
       }
+      if (!attribs || typeof attribs !== 'object') {
+        attribs = {};
+      }
+      const preheader = String(this.form.preheader || '').trim();
+      if (preheader) {
+        attribs.preheader = preheader;
+      } else {
+        delete attribs.preheader;
+      }
       this.form.attribs = attribs;
 
       switch (typ) {
@@ -983,8 +1008,10 @@ export default {
 
     getCampaign(id) {
       return this.$api.getCampaign(id).then((data) => {
+        this.isHydratingCampaignForm = true;
         const batching = this.getBatching(data.attribs);
         const userAttribs = this.stripSystemAttribs(data.attribs);
+        const preheader = typeof userAttribs.preheader === 'string' ? userAttribs.preheader : '';
         const nextForm = {
           ...this.form,
           ...data,
@@ -993,6 +1020,7 @@ export default {
           headersStr: JSON.stringify(data.headers, null, 4),
           archiveMetaStr: data.archiveMeta ? JSON.stringify(data.archiveMeta, null, 4) : '{}',
           attribsStr: JSON.stringify(userAttribs, null, 4),
+          preheader,
           batching,
 
           // The structure that is populated by editor input event.
@@ -1014,6 +1042,9 @@ export default {
         this.lastAutoFromEmail = nextForm.fromEmail || '';
         this.isAttachFieldVisible = this.form.media.length > 0;
         this.data = data;
+        this.$nextTick(() => {
+          this.isHydratingCampaignForm = false;
+        });
       });
     },
 
@@ -1032,6 +1063,7 @@ export default {
         content_type: this.form.content.contentType,
         body: this.form.content.body,
         altbody: this.form.content.contentType !== 'plain' ? this.form.altbody : null,
+        attribs: this.form.attribs,
         subscribers: this.form.testEmails,
         media: this.form.media.map((m) => m.id),
       };
@@ -1382,8 +1414,11 @@ export default {
     },
 
     // eslint-disable-next-line func-names
-    'form.messenger': function () {
-      this.applyDefaultFromEmailForMessenger();
+    'form.messenger': function (nextMessenger, prevMessenger) {
+      if (this.isHydratingCampaignForm || nextMessenger === prevMessenger) {
+        return;
+      }
+      this.applyDefaultFromEmailForMessenger(true);
     },
 
     // eslint-disable-next-line func-names
@@ -1400,9 +1435,6 @@ export default {
 
   mounted() {
     window.onbeforeunload = () => this.isUnsaved() || null;
-
-    // Fill default form fields.
-    this.applyDefaultFromEmailForMessenger(true);
 
     // New campaign.
     const { id } = this.$route.params;

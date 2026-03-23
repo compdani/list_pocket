@@ -235,3 +235,21 @@ func (c *Campaign) ConvertContent(from, to string) (string, error) {
 
 	return out, nil
 }
+
+func (c *Campaign) Preheader() string {
+	if c == nil || c.Attribs == nil {
+		return ""
+	}
+
+	v, ok := c.Attribs["preheader"]
+	if !ok {
+		return ""
+	}
+
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+
+	return strings.TrimSpace(s)
+}

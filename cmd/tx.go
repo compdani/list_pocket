@@ -136,6 +136,7 @@ func (a *App) SendTxMessage(c echo.Context) error {
 			ContentType:      m.ContentType,
 			Messenger:        m.Messenger,
 			Subject:          m.Subject,
+			Preheader:        m.Preheader,
 			Attachments:      m.Attachments,
 		}); err != nil {
 			a.log.Printf("error sending transactional message (%s): %v", sub.Email, err)

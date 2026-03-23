@@ -282,6 +282,15 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 	if isPost {
 		camp.ContentType = contentType
 		camp.Body = c.FormValue("body")
+		preheader := c.FormValue("preheader")
+		if camp.Attribs == nil {
+			camp.Attribs = models.JSON{}
+		}
+		if strings.TrimSpace(preheader) == "" {
+			delete(camp.Attribs, "preheader")
+		} else {
+			camp.Attribs["preheader"] = preheader
+		}
 
 		// For visual campaigns, template body from the DB shouldn't be used.
 		if contentType == models.CampaignContentTypeVisual {
@@ -758,6 +767,9 @@ func (a *App) TestCampaign(c echo.Context) error {
 	camp.Messenger = req.Messenger
 	camp.ContentType = req.ContentType
 	camp.Headers = req.Headers
+	if req.Attribs != nil {
+		camp.Attribs = req.Attribs
+	}
 	camp.TemplateID = req.TemplateID
 	for _, id := range req.MediaIDs {
 		if id > 0 {
