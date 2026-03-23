@@ -1,101 +1,55 @@
 <template>
   <!-- Two-way Data-Binding -->
   <div class="editor">
-    <v-row class="mb-4">
-      <v-col cols="12" sm="9">
-        <v-select
-          v-model="contentTypeSel"
-          :disabled="disabled"
-          :label="$t('campaigns.format')"
-          :items="Object.entries(contentTypes).map(([key, name]) => ({ value: key, title: name }))"
-          item-title="title"
-          item-value="value"
-          name="content_type"
-          class="mb-4"
-        />
+    <v-toolbar class="mb-1">
+      <v-select v-model="contentTypeSel" :disabled="isContentTypeSelectDisabled" :label="$t('campaigns.format')"
+        :items="Object.entries(contentTypes).map(([key, name]) => ({ value: key, title: name }))" item-title="title"
+        item-value="value" name="content_type" hide-details class="mx-2" variant="outlined" density="compact" />
+      <v-spacer />
 
-        <v-select
-          v-if="self.contentType !== 'visual'"
-          v-model="templateId"
-          :label="$tc('globals.terms.template')"
-          :placeholder="$t('globals.terms.none')"
-          :items="validTemplates"
-          item-title="name"
-          item-value="id"
-          name="template"
-          :disabled="disabled"
-          clearable
-        />
+      <v-btn v-if="isContentTypeLocked" color="warning" prepend-icon="mdi-lock-open-variant-outline"
+        :disabled="disabled" @click="onUnlockContentTypeSelect">
+        Unlock
+      </v-btn>
+      <v-btn v-if="!isVisualTplSelector && self.contentType === 'visual'" @click="onShowVisualTplSelector"
+        variant="text" prepend-icon="mdi-file-find-outline" data-cy="btn-select-visual-tpl">
+        {{ $t('campaigns.importVisualTemplate') }}
+      </v-btn>
+      <v-btn @click="onTogglePreview" color="primary" prepend-icon="mdi-file-find-outline" data-cy="btn-preview"
+        aria-keyshortcuts="F9">
+        <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
+      </v-btn>
 
-        <div v-else>
-          <v-btn
-            v-if="!isVisualTplSelector"
-            @click="onShowVisualTplSelector"
-            variant="text"
-            prepend-icon="mdi-file-find-outline"
-            data-cy="btn-select-visual-tpl"
-          >
-            {{ $t('campaigns.importVisualTemplate') }}
+      <template #extension v-if="self.contentType !== 'visual'">
+        <v-select v-model="templateId" :label="$tc('globals.terms.template')" :placeholder="$t('globals.terms.none')"
+          :items="validTemplates" item-title="name" item-value="id" name="template" :disabled="disabled" clearable hide-details variant="outlined" density="compact" class="mx-2" />
+      </template>
+      <template #extension v-if="isVisualTplSelector">
+
+          <v-select v-model="visualTemplateId" @update:model-value="() => isVisualTplDisabled = false"
+            :label="$tc('globals.terms.template')" :placeholder="$t('globals.terms.none')" :items="validTemplates"
+            item-title="name" item-value="id" name="template" :disabled="disabled" clearable class="mx-2"
+            hide-details variant="outlined" density="compact" />
+
+          <v-btn :disabled="disabled || isVisualTplDisabled || !visualTemplateId" @click="onImportVisualTpl"
+            color="primary" prepend-icon="mdi-content-save-outline" data-cy="btn-save-visual-tpl"
+            :loading="loading.templates">
+            {{ $t('globals.terms.import') }}
           </v-btn>
-          <div v-else class="d-flex align-center gap-2">
-            <v-select
-              v-model="visualTemplateId"
-              @update:model-value="() => isVisualTplDisabled = false"
-              :label="$tc('globals.terms.template')"
-              :placeholder="$t('globals.terms.none')"
-              :items="validTemplates"
-              item-title="name"
-              item-value="id"
-              name="template"
-              :disabled="disabled"
-              clearable
-              class="copy-visual-template-list"
-            />
+      </template>
+    </v-toolbar>
 
-            <v-btn
-              :disabled="disabled || isVisualTplDisabled || !visualTemplateId"
-              @click="onImportVisualTpl"
-              color="primary"
-              prepend-icon="mdi-content-save-outline"
-              data-cy="btn-save-visual-tpl"
-              :loading="loading.templates"
-            >
-              {{ $t('globals.terms.import') }}
-            </v-btn>
-          </div>
-        </div>
-      </v-col>
-      <v-col cols="12" sm="3" class="text-right">
-        <v-btn
-          @click="onTogglePreview"
-          color="primary"
-          prepend-icon="mdi-file-find-outline"
-          data-cy="btn-preview"
-          aria-keyshortcuts="F9"
-        >
-          <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
-        </v-btn>
-      </v-col>
-    </v-row>
 
-    <richtext-editor
-      v-if="self.contentType === 'richtext'"
-      v-model="self.body"
-      :disabled="disabled"
-      key="editor-richtext"
-    />
+
+    <richtext-editor v-if="self.contentType === 'richtext'" v-model="self.body" :disabled="disabled"
+      key="editor-richtext" />
 
     <!-- visual editor //-->
     <visual-editor v-if="self.contentType === 'visual'" :source="self.bodySource" @change="onVisualEditorChange"
       height="65vh" ref="visualEditor" />
 
-    <grapes-mjml-editor
-      v-if="self.contentType === 'grapes_mjml'"
-      :source="self.bodySource"
-      :data="self.body"
-      height="65vh"
-      @change="onGrapesEditorChange"
-    />
+    <grapes-mjml-editor v-if="self.contentType === 'grapes_mjml'" ref="grapesEditor" :source="self.bodySource"
+      :data="self.body" height="65vh" @change="onGrapesEditorChange" />
 
     <!-- raw html editor //-->
     <code-editor lang="html" v-if="self.contentType === 'html'" v-model="self.body" key="editor-html" />
@@ -104,13 +58,8 @@
     <code-editor lang="markdown" v-if="self.contentType === 'markdown'" v-model="self.body" key="editor-markdown" />
 
     <!-- plain text //-->
-    <v-textarea
-      v-if="self.contentType === 'plain'"
-      v-model="self.body"
-      name="content"
-      ref="plainEditor"
-      class="plain-editor"
-    />
+    <v-textarea v-if="self.contentType === 'plain'" v-model="self.body" name="content" ref="plainEditor"
+      class="plain-editor" />
 
     <!-- campaign preview //-->
     <campaign-preview v-if="isPreviewing" is-post @close="onTogglePreview" type="campaign" :id="id" :title="title"
@@ -171,6 +120,7 @@ export default {
       contentTypeSel: this.$props.modelValue.contentType,
       templateId: null,
       visualTemplateId: null,
+      isTypeSelectorLocked: true,
     };
   },
 
@@ -194,7 +144,29 @@ export default {
       );
     },
 
+    isGuardedEditorSwitch(from, to) {
+      return (from === 'visual' || from === 'grapes_mjml') && from !== to;
+    },
+
+    isGuardedType(type) {
+      return type === 'visual' || type === 'grapes_mjml';
+    },
+
+    onUnlockContentTypeSelect() {
+      this.isTypeSelectorLocked = false;
+    },
+
+    htmlToMjml(html) {
+      const source = String(html ?? '').trim();
+      const fallback = '<div></div>';
+      return `<mjml><mj-body><mj-section><mj-column><mj-raw>${source || fallback}</mj-raw></mj-column></mj-section></mj-body></mjml>`;
+    },
+
     convertContentType(to, from) {
+      if (from === 'grapes_mjml' && from !== to) {
+        this.syncGrapesHtml();
+      }
+
       let body = this.self.body ?? '';
       let bodySource = null;
 
@@ -226,11 +198,15 @@ export default {
           }
 
           case 'visual':
-          case 'grapes_mjml': {
-            const md = turndown.turndown(body).replace(/\n\n+/ig, '\n\n');
-            bodySource = JSON.stringify(markdownToVisualBlock(md));
+            {
+              const md = turndown.turndown(body).replace(/\n\n+/ig, '\n\n');
+              bodySource = JSON.stringify(markdownToVisualBlock(md));
+              break;
+            }
+
+          case 'grapes_mjml':
+            bodySource = this.htmlToMjml(body);
             break;
-          }
 
           default:
             // Switching between HTML formats, no need to do anything further
@@ -256,8 +232,10 @@ export default {
         // Plain to an HTML type, change plain line breaks to HTML breaks.
       } else if (from === 'plain' && (to === 'richtext' || to === 'html')) {
         body = body.replace(/\n/ig, '<br>\n');
-      } else if (to === 'visual' || to === 'grapes_mjml') {
+      } else if (to === 'visual') {
         bodySource = JSON.stringify(markdownToVisualBlock(body));
+      } else if (to === 'grapes_mjml') {
+        bodySource = this.htmlToMjml(body);
       }
 
       // =======================================================================
@@ -276,11 +254,15 @@ export default {
           this.self.contentType = to;
           this.self.body = body;
           this.self.bodySource = bodySource;
+          if (this.isGuardedType(to)) {
+            this.isTypeSelectorLocked = true;
+          }
         });
       }
     },
 
     onTogglePreview() {
+      this.syncGrapesHtml();
       this.isPreviewing = !this.isPreviewing;
     },
 
@@ -304,8 +286,26 @@ export default {
     },
 
     onGrapesEditorChange({ body, source }) {
-      this.self.body = body;
+      if (typeof body === 'string') {
+        this.self.body = body;
+      }
       this.self.bodySource = source;
+    },
+
+    syncGrapesHtml() {
+      if (this.self.contentType !== 'grapes_mjml') {
+        return;
+      }
+      const compiled = this.$refs.grapesEditor?.getCompiledContent?.();
+      if (!compiled) {
+        return;
+      }
+      if (compiled.source) {
+        this.self.bodySource = compiled.source;
+      }
+      if (compiled.body) {
+        this.self.body = compiled.body;
+      }
     },
 
     beautifyHTML(str) {
@@ -417,6 +417,14 @@ export default {
       }
       return this.templates.filter((t) => (t.type === typ));
     },
+
+    isContentTypeLocked() {
+      return this.isGuardedType(this.self.contentType) && this.isTypeSelectorLocked;
+    },
+
+    isContentTypeSelectDisabled() {
+      return this.disabled || this.isContentTypeLocked;
+    },
   },
 
   watch: {
@@ -429,6 +437,9 @@ export default {
 
         if (val.contentType && val.contentType !== this.contentTypeSel) {
           this.contentTypeSel = val.contentType;
+          if (this.isGuardedType(val.contentType)) {
+            this.isTypeSelectorLocked = true;
+          }
         }
 
         if (val.templateId !== this.templateId) {

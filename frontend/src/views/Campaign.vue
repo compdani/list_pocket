@@ -411,6 +411,7 @@
     <section v-show="activeTab === 'content'">
       <editor
         v-if="data.id"
+        ref="contentEditor"
         :key="editorKey"
         v-model="form.content"
         :id="data.id"
@@ -741,6 +742,12 @@ export default {
   },
 
   methods: {
+    syncEditorBeforeSubmit() {
+      if (this.form.content.contentType !== 'grapes_mjml') {
+        return;
+      }
+      this.$refs.contentEditor?.syncGrapesHtml?.();
+    },
     formatDateTime(s) {
       return dayjs(s).format('YYYY-MM-DD HH:mm');
     },
@@ -921,6 +928,7 @@ export default {
     },
 
     onSubmit(typ) {
+      this.syncEditorBeforeSubmit();
       // Validate custom JSON headers.
       if (this.form.headersStr && this.form.headersStr !== '[]') {
         try {
@@ -1157,6 +1165,7 @@ export default {
       this.$utils.confirm(
         null,
         () => {
+          this.syncEditorBeforeSubmit();
           // First save the campaign.
           this.updateCampaign().then(() => {
             // Then start/schedule it.
