@@ -7,6 +7,7 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
@@ -35,18 +36,45 @@ type Sendgrid struct {
 
 // NewSendgrid returns a new Sendgrid instance.
 func NewSendgrid(key string) (*Sendgrid, error) {
-	// Get the certificate from the key.
-	sigB, err := base64.StdEncoding.DecodeString(key)
+	pubKey, err := parseSendgridPublicKey(key)
 	if err != nil {
 		return nil, err
+	}
+
+	ecdsaPubKey, ok := pubKey.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, errors.New("sendgrid webhook key is not an ECDSA public key")
+	}
+
+	return &Sendgrid{pubKey: ecdsaPubKey}, nil
+}
+
+func parseSendgridPublicKey(key string) (any, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil, errors.New("sendgrid webhook key is empty")
+	}
+
+	// Try PEM first as that's the usual format from SendGrid.
+	if block, _ := pem.Decode([]byte(key)); block != nil {
+		pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("invalid sendgrid PEM public key: %w", err)
+		}
+		return pubKey, nil
+	}
+
+	// Fallback to raw base64-encoded DER.
+	sigB, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, fmt.Errorf("invalid sendgrid webhook key: expected PEM or base64 DER: %w", err)
 	}
 
 	pubKey, err := x509.ParsePKIXPublicKey(sigB)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid sendgrid DER public key: %w", err)
 	}
-
-	return &Sendgrid{pubKey: pubKey.(*ecdsa.PublicKey)}, nil
+	return pubKey, nil
 }
 
 // ProcessBounce processes Sendgrid bounce notifications and returns one or more Bounce objects.
