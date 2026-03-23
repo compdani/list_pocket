@@ -107,12 +107,6 @@
           <div class="charts-grid">
             <div class="chart-block">
               <h3 class="title is-size-6 chart-title">
-                {{ $t('dashboard.campaignViews') }}
-              </h3>
-              <chart type="line" v-if="campaignViews" :data="campaignViews" />
-            </div>
-            <div class="chart-block">
-              <h3 class="title is-size-6 chart-title">
                 {{ $t('analytics.openTracking') }}
               </h3>
               <div v-if="openTrackingBreakdown" class="chart-legend">
@@ -161,7 +155,6 @@ export default {
     return {
       isChartsLoading: true,
       isCountsLoading: true,
-      campaignViews: null,
       campaignClicks: null,
       openTrackingBreakdown: null,
       counts: {
@@ -186,7 +179,6 @@ export default {
 
       this.$api.getDashboardCharts().then((data) => {
         this.isChartsLoading = false;
-        this.campaignViews = this.makeChart(data.campaignViews);
         this.campaignClicks = this.makeChart(data.linkClicks);
         this.openTrackingBreakdown = this.makeOpenTrackingChart(
           data.campaignViewsRaw,
