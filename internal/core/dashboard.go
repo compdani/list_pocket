@@ -68,7 +68,8 @@ func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error
 			FROM (
 				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
 				FROM campaign_views
-				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
+				WHERE COALESCE(is_suspected_privacy_open, 0) = 0
+				  AND DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
 				GROUP BY DATE(datetime(created, ?))
 				ORDER BY DATE(datetime(created, ?))
 			)

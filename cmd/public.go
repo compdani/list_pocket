@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/compdani/list_pocket/internal/captcha"
 	"github.com/compdani/list_pocket/internal/i18n"
@@ -102,6 +103,22 @@ type subFormTpl struct {
 var (
 	pixelPNG = drawTransparentImage(3, 14)
 )
+
+func trackingOpenEvent(c echo.Context) models.OpenEvent {
+	ipAddress := strings.TrimSpace(c.Request().Header.Get("X-Forwarded-For"))
+	if ipAddress != "" {
+		ipAddress = strings.TrimSpace(strings.Split(ipAddress, ",")[0])
+	}
+	if ipAddress == "" {
+		ipAddress = strings.TrimSpace(c.RealIP())
+	}
+
+	return models.OpenEvent{
+		IPAddress: ipAddress,
+		UserAgent: strings.TrimSpace(c.Request().UserAgent()),
+		OpenedAt:  time.Now().UTC(),
+	}
+}
 
 // Render executes and renders a template for echo.
 func (t *tplRenderer) Render(w io.Writer, name string, data any, c echo.Context) error {
@@ -600,7 +617,7 @@ func (a *App) RegisterCampaignView(c echo.Context) error {
 	// Exclude dummy hits from template previews.
 	campUUID := c.Param("campUUID")
 	if campUUID != dummyUUID {
-		if err := a.core.RegisterCampaignView(campUUID, subUUID); err != nil {
+		if err := a.core.RegisterCampaignView(campUUID, subUUID, trackingOpenEvent(c)); err != nil {
 			a.log.Printf("error registering campaign view: %s", err)
 		}
 	}
@@ -637,7 +654,7 @@ func (a *App) RegisterTxMessageView(c echo.Context) error {
 		return c.Blob(http.StatusOK, "image/png", pixelPNG)
 	}
 
-	if err := a.core.RegisterTransactionalMessageView(c.Param("msgUUID")); err != nil {
+	if err := a.core.RegisterTransactionalMessageView(c.Param("msgUUID"), trackingOpenEvent(c)); err != nil {
 		a.log.Printf("error registering transactional message view: %s", err)
 	}
 

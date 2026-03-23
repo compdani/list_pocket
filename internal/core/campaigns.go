@@ -38,10 +38,6 @@ func sqliteCampaignTimeValue(v null.Time) string {
 	return ""
 }
 
-func sqliteUniqueCampaignViewsExpr(alias string) string {
-	return "COUNT(DISTINCT COALESCE(CAST(" + alias + ".subscriber_id AS TEXT), 'anon:' || " + alias + ".rowid))"
-}
-
 func normalizeAnalyticsDateInput(value string, endOfDay bool) (string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -121,6 +117,8 @@ type sqliteCampaignRow struct {
 	Lists             []byte         `db:"lists"`
 	Media             []byte         `db:"media"`
 	Views             int            `db:"views"`
+	RawViews          int            `db:"raw_views"`
+	SuspectedViews    int            `db:"suspected_views"`
 	Clicks            int            `db:"clicks"`
 	Bounces           int            `db:"bounces"`
 	Total             int            `db:"total"`
@@ -195,14 +193,16 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 			UpdatedAt: parseNullTime(row.UpdatedAt),
 		},
 		CampaignMeta: models.CampaignMeta{
-			Views:     row.Views,
-			Clicks:    row.Clicks,
-			Bounces:   row.Bounces,
-			Lists:     types.JSONText(row.Lists),
-			Media:     types.JSONText(row.Media),
-			StartedAt: parseNullTime(row.StartedAt),
-			ToSend:    row.ToSend,
-			Sent:      row.Sent,
+			Views:          row.Views,
+			RawViews:       row.RawViews,
+			SuspectedViews: row.SuspectedViews,
+			Clicks:         row.Clicks,
+			Bounces:        row.Bounces,
+			Lists:          types.JSONText(row.Lists),
+			Media:          types.JSONText(row.Media),
+			StartedAt:      parseNullTime(row.StartedAt),
+			ToSend:         row.ToSend,
+			Sent:           row.Sent,
 		},
 		UUID:              row.UUID,
 		Type:              row.Type,
@@ -640,7 +640,9 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS raw_views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS suspected_views,
 		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 	FROM campaigns c
@@ -737,7 +739,9 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS raw_views,
+		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS suspected_views,
 		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 	FROM campaigns c
@@ -789,7 +793,9 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 				WHERE cl.campaign_id = c.id
 			), '[]') AS lists,
 			'[]' AS media,
-			(SELECT `+sqliteUniqueCampaignViewsExpr("cv")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS raw_views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS suspected_views,
 			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces,
 			0 AS total
@@ -821,7 +827,9 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 			'[]' AS lists,
 			'[]' AS media,
-			(SELECT `+sqliteUniqueCampaignViewsExpr("cv")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS raw_views,
+			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS suspected_views,
 			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
 			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
 		FROM campaigns c
@@ -1178,15 +1186,43 @@ func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate st
 }
 
 // RegisterCampaignView registers a subscriber's view on a campaign.
-func (c *Core) RegisterCampaignView(campUUID, subUUID string) error {
-	if _, err := c.db.Exec(`
-		INSERT INTO campaign_views (campaign_id, subscriber_id, created)
-		SELECT c.id, s.id, (strftime('%Y-%m-%d %H:%M:%fZ'))
+func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenEvent) error {
+	event = normalizeOpenEvent(event)
+
+	var row struct {
+		CampaignID   string         `db:"campaign_id"`
+		SubscriberID sql.NullString `db:"subscriber_id"`
+		StartedAt    string         `db:"started_at"`
+	}
+	if err := c.db.Get(&row, `
+		SELECT c.id AS campaign_id, s.id AS subscriber_id, COALESCE(c.started_at, '') AS started_at
 		FROM campaigns c
 		LEFT JOIN subscribers s ON s.uuid = ?
 		WHERE c.uuid = ?
 		LIMIT 1
 	`, subUUID, campUUID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		c.log.Printf("error resolving campaign view target: %s", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+
+	startedAt := time.Time{}
+	if parsed := parseNullTime(row.StartedAt); parsed.Valid {
+		startedAt = parsed.Time
+	}
+	suspected, meta, err := classifyPrivacyOpen(event, startedAt, "campaign_started_at")
+	if err != nil {
+		c.log.Printf("error marshaling campaign view metadata: %s", err)
+		meta = "{}"
+	}
+
+	if _, err := c.db.Exec(`
+		INSERT INTO campaign_views (campaign_id, subscriber_id, meta, is_suspected_privacy_open, created)
+		VALUES (?, ?, ?, ?, ?)
+	`, row.CampaignID, row.SubscriberID, meta, suspected, sqliteTimestampValue(event.OpenedAt)); err != nil {
 		c.log.Printf("error registering campaign view: %s", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
@@ -1247,9 +1283,21 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	switch typ {
 	case "views":
 		table = "campaign_views"
+		countExpr = "COUNT(CASE WHEN COALESCE(" + table + ".is_suspected_privacy_open, 0) = 0 THEN 1 END)"
 	case "views_unique":
 		table = "campaign_views"
-		countExpr = sqliteUniqueCampaignViewsExpr(table)
+		countExpr = sqliteUniqueCampaignViewsExpr(table, "COALESCE("+table+".is_suspected_privacy_open, 0) = 0")
+	case "views_raw":
+		table = "campaign_views"
+	case "views_unique_raw":
+		table = "campaign_views"
+		countExpr = sqliteUniqueCampaignViewsExpr(table, "")
+	case "views_suspected":
+		table = "campaign_views"
+		countExpr = "COUNT(CASE WHEN COALESCE(" + table + ".is_suspected_privacy_open, 0) = 1 THEN 1 END)"
+	case "views_unique_suspected":
+		table = "campaign_views"
+		countExpr = sqliteUniqueCampaignViewsExpr(table, "COALESCE("+table+".is_suspected_privacy_open, 0) = 1")
 	case "clicks":
 		table = "link_clicks"
 	case "bounces":

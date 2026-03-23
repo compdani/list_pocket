@@ -182,6 +182,9 @@
           <div>
             <div class="text-caption font-weight-bold">{{ $t('campaigns.views') }}</div>
             <div class="text-caption">{{ $utils.formatNumber(item.views) }}</div>
+            <div class="text-caption text-medium-emphasis">
+              raw {{ $utils.formatNumber(item.rawViews || 0) }} / suspected {{ $utils.formatNumber(item.suspectedViews || 0) }}
+            </div>
           </div>
           <div>
             <div class="text-caption font-weight-bold">{{ $t('campaigns.clicks') }}</div>

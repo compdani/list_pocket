@@ -567,6 +567,26 @@ export const getCampaignLinkCounts = async (params) => http.get(
   { params: normalizeAnalyticsParams(params), loading: models.campaigns },
 );
 
+export const getCampaignRawViewCounts = async (params) => http.get(
+  '/api/campaigns/analytics/views_raw',
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
+);
+
+export const getCampaignUniqueRawViewCounts = async (params) => http.get(
+  '/api/campaigns/analytics/views_unique_raw',
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
+);
+
+export const getCampaignSuspectedViewCounts = async (params) => http.get(
+  '/api/campaigns/analytics/views_suspected',
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
+);
+
+export const getCampaignUniqueSuspectedViewCounts = async (params) => http.get(
+  '/api/campaigns/analytics/views_unique_suspected',
+  { params: normalizeAnalyticsParams(params), loading: models.campaigns },
+);
+
 export const convertCampaignContent = async (data) => http.post(
   `/api/campaigns/${data.id}/content`,
   data,

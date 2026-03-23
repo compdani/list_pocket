@@ -1,11 +1,14 @@
 <template>
   <section class="analytics">
-    <v-container>
+    <v-container class="analytics-container">
       <v-row>
         <v-col cols="12">
-          <h1 class="text-h4 mb-4">
+          <h1 class="text-h4 mb-1">
             {{ $t('analytics.title') }}
           </h1>
+          <p class="text-body-2 text-medium-emphasis mb-6 analytics-subtitle">
+            {{ $t('analytics.title') }} {{ $t('globals.terms.dashboard').toLowerCase() }}
+          </p>
         </v-col>
       </v-row>
 
@@ -22,82 +25,173 @@
         </v-col>
       </v-row>
 
-      <v-form @submit.prevent="onSubmit" class="mb-6">
-        <v-row>
-          <v-col cols="12" md="6">
-            <v-autocomplete
-              v-model="form.campaigns"
-              :items="queriedCampaigns"
-              :label="$t('globals.terms.campaigns')"
-              item-title="name"
-              item-value="id"
-              return-object
-              multiple
-              chips
-              closable-chips
-              :placeholder="$t('globals.terms.campaigns')"
-              :loading="isSearchLoading"
-              @focus="ensureCampaignOptions"
-              @update:search="queryCampaigns"
-            />
-          </v-col>
+      <v-card variant="outlined" class="mb-6 analytics-filters-card">
+        <v-card-text>
+          <v-form @submit.prevent="onSubmit">
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-autocomplete
+                  v-model="form.campaigns"
+                  :items="queriedCampaigns"
+                  :label="$t('globals.terms.campaigns')"
+                  item-title="name"
+                  item-value="id"
+                  return-object
+                  multiple
+                  chips
+                  closable-chips
+                  :placeholder="$t('globals.terms.campaigns')"
+                  :loading="isSearchLoading"
+                  @focus="ensureCampaignOptions"
+                  @update:search="queryCampaigns"
+                />
+              </v-col>
 
-          <v-col cols="12" md="3">
-            <v-text-field
-              :value="toDateTimeLocal(form.from)"
-              :label="$t('analytics.fromDate')"
-              type="datetime-local"
-              data-cy="from"
-              @input="onFromInput($event)"
-            />
-          </v-col>
+              <v-col cols="12" md="3">
+                <v-text-field
+                  :value="toDateTimeLocal(form.from)"
+                  :label="$t('analytics.fromDate')"
+                  type="datetime-local"
+                  data-cy="from"
+                  @input="onFromInput($event)"
+                />
+              </v-col>
 
-          <v-col cols="12" md="3">
-            <v-text-field
-              :value="toDateTimeLocal(form.to)"
-              :label="$t('analytics.toDate')"
-              type="datetime-local"
-              data-cy="to"
-              @input="onToInput($event)"
-            />
-          </v-col>
+              <v-col cols="12" md="3">
+                <v-text-field
+                  :value="toDateTimeLocal(form.to)"
+                  :label="$t('analytics.toDate')"
+                  type="datetime-local"
+                  data-cy="to"
+                  @input="onToInput($event)"
+                />
+              </v-col>
 
-          <v-col cols="12" class="d-flex justify-end">
-            <v-btn
-              type="submit"
-              color="primary"
-              :disabled="form.campaigns.length === 0"
-              data-cy="btn-search"
-              icon="mdi-magnify"
-            />
-          </v-col>
-        </v-row>
-      </v-form>
+              <v-col cols="12" class="d-flex justify-end">
+                <v-btn
+                  type="submit"
+                  color="primary"
+                  :disabled="form.campaigns.length === 0"
+                  data-cy="btn-search"
+                  prepend-icon="mdi-magnify"
+                >
+                  {{ $t('globals.buttons.refresh') }}
+                </v-btn>
+              </v-col>
+            </v-row>
+          </v-form>
+        </v-card-text>
+      </v-card>
+
+      <!-- Open tracking breakdown panel -->
+      <v-row v-if="openTrackingVisible" class="mb-6">
+        <v-col cols="12">
+          <v-card variant="outlined" class="analytics-section-card">
+            <v-card-title class="text-subtitle-1 font-weight-bold pa-4 pb-2">
+              {{ $t('analytics.openTracking') }}
+            </v-card-title>
+            <v-card-subtitle class="px-4 pb-3">
+              {{ $t('analytics.openTrackingDesc') }}
+            </v-card-subtitle>
+            <v-card-text>
+              <!-- Summary stat chips -->
+              <v-row class="mb-2">
+                <v-col cols="12" md="4">
+                  <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-confirmed">
+                    <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.confirmedCount') }}</div>
+                    <div class="text-h5 font-weight-bold text-success">
+                      {{ $utils.niceNumber(counts.viewsUnique || counts.views) }}
+                    </div>
+                    <div v-if="counts.viewsUnique" class="text-caption text-medium-emphasis">
+                      {{ $utils.niceNumber(counts.views) }} {{ $t('analytics.totalViews').toLowerCase() }}
+                    </div>
+                  </div>
+                </v-col>
+                <v-col cols="12" md="4">
+                  <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-raw">
+                    <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.rawCount') }}</div>
+                    <div class="text-h5 font-weight-bold text-info">
+                      {{ $utils.niceNumber(counts.viewsUniqueRaw || counts.viewsRaw) }}
+                    </div>
+                    <div v-if="counts.viewsUniqueRaw" class="text-caption text-medium-emphasis">
+                      {{ $utils.niceNumber(counts.viewsRaw) }} {{ $t('analytics.totalViews').toLowerCase() }}
+                    </div>
+                  </div>
+                </v-col>
+                <v-col cols="12" md="4">
+                  <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-suspected">
+                    <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.suspectedCount') }}</div>
+                    <div class="text-h5 font-weight-bold text-warning">
+                      {{ $utils.niceNumber(counts.viewsUniqueSuspected || counts.viewsSuspected) }}
+                    </div>
+                    <div v-if="counts.viewsUniqueSuspected" class="text-caption text-medium-emphasis">
+                      {{ $utils.niceNumber(counts.viewsSuspected) }} {{ $t('analytics.totalViews').toLowerCase() }}
+                    </div>
+                  </div>
+                </v-col>
+              </v-row>
+
+              <v-row>
+                <v-col cols="12">
+                  <v-progress-circular
+                    v-if="openTrackingCombinedLoading"
+                    indeterminate
+                    color="primary"
+                    class="mx-auto d-block mb-4"
+                  />
+                  <div v-else-if="openTrackingCombinedData">
+                    <h3 class="text-h6 mb-3">
+                      {{ $t('analytics.openTracking') }}
+                    </h3>
+                    <div class="d-flex align-center flex-wrap ga-2 mb-3">
+                      <v-chip size="small" variant="tonal" color="info">
+                        {{ openTrackingLineNames.raw }}
+                      </v-chip>
+                      <v-chip size="small" variant="tonal" color="warning">
+                        {{ openTrackingLineNames.suspected }}
+                      </v-chip>
+                    </div>
+                    <div class="analytics-chart-wrap">
+                      <chart type="line" :data="openTrackingCombinedData" />
+                    </div>
+                  </div>
+                </v-col>
+              </v-row>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </v-row>
 
       <v-row>
         <v-col cols="12">
           <div v-for="k in analyticsChartKeys()" :key="k" class="mb-6">
             <template v-if="charts[k]">
-            <v-row>
-              <v-col cols="12" md="9">
-                <v-progress-circular
-                  v-if="charts[k].loading"
-                  indeterminate
-                  color="primary"
-                  class="mx-auto d-block mb-4"
-                />
-                <div v-else>
-                  <h3 v-if="charts[k].chart !== null" class="text-h6 mb-3">
-                    {{ charts[k].name }}
-                    <span class="text-caption text-medium-emphasis">({{ $utils.niceNumber(counts[k]) }})</span>
-                  </h3>
-                  <chart :type="charts[k].type" :data="charts[k].data" :on-click="charts[k].onClick" />
-                </div>
-              </v-col>
-              <v-col cols="12" md="3">
-                <chart v-if="!charts[k].loading" type="donut" :data="charts[k].donutData" />
-              </v-col>
-            </v-row>
+              <v-card variant="outlined" class="analytics-section-card">
+                <v-card-text>
+                  <v-row>
+                    <v-col cols="12" md="9">
+                      <v-progress-circular
+                        v-if="charts[k].loading"
+                        indeterminate
+                        color="primary"
+                        class="mx-auto d-block mb-4"
+                      />
+                      <div v-else>
+                        <h3 v-if="charts[k].chart !== null" class="text-h6 mb-3">
+                          {{ charts[k].name }}
+                          <span class="text-caption text-medium-emphasis">({{ $utils.niceNumber(counts[k]) }})</span>
+                        </h3>
+                        <div class="analytics-chart-wrap">
+                          <chart :type="charts[k].type" :data="charts[k].data" :on-click="charts[k].onClick" />
+                        </div>
+                      </div>
+                    </v-col>
+                    <v-col cols="12" md="3">
+                      <chart v-if="!charts[k].loading" type="donut" :data="charts[k].donutData" />
+                    </v-col>
+                  </v-row>
+                </v-card-text>
+              </v-card>
             </template>
           </div>
         </v-col>
@@ -138,6 +232,10 @@ export default {
       counts: {
         viewsUnique: 0,
         views: 0,
+        viewsUniqueRaw: 0,
+        viewsRaw: 0,
+        viewsUniqueSuspected: 0,
+        viewsSuspected: 0,
         clicks: 0,
         bounces: 0,
         unsubscribes: 0,
@@ -160,6 +258,44 @@ export default {
           data: null,
           fn: this.$api.getCampaignViewCounts,
           chartFn: this.makeCharts,
+          loading: false,
+        },
+
+        viewsRaw: {
+          name: this.$t('analytics.rawViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignRawViewCounts,
+          chartFn: this.makeCharts,
+          loading: false,
+        },
+
+        viewsUniqueRaw: {
+          name: this.$t('analytics.uniqueRawViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUniqueRawViewCounts,
+          chartFn: this.makeCharts,
+          loading: false,
+        },
+
+        viewsSuspected: {
+          name: this.$t('analytics.suspectedViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignSuspectedViewCounts,
+          chartFn: this.makeCharts,
+          donutColor: '#FFB50D',
+          loading: false,
+        },
+
+        viewsUniqueSuspected: {
+          name: this.$t('analytics.uniqueSuspectedViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUniqueSuspectedViewCounts,
+          chartFn: this.makeCharts,
+          donutColor: '#FFB50D',
           loading: false,
         },
 
@@ -370,6 +506,26 @@ export default {
       };
     },
 
+    aggregateLineDatasets(lineData, labels = []) {
+      if (!lineData || !Array.isArray(lineData.labels) || !Array.isArray(lineData.datasets)) {
+        return null;
+      }
+
+      const allLabels = labels.length > 0 ? labels : lineData.labels;
+      const totals = new Map(allLabels.map((label) => [label, 0]));
+      lineData.datasets.forEach((dataset) => {
+        (dataset.data || []).forEach((point) => {
+          if (!point || typeof point.x === 'undefined') {
+            return;
+          }
+          const current = totals.get(point.x) || 0;
+          totals.set(point.x, current + (point.y || 0));
+        });
+      });
+
+      return allLabels.map((label) => ({ x: label, y: totals.get(label) || 0 }));
+    },
+
     onSubmit() {
       this.$router.push({ query: { id: this.form.campaigns.map((c) => c.id), from: dayjs(this.form.from).unix(), to: dayjs(this.form.to).unix() } });
     },
@@ -429,15 +585,88 @@ export default {
       }
 
       if (!this.serverConfig.privacy.individual_tracking) {
-        return ['views', 'clicks', 'bounces', 'unsubscribes', 'links'];
+        return ['clicks', 'bounces', 'unsubscribes', 'links'];
       }
 
-      return ['viewsUnique', 'views', 'clicks', 'bounces', 'unsubscribes', 'links'];
+      return ['clicks', 'bounces', 'unsubscribes', 'links'];
+    },
+
+    openTrackingChartKeys() {
+      if (this.serverConfig.privacy.individual_tracking) {
+        return ['viewsUniqueRaw', 'viewsUniqueSuspected'];
+      }
+      return ['viewsRaw', 'viewsSuspected'];
+    },
+
+    openTrackingCountKeys() {
+      if (this.serverConfig.privacy.individual_tracking) {
+        return ['viewsUnique', 'viewsUniqueRaw', 'viewsUniqueSuspected'];
+      }
+      return ['views', 'viewsRaw', 'viewsSuspected'];
     },
   },
 
   computed: {
     ...mapState(['serverConfig']),
+
+    openTrackingVisible() {
+      return !this.serverConfig.privacy.disable_tracking
+        && (this.form.campaigns.length > 0)
+        && (this.counts.viewsRaw > 0 || this.counts.viewsUniqueRaw > 0
+            || this.counts.viewsSuspected > 0 || this.counts.viewsUniqueSuspected > 0
+            || this.counts.views > 0 || this.counts.viewsUnique > 0);
+    },
+
+    openTrackingCombinedLoading() {
+      return this.openTrackingChartKeys().some((key) => this.charts[key]?.loading);
+    },
+
+    openTrackingCombinedData() {
+      const [rawKey, suspectedKey] = this.openTrackingChartKeys();
+      const rawChart = this.charts[rawKey]?.data;
+      const suspectedChart = this.charts[suspectedKey]?.data;
+      if (!rawChart || !suspectedChart) {
+        return null;
+      }
+
+      const labels = [...new Set([...(rawChart.labels || []), ...(suspectedChart.labels || [])])];
+      const rawSeries = this.aggregateLineDatasets(rawChart, labels);
+      const suspectedSeries = this.aggregateLineDatasets(suspectedChart, labels);
+      if (!rawSeries || !suspectedSeries || labels.length === 0) {
+        return null;
+      }
+
+      return {
+        labels,
+        transitionLabel: rawChart.transitionLabel || suspectedChart.transitionLabel || null,
+        datasets: [
+          {
+            label: this.charts[rawKey].name,
+            data: rawSeries,
+            borderColor: '#3a82d6',
+            borderWidth: 2,
+            pointHoverBorderWidth: 5,
+            pointBorderWidth: 0.5,
+          },
+          {
+            label: this.charts[suspectedKey].name,
+            data: suspectedSeries,
+            borderColor: '#FFB50D',
+            borderWidth: 2,
+            pointHoverBorderWidth: 5,
+            pointBorderWidth: 0.5,
+          },
+        ],
+      };
+    },
+
+    openTrackingLineNames() {
+      const [rawKey, suspectedKey] = this.openTrackingChartKeys();
+      return {
+        raw: this.charts[rawKey]?.name || '',
+        suspected: this.charts[suspectedKey]?.name || '',
+      };
+    },
   },
 
   created() {
@@ -474,7 +703,12 @@ export default {
           this.mergeCampaignOptions(this.form.campaigns);
 
           // Fetch count for each analytics type (views, counts, bounces);
-          this.analyticsChartKeys().forEach((k) => {
+          const allKeys = [...new Set([
+            ...this.analyticsChartKeys(),
+            ...this.openTrackingChartKeys(),
+            ...this.openTrackingCountKeys(),
+          ])];
+          allKeys.forEach((k) => {
             this.charts[k].data = null;
             this.charts[k].donutData = null;
 
@@ -489,3 +723,84 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.analytics-container {
+  max-width: 1280px;
+}
+
+.analytics-subtitle {
+  letter-spacing: 0.1px;
+}
+
+.analytics-filters-card {
+  background: rgba(var(--v-theme-surface), 0.9);
+  border-color: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.analytics-section-card {
+  background: rgba(var(--v-theme-surface), 0.98);
+  border-color: rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.analytics-stat {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.analytics-stat-confirmed {
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.analytics-stat-raw {
+  background: rgba(25, 118, 210, 0.08);
+}
+
+.analytics-stat-suspected {
+  background: rgba(251, 140, 0, 0.12);
+}
+
+.analytics-chart-wrap {
+  min-height: 320px;
+}
+
+@media (max-width: 960px) {
+  .analytics-subtitle {
+    margin-bottom: 1.25rem !important;
+  }
+
+  .analytics-chart-wrap {
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 600px) {
+  .analytics-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .analytics-filters-card :deep(.v-card-text),
+  .analytics-section-card :deep(.v-card-text) {
+    padding: 0.9rem;
+  }
+
+  .analytics-section-card :deep(.v-card-title) {
+    padding: 0.9rem 0.9rem 0.35rem;
+    font-size: 0.95rem;
+  }
+
+  .analytics-section-card :deep(.v-card-subtitle) {
+    padding: 0 0.9rem 0.7rem;
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .analytics-stat {
+    padding: 0.8rem !important;
+  }
+
+  .analytics-chart-wrap {
+    min-height: 230px;
+  }
+}
+</style>

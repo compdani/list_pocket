@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
@@ -130,6 +131,13 @@ type Base struct {
 
 // JSON is the wrapper for reading and writing arbitrary JSONB fields from the DB.
 type JSON map[string]any
+
+// OpenEvent captures request metadata for a tracking-pixel hit.
+type OpenEvent struct {
+	IPAddress string    `json:"ip_address,omitempty"`
+	UserAgent string    `json:"user_agent,omitempty"`
+	OpenedAt  time.Time `json:"opened_at,omitempty"`
+}
 
 // StringIntMap is used to define DB Scan()s.
 type StringIntMap map[string]int
