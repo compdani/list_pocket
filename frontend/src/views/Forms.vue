@@ -62,7 +62,7 @@
           <h2 class="text-subtitle-1 font-weight-bold mb-2">{{ $t('forms.formHTML') }}</h2>
           <p class="text-body-2 text-medium-emphasis mb-4">{{ $t('forms.formHTMLHelp') }}</p>
 
-          <code-editor v-if="checkedListUUIDs.length > 0" :value="formHTML" lang="html" disabled />
+          <code-editor v-if="checkedListUUIDs.length > 0" :model-value="formHTML" lang="html" disabled />
           <v-alert v-else type="info" variant="tonal">
             {{ $t('forms.selectHelp') }}
           </v-alert>
