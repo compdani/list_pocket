@@ -81,6 +81,10 @@
               <label for="#">{{ $utils.niceNumber(counts.subscribers.orphans) }}</label>
               {{ $t('dashboard.orphanSubs') }}
             </li>
+            <li>
+              <label for="#">{{ $utils.niceNumber(counts.unsubscribes || 0) }}</label>
+              {{ $t('analytics.unsubscribes') }}
+            </li>
           </ul>
 
           <div class="metric-divider" />
@@ -106,6 +110,20 @@
                 {{ $t('dashboard.campaignViews') }}
               </h3>
               <chart type="line" v-if="campaignViews" :data="campaignViews" />
+            </div>
+            <div class="chart-block">
+              <h3 class="title is-size-6 chart-title">
+                {{ $t('analytics.openTracking') }}
+              </h3>
+              <div v-if="openTrackingBreakdown" class="chart-legend">
+                <span class="legend-chip legend-chip-raw">
+                  {{ $t('analytics.rawViews') }}
+                </span>
+                <span class="legend-chip legend-chip-suspected">
+                  {{ $t('analytics.suspectedViews') }}
+                </span>
+              </div>
+              <chart type="line" v-if="openTrackingBreakdown" :data="openTrackingBreakdown" />
             </div>
             <div class="chart-block">
               <h3 class="title is-size-6 chart-title align-right">
@@ -145,10 +163,12 @@ export default {
       isCountsLoading: true,
       campaignViews: null,
       campaignClicks: null,
+      openTrackingBreakdown: null,
       counts: {
         lists: {},
         subscribers: {},
         campaigns: {},
+        unsubscribes: 0,
         messages: 0,
       },
     };
@@ -168,11 +188,15 @@ export default {
         this.isChartsLoading = false;
         this.campaignViews = this.makeChart(data.campaignViews);
         this.campaignClicks = this.makeChart(data.linkClicks);
+        this.openTrackingBreakdown = this.makeOpenTrackingChart(
+          data.campaignViewsRaw,
+          data.campaignViewsSuspected,
+        );
       });
     },
 
     makeChart(data) {
-      if (data.length === 0) {
+      if (!Array.isArray(data) || data.length === 0) {
         return {};
       }
       return {
@@ -181,6 +205,46 @@ export default {
           {
             data: [...data.map((d) => d.count)],
             borderColor: colors.primary,
+            borderWidth: 2,
+            pointHoverBorderWidth: 5,
+            pointBorderWidth: 0.5,
+          },
+        ],
+      };
+    },
+
+    makeOpenTrackingChart(rawViews, suspectedViews) {
+      const hasRaw = Array.isArray(rawViews) && rawViews.length > 0;
+      const hasSuspected = Array.isArray(suspectedViews) && suspectedViews.length > 0;
+      if (!hasRaw && !hasSuspected) {
+        return null;
+      }
+
+      const rawMap = new Map(
+        (hasRaw ? rawViews : []).map((point) => [dayjs(point.date).format('DD MMM'), point.count]),
+      );
+      const suspectedMap = new Map(
+        (hasSuspected ? suspectedViews : []).map((point) => [dayjs(point.date).format('DD MMM'), point.count]),
+      );
+
+      const labels = [...new Set([
+        ...Array.from(rawMap.keys()),
+        ...Array.from(suspectedMap.keys()),
+      ])];
+
+      return {
+        labels,
+        datasets: [
+          {
+            data: labels.map((label) => rawMap.get(label) || 0),
+            borderColor: '#3a82d6',
+            borderWidth: 2,
+            pointHoverBorderWidth: 5,
+            pointBorderWidth: 0.5,
+          },
+          {
+            data: labels.map((label) => suspectedMap.get(label) || 0),
+            borderColor: '#FFB50D',
             borderWidth: 2,
             pointHoverBorderWidth: 5,
             pointBorderWidth: 0.5,
@@ -324,6 +388,30 @@ export default {
 
 .chart-title {
   margin-bottom: 8px !important;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.legend-chip {
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 10px;
+}
+
+.legend-chip-raw {
+  background: rgba(58, 130, 214, 0.12);
+  color: #235fa3;
+}
+
+.legend-chip-suspected {
+  background: rgba(255, 181, 13, 0.2);
+  color: #956400;
 }
 
 .align-right {

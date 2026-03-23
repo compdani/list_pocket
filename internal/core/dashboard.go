@@ -73,6 +73,27 @@ func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error
 				GROUP BY DATE(datetime(created, ?))
 				ORDER BY DATE(datetime(created, ?))
 			)
+		), '[]'),
+		'campaign_views_raw', COALESCE((
+			SELECT json_group_array(json_object('count', count, 'date', date))
+			FROM (
+				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
+				FROM campaign_views
+				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
+				GROUP BY DATE(datetime(created, ?))
+				ORDER BY DATE(datetime(created, ?))
+			)
+		), '[]'),
+		'campaign_views_suspected', COALESCE((
+			SELECT json_group_array(json_object('count', count, 'date', date))
+			FROM (
+				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
+				FROM campaign_views
+				WHERE COALESCE(is_suspected_privacy_open, 0) = 1
+				  AND DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
+				GROUP BY DATE(datetime(created, ?))
+				ORDER BY DATE(datetime(created, ?))
+			)
 		), '[]')
 	) AS data`
 
@@ -80,6 +101,8 @@ func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error
 
 	var out types.JSONText
 	if err := c.db.Get(&out, q,
+		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
+		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
 		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
 		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
 	); err != nil {
@@ -119,6 +142,7 @@ func (c *Core) getDashboardCountsSQLite() (types.JSONText, error) {
 			'total', COALESCE((SELECT COUNT(*) FROM campaigns), 0),
 			'by_status', COALESCE((SELECT json_group_object(status, num) FROM campaign_statuses), '{}')
 		),
+		'unsubscribes', COALESCE((SELECT COUNT(*) FROM campaign_unsubscribes), 0),
 		'messages', COALESCE((SELECT SUM(sent) FROM campaigns), 0)
 	) AS data`
 
