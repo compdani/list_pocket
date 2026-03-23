@@ -53,6 +53,7 @@ export default {
     archiveMeta: { type: String, default: null },
 
     body: { type: String, default: '' },
+    preheader: { type: [String, null], default: null },
     contentType: { type: String, default: '' },
     templateId: { type: [String, Number, null], default: null },
     isArchive: { type: Boolean, default: false },
@@ -109,6 +110,9 @@ export default {
         }
         if (this.body) {
           form.set('body', this.body);
+        }
+        if (this.preheader !== null && this.preheader !== undefined) {
+          form.set('preheader', this.preheader);
         }
         options.body = form;
       }

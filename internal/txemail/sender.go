@@ -30,6 +30,7 @@ type Request struct {
 	ContentType string
 	Messenger   string
 	Subject     string
+	Preheader   string
 	ContentTpl  string
 	Attachments []models.Attachment
 }
@@ -116,6 +117,7 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 		ContentType: contentType,
 		Messenger:   messengerName,
 		Subject:     req.Subject,
+		Preheader:   req.Preheader,
 		Attachments: req.Attachments,
 	}
 

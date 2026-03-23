@@ -63,7 +63,7 @@
 
     <!-- campaign preview //-->
     <campaign-preview v-if="isPreviewing" is-post @close="onTogglePreview" type="campaign" :id="id" :title="title"
-      :content-type="self.contentType" :template-id="templateId" :body="self.body" />
+      :content-type="self.contentType" :template-id="templateId" :body="self.body" :preheader="preheader" />
   </div>
 </template>
 
@@ -98,6 +98,7 @@ export default {
     title: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
     templates: { type: Array, default: null },
+    preheader: { type: String, default: '' },
 
     // modelValue is provided by the parent component.
     // Throughout the editor, `this.self` references that reactive object.

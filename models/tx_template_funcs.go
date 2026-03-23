@@ -25,6 +25,7 @@ func txAliasData(sub Subscriber, msg *TxMessage) (map[string]any, map[string]any
 			"contentType": msg.ContentType,
 			"messenger":   msg.Messenger,
 			"subject":     msg.Subject,
+			"preheader":   msg.Preheader,
 		}
 	}
 

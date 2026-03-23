@@ -66,6 +66,7 @@ type TxMessage struct {
 	ContentType string         `json:"content_type"`
 	Messenger   string         `json:"messenger"`
 	Subject     string         `json:"subject"`
+	Preheader   string         `json:"preheader"`
 
 	// File attachments added from multi-part form data.
 	Attachments []Attachment `json:"-"`
@@ -119,6 +120,7 @@ func (m *TxMessage) Render(sub Subscriber, tpl *Template) error {
 	}
 	m.Body = make([]byte, b.Len())
 	copy(m.Body, b.Bytes())
+	m.Body = ApplyPreheaderToHTML(m.Body, m.ContentType, m.Preheader)
 	b.Reset()
 
 	// Was a subject provided in the message?
