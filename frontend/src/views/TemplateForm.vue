@@ -123,6 +123,14 @@
               @change="onChangeVisualEditor"
             />
 
+            <grapes-mjml-editor
+              v-else-if="useGrapesEditor"
+              :source="form.bodySource"
+              :data="form.body"
+              height="62vh"
+              @change="onChangeVisualEditor"
+            />
+
             <richtext-editor
               v-else-if="useRichtextEditor"
               v-model="form.body"
@@ -190,6 +198,7 @@ import CampaignPreview from '../components/CampaignPreview.vue';
 import CodeEditor from '../components/CodeEditor.vue';
 import RichtextEditor from '../components/RichtextEditor.vue';
 import VisualEditor from '../components/VisualEditor.vue';
+import GrapesMjmlEditor from '../components/GrapesMjmlEditor.vue';
 import CopyText from '../components/CopyText.vue';
 
 const baseForm = () => ({
@@ -210,6 +219,7 @@ export default {
     'code-editor': CodeEditor,
     'richtext-editor': RichtextEditor,
     'visual-editor': VisualEditor,
+    'grapes-mjml-editor': GrapesMjmlEditor,
   },
 
   props: {
@@ -234,6 +244,7 @@ export default {
       return [
         { title: this.$tc('templates.typeCampaignHTML'), value: 'campaign' },
         { title: this.$tc('templates.typeCampaignVisual'), value: 'campaign_visual' },
+        { title: 'GrapesJS (MJML)', value: 'campaign_grapes_mjml' },
         { title: this.$tc('templates.typeTransactional'), value: 'tx' },
       ];
     },
@@ -243,11 +254,16 @@ export default {
         { title: this.$t('templates.rawHTML'), value: 'html' },
         { title: 'TinyMCE', value: 'richtext' },
         { title: this.$tc('templates.typeCampaignVisual'), value: 'visual' },
+        { title: 'GrapesJS (MJML)', value: 'grapes_mjml' },
       ];
     },
 
     useVisualEditor() {
       return this.form.type === 'campaign_visual' || (this.form.type === 'tx' && this.editorMode === 'visual');
+    },
+
+    useGrapesEditor() {
+      return this.form.type === 'campaign_grapes_mjml' || (this.form.type === 'tx' && this.editorMode === 'grapes_mjml');
     },
 
     useRichtextEditor() {
@@ -257,6 +273,9 @@ export default {
     currentEditorLabel() {
       if (this.useVisualEditor) {
         return this.$t('templates.typeCampaignVisual');
+      }
+      if (this.useGrapesEditor) {
+        return 'GrapesJS (MJML)';
       }
       if (this.useRichtextEditor) {
         return 'TinyMCE';
@@ -280,12 +299,19 @@ export default {
 
     normalizeForm(data = {}) {
       const hasBodySource = typeof data.bodySource === 'string' && data.bodySource.trim() !== '';
+      const initialEditorMode = data.type === 'campaign_grapes_mjml'
+        ? 'grapes_mjml'
+        : data.type === 'campaign_visual'
+          ? 'visual'
+          : (data.type === 'tx' && hasBodySource)
+            ? 'visual'
+            : 'html';
       return {
         ...baseForm(),
         ...data,
         body: data.body ?? '',
         bodySource: data.bodySource ?? '',
-        editorMode: data.type === 'campaign_visual' || (data.type === 'tx' && hasBodySource) ? 'visual' : 'html',
+        editorMode: initialEditorMode,
       };
     },
 
@@ -396,7 +422,7 @@ export default {
       if (this.form.type !== 'tx') {
         return;
       }
-      if (nextMode !== 'visual') {
+      if (nextMode !== 'visual' && nextMode !== 'grapes_mjml') {
         this.form.bodySource = '';
       }
     },
@@ -404,6 +430,8 @@ export default {
     'form.type'(nextType) {
       if (nextType === 'campaign_visual') {
         this.editorMode = 'visual';
+      } else if (nextType === 'campaign_grapes_mjml') {
+        this.editorMode = 'grapes_mjml';
       } else if (nextType === 'tx') {
         this.editorMode = this.form.bodySource ? 'visual' : 'html';
       } else {

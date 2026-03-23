@@ -34,6 +34,10 @@ var (
 
 // registerHandlers registers HTTP handlers on the PocketBase router.
 func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig) {
+
+	//Token exchange routes
+	auth.RegisterExchangeRoutes(se)
+
 	admin := se.Group("")
 	admin.GET(path.Join(uriAdmin, "/login"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginPage))
 	admin.POST(path.Join(uriAdmin, "/login"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginPage))

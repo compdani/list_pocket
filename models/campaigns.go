@@ -29,6 +29,7 @@ const (
 	CampaignContentTypeMarkdown = "markdown"
 	CampaignContentTypePlain    = "plain"
 	CampaignContentTypeVisual   = "visual"
+	CampaignContentTypeGrapes   = "grapes_mjml"
 )
 
 // Campaigns represents a slice of Campaigns.
