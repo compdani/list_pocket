@@ -680,6 +680,7 @@ export default {
         markdown: this.$t('campaigns.markdown'),
         plain: this.$t('campaigns.plainText'),
         visual: this.$t('campaigns.visual'),
+        grapes_mjml: 'GrapesJS (MJML)',
       }),
 
       isNew: false,

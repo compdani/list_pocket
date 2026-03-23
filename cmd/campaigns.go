@@ -916,11 +916,12 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 		c.ContentType != models.CampaignContentTypeHTML &&
 		c.ContentType != models.CampaignContentTypePlain &&
 		c.ContentType != models.CampaignContentTypeVisual &&
+		c.ContentType != models.CampaignContentTypeGrapes &&
 		c.ContentType != models.CampaignContentTypeMarkdown {
 		c.ContentType = models.CampaignContentTypeRichtext
 	}
 
-	if c.ContentType != models.CampaignContentTypeVisual {
+	if c.ContentType != models.CampaignContentTypeVisual && c.ContentType != models.CampaignContentTypeGrapes {
 		c.BodySource.Valid = false
 	}
 
@@ -1017,11 +1018,12 @@ func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
 		c.ContentType != models.CampaignContentTypeHTML &&
 		c.ContentType != models.CampaignContentTypePlain &&
 		c.ContentType != models.CampaignContentTypeVisual &&
+		c.ContentType != models.CampaignContentTypeGrapes &&
 		c.ContentType != models.CampaignContentTypeMarkdown {
 		c.ContentType = models.CampaignContentTypeRichtext
 	}
 
-	if c.ContentType != models.CampaignContentTypeVisual {
+	if c.ContentType != models.CampaignContentTypeVisual && c.ContentType != models.CampaignContentTypeGrapes {
 		c.BodySource.Valid = false
 	}
 

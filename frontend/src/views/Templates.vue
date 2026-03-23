@@ -264,6 +264,9 @@ export default {
       if (type === 'campaign_visual') {
         return this.$tc('templates.typeCampaignVisual');
       }
+      if (type === 'campaign_grapes_mjml') {
+        return 'GrapesJS (MJML)';
+      }
 
       return this.$tc('templates.typeTransactional');
     },
@@ -423,6 +426,10 @@ export default {
 
 .template-type-chip.campaign_visual {
   background: rgba(var(--v-theme-success), 0.12);
+}
+
+.template-type-chip.campaign_grapes_mjml {
+  background: rgba(var(--v-theme-info), 0.14);
 }
 
 .template-type-chip.tx {

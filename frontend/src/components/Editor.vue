@@ -89,6 +89,14 @@
     <visual-editor v-if="self.contentType === 'visual'" :source="self.bodySource" @change="onVisualEditorChange"
       height="65vh" ref="visualEditor" />
 
+    <grapes-mjml-editor
+      v-if="self.contentType === 'grapes_mjml'"
+      :source="self.bodySource"
+      :data="self.body"
+      height="65vh"
+      @change="onGrapesEditorChange"
+    />
+
     <!-- raw html editor //-->
     <code-editor lang="html" v-if="self.contentType === 'html'" v-model="self.body" key="editor-html" />
 
@@ -118,6 +126,7 @@ import { mapState } from 'vuex';
 import CampaignPreview from './CampaignPreview.vue';
 import RichtextEditor from './RichtextEditor.vue';
 import VisualEditor from './VisualEditor.vue';
+import GrapesMjmlEditor from './GrapesMjmlEditor.vue';
 import markdownToVisualBlock from './editor';
 import CodeEditor from './CodeEditor.vue';
 
@@ -129,6 +138,7 @@ export default {
     RichtextEditor,
     'code-editor': CodeEditor,
     'visual-editor': VisualEditor,
+    'grapes-mjml-editor': GrapesMjmlEditor,
   },
 
   emits: ['update:modelValue'],
@@ -193,7 +203,7 @@ export default {
 
       // If `from` is HTML content, strip out `<body>..` etc. and keep the beautified HTML.
       let isHTML = false;
-      if (from === 'richtext' || from === 'html' || from === 'visual') {
+      if (from === 'richtext' || from === 'html' || from === 'visual' || from === 'grapes_mjml') {
         const d = document.createElement('div');
         d.innerHTML = body;
         body = this.beautifyHTML(d.innerHTML.trim());
@@ -215,7 +225,8 @@ export default {
             break;
           }
 
-          case 'visual': {
+          case 'visual':
+          case 'grapes_mjml': {
             const md = turndown.turndown(body).replace(/\n\n+/ig, '\n\n');
             bodySource = JSON.stringify(markdownToVisualBlock(md));
             break;
@@ -245,13 +256,13 @@ export default {
         // Plain to an HTML type, change plain line breaks to HTML breaks.
       } else if (from === 'plain' && (to === 'richtext' || to === 'html')) {
         body = body.replace(/\n/ig, '<br>\n');
-      } else if (to === 'visual') {
+      } else if (to === 'visual' || to === 'grapes_mjml') {
         bodySource = JSON.stringify(markdownToVisualBlock(body));
       }
 
       // =======================================================================
       // Reset the campaign template ID if its converted to or from visual template.
-      if (to === 'visual' || from === 'visual') {
+      if (to === 'visual' || from === 'visual' || to === 'grapes_mjml' || from === 'grapes_mjml') {
         this.templateId = null;
         this.self.templateId = null;
       }
@@ -288,6 +299,11 @@ export default {
     },
 
     onVisualEditorChange({ body, source }) {
+      this.self.body = body;
+      this.self.bodySource = source;
+    },
+
+    onGrapesEditorChange({ body, source }) {
       this.self.body = body;
       this.self.bodySource = source;
     },
@@ -393,7 +409,12 @@ export default {
 
     // Returns the list of valid (visual vs. normal) templates for the template dropdown.
     validTemplates() {
-      const typ = this.self.contentType === 'visual' ? 'campaign_visual' : 'campaign';
+      let typ = 'campaign';
+      if (this.self.contentType === 'visual') {
+        typ = 'campaign_visual';
+      } else if (this.self.contentType === 'grapes_mjml') {
+        typ = 'campaign_grapes_mjml';
+      }
       return this.templates.filter((t) => (t.type === typ));
     },
   },
