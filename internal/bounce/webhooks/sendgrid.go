@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,7 +51,7 @@ func NewSendgrid(key string) (*Sendgrid, error) {
 }
 
 func parseSendgridPublicKey(key string) (any, error) {
-	key = strings.TrimSpace(key)
+	key = normalizeSendgridKey(key)
 	if key == "" {
 		return nil, errors.New("sendgrid webhook key is empty")
 	}
@@ -67,7 +68,14 @@ func parseSendgridPublicKey(key string) (any, error) {
 	// Fallback to raw base64-encoded DER.
 	sigB, err := base64.StdEncoding.DecodeString(key)
 	if err != nil {
-		return nil, fmt.Errorf("invalid sendgrid webhook key: expected PEM or base64 DER: %w", err)
+		// Also accept URL-safe/base64-without-padding variants.
+		sigB, err = base64.RawStdEncoding.DecodeString(key)
+		if err != nil {
+			sigB, err = base64.RawURLEncoding.DecodeString(key)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("invalid sendgrid webhook key: expected PEM or base64 DER: %w", err)
+		}
 	}
 
 	pubKey, err := x509.ParsePKIXPublicKey(sigB)
@@ -75,6 +83,24 @@ func parseSendgridPublicKey(key string) (any, error) {
 		return nil, fmt.Errorf("invalid sendgrid DER public key: %w", err)
 	}
 	return pubKey, nil
+}
+
+func normalizeSendgridKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+
+	// If the key was saved as a quoted/escaped string, unquote first.
+	if len(key) >= 2 && key[0] == '"' && key[len(key)-1] == '"' {
+		if unq, err := strconv.Unquote(key); err == nil {
+			key = unq
+		}
+	}
+
+	// Support literal escaped newlines from env/config strings.
+	key = strings.ReplaceAll(key, `\n`, "\n")
+	return strings.TrimSpace(key)
 }
 
 // ProcessBounce processes Sendgrid bounce notifications and returns one or more Bounce objects.
