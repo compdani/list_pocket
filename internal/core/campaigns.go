@@ -1193,9 +1193,10 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 		CampaignID   string         `db:"campaign_id"`
 		SubscriberID sql.NullString `db:"subscriber_id"`
 		StartedAt    string         `db:"started_at"`
+		SendAt       string         `db:"send_at"`
 	}
 	if err := c.db.Get(&row, `
-		SELECT c.id AS campaign_id, s.id AS subscriber_id, COALESCE(c.started_at, '') AS started_at
+		SELECT c.id AS campaign_id, s.id AS subscriber_id, COALESCE(c.started_at, '') AS started_at, COALESCE(c.send_at, '') AS send_at
 		FROM campaigns c
 		LEFT JOIN subscribers s ON s.uuid = ?
 		WHERE c.uuid = ?
@@ -1213,7 +1214,12 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 	if parsed := parseNullTime(row.StartedAt); parsed.Valid {
 		startedAt = parsed.Time
 	}
-	suspected, meta, err := classifyPrivacyOpen(event, startedAt, "campaign_started_at")
+	sendAt := time.Time{}
+	if parsed := parseNullTime(row.SendAt); parsed.Valid {
+		sendAt = parsed.Time
+	}
+	referenceAt, referenceType := campaignPrivacyReference(sendAt, startedAt)
+	suspected, meta, err := classifyPrivacyOpen(event, referenceAt, referenceType)
 	if err != nil {
 		c.log.Printf("error marshaling campaign view metadata: %s", err)
 		meta = "{}"

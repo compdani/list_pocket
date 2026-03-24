@@ -11,7 +11,7 @@ import (
 
 const privacyOpenWindow = 2 * time.Minute
 
-var privacyOpenUserAgentRe = regexp.MustCompile(`(?i)(applewebkit|apple mail|iphone|ipad|mac os x)`)
+var privacyOpenUserAgentRe = regexp.MustCompile(`(?i)(applewebkit|apple mail|iphone|ipad|mac os x|googleimageproxy|ggpht\.com)`)
 
 func sqliteTimestampValue(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04:05.000Z")
@@ -82,4 +82,11 @@ func classifyPrivacyOpen(event models.OpenEvent, referenceAt time.Time, referenc
 		return suspected, "", err
 	}
 	return suspected, string(b), nil
+}
+
+func campaignPrivacyReference(sendAt time.Time, startedAt time.Time) (time.Time, string) {
+	if !sendAt.IsZero() {
+		return sendAt, "campaign_send_at"
+	}
+	return startedAt, "campaign_started_at"
 }

@@ -74,6 +74,16 @@ func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error
 				ORDER BY DATE(datetime(created, ?))
 			)
 		), '[]'),
+		'campaign_views_all_raw', COALESCE((
+			SELECT json_group_array(json_object('count', count, 'date', date))
+			FROM (
+				SELECT COUNT(*) AS count, DATE(datetime(created, ?)) AS date
+				FROM campaign_views
+				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
+				GROUP BY DATE(datetime(created, ?))
+				ORDER BY DATE(datetime(created, ?))
+			)
+		), '[]'),
 		'campaign_views_raw', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
@@ -101,6 +111,7 @@ func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error
 
 	var out types.JSONText
 	if err := c.db.Get(&out, q,
+		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
 		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
 		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
 		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
