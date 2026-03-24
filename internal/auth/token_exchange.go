@@ -33,6 +33,7 @@ func validateUserJWT(tokenString string) (*UserClaims, error) {
 }
 
 func RegisterExchangeRoutes(c *router.Router[*core.RequestEvent]) {
+	Init()
 	c.GET("/user_token", func(e *core.RequestEvent) error {
 		token := e.Request.Header.Get("ExchangeToken")
 		if token == "" {
