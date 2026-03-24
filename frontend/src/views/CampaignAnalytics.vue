@@ -100,10 +100,7 @@
                   <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-confirmed">
                     <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.confirmedCount') }}</div>
                     <div class="text-h5 font-weight-bold text-success">
-                      {{ $utils.niceNumber(counts.viewsUnique || counts.views) }}
-                    </div>
-                    <div v-if="counts.viewsUnique" class="text-caption text-medium-emphasis">
-                      {{ $utils.niceNumber(counts.views) }} {{ $t('analytics.totalViews').toLowerCase() }}
+                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUnique : counts.views) }}
                     </div>
                   </div>
                 </v-col>
@@ -111,9 +108,9 @@
                   <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-raw">
                     <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.rawCount') }}</div>
                     <div class="text-h5 font-weight-bold text-info">
-                      {{ $utils.niceNumber(counts.viewsUniqueRaw || counts.viewsRaw) }}
+                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueRaw : counts.viewsRaw) }}
                     </div>
-                    <div v-if="counts.viewsUniqueRaw" class="text-caption text-medium-emphasis">
+                    <div v-if="serverConfig.privacy.individual_tracking" class="text-caption text-medium-emphasis">
                       {{ $utils.niceNumber(counts.viewsRaw) }} {{ $t('analytics.totalViews').toLowerCase() }}
                     </div>
                   </div>
@@ -122,10 +119,7 @@
                   <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-suspected">
                     <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.suspectedCount') }}</div>
                     <div class="text-h5 font-weight-bold text-warning">
-                      {{ $utils.niceNumber(counts.viewsUniqueSuspected || counts.viewsSuspected) }}
-                    </div>
-                    <div v-if="counts.viewsUniqueSuspected" class="text-caption text-medium-emphasis">
-                      {{ $utils.niceNumber(counts.viewsSuspected) }} {{ $t('analytics.totalViews').toLowerCase() }}
+                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueSuspected : counts.viewsSuspected) }}
                     </div>
                   </div>
                 </v-col>
@@ -145,7 +139,15 @@
                     </h3>
                     <div class="d-flex align-center flex-wrap ga-2 mb-3">
                       <v-chip size="small" variant="tonal" color="info">
-                        {{ openTrackingLineNames.raw }}
+                        {{ openTrackingLineNames.rawUnique }}
+                      </v-chip>
+                      <v-chip
+                        v-if="openTrackingLineNames.rawAll"
+                        size="small"
+                        variant="tonal"
+                        color="grey"
+                      >
+                        {{ openTrackingLineNames.rawAll }}
                       </v-chip>
                       <v-chip size="small" variant="tonal" color="warning">
                         {{ openTrackingLineNames.suspected }}
@@ -600,7 +602,7 @@ export default {
 
     openTrackingCountKeys() {
       if (this.serverConfig.privacy.individual_tracking) {
-        return ['viewsUnique', 'viewsUniqueRaw', 'viewsUniqueSuspected'];
+        return ['viewsUnique', 'viewsRaw', 'viewsUniqueRaw', 'viewsUniqueSuspected'];
       }
       return ['views', 'viewsRaw', 'viewsSuspected'];
     },
@@ -618,7 +620,10 @@ export default {
     },
 
     openTrackingCombinedLoading() {
-      return this.openTrackingChartKeys().some((key) => this.charts[key]?.loading);
+      const keys = this.serverConfig.privacy.individual_tracking
+        ? [...this.openTrackingChartKeys(), 'viewsRaw']
+        : this.openTrackingChartKeys();
+      return keys.some((key) => this.charts[key]?.loading);
     },
 
     openTrackingCombinedData() {
@@ -632,38 +637,56 @@ export default {
       const labels = [...new Set([...(rawChart.labels || []), ...(suspectedChart.labels || [])])];
       const rawSeries = this.aggregateLineDatasets(rawChart, labels);
       const suspectedSeries = this.aggregateLineDatasets(suspectedChart, labels);
+      const rawAllSeries = this.serverConfig.privacy.individual_tracking
+        ? this.aggregateLineDatasets(this.charts.viewsRaw?.data, labels)
+        : null;
       if (!rawSeries || !suspectedSeries || labels.length === 0) {
         return null;
       }
 
+      const datasets = [
+        {
+          label: this.charts[rawKey].name,
+          data: rawSeries,
+          borderColor: '#3a82d6',
+          borderWidth: 2,
+          pointHoverBorderWidth: 5,
+          pointBorderWidth: 0.5,
+        },
+      ];
+
+      if (rawAllSeries) {
+        datasets.push({
+          label: this.charts.viewsRaw.name,
+          data: rawAllSeries,
+          borderColor: '#9E9E9E',
+          borderWidth: 2,
+          pointHoverBorderWidth: 5,
+          pointBorderWidth: 0.5,
+        });
+      }
+
+      datasets.push({
+        label: this.charts[suspectedKey].name,
+        data: suspectedSeries,
+        borderColor: '#FFB50D',
+        borderWidth: 2,
+        pointHoverBorderWidth: 5,
+        pointBorderWidth: 0.5,
+      });
+
       return {
         labels,
         transitionLabel: rawChart.transitionLabel || suspectedChart.transitionLabel || null,
-        datasets: [
-          {
-            label: this.charts[rawKey].name,
-            data: rawSeries,
-            borderColor: '#3a82d6',
-            borderWidth: 2,
-            pointHoverBorderWidth: 5,
-            pointBorderWidth: 0.5,
-          },
-          {
-            label: this.charts[suspectedKey].name,
-            data: suspectedSeries,
-            borderColor: '#FFB50D',
-            borderWidth: 2,
-            pointHoverBorderWidth: 5,
-            pointBorderWidth: 0.5,
-          },
-        ],
+        datasets,
       };
     },
 
     openTrackingLineNames() {
       const [rawKey, suspectedKey] = this.openTrackingChartKeys();
       return {
-        raw: this.charts[rawKey]?.name || '',
+        rawUnique: this.charts[rawKey]?.name || '',
+        rawAll: this.serverConfig.privacy.individual_tracking ? this.charts.viewsRaw?.name || '' : '',
         suspected: this.charts[suspectedKey]?.name || '',
       };
     },

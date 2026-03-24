@@ -110,8 +110,11 @@
                 {{ $t('analytics.openTracking') }}
               </h3>
               <div v-if="openTrackingBreakdown" class="chart-legend">
-                <span class="legend-chip legend-chip-raw">
+                <span class="legend-chip legend-chip-all-raw">
                   {{ $t('analytics.rawViews') }}
+                </span>
+                <span class="legend-chip legend-chip-raw">
+                  {{ $t('analytics.uniqueRawViews') }}
                 </span>
                 <span class="legend-chip legend-chip-suspected">
                   {{ $t('analytics.suspectedViews') }}
@@ -181,6 +184,7 @@ export default {
         this.isChartsLoading = false;
         this.campaignClicks = this.makeChart(data.linkClicks);
         this.openTrackingBreakdown = this.makeOpenTrackingChart(
+          data.campaignViewsAllRaw || data.campaignViewsAll || [],
           data.campaignViewsRaw,
           data.campaignViewsSuspected,
         );
@@ -205,13 +209,17 @@ export default {
       };
     },
 
-    makeOpenTrackingChart(rawViews, suspectedViews) {
+    makeOpenTrackingChart(allRawViews, rawViews, suspectedViews) {
+      const hasAllRaw = Array.isArray(allRawViews) && allRawViews.length > 0;
       const hasRaw = Array.isArray(rawViews) && rawViews.length > 0;
       const hasSuspected = Array.isArray(suspectedViews) && suspectedViews.length > 0;
-      if (!hasRaw && !hasSuspected) {
+      if (!hasAllRaw && !hasRaw && !hasSuspected) {
         return null;
       }
 
+      const allRawMap = new Map(
+        (hasAllRaw ? allRawViews : []).map((point) => [dayjs(point.date).format('DD MMM'), point.count]),
+      );
       const rawMap = new Map(
         (hasRaw ? rawViews : []).map((point) => [dayjs(point.date).format('DD MMM'), point.count]),
       );
@@ -220,6 +228,7 @@ export default {
       );
 
       const labels = [...new Set([
+        ...Array.from(allRawMap.keys()),
         ...Array.from(rawMap.keys()),
         ...Array.from(suspectedMap.keys()),
       ])];
@@ -227,6 +236,13 @@ export default {
       return {
         labels,
         datasets: [
+          {
+            data: labels.map((label) => allRawMap.get(label) || 0),
+            borderColor: '#9E9E9E',
+            borderWidth: 2,
+            pointHoverBorderWidth: 5,
+            pointBorderWidth: 0.5,
+          },
           {
             data: labels.map((label) => rawMap.get(label) || 0),
             borderColor: '#3a82d6',
@@ -399,6 +415,11 @@ export default {
 .legend-chip-raw {
   background: rgba(58, 130, 214, 0.12);
   color: #235fa3;
+}
+
+.legend-chip-all-raw {
+  background: rgba(120, 120, 120, 0.16);
+  color: #616161;
 }
 
 .legend-chip-suspected {
