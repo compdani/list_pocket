@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -46,7 +45,6 @@ func RegisterExchangeRoutes(c *router.Router[*core.RequestEvent]) {
 		}
 		app := e.App.(*pocketbase.PocketBase)
 		// check if user exists in the database
-		fmt.Println("userClaims.Email", userClaims.Email)
 		userRecord, err := app.FindFirstRecordByData("users", "email", userClaims.Email)
 		if err != nil {
 			return e.BadRequestError("Users is not found, please have the admin create a listpocket user first.", err)
