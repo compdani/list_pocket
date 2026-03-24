@@ -778,10 +778,12 @@ export default {
           this.mergeCampaignOptions(this.form.campaigns);
 
           // Fetch count for each analytics type (views, counts, bounces);
+          const confirmedChartKey = this.serverConfig.privacy.individual_tracking ? 'viewsUnique' : 'views';
           const allKeys = [...new Set([
             ...this.analyticsChartKeys(),
             ...this.openTrackingChartKeys(),
             ...this.openTrackingCountKeys(),
+            confirmedChartKey,
           ])];
           allKeys.forEach((k) => {
             this.charts[k].data = null;
