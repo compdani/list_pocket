@@ -100,7 +100,7 @@
                   <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-confirmed">
                     <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.confirmedCount') }}</div>
                     <div class="text-h5 font-weight-bold text-success">
-                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUnique : counts.views) }}
+                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueTotal : counts.views) }}
                     </div>
                   </div>
                 </v-col>
@@ -108,7 +108,7 @@
                   <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-raw">
                     <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.rawCount') }}</div>
                     <div class="text-h5 font-weight-bold text-info">
-                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueRaw : counts.viewsRaw) }}
+                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueRawTotal : counts.viewsRaw) }}
                     </div>
                     <div v-if="serverConfig.privacy.individual_tracking" class="text-caption text-medium-emphasis">
                       {{ $utils.niceNumber(counts.viewsRaw) }} {{ $t('analytics.totalViews').toLowerCase() }}
@@ -119,7 +119,7 @@
                   <div class="pa-4 rounded-lg text-center analytics-stat analytics-stat-suspected">
                     <div class="text-caption text-medium-emphasis mb-1">{{ $t('analytics.suspectedCount') }}</div>
                     <div class="text-h5 font-weight-bold text-warning">
-                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueSuspected : counts.viewsSuspected) }}
+                      {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueSuspectedTotal : counts.viewsSuspected) }}
                     </div>
                   </div>
                 </v-col>
@@ -138,6 +138,9 @@
                       {{ $t('analytics.openTracking') }}
                     </h3>
                     <div class="d-flex align-center flex-wrap ga-2 mb-3">
+                      <v-chip size="small" variant="tonal" color="success">
+                        {{ openTrackingLineNames.confirmed }}
+                      </v-chip>
                       <v-chip size="small" variant="tonal" color="info">
                         {{ openTrackingLineNames.rawUnique }}
                       </v-chip>
@@ -233,10 +236,13 @@ export default {
       // Data for each view.
       counts: {
         viewsUnique: 0,
+        viewsUniqueTotal: 0,
         views: 0,
         viewsUniqueRaw: 0,
+        viewsUniqueRawTotal: 0,
         viewsRaw: 0,
         viewsUniqueSuspected: 0,
+        viewsUniqueSuspectedTotal: 0,
         viewsSuspected: 0,
         clicks: 0,
         bounces: 0,
@@ -250,6 +256,15 @@ export default {
           type: 'line',
           data: null,
           fn: this.$api.getCampaignUniqueViewCounts,
+          chartFn: this.makeCharts,
+          loading: false,
+        },
+
+        viewsUniqueTotal: {
+          name: this.$t('analytics.uniqueViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUniqueViewTotalCounts,
           chartFn: this.makeCharts,
           loading: false,
         },
@@ -281,6 +296,15 @@ export default {
           loading: false,
         },
 
+        viewsUniqueRawTotal: {
+          name: this.$t('analytics.uniqueRawViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUniqueRawViewTotalCounts,
+          chartFn: this.makeCharts,
+          loading: false,
+        },
+
         viewsSuspected: {
           name: this.$t('analytics.suspectedViews'),
           type: 'line',
@@ -296,6 +320,16 @@ export default {
           type: 'line',
           data: null,
           fn: this.$api.getCampaignUniqueSuspectedViewCounts,
+          chartFn: this.makeCharts,
+          donutColor: '#FFB50D',
+          loading: false,
+        },
+
+        viewsUniqueSuspectedTotal: {
+          name: this.$t('analytics.uniqueSuspectedViews'),
+          type: 'line',
+          data: null,
+          fn: this.$api.getCampaignUniqueSuspectedViewTotalCounts,
           chartFn: this.makeCharts,
           donutColor: '#FFB50D',
           loading: false,
@@ -602,7 +636,7 @@ export default {
 
     openTrackingCountKeys() {
       if (this.serverConfig.privacy.individual_tracking) {
-        return ['viewsUnique', 'viewsRaw', 'viewsUniqueRaw', 'viewsUniqueSuspected'];
+        return ['viewsUniqueTotal', 'viewsRaw', 'viewsUniqueRawTotal', 'viewsUniqueSuspectedTotal'];
       }
       return ['views', 'viewsRaw', 'viewsSuspected'];
     },
@@ -614,37 +648,53 @@ export default {
     openTrackingVisible() {
       return !this.serverConfig.privacy.disable_tracking
         && (this.form.campaigns.length > 0)
-        && (this.counts.viewsRaw > 0 || this.counts.viewsUniqueRaw > 0
-            || this.counts.viewsSuspected > 0 || this.counts.viewsUniqueSuspected > 0
-            || this.counts.views > 0 || this.counts.viewsUnique > 0);
+        && (this.counts.viewsRaw > 0 || this.counts.viewsUniqueRaw > 0 || this.counts.viewsUniqueRawTotal > 0
+            || this.counts.viewsSuspected > 0 || this.counts.viewsUniqueSuspected > 0 || this.counts.viewsUniqueSuspectedTotal > 0
+            || this.counts.views > 0 || this.counts.viewsUnique > 0 || this.counts.viewsUniqueTotal > 0);
     },
 
     openTrackingCombinedLoading() {
+      const confirmedKey = this.serverConfig.privacy.individual_tracking ? 'viewsUnique' : 'views';
       const keys = this.serverConfig.privacy.individual_tracking
-        ? [...this.openTrackingChartKeys(), 'viewsRaw']
-        : this.openTrackingChartKeys();
+        ? [...this.openTrackingChartKeys(), 'viewsRaw', confirmedKey]
+        : [...this.openTrackingChartKeys(), confirmedKey];
       return keys.some((key) => this.charts[key]?.loading);
     },
 
     openTrackingCombinedData() {
       const [rawKey, suspectedKey] = this.openTrackingChartKeys();
+      const confirmedKey = this.serverConfig.privacy.individual_tracking ? 'viewsUnique' : 'views';
+      const confirmedChart = this.charts[confirmedKey]?.data;
       const rawChart = this.charts[rawKey]?.data;
       const suspectedChart = this.charts[suspectedKey]?.data;
-      if (!rawChart || !suspectedChart) {
+      if (!confirmedChart || !rawChart || !suspectedChart) {
         return null;
       }
 
-      const labels = [...new Set([...(rawChart.labels || []), ...(suspectedChart.labels || [])])];
+      const labels = [...new Set([
+        ...(confirmedChart.labels || []),
+        ...(rawChart.labels || []),
+        ...(suspectedChart.labels || []),
+      ])];
+      const confirmedSeries = this.aggregateLineDatasets(confirmedChart, labels);
       const rawSeries = this.aggregateLineDatasets(rawChart, labels);
       const suspectedSeries = this.aggregateLineDatasets(suspectedChart, labels);
       const rawAllSeries = this.serverConfig.privacy.individual_tracking
         ? this.aggregateLineDatasets(this.charts.viewsRaw?.data, labels)
         : null;
-      if (!rawSeries || !suspectedSeries || labels.length === 0) {
+      if (!confirmedSeries || !rawSeries || !suspectedSeries || labels.length === 0) {
         return null;
       }
 
       const datasets = [
+        {
+          label: this.charts[confirmedKey].name,
+          data: confirmedSeries,
+          borderColor: '#4CAF50',
+          borderWidth: 2,
+          pointHoverBorderWidth: 5,
+          pointBorderWidth: 0.5,
+        },
         {
           label: this.charts[rawKey].name,
           data: rawSeries,
@@ -684,7 +734,9 @@ export default {
 
     openTrackingLineNames() {
       const [rawKey, suspectedKey] = this.openTrackingChartKeys();
+      const confirmedKey = this.serverConfig.privacy.individual_tracking ? 'viewsUnique' : 'views';
       return {
+        confirmed: this.charts[confirmedKey]?.name || '',
         rawUnique: this.charts[rawKey]?.name || '',
         rawAll: this.serverConfig.privacy.individual_tracking ? this.charts.viewsRaw?.name || '' : '',
         suspected: this.charts[suspectedKey]?.name || '',

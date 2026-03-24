@@ -1286,24 +1286,48 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 
 	table := ""
 	countExpr := "COUNT(*)"
+	groupByPeriod := true
 	switch typ {
 	case "views":
 		table = "campaign_views"
 		countExpr = "COUNT(CASE WHEN COALESCE(" + table + ".is_suspected_privacy_open, 0) = 0 THEN 1 END)"
+	case "views_total":
+		table = "campaign_views"
+		countExpr = "COUNT(CASE WHEN COALESCE(" + table + ".is_suspected_privacy_open, 0) = 0 THEN 1 END)"
+		groupByPeriod = false
 	case "views_unique":
 		table = "campaign_views"
 		countExpr = sqliteUniqueCampaignViewsExpr(table, "COALESCE("+table+".is_suspected_privacy_open, 0) = 0")
+	case "views_unique_total":
+		table = "campaign_views"
+		countExpr = sqliteUniqueCampaignViewsExpr(table, "COALESCE("+table+".is_suspected_privacy_open, 0) = 0")
+		groupByPeriod = false
 	case "views_raw":
 		table = "campaign_views"
+	case "views_raw_total":
+		table = "campaign_views"
+		groupByPeriod = false
 	case "views_unique_raw":
 		table = "campaign_views"
 		countExpr = sqliteUniqueCampaignViewsExpr(table, "")
+	case "views_unique_raw_total":
+		table = "campaign_views"
+		countExpr = sqliteUniqueCampaignViewsExpr(table, "")
+		groupByPeriod = false
 	case "views_suspected":
 		table = "campaign_views"
 		countExpr = "COUNT(CASE WHEN COALESCE(" + table + ".is_suspected_privacy_open, 0) = 1 THEN 1 END)"
+	case "views_suspected_total":
+		table = "campaign_views"
+		countExpr = "COUNT(CASE WHEN COALESCE(" + table + ".is_suspected_privacy_open, 0) = 1 THEN 1 END)"
+		groupByPeriod = false
 	case "views_unique_suspected":
 		table = "campaign_views"
 		countExpr = sqliteUniqueCampaignViewsExpr(table, "COALESCE("+table+".is_suspected_privacy_open, 0) = 1")
+	case "views_unique_suspected_total":
+		table = "campaign_views"
+		countExpr = sqliteUniqueCampaignViewsExpr(table, "COALESCE("+table+".is_suspected_privacy_open, 0) = 1")
+		groupByPeriod = false
 	case "clicks":
 		table = "link_clicks"
 	case "bounces":
@@ -1339,7 +1363,10 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 		return []models.CampaignAnalyticsCount{}, nil
 	}
 
-	q := `
+	q := ""
+	args := []any{}
+	if groupByPeriod {
+		q = `
 			SELECT
 				campaign_id,
 				` + countExpr + ` AS count,
@@ -1357,8 +1384,22 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 			  AND created <= ?
 			GROUP BY campaign_id, bucket, ts
 			ORDER BY ts ASC`
-
-	args := []any{splitSQL, splitSQL}
+		args = []any{splitSQL, splitSQL}
+	} else {
+		q = `
+			SELECT
+				campaign_id,
+				` + countExpr + ` AS count,
+				'day' AS bucket,
+				? AS ts
+			FROM ` + table + `
+			WHERE campaign_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)
+			  AND created >= ?
+			  AND created <= ?
+			GROUP BY campaign_id
+			ORDER BY campaign_id ASC`
+		args = []any{fromSQL}
+	}
 	for _, id := range recordIDs {
 		args = append(args, id)
 	}
