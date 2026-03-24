@@ -116,7 +116,7 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 
 	out := make([]models.Bounce, 0, len(notifs))
 	for _, n := range notifs {
-		if n.Event != "bounce" {
+		if n.Event != "bounce" && n.Event != "dropped" {
 			continue
 		}
 
@@ -142,9 +142,19 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 
 // verifyNotif verifies the signature on a notification payload.
 func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
+	sig = strings.TrimSpace(sig)
+	timestamp = strings.TrimSpace(timestamp)
+
 	sigB, err := base64.StdEncoding.DecodeString(sig)
 	if err != nil {
-		return err
+		// Also accept URL-safe/base64-without-padding variants from proxies.
+		sigB, err = base64.RawStdEncoding.DecodeString(sig)
+		if err != nil {
+			sigB, err = base64.RawURLEncoding.DecodeString(sig)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	ecdsaSig := struct {
