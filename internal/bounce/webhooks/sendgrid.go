@@ -27,6 +27,9 @@ type sendgridNotif struct {
 	// SendGrid flattens all X-headers and adds them to the bounce
 	// event notification.
 	CampaignUUID string `json:"XListpocketCampaign"`
+	// Some SendGrid webhook payloads may keep the dashes in the flattened X-header name.
+	// Support that variant too.
+	CampaignUUIDDashed string `json:"X-Listpocket-Campaign"`
 }
 
 // Sendgrid handles Sendgrid/SNS webhook notifications including confirming SNS topic subscription
@@ -120,6 +123,11 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 			continue
 		}
 
+		campUUID := n.CampaignUUID
+		if campUUID == "" {
+			campUUID = n.CampaignUUIDDashed
+		}
+
 		typ := models.BounceTypeHard
 		if n.BounceClassification == "technical" || n.BounceClassification == "content" {
 			typ = models.BounceTypeSoft
@@ -127,7 +135,7 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 
 		tstamp := time.Unix(n.Timestamp, 0)
 		bn := models.Bounce{
-			CampaignUUID: n.CampaignUUID,
+			CampaignUUID: campUUID,
 			Email:        strings.ToLower(n.Email),
 			Type:         typ,
 			Meta:         json.RawMessage(b),
