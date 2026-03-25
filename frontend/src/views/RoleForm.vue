@@ -163,7 +163,7 @@
                   <span>{{ perm }}</span>
                   <a
                     v-if="perm === 'subscribers:sql_query'"
-                    href="https://listmonk.app/docs/roles-and-permissions/#subscriberssql_query"
+                    :href="$docsUrl('roles-and-permissions/#subscriberssql_query')"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="perm-link"
@@ -177,7 +177,7 @@
         </section>
 
         <a
-          href="https://listmonk.app/docs/roles-and-permissions"
+          :href="$docsUrl('roles-and-permissions/')"
           target="_blank"
           rel="noopener noreferrer"
           class="learn-link"

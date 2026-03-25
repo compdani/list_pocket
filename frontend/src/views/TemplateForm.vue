@@ -151,7 +151,7 @@
           <template v-if="form.type === 'campaign'">
             {{ $t('templates.placeholderHelp', { placeholder: egPlaceholder }) }}
           </template>
-          <a target="_blank" rel="noopener noreferer" href="https://listmonk.app/docs/templating">
+          <a target="_blank" rel="noopener noreferrer" :href="$docsUrl('templating/')">
             {{ $t('globals.buttons.learnMore') }}
           </a>
         </p>

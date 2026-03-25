@@ -66,7 +66,7 @@
                 data-cy="query" />
               <span class="text-body-2 text-medium-emphasis">
                 {{ $t('subscribers.advancedQueryHelp') }}.{{ ' ' }}
-                <a href="https://listmonk.app/docs/querying-and-segmentation" target="_blank"
+                <a :href="$docsUrl('querying-and-segmentation/')" target="_blank"
                   rel="noopener noreferrer">
                   {{ $t('globals.buttons.learnMore') }}.
                 </a>

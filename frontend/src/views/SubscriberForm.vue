@@ -280,7 +280,7 @@
           class="mb-1"
         />
         <p class="form-help">{{ $t('subscribers.attribsHelp') }} {{ egAttribs }}</p>
-        <a href="https://listmonk.app/docs/concepts" target="_blank" rel="noopener noreferrer" class="is-size-7">
+        <a :href="$docsUrl('concepts/')" target="_blank" rel="noopener noreferrer" class="is-size-7">
           {{ $t('globals.buttons.learnMore') }}
         </a>
       </section>

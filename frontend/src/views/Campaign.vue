@@ -477,7 +477,7 @@
 
         <v-col cols="12" md="6" class="text-md-right">
           <a
-            href="https://listmonk.app/docs/templating/#template-expressions"
+            :href="$docsUrl('templating/#template-expressions')"
             target="_blank"
             rel="noopener noreferer"
             class="templating-link"
