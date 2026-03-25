@@ -32,6 +32,64 @@ type sendgridNotif struct {
 	CampaignUUIDDashed string `json:"X-Listpocket-Campaign"`
 }
 
+func (n *sendgridNotif) UnmarshalJSON(data []byte) error {
+	// Use a map to robustly handle:
+	// - timestamp being encoded as a JSON number
+	// - SendGrid's flattened header field name being slightly different
+	//   (e.g. `XListpocketCampaign` vs `X-Listpocket-Campaign`).
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if v, ok := raw["email"].(string); ok {
+		n.Email = v
+	}
+	if v, ok := raw["event"].(string); ok {
+		n.Event = v
+	}
+	if v, ok := raw["bounce_classification"].(string); ok {
+		n.BounceClassification = v
+	}
+
+	if v, ok := raw["timestamp"]; ok {
+		ts, ok := sendgridAnyToInt64(v)
+		if ok {
+			n.Timestamp = ts
+		}
+	}
+
+	// First try the two most likely flattened header field names.
+	if v, ok := raw["XListpocketCampaign"].(string); ok {
+		n.CampaignUUID = strings.TrimSpace(v)
+	}
+	if n.CampaignUUID == "" {
+		if v, ok := raw["X-Listpocket-Campaign"].(string); ok {
+			n.CampaignUUID = strings.TrimSpace(v)
+		}
+	}
+
+	// Fallback: scan all keys for a normalized match.
+	if n.CampaignUUID == "" {
+		for k, v := range raw {
+			if normalizeSendgridHeaderKey(k) != "xlistpocketcampaign" {
+				continue
+			}
+			switch t := v.(type) {
+			case string:
+				n.CampaignUUID = strings.TrimSpace(t)
+			default:
+				n.CampaignUUID = strings.TrimSpace(fmt.Sprint(v))
+			}
+			if n.CampaignUUID != "" {
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
 // Sendgrid handles Sendgrid/SNS webhook notifications including confirming SNS topic subscription
 // requests and bounce notifications.
 type Sendgrid struct {
@@ -106,6 +164,38 @@ func normalizeSendgridKey(key string) string {
 	return strings.TrimSpace(key)
 }
 
+func normalizeSendgridHeaderKey(key string) string {
+	// SendGrid flattens X-headers, but the flattened JSON field name can vary (e.g. `XListpocketCampaign`
+	// vs `X-Listpocket-Campaign`). Normalize by stripping non-alphanumerics and lowercasing.
+	key = strings.ToLower(key)
+	var sb strings.Builder
+	sb.Grow(len(key))
+	for i := 0; i < len(key); i++ {
+		c := key[i]
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
+}
+
+func sendgridAnyToInt64(v any) (int64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return int64(t), true
+	case int64:
+		return t, true
+	case int:
+		return int64(t), true
+	case json.Number:
+		i, err := t.Int64()
+		if err == nil {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
 // ProcessBounce processes Sendgrid bounce notifications and returns one or more Bounce objects.
 func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Bounce, error) {
 	if err := s.verifyNotif(sig, timestamp, b); err != nil {
@@ -123,24 +213,18 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 			continue
 		}
 
-		campUUID := n.CampaignUUID
-		if campUUID == "" {
-			campUUID = n.CampaignUUIDDashed
-		}
-
 		typ := models.BounceTypeHard
 		if n.BounceClassification == "technical" || n.BounceClassification == "content" {
 			typ = models.BounceTypeSoft
 		}
 
-		tstamp := time.Unix(n.Timestamp, 0)
 		bn := models.Bounce{
-			CampaignUUID: campUUID,
-			Email:        strings.ToLower(n.Email),
+			CampaignUUID: strings.TrimSpace(n.CampaignUUID),
+			Email:        strings.ToLower(strings.TrimSpace(n.Email)),
 			Type:         typ,
 			Meta:         json.RawMessage(b),
 			Source:       "sendgrid",
-			CreatedAt:    tstamp,
+			CreatedAt:    time.Unix(n.Timestamp, 0),
 		}
 		out = append(out, bn)
 	}
@@ -154,7 +238,6 @@ func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 
 	sigLen := len(sig)
 	tsLen := len(timestamp)
-	payloadLen := len(b)
 
 	sigB, err := base64.StdEncoding.DecodeString(sig)
 	if err != nil {
@@ -183,31 +266,7 @@ func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 	hash := h.Sum(nil)
 
 	if !ecdsa.Verify(s.pubKey, hash, ecdsaSig.R, ecdsaSig.S) {
-		// Helpful diagnostics for signature mismatches.
-		// Avoid logging raw key material or the webhook payload itself.
-		keyFP := "unknown"
-		if pkBytes, err := x509.MarshalPKIXPublicKey(s.pubKey); err == nil {
-			sum := sha256.Sum256(pkBytes)
-			keyFP = fmt.Sprintf("%x", sum[:8]) // short fingerprint
-		}
-
-		curveName := "unknown"
-		if s.pubKey != nil && s.pubKey.Curve != nil && s.pubKey.Curve.Params() != nil {
-			curveName = s.pubKey.Curve.Params().Name
-		}
-
-		rBits, sBits := 0, 0
-		if ecdsaSig.R != nil {
-			rBits = ecdsaSig.R.BitLen()
-		}
-		if ecdsaSig.S != nil {
-			sBits = ecdsaSig.S.BitLen()
-		}
-
-		return fmt.Errorf(
-			"invalid sendgrid signature (signed event webhook): key_fp=%s curve=%s ts=%q sig_len=%d payload_len=%d payload_sha256=%x R_bits=%d S_bits=%d",
-			keyFP, curveName, timestamp, sigLen, payloadLen, hash, rBits, sBits,
-		)
+		return errors.New("invalid signature")
 	}
 
 	return nil
