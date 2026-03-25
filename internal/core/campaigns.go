@@ -973,8 +973,6 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 		campaignRec.Set("template_id", templateRecordID)
 		campaignRec.Set("to_send", 0)
 		campaignRec.Set("sent", 0)
-		campaignRec.Set("max_subscriber_id", 0)
-		campaignRec.Set("last_subscriber_id", 0)
 		campaignRec.Set("archive", o.Archive)
 		campaignRec.Set("archive_slug", sqliteCampaignStringValue(o.ArchiveSlug))
 		campaignRec.Set("archive_template_id", archiveTemplateRecordID)
