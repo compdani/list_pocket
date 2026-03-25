@@ -180,8 +180,13 @@
       <template #[`item.stats`]="{ item }">
         <div class="fields stats">
           <div>
-            <div class="text-caption font-weight-bold">{{ $t('campaigns.views') }}</div>
-            <div class="text-caption">{{ $utils.formatNumber(item.views) }}</div>
+            <div class="text-caption font-weight-bold">{{ $t('analytics.uniqueConfirmedViews') }}</div>
+            <div class="text-caption">
+              {{ $utils.formatNumber(item.views) }}
+              <span class="text-medium-emphasis">
+                ({{ formatConfirmedRate(item.views, getCampaignStats(item).sent || 0) }}%)
+              </span>
+            </div>
             <div class="text-caption text-medium-emphasis">
               raw {{ $utils.formatNumber(item.rawViews || 0) }} / suspected {{ $utils.formatNumber(item.suspectedViews || 0) }}
             </div>
@@ -464,6 +469,15 @@ export default {
         return true;
       }
       return false;
+    },
+
+    formatConfirmedRate(confirmedViews, sent) {
+      const confirmed = Number(confirmedViews) || 0;
+      const sentCount = Number(sent) || 0;
+      if (sentCount <= 0) {
+        return '0.0';
+      }
+      return ((confirmed / sentCount) * 100).toFixed(1);
     },
 
     highlightedRow(data) {

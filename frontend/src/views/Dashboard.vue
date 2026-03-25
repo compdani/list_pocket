@@ -109,7 +109,10 @@
               </h3>
               <div v-if="openTrackingBreakdown" class="chart-legend">
                 <span class="legend-chip legend-chip-confirmed">
-                  {{ $t('analytics.confirmedCount') }}
+                  {{ $t('analytics.uniqueConfirmedViews') }}
+                  <template v-if="openTrackingSummary">
+                    · {{ openTrackingSummary.confirmedRate }}%
+                  </template>
                 </span>
                 <span class="legend-chip legend-chip-all-raw">
                   {{ $t('analytics.rawViews') }}
@@ -161,6 +164,7 @@ export default {
       isCountsLoading: true,
       campaignClicks: null,
       openTrackingBreakdown: null,
+      openTrackingSummary: null,
       counts: {
         lists: {},
         subscribers: {},
@@ -183,13 +187,16 @@ export default {
 
       this.$api.getDashboardCharts().then((data) => {
         this.isChartsLoading = false;
+        const confirmedViews = data.campaignViews || data.campaignViewsConfirmed || [];
+        const rawUniqueViews = data.campaignViewsRaw || [];
         this.campaignClicks = this.makeChart(data.linkClicks);
         this.openTrackingBreakdown = this.makeOpenTrackingChart(
-          data.campaignViews || data.campaignViewsConfirmed || [],
+          confirmedViews,
           data.campaignViewsAllRaw || data.campaignViewsAll || [],
-          data.campaignViewsRaw,
+          rawUniqueViews,
           data.campaignViewsSuspected,
         );
+        this.openTrackingSummary = this.makeOpenTrackingSummary(confirmedViews, rawUniqueViews);
       });
     },
 
@@ -273,6 +280,31 @@ export default {
           },
         ],
       };
+    },
+
+    makeOpenTrackingSummary(confirmedViews, rawUniqueViews) {
+      const confirmed = this.sumCounts(confirmedViews);
+      const sent = Number(this.counts.messages) || 0;
+      if (sent <= 0) {
+        return {
+          confirmed,
+          sent,
+          confirmedRate: '0.0',
+        };
+      }
+
+      return {
+        confirmed,
+        sent,
+        confirmedRate: ((confirmed / sent) * 100).toFixed(1),
+      };
+    },
+
+    sumCounts(points) {
+      if (!Array.isArray(points) || points.length === 0) {
+        return 0;
+      }
+      return points.reduce((total, point) => total + (Number(point.count) || 0), 0);
     },
   },
 
