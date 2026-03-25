@@ -144,6 +144,10 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 	sig = strings.TrimSpace(sig)
 
+	sigLen := len(sig)
+	tsLen := len(timestamp)
+	payloadLen := len(b)
+
 	sigB, err := base64.StdEncoding.DecodeString(sig)
 	if err != nil {
 		// Also accept URL-safe/base64-without-padding variants from proxies.
@@ -151,7 +155,7 @@ func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 		if err != nil {
 			sigB, err = base64.RawURLEncoding.DecodeString(sig)
 			if err != nil {
-				return err
+				return fmt.Errorf("sendgrid signature base64 decode failed (sig_len=%d ts_len=%d): %w", sigLen, tsLen, err)
 			}
 		}
 	}
@@ -162,7 +166,7 @@ func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 	}{}
 
 	if _, err := asn1.Unmarshal(sigB, &ecdsaSig); err != nil {
-		return fmt.Errorf("error asn1 unmarshal of signature: %v", err)
+		return fmt.Errorf("sendgrid signature ASN.1 unmarshal failed (sig_len=%d sigB_len=%d): %v", sigLen, len(sigB), err)
 	}
 
 	h := sha256.New()
@@ -171,7 +175,31 @@ func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 	hash := h.Sum(nil)
 
 	if !ecdsa.Verify(s.pubKey, hash, ecdsaSig.R, ecdsaSig.S) {
-		return errors.New("invalid signature")
+		// Helpful diagnostics for signature mismatches.
+		// Avoid logging raw key material or the webhook payload itself.
+		keyFP := "unknown"
+		if pkBytes, err := x509.MarshalPKIXPublicKey(s.pubKey); err == nil {
+			sum := sha256.Sum256(pkBytes)
+			keyFP = fmt.Sprintf("%x", sum[:8]) // short fingerprint
+		}
+
+		curveName := "unknown"
+		if s.pubKey != nil && s.pubKey.Curve != nil && s.pubKey.Curve.Params() != nil {
+			curveName = s.pubKey.Curve.Params().Name
+		}
+
+		rBits, sBits := 0, 0
+		if ecdsaSig.R != nil {
+			rBits = ecdsaSig.R.BitLen()
+		}
+		if ecdsaSig.S != nil {
+			sBits = ecdsaSig.S.BitLen()
+		}
+
+		return fmt.Errorf(
+			"invalid sendgrid signature (signed event webhook): key_fp=%s curve=%s ts=%q sig_len=%d payload_len=%d payload_sha256=%x R_bits=%d S_bits=%d",
+			keyFP, curveName, timestamp, sigLen, payloadLen, hash, rBits, sBits,
+		)
 	}
 
 	return nil
