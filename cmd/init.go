@@ -149,6 +149,7 @@ type Config struct {
 	BounceSendgridEnabled     bool
 	BouncePostmarkEnabled     bool
 	BounceForwardemailEnabled bool
+	BounceBrevoEnabled        bool
 
 	PermissionsRaw json.RawMessage
 	Permissions    map[string]struct{}
@@ -865,6 +866,7 @@ func initConstConfig(ko *koanf.Koanf) *Config {
 	c.BounceSendgridEnabled = ko.Bool("bounce.sendgrid_enabled")
 	c.BouncePostmarkEnabled = ko.Bool("bounce.postmark.enabled")
 	c.BounceForwardemailEnabled = ko.Bool("bounce.forwardemail.enabled")
+	c.BounceBrevoEnabled = ko.Bool("bounce.brevo.enabled")
 	c.HasLegacyUser = ko.Exists("app.admin_username") || ko.Exists("app.admin_password")
 
 	b := md5.Sum([]byte(time.Now().String()))
@@ -1254,6 +1256,8 @@ func initBounceManager(cb func(models.Bounce) error, stmt *pbdb.Query, lo *log.L
 			ko.Bool("bounce.forwardemail.enabled"),
 			ko.String("bounce.forwardemail.key"),
 		},
+		BrevoEnabled: ko.Bool("bounce.brevo.enabled"),
+		BrevoToken:   ko.String("bounce.brevo.token"),
 		RecordBounceCB: cb,
 	}
 
@@ -1357,6 +1361,8 @@ func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.Fi
 			e.Set("app", app)
 			return e.Next()
 		})
+
+		registerDocsRoutes(se, ko)
 
 		// Public (subscriber) facing static files.
 		se.Router.GET("/public/static/{path...}", apis.Static(stuffbinSubFS{base: fs, root: "/public/static"}, false))

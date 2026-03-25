@@ -5,6 +5,11 @@
 # port, use port 80 (this will require running with elevated permissions).
 address = "localhost:9000"
 
+# Optional: serve MkDocs output at /docs/ and OpenAPI at /openapi.yaml + /swagger/
+# (defaults: docs/docs/_out and docs/swagger relative to the process working directory).
+# docs_dir = "docs/docs/_out"
+# swagger_dir = "docs/swagger"
+
 # Database.
 [db]
 host = "localhost"

@@ -1,12 +1,12 @@
-# SDKs and client libraries
+# SDKs and libs
 
-A list of 3rd party client libraries and SDKs that have been written for listmonk APIs.
+A list of third-party client libraries and SDKs written for **listmonk** APIs. List Pocket aims to keep HTTP APIs compatible with upstream listmonk where possible; these clients may work unchanged or with minor adjustments.
 
 !!! note
-	The list is community sourced. They have not been verified and are not officially supported.
+    These projects are maintained by their authors against upstream listmonk. Test against your List Pocket instance before relying on them in production.
 
 - [WordPress - WooCommerce plugin](https://github.com/post-duif/integration-listmonk-wordpress-plugin) integration for listmonk
-- [listmonk ](https://github.com/mikeckennedy/listmonk) — Python API client
+- [listmonk](https://github.com/mikeckennedy/listmonk) — Python API client
 - [listmonk-api](https://github.com/Knuckles-Team/listmonk-api) — Python API client
 - [frappe_listmonk](https://github.com/anandology/frappe_listmonk) — Frappe framework integration for listmonk
 - [auto-newsletter-listmonk](https://github.com/chaddyc/auto-newsletter-listmonk) — Ghost CMS integration

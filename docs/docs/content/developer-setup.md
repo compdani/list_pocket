@@ -1,45 +1,50 @@
 # Developer setup
-The app has two distinct components, the Go backend and the VueJS frontend. In the dev environment, both are run independently.
 
+The app has two parts: the Go backend (with embedded PocketBase) and the Vue 3 frontend. In development they run as separate processes.
 
-### Pre-requisites
-- `go`
-- `nodejs` (if you are working on the frontend) and `npm`
-- Postgres database. If there is no local installation, the demo docker DB can be used for development (`docker compose up demo-db`)
+### Prerequisites
 
+- Go (see `go.mod` for the toolchain version)
+- Node.js and npm (for the frontend)
+- PostgreSQL — create an empty database and point `[db]` in `config.toml` at it
 
-### First time setup
-`git clone https://github.com/knadh/listmonk.git`. The project uses go.mod, so it's best to clone it outside the Go src path.
+### First-time setup
 
-1. Copy `config.toml.sample` as `config.toml` and add your config.
-2. `make dist` to build the listmonk binary. Once the binary is built, run `./listmonk --install` to run the DB setup. For subsequent dev runs, use `make run`.
+1. Clone this repository (it uses Go modules; clone outside `GOPATH/src` if you still use legacy layouts).
+2. Copy `config.toml.sample` to `config.toml` and set database credentials.
+3. From the repo root, build the frontend and run the backend (see below).
 
-> [mailhog](https://github.com/mailhog/MailHog) is an excellent standalone mock SMTP server (with a UI) for testing and dev.
+[MailHog](https://github.com/mailhog/MailHog) is a useful mock SMTP server with a web UI for local e-mail testing.
 
+### Running locally
 
-### Running the dev environment
-You can run your dev environment locally or inside containers.
+1. **Backend** — from the repository root:
 
-After setting up the dev environment, you can visit `http://localhost:8080`.
+   ```bash
+   go run ./cmd
+   ```
 
+   By default the app listens on `http://127.0.0.1:9000`.
 
-1. Locally
+2. **Frontend** — in a second terminal:
 
-    - Run `make run` to start the listmonk dev server on `:9000`.
-    - Run `make run-frontend` to start the Vue frontend in dev mode using npm on `:8080`. All `/api/*` calls are proxied to the app running on `:9000`. Refer to the [frontend README](https://github.com/knadh/listmonk/blob/master/frontend/README.md) for an overview on how the frontend is structured.
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
 
-2. Inside containers (Using Makefile)
+   The dev server (default `http://127.0.0.1:8080`) proxies `/api/*` to the backend.
 
-    - Run `make init-dev-docker` to setup container for db.
-    - Run `make dev-docker` to setup docker container suite.
-    - Run `make rm-dev-docker` to clean up docker container suite.
+See the [frontend README](https://github.com/compdani/list_pocket/blob/master/frontend/README.md) for structure and conventions.
 
-3. Inside containers (Using devcontainer)
+### Production build
 
-    - Open repo in vscode, open command palette, and select "Dev Containers: Rebuild and Reopen in Container".
+Build the frontend, then compile the binary:
 
-It will set up db, and start frontend/backend for you.
+```bash
+cd frontend && npm install && npm run build
+cd .. && go build -o listpocket ./cmd
+```
 
-
-# Production build
-Run `make dist` to build the Go binary, build the Javascript frontend, and embed the static assets producing a single self-contained binary, `listmonk`
+This embeds the built assets into the binary. Run `./listpocket` with your `config.toml` (and optional `LISTPOCKET_*` environment variables).

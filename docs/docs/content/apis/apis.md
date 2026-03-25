@@ -1,6 +1,6 @@
 # APIs
 
-All features that are available on the listmonk dashboard are also available as REST-like HTTP APIs that can be interacted with directly. Request and response bodies are JSON. This allows easy scripting of listmonk and integration with other systems, for instance, synchronisation with external subscriber databases.
+All features that are available on the List Pocket admin dashboard are also available as REST-like HTTP APIs that can be interacted with directly. Request and response bodies are JSON. This allows easy scripting and integration with other systems, for instance, synchronisation with external subscriber databases.
 
 !!! note
     If you come across API calls that are yet to be documented, please consider contributing to docs.
@@ -81,5 +81,9 @@ All timestamp fields are in the format `2019-01-01T09:00:00.000000+05:30`. The s
 
 ## OpenAPI (Swagger) spec
 
-The auto-generated OpenAPI (Swagger) specification site for the APIs are available at [**listmonk.app/docs/swagger**](https://listmonk.app/docs/swagger/)
+When the app is running, the OpenAPI spec is served at **`/openapi.yaml`** and interactive **Swagger UI** at **`/swagger/`** (when `docs/swagger` exists or `app.swagger_dir` is set).
+
+The same files live in the repository under [`docs/swagger/`](https://github.com/compdani/list_pocket/tree/master/docs/swagger); you can also import `collections.yaml` into external tooling.
+
+The MkDocs manual is served at **`/docs/`** after you run `mkdocs build` in `docs/docs` (or set `app.docs_dir` to your `site_dir` output).
 

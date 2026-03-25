@@ -15,7 +15,7 @@ Configure the bounce mailbox in Settings -> Bounces. Either the "From" e-mail th
 Some mail servers may also return the bounce to the `Reply-To` address, which can also be added to the header settings.
 
 ### Bounce classification
-listmonk applies a series of heuristics looking for keywords in the bounced mail body to guess if it is a 'soft' bounce or a 'hard' bounce. For instance, 4.x.x and 5.x.x error status codes, common strings such as "mailbox not found" etc. If none of the heuristics match, then the bounce mail is considered to be 'soft' by default.
+List Pocket applies a series of heuristics looking for keywords in the bounced mail body to guess if it is a 'soft' bounce or a 'hard' bounce. For instance, 4.x.x and 5.x.x error status codes, common strings such as "mailbox not found" etc. If none of the heuristics match, then the bounce mail is considered to be 'soft' by default.
 
 ## Webhook API
 The bounce webhook API can be used to record bounce events with custom scripting. This could be by reading a mailbox, a database, or mail server logs.
@@ -43,20 +43,20 @@ curl -u 'api_username:access_token' -X POST 'http://localhost:9000/webhooks/boun
 ```
 
 ## External webhooks
-listmonk supports receiving bounce webhook events from the following SMTP providers.
+List Pocket supports receiving bounce webhook events from the following SMTP providers.
 
 | Endpoint                                                      | Description                            | More info                                                                                                             |
 | :------------------------------------------------------------ | :------------------------------------- | :-------------------------------------------------------------------------------------------------------------------- |
-| `https://listmonk.yoursite.com/webhooks/service/ses`          | Amazon (AWS) SES                       | See below                                                                                                             |
-| `https://listmonk.yoursite.com/webhooks/service/sendgrid`     | Sendgrid / Twilio Signed event webhook | [More info](https://docs.sendgrid.com/for-developers/tracking-events/getting-started-event-webhook-security-features) |
-| `https://listmonk.yoursite.com/webhooks/service/postmark`     | Postmark webhook                       | [More info](https://postmarkapp.com/developer/webhooks/webhooks-overview)                                             |
-| `https://listmonk.yoursite.com/webhooks/service/forwardemail` | Forward Email webhook                  | [More info](https://forwardemail.net/en/faq#do-you-support-bounce-webhooks)                                           |
+| `https://listpocket.yoursite.com/webhooks/service/ses`          | Amazon (AWS) SES                       | See below                                                                                                             |
+| `https://listpocket.yoursite.com/webhooks/service/sendgrid`     | Sendgrid / Twilio Signed event webhook | [More info](https://docs.sendgrid.com/for-developers/tracking-events/getting-started-event-webhook-security-features) |
+| `https://listpocket.yoursite.com/webhooks/service/postmark`     | Postmark webhook                       | [More info](https://postmarkapp.com/developer/webhooks/webhooks-overview)                                             |
+| `https://listpocket.yoursite.com/webhooks/service/forwardemail` | Forward Email webhook                  | [More info](https://forwardemail.net/en/faq#do-you-support-bounce-webhooks)                                           |
 
 ## Amazon Simple Email Service (SES)
 
 If using SES as your SMTP provider, automatic bounce processing is the recommended way to maintain your [sender reputation](https://docs.aws.amazon.com/ses/latest/dg/monitor-sender-reputation.html). The settings below are based on Amazon's [recommendations](https://docs.aws.amazon.com/ses/latest/dg/send-email-concepts-deliverability.html). Please note that your sending domain must be verified in SES before proceeding.
 
-1. In listmonk settings, go to the "Bounces" tab and configure the following:
+1. In List Pocket settings, go to the "Bounces" tab and configure the following:
     - Enable bounce processing: `Enabled`
         - Soft:
             - Bounce count: `2`
@@ -74,16 +74,16 @@ If using SES as your SMTP provider, automatic bounce processing is the recommend
     - Name: `ses-bounces` (or any other name)
 3. Create a new subscription to that topic with the following settings:
     - Protocol: `HTTPS`
-    - Endpoint: `https://listmonk.yoursite.com/webhooks/service/ses`
+    - Endpoint: `https://listpocket.yoursite.com/webhooks/service/ses`
     - Enable raw message delivery: `Disabled` (unchecked)
-4. SES will then make a request to your listmonk instance to confirm the subscription. After a page refresh, the subscription should have a status of "Confirmed". If not, your endpoint may be incorrect or not publicly accessible.
+4. SES will then make a request to your List Pocket instance to confirm the subscription. After a page refresh, the subscription should have a status of "Confirmed". If not, your endpoint may be incorrect or not publicly accessible.
 5. In the AWS console, go to [Simple Email Service](https://console.aws.amazon.com/ses/) and click "Identities" in the left sidebar.
 6. Click your domain and go to the "Notifications" tab.
 7. Next to "Feedback notifications", click "Edit".
 8. For both "Bounce feedback" and "Complaint feedback", use the following settings:
     - SNS topic: `ses-bounces` (or whatever you named it)
     - Include original email headers: `Enabled` (checked)
-9. Repeat steps 6-8 for any `Email address` identities you send from using listmonk
+9. Repeat steps 6-8 for any `Email address` identities you send from using List Pocket
 10. Bounce processing should now be working. You can test it with [SES simulator addresses](https://docs.aws.amazon.com/ses/latest/dg/send-an-email-from-console.html#send-email-simulator). Add them as subscribers, send them campaign previews, and ensure that the appropriate action was taken after the configured bounce count was reached.
     - Soft bounce: `ooto@simulator.amazonses.com`
     - Hard bounce: `bounce@simulator.amazonses.com`

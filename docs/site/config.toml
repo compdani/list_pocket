@@ -1,6 +1,6 @@
-baseurl = "https://listmonk.app/"
+baseurl = "https://localhost:1313/"
 languageCode = "en-us"
-title = "listmonk - Free and open source self-hosted newsletter, mailing list manager, and transactional mails"
+title = "List Pocket — self-hosted newsletter and mailing list manager"
 
 [taxonomies]
   tag = "tags"

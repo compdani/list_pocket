@@ -191,6 +191,11 @@ export default {
         key: '',
       };
 
+      d['bounce.brevo'] = d['bounce.brevo'] || {
+        enabled: false,
+        token: '',
+      };
+
       d['security.captcha'] = d['security.captcha'] || {};
       d['security.captcha'].altcha = d['security.captcha'].altcha || {
         enabled: true,
@@ -267,6 +272,12 @@ export default {
         form['bounce.forwardemail'].key = '';
       } else if (this.hasDummy(form['bounce.forwardemail'].key)) {
         hasDummy = 'forwardemail';
+      }
+
+      if (this.isDummy(form['bounce.brevo'].token)) {
+        form['bounce.brevo'].token = '';
+      } else if (this.hasDummy(form['bounce.brevo'].token)) {
+        hasDummy = 'brevo';
       }
 
       for (let i = 0; i < form.messengers.length; i += 1) {

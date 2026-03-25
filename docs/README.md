@@ -1,9 +1,11 @@
 # Static website and docs
 
-This repository contains the source for the static website for listpocket
+This directory holds the static marketing site and MkDocs documentation for **List Pocket**.
 
-- The website is in `site` and is built with hugo (run `hugo serve` inside `site` to preview).
+- The marketing site lives in `site` and is built with [Hugo](https://gohugo.io/). From `site`, run `hugo serve` to preview locally.
 
-- Documentation is in `docs` and is built with mkdocs (inside `docs`, run `mkdocs serve` to preview after running `pip install -r requirements.txt`)
+- Documentation lives in `docs/docs` and is built with [MkDocs](https://www.mkdocs.org/). From `docs/docs`, run `pip install -r requirements.txt` (once) and `mkdocs serve` to preview.
 
-- `i18n` directory has the static UI for i18n translations: https://listmonk.app/i18n
+- The `i18n` subdirectory contains a small static UI for editing translation JSON files (served alongside docs when deployed).
+
+When the main List Pocket binary runs from the repository root, it serves the built MkDocs site at **`/docs/`** (after `mkdocs build` in `docs/docs`) and the OpenAPI spec plus Swagger UI at **`/openapi.yaml`** and **`/swagger/`**. Override paths with `app.docs_dir` and `app.swagger_dir` in `config.toml` if needed.

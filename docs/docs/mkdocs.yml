@@ -1,4 +1,7 @@
-site_name: listmonk / Documentation
+site_name: List Pocket / Documentation
+# Set this to your public URL including /docs/ when serving via the app (e.g. http://127.0.0.1:9000/docs/).
+site_url: http://127.0.0.1:9000/docs/
+
 theme:
   name: material
   # custom_dir: "mkdocs-material/material"
@@ -44,7 +47,7 @@ nav:
     - "Installation": installation.md
     - "Configuration": configuration.md
     - "Upgrade": upgrade.md
-  - "Using listmonk":
+  - "Using List Pocket":
     - "Concepts": concepts.md
     - "Templating": templating.md
     - "Querying and segmenting subscribers": querying-and-segmentation.md
