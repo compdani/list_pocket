@@ -47,15 +47,13 @@ func registerDocsRoutes(se *pbcore.ServeEvent, ko *koanf.Koanf) {
 	}
 	lo.Printf("documentation site at /docs/ (MkDocs output: %s)", docsDir)
 
-	se.Router.GET("/docs", func(e *pbcore.RequestEvent) error {
-		http.Redirect(e.Response, e.Request, "/docs/", http.StatusMovedPermanently)
-		return nil
-	})
-	se.Router.GET("/docs/", func(e *pbcore.RequestEvent) error {
-		http.ServeFile(e.Response, e.Request, filepath.Join(docsDir, "index.html"))
-		return nil
-	})
+	// Single catch-all: Go's ServeMux rejects registering both /docs/ and /docs/{path...}
+	// because they match the same requests. Handle /docs → /docs/ redirect here too.
 	se.Router.GET("/docs/{path...}", func(e *pbcore.RequestEvent) error {
+		if e.Request.URL.Path == "/docs" {
+			http.Redirect(e.Response, e.Request, "/docs/", http.StatusMovedPermanently)
+			return nil
+		}
 		p := strings.TrimPrefix(strings.TrimSpace(e.Request.PathValue("path")), "/")
 		rel := strings.TrimPrefix(path.Clean("/"+p), "/")
 		if rel == "" || rel == "." {
