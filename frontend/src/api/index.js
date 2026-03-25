@@ -105,15 +105,26 @@ async function send(method, url, data, config = {}) {
   }
 }
 
+function toUTCISOString(value) {
+  if (value === null || typeof value === 'undefined' || value === '') {
+    return null;
+  }
+
+  const parsed = dayjs(value);
+  if (!parsed.isValid()) {
+    return null;
+  }
+
+  return parsed.toDate().toISOString();
+}
+
 function normalizeAnalyticsParams(params = {}) {
   const out = { ...params };
   ['from', 'to'].forEach((key) => {
-    const value = out[key];
-    if (value instanceof Date || (typeof value === 'string' && value.includes('T'))) {
-      const parsed = dayjs(value);
-      if (parsed.isValid()) {
-        out[key] = parsed.toDate().toISOString();
-      }
+    const normalized = toUTCISOString(out[key]);
+    if (normalized) {
+      // Always send analytics range bounds in UTC to the backend.
+      out[key] = normalized;
     }
   });
   return out;
@@ -254,10 +265,7 @@ export const getDashboardCounts = () => http.get(
 
 export const getDashboardCharts = () => http.get(
   '/api/dashboard/charts',
-  {
-    loading: models.dashboard,
-    params: { tz_offset: new Date().getTimezoneOffset() },
-  },
+  { loading: models.dashboard },
 );
 
 export const getWorkflowDashboard = (workflowId) => sendControlPlane(
@@ -768,7 +776,10 @@ export const logout = async () => {
 
 export const deleteGCCampaignAnalytics = async (typ, beforeDate) => http.delete(
   `/api/maintenance/analytics/${typ}`,
-  { loading: models.maintenance, params: { before_date: beforeDate } },
+  {
+    loading: models.maintenance,
+    params: { before_date: toUTCISOString(beforeDate) || beforeDate },
+  },
 );
 
 export const deleteGCSubscribers = async (typ) => http.delete(
@@ -778,7 +789,10 @@ export const deleteGCSubscribers = async (typ) => http.delete(
 
 export const deleteGCSubscriptions = async (beforeDate) => http.delete(
   '/api/maintenance/subscriptions/unconfirmed',
-  { loading: models.maintenance, params: { before_date: beforeDate } },
+  {
+    loading: models.maintenance,
+    params: { before_date: toUTCISOString(beforeDate) || beforeDate },
+  },
 );
 
 // Users.

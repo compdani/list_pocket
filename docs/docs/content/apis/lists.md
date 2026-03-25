@@ -4,10 +4,10 @@
 | :----- | :---------------------------------------------- | :------------------------ |
 | GET    | [/api/lists](#get-apilists)                     | Retrieve all lists.       |
 | GET    | [/api/public/lists](#get-public-apilists)       | Retrieve public lists.    |
-| GET    | [/api/lists/{list_id}](#get-apilistslist_id)    | Retrieve a specific list. |
+| GET    | [/api/lists/{id}](#get-apilistsid)    | Retrieve a specific list. |
 | POST   | [/api/lists](#post-apilists)                    | Create a new list.        |
-| PUT    | [/api/lists/{list_id}](#put-apilistslist_id)    | Update a list.            |
-| DELETE | [/api/lists/{list_id}](#delete-apilistslist_id) | Delete a list.            |
+| PUT    | [/api/lists/{id}](#put-apilistsid)    | Update a list.            |
+| DELETE | [/api/lists/{id}](#delete-apilistsid) | Delete a list.            |
 | DELETE | [/api/lists](#delete-apilists)                  | Delete multiple lists.    |
 
 ______________________________________________________________________
@@ -110,7 +110,7 @@ curl -X GET 'http://localhost:9000/api/public/lists'
 ```
 ______________________________________________________________________
 
-#### GET /api/lists/{list_id}
+#### GET /api/lists/{id}
 
 Retrieve a specific list.
 
@@ -118,7 +118,7 @@ Retrieve a specific list.
 
 | Name    | Type   | Required | Description                 |
 | :------ | :----- | :------- | :-------------------------- |
-| list_id | number | Yes      | ID of the list to retrieve. |
+| id | number | Yes      | ID of the list to retrieve. |
 
 ##### Example Request
 
@@ -190,7 +190,7 @@ curl -u "api_user:token" -X POST 'http://localhost:9000/api/lists'
 
 ______________________________________________________________________
 
-#### PUT /api/lists/{list_id}
+#### PUT /api/lists/{id}
 
 Update a list.
 
@@ -198,7 +198,7 @@ Update a list.
 
 | Name        | Type       | Required | Description                                    |
 | :---------- | :--------- | :------- | :--------------------------------------------- |
-| list_id     | number     | Yes      | ID of the list to update.                      |
+| id          | number     | Yes      | ID of the list to update.                      |
 | name        | string     |          | New name for the list.                         |
 | type        | string     |          | Type of list. Options: private, public.        |
 | optin       | string     |          | Opt-in type. Options: single, double.          |
@@ -236,7 +236,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/lists/5' \
 
 ______________________________________________________________________
 
-#### DELETE /api/lists/{list_id}
+#### DELETE /api/lists/{id}
 
 Delete a specific list.
 
@@ -244,7 +244,7 @@ Delete a specific list.
 
 | Name    | Type   | Required | Description               |
 | :------ | :----- | :------- | :------------------------ |
-| list_id | Number | Yes      | ID of the list to delete. |
+| id | Number | Yes      | ID of the list to delete. |
 
 ##### Example Request
 

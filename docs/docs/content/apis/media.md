@@ -3,9 +3,9 @@
 Method | Endpoint                                             | Description
 -------|------------------------------------------------------|---------------------------------
 GET    | [/api/media](#get-apimedia)                          | Get uploaded media file
-GET    | [/api/media/{media_id}](#get-apimediamedia_id)       | Get specific uploaded media file
+GET    | [/api/media/{id}](#get-apimediaid)       | Get specific uploaded media file
 POST   | [/api/media](#post-apimedia)                         | Upload media file
-DELETE | [/api/media/{media_id}](#delete-apimediamedia_id)    | Delete uploaded media file
+DELETE | [/api/media/{id}](#delete-apimediaid)    | Delete uploaded media file
 
 ______________________________________________________________________
 
@@ -38,7 +38,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/media' \
 ```
 ______________________________________________________________________
 
-#### GET /api/media/{media_id}
+#### GET /api/media/{id}
 
 Retrieve a specific media.
 
@@ -46,7 +46,7 @@ Retrieve a specific media.
 
 | Name          | Type      | Required | Description      |
 |:--------------|:----------|:---------|:-----------------|
-| media_id      | Number    | Yes      | Media ID.        |
+| id            | Number    | Yes      | Media ID.        |
 
 ##### Example Request
 
@@ -109,7 +109,7 @@ curl -u "api_user:token" -X POST 'http://localhost:9000/api/media' \
 
 ______________________________________________________________________
 
-#### DELETE /api/media/{media_id}
+#### DELETE /api/media/{id}
 
 Delete an uploaded media file.
 
@@ -117,7 +117,7 @@ Delete an uploaded media file.
 
 | Field    | Type      | Required | Description             |
 |----------|-----------|----------|-------------------------|
-| media_id | number    | Yes      | ID of media file to delete |
+| id | number    | Yes      | ID of media file to delete |
 
 ##### Example Request
 

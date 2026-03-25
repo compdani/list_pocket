@@ -4,7 +4,7 @@ Method   | Endpoint                                                | Description
 ---------|---------------------------------------------------------|------------------------------------------------
 GET      | [/api/bounces](#get-apibounces)                         | Retrieve bounce records.
 DELETE   | [/api/bounces](#delete-apibounces)                      | Delete all/multiple bounce records.
-DELETE   | [/api/bounces/{bounce_id}](#delete-apibouncesbounce_id) | Delete specific bounce record.
+DELETE   | [/api/bounces/{id}](#delete-apibouncesid) | Delete specific bounce record.
 
 
 ______________________________________________________________________
@@ -133,7 +133,7 @@ curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/bounces
 
 ______________________________________________________________________
 
-#### DELETE /api/bounces/{bounce_id}
+#### DELETE /api/bounces/{id}
 
 To delete specific bounce id.
 

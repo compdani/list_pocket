@@ -3,16 +3,16 @@
 | Method | Endpoint                                                                    | Description                               |
 | :----- | :-------------------------------------------------------------------------- | :---------------------------------------- |
 | GET    | [/api/campaigns](#get-apicampaigns)                                         | Retrieve all campaigns.                   |
-| GET    | [/api/campaigns/{campaign_id}](#get-apicampaignscampaign_id)                | Retrieve a specific campaign.             |
-| GET    | [/api/campaigns/{campaign_id}/preview](#get-apicampaignscampaign_idpreview) | Retrieve preview of a campaign.           |
+| GET    | [/api/campaigns/{id}](#get-apicampaignsid)                | Retrieve a specific campaign.             |
+| GET    | [/api/campaigns/{id}/preview](#get-apicampaignsidpreview) | Retrieve preview of a campaign.           |
 | GET    | [/api/campaigns/running/stats](#get-apicampaignsrunningstats)               | Retrieve stats of specified campaigns.    |
 | GET    | [/api/campaigns/analytics/{type}](#get-apicampaignsanalyticstype)           | Retrieve view counts for a  campaign.     |
 | POST   | [/api/campaigns](#post-apicampaigns)                                        | Create a new campaign.                    |
-| POST   | [/api/campaigns/{campaign_id}/test](#post-apicampaignscampaign_idtest)      | Test campaign with arbitrary subscribers. |
-| PUT    | [/api/campaigns/{campaign_id}](#put-apicampaignscampaign_id)                | Update a campaign.                        |
-| PUT    | [/api/campaigns/{campaign_id}/status](#put-apicampaignscampaign_idstatus)   | Change status of a campaign.              |
-| PUT    | [/api/campaigns/{campaign_id}/archive](#put-apicampaignscampaign_idarchive) | Publish campaign to public archive.       |
-| DELETE | [/api/campaigns/{campaign_id}](#delete-apicampaignscampaign_id)             | Delete a campaign.                        |
+| POST   | [/api/campaigns/{id}/test](#post-apicampaignsidtest)      | Test campaign with arbitrary subscribers. |
+| PUT    | [/api/campaigns/{id}](#put-apicampaignsid)                | Update a campaign.                        |
+| PUT    | [/api/campaigns/{id}/status](#put-apicampaignsidstatus)   | Change status of a campaign.              |
+| PUT    | [/api/campaigns/{id}/archive](#put-apicampaignsidarchive) | Publish campaign to public archive.       |
+| DELETE | [/api/campaigns/{id}](#delete-apicampaignsid)             | Delete a campaign.                        |
 | DELETE | [/api/campaigns](#delete-apicampaigns)                                      | Delete multiple campaigns.                |
 
 ____________________________________________________________________________________________________________________________________
@@ -88,7 +88,7 @@ Retrieve all campaigns.
 
 ______________________________________________________________________
 
-#### GET /api/campaigns/{campaign_id}
+#### GET /api/campaigns/{id}
 
 Retrieve a specific campaign.
 
@@ -96,7 +96,7 @@ Retrieve a specific campaign.
 
 | Name        | Type    | Required | Description                                              |
 | :---------- | :------ | :------- | :------------------------------------------------------- |
-| campaign_id | number  | Yes      | Campaign ID.                                             |
+| id | number  | Yes      | Campaign ID.                                             |
 | no_body     | boolean |          | When set to true, returns response without body content. |
 
 ##### Example Request
@@ -145,7 +145,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/1'
 
 ______________________________________________________________________
 
-#### GET /api/campaigns/{campaign_id}/preview
+#### GET /api/campaigns/{id}/preview
 
 Preview a specific campaign.
 
@@ -153,7 +153,7 @@ Preview a specific campaign.
 
 | Name        | Type   | Required | Description             |
 | :---------- | :----- | :------- | :---------------------- |
-| campaign_id | number | Yes      | Campaign ID to preview. |
+| id | number | Yes      | Campaign ID to preview. |
 
 ##### Example Request
 
@@ -178,7 +178,7 @@ Retrieve stats of specified campaigns.
 
 | Name        | Type   | Required | Description                    |
 | :---------- | :----- | :------- | :----------------------------- |
-| campaign_id | number | Yes      | Campaign IDs to get stats for. |
+| id | number | Yes      | Campaign IDs to get stats for. |
 
 ##### Example Request
 
@@ -353,7 +353,7 @@ curl -u "api_user:token" 'http://localhost:9000/api/campaigns' -X POST -H 'Conte
 
 ______________________________________________________________________
 
-#### POST /api/campaigns/{campaign_id}/test
+#### POST /api/campaigns/{id}/test
 
 Test campaign with arbitrary subscribers.
 
@@ -367,7 +367,7 @@ Use the same parameters in [POST /api/campaigns](#post-apicampaigns) in addition
 
 ______________________________________________________________________
 
-#### PUT /api/campaigns/{campaign_id}
+#### PUT /api/campaigns/{id}
 
 Update a campaign.
 
@@ -375,7 +375,7 @@ Update a campaign.
 
 ______________________________________________________________________
 
-#### PUT /api/campaigns/{campaign_id}
+#### PUT /api/campaigns/{id}
 
 Update a specific campaign.
 
@@ -383,7 +383,7 @@ Update a specific campaign.
 
 ______________________________________________________________________
 
-#### PUT /api/campaigns/{campaign_id}/status
+#### PUT /api/campaigns/{id}/status
 
 Change status of a campaign.
 
@@ -391,7 +391,7 @@ Change status of a campaign.
 
 | Name        | Type   | Required | Description                                                             |
 | :---------- | :----- | :------- | :---------------------------------------------------------------------- |
-| campaign_id | number | Yes      | Campaign ID to change status.                                           |
+| id | number | Yes      | Campaign ID to change status.                                           |
 | status      | string | Yes      | New status for campaign: 'scheduled', 'running', 'paused', 'cancelled'. |
 
 ##### Note
@@ -448,7 +448,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/campaigns/1/status' \
 
 ______________________________________________________________________
 
-#### PUT /api/campaigns/{campaign_id}/archive
+#### PUT /api/campaigns/{id}/archive
 
 Publish campaign to public archive.
 
@@ -456,7 +456,7 @@ Publish campaign to public archive.
 
 | Name                | Type        | Required | Description                                                               |
 | :------------------ | :---------- | :------- | :------------------------------------------------------------------------ |
-| campaign_id         | number      | Yes      | Campaign ID to publish to public archive.                                 |
+| id                  | number      | Yes      | Campaign ID to publish to public archive.                                 |
 | archive             | bool        | Yes      | State of the public archive.                                              |
 | archive_template_id | number      | No       | Archive template id. Defaults to 0.                                       |
 | archive_meta        | JSON string | No       | Optional Metadata to use in campaign message or template.Eg: name, email. |
@@ -467,7 +467,7 @@ Publish campaign to public archive.
 
 ```shell
 
-curl -u "api_user:token" -X PUT 'http://localhost:8080/api/campaigns/33/archive' 
+curl -u "api_user:token" -X PUT 'http://localhost:9000/api/campaigns/33/archive' 
 --header 'Content-Type: application/json' 
 --data-raw '{"archive":true,"archive_template_id":1,"archive_meta":{},"archive_slug":"my-newsletter-old-edition"}'
 ```
@@ -487,7 +487,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:8080/api/campaigns/33/archive'
 
 ______________________________________________________________________
 
-#### DELETE /api/campaigns/{campaign_id}
+#### DELETE /api/campaigns/{id}
 
 Delete a campaign.
 
@@ -495,7 +495,7 @@ Delete a campaign.
 
 | Name        | Type   | Required | Description            |
 | :---------- | :----- | :------- | :--------------------- |
-| campaign_id | number | Yes      | Campaign ID to delete. |
+| id | number | Yes      | Campaign ID to delete. |
 
 ##### Example Request
 

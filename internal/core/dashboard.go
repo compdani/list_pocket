@@ -2,16 +2,15 @@ package core
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/jmoiron/sqlx/types"
 	"github.com/labstack/echo/v4"
 )
 
 // GetDashboardCharts returns chart data points to render on the dashboard.
-func (c *Core) GetDashboardCharts(tzOffsetMins int) (types.JSONText, error) {
+func (c *Core) GetDashboardCharts() (types.JSONText, error) {
 	if c.isSQLite() {
-		return c.getDashboardChartsSQLite(tzOffsetMins)
+		return c.getDashboardChartsSQLite()
 	}
 
 	_ = c.refreshCache(matDashboardCharts, false)
@@ -42,81 +41,65 @@ func (c *Core) GetDashboardCounts() (types.JSONText, error) {
 	return out, nil
 }
 
-func sqliteTimezoneModifier(tzOffsetMins int) string {
-	if tzOffsetMins == 0 {
-		return "0 minutes"
-	}
-
-	return strconv.Itoa(-tzOffsetMins) + " minutes"
-}
-
-func (c *Core) getDashboardChartsSQLite(tzOffsetMins int) (types.JSONText, error) {
+func (c *Core) getDashboardChartsSQLite() (types.JSONText, error) {
 	const q = `
 	SELECT json_object(
 		'link_clicks', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(*) AS count, DATE(datetime(created, ?)) AS date
+				SELECT COUNT(*) AS count, DATE(datetime(created)) AS date
 				FROM link_clicks
-				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
-				GROUP BY DATE(datetime(created, ?))
-				ORDER BY DATE(datetime(created, ?))
+				WHERE DATE(datetime(created)) >= DATE(datetime('now'), '-30 day')
+				GROUP BY DATE(datetime(created))
+				ORDER BY DATE(datetime(created))
 			)
 		), '[]'),
 		'campaign_views', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
+				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created)) AS date
 				FROM campaign_views
 				WHERE COALESCE(is_suspected_privacy_open, 0) = 0
-				  AND DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
-				GROUP BY DATE(datetime(created, ?))
-				ORDER BY DATE(datetime(created, ?))
+				  AND DATE(datetime(created)) >= DATE(datetime('now'), '-30 day')
+				GROUP BY DATE(datetime(created))
+				ORDER BY DATE(datetime(created))
 			)
 		), '[]'),
 		'campaign_views_all_raw', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(*) AS count, DATE(datetime(created, ?)) AS date
+				SELECT COUNT(*) AS count, DATE(datetime(created)) AS date
 				FROM campaign_views
-				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
-				GROUP BY DATE(datetime(created, ?))
-				ORDER BY DATE(datetime(created, ?))
+				WHERE DATE(datetime(created)) >= DATE(datetime('now'), '-30 day')
+				GROUP BY DATE(datetime(created))
+				ORDER BY DATE(datetime(created))
 			)
 		), '[]'),
 		'campaign_views_raw', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
+				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created)) AS date
 				FROM campaign_views
-				WHERE DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
-				GROUP BY DATE(datetime(created, ?))
-				ORDER BY DATE(datetime(created, ?))
+				WHERE DATE(datetime(created)) >= DATE(datetime('now'), '-30 day')
+				GROUP BY DATE(datetime(created))
+				ORDER BY DATE(datetime(created))
 			)
 		), '[]'),
 		'campaign_views_suspected', COALESCE((
 			SELECT json_group_array(json_object('count', count, 'date', date))
 			FROM (
-				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created, ?)) AS date
+				SELECT COUNT(DISTINCT campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)) AS count, DATE(datetime(created)) AS date
 				FROM campaign_views
 				WHERE COALESCE(is_suspected_privacy_open, 0) = 1
-				  AND DATE(datetime(created, ?)) >= DATE(datetime('now', ?), '-30 day')
-				GROUP BY DATE(datetime(created, ?))
-				ORDER BY DATE(datetime(created, ?))
+				  AND DATE(datetime(created)) >= DATE(datetime('now'), '-30 day')
+				GROUP BY DATE(datetime(created))
+				ORDER BY DATE(datetime(created))
 			)
 		), '[]')
 	) AS data`
 
-	tzModifier := sqliteTimezoneModifier(tzOffsetMins)
-
 	var out types.JSONText
-	if err := c.db.Get(&out, q,
-		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
-		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
-		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
-		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
-		tzModifier, tzModifier, tzModifier, tzModifier, tzModifier,
-	); err != nil {
+	if err := c.db.Get(&out, q); err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
 	}
