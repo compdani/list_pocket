@@ -3,19 +3,19 @@
 | Method | Endpoint                                                                                | Description                                    |
 | ------ | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | GET    | [/api/subscribers](#get-apisubscribers)                                                 | Query and retrieve subscribers.                |
-| GET    | [/api/subscribers/{subscriber_id}](#get-apisubscriberssubscriber_id)                    | Retrieve a specific subscriber.                |
-| GET    | [/api/subscribers/{subscriber_id}/export](#get-apisubscriberssubscriber_idexport)       | Export a specific subscriber.                  |
-| GET    | [/api/subscribers/{subscriber_id}/bounces](#get-apisubscriberssubscriber_idbounces)     | Retrieve a  subscriber bounce records.         |
+| GET    | [/api/subscribers/{id}](#get-apisubscribersid)                    | Retrieve a specific subscriber.                |
+| GET    | [/api/subscribers/{id}/export](#get-apisubscribersidexport)       | Export a specific subscriber.                  |
+| GET    | [/api/subscribers/{id}/bounces](#get-apisubscribersidbounces)     | Retrieve a  subscriber bounce records.         |
 | POST   | [/api/subscribers](#post-apisubscribers)                                                | Create a new subscriber.                       |
-| POST   | [/api/subscribers/{subscriber_id}/optin](#post-apisubscriberssubscriber_idoptin)        | Sends optin confirmation email to subscribers. |
+| POST   | [/api/subscribers/{id}/optin](#post-apisubscribersidoptin)        | Sends optin confirmation email to subscribers. |
 | POST   | [/api/public/subscription](#post-apipublicsubscription)                                 | Create a public subscription.                  |
 | PUT    | [/api/subscribers/lists](#put-apisubscriberslists)                                      | Modify subscriber list memberships.            |
-| PUT    | [/api/subscribers/{subscriber_id}](#put-apisubscriberssubscriber_id)                    | Update a specific subscriber.                  |
-| PUT    | [/api/subscribers/{subscriber_id}/blocklist](#put-apisubscriberssubscriber_idblocklist) | Blocklist a specific subscriber.               |
+| PUT    | [/api/subscribers/{id}](#put-apisubscribersid)                    | Update a specific subscriber.                  |
+| PUT    | [/api/subscribers/{id}/blocklist](#put-apisubscribersidblocklist) | Blocklist a specific subscriber.               |
 | PUT    | [/api/subscribers/blocklist](#put-apisubscribersblocklist)                              | Blocklist one or many subscribers.             |
 | PUT    | [/api/subscribers/query/blocklist](#put-apisubscribersqueryblocklist)                   | Blocklist subscribers based on SQL expression. |
-| DELETE | [/api/subscribers/{subscriber_id}](#delete-apisubscriberssubscriber_id)                 | Delete a specific subscriber.                  |
-| DELETE | [/api/subscribers/{subscriber_id}/bounces](#delete-apisubscriberssubscriber_idbounces)  | Delete a specific subscriber's bounce records. |
+| DELETE | [/api/subscribers/{id}](#delete-apisubscribersid)                 | Delete a specific subscriber.                  |
+| DELETE | [/api/subscribers/{id}/bounces](#delete-apisubscribersidbounces)  | Delete a specific subscriber's bounce records. |
 | DELETE | [/api/subscribers](#delete-apisubscribers)                                              | Delete one or more subscribers.                |
 | POST   | [/api/subscribers/query/delete](#post-apisubscribersquerydelete)                        | Delete subscribers based on SQL expression.    |
 
@@ -134,7 +134,7 @@ curl -u 'api_username:access_token' -X GET 'http://localhost:9000/api/subscriber
 
 ______________________________________________________________________
 
-#### GET /api/subscribers/{subscriber_id}
+#### GET /api/subscribers/{id}
 
 Retrieve a specific subscriber.
 
@@ -142,7 +142,7 @@ Retrieve a specific subscriber.
 
 | Name          | Type   | Required | Description      |
 | :------------ | :----- | :------- | :--------------- |
-| subscriber_id | Number | Yes      | Subscriber's ID. |
+| id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -186,7 +186,7 @@ curl -u 'api_username:access_token' 'http://localhost:9000/api/subscribers/1'
 ```
 ______________________________________________________________________
 
-#### GET /api/subscribers/{subscriber_id}/export
+#### GET /api/subscribers/{id}/export
 
 Export a specific subscriber data that gives profile, list subscriptions, campaign views and link clicks information. Names of private lists are replaced with "Private list". 
 
@@ -194,7 +194,7 @@ Export a specific subscriber data that gives profile, list subscriptions, campai
 
 | Name          | Type   | Required | Description      |
 | :------------ | :----- | :------- | :--------------- |
-| subscriber_id | Number | Yes      | Subscriber's ID. |
+| id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -236,14 +236,14 @@ curl -u 'api_username:access_token' 'http://localhost:9000/api/subscribers/1/exp
 ```
 ______________________________________________________________________
 
-#### GET /api/subscribers/{subscriber_id}/bounces
+#### GET /api/subscribers/{id}/bounces
 
 Get a specific subscriber bounce records.
 ##### Parameters
 
 | Name          | Type   | Required | Description      |
 | :------------ | :----- | :------- | :--------------- |
-| subscriber_id | Number | Yes      | Subscriber's ID. |
+| id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -340,7 +340,7 @@ curl -u 'api_username:access_token' 'http://localhost:9000/api/subscribers' -H '
 
 ______________________________________________________________________
 
-#### POST /api/subscribers/{subscribers_id}/optin
+#### POST /api/subscribers/{id}/optin
 
 Sends optin confirmation email to subscribers.
 
@@ -382,7 +382,7 @@ curl 'http://localhost:9000/api/public/subscription' -H 'Content-Type: applicati
 ##### Example Form Request
 
 ```shell
-curl -u 'http://localhost:9000/api/public/subscription' \
+curl 'http://localhost:9000/api/public/subscription' \
     -d 'email=subscriber@domain.com' -d 'name=The Subscriber' -d 'l=eb420c55-4cfb-4972-92ba-c93c34ba475d' -d 'l=0c554cfb-eb42-4972-92ba-c93c34ba475d'
 ```
 
@@ -429,7 +429,7 @@ curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscriber
 
 ______________________________________________________________________
 
-#### PUT /api/subscribers/{subscriber_id}
+#### PUT /api/subscribers/{id}
 
 Update a specific subscriber.
 
@@ -437,7 +437,7 @@ Update a specific subscriber.
 
 ______________________________________________________________________
 
-#### PUT /api/subscribers/{subscriber_id}/blocklist
+#### PUT /api/subscribers/{id}/blocklist
 
 Blocklist a specific subscriber.
 
@@ -445,7 +445,7 @@ Blocklist a specific subscriber.
 
 | Name          | Type   | Required | Description      |
 | :------------ | :----- | :------- | :--------------- |
-| subscriber_id | Number | Yes      | Subscriber's ID. |
+| id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -476,7 +476,7 @@ Blocklist multiple subscriber.
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' -X PUT 'http://localhost:8080/api/subscribers/blocklist' -H 'Content-Type: application/json' --data-raw '{"ids":[2,1]}'
+curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscribers/blocklist' -H 'Content-Type: application/json' --data-raw '{"ids":[2,1]}'
 ```
 
 ##### Example Response
@@ -505,7 +505,7 @@ Blocklist subscribers based on SQL expression.
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' -X POST 'http://localhost:9000/api/subscribers/query/blocklist' \
+curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscribers/query/blocklist' \
 -H 'Content-Type: application/json' \
 --data-raw '{"query":"subscribers.name LIKE \'John Doe\' AND subscribers.attribs->>'\''city'\'' = '\''Bengaluru'\''"}'
 ```
@@ -520,7 +520,7 @@ curl -u 'api_username:access_token' -X POST 'http://localhost:9000/api/subscribe
 
 ______________________________________________________________________
 
-#### DELETE /api/subscribers/{subscriber_id}
+#### DELETE /api/subscribers/{id}
 
 Delete a specific subscriber.
 
@@ -528,7 +528,7 @@ Delete a specific subscriber.
 
 | Name          | Type   | Required | Description      |
 | :------------ | :----- | :------- | :--------------- |
-| subscriber_id | Number | Yes      | Subscriber's ID. |
+| id | Number | Yes      | Subscriber's ID. |
 
 ##### Example Request
 
@@ -546,7 +546,7 @@ curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/subscri
 
 ______________________________________________________________________
 
-#### DELETE /api/subscribers/{subscriber_id}/bounces
+#### DELETE /api/subscribers/{id}/bounces
 
 Delete a subscriber's bounce records
 
@@ -554,7 +554,7 @@ Delete a subscriber's bounce records
 
 | Name | Type          | Required | Description      |
 | :--- | :------------ | :------- | :--------------- |
-| id   | subscriber_id | Yes      | Subscriber's ID. |
+| id   | id | Yes      | Subscriber's ID. |
 
 ##### Example Request
 

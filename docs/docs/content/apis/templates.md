@@ -3,13 +3,13 @@
 | Method | Endpoint                                                                      | Description                    |
 |:-------|:------------------------------------------------------------------------------|:-------------------------------|
 | GET    | [/api/templates](#get-apitemplates)                                           | Retrieve all templates         |
-| GET    | [/api/templates/{template_id}](#get-apitemplates-template_id)                 | Retrieve a template            |
-| GET    | [/api/templates/{template_id}/preview](#get-apitemplates-template_id-preview) | Retrieve template HTML preview |
+| GET    | [/api/templates/{id}](#get-apitemplates-id)                 | Retrieve a template            |
+| GET    | [/api/templates/{id}/preview](#get-apitemplates-id-preview) | Retrieve template HTML preview |
 | POST   | [/api/templates](#post-apitemplates)                                          | Create a template              |
 | POST   | /api/templates/preview                                                        | Render and preview a template  |
-| PUT    | [/api/templates/{template_id}](#put-apitemplatestemplate_id)                  | Update a template              |
-| PUT    | [/api/templates/{template_id}/default](#put-apitemplates-template_id-default) | Set default template           |
-| DELETE | [/api/templates/{template_id}](#delete-apitemplates-template_id)              | Delete a template              |
+| PUT    | [/api/templates/{id}](#put-apitemplatesid)                  | Update a template              |
+| PUT    | [/api/templates/{id}/default](#put-apitemplates-id-default) | Set default template           |
+| DELETE | [/api/templates/{id}](#delete-apitemplates-id)              | Delete a template              |
 
 ______________________________________________________________________
 
@@ -44,7 +44,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/templates'
 
 ______________________________________________________________________
 
-#### GET /api/templates/{template_id}
+#### GET /api/templates/{id}
 
 Retrieve a specific template.
 
@@ -52,7 +52,7 @@ Retrieve a specific template.
 
 | Name        | Type      | Required | Description                    |
 |:------------|:----------|:---------|:-------------------------------|
-| template_id | number    | Yes      | ID of the template to retrieve |
+| id | number    | Yes      | ID of the template to retrieve |
 
 ##### Example Request
 
@@ -79,7 +79,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/templates/1'
 
 ______________________________________________________________________
 
-#### GET /api/templates/{template_id}/preview
+#### GET /api/templates/{id}/preview
 
 Retrieve the HTML preview of a template.
 
@@ -87,7 +87,7 @@ Retrieve the HTML preview of a template.
 
 | Name        | Type      | Required | Description                   |
 |:------------|:----------|:---------|:------------------------------|
-| template_id | number    | Yes      | ID of the template to preview |
+| id | number    | Yes      | ID of the template to preview |
 
 ##### Example Request
 
@@ -162,7 +162,7 @@ curl -u "api_user:token" -X POST 'http://localhost:9000/api/templates' \
 
 ______________________________________________________________________
 
-#### PUT /api/templates/{template_id}
+#### PUT /api/templates/{id}
 
 Update a template.
 
@@ -170,7 +170,7 @@ Update a template.
 
 ______________________________________________________________________
 
-#### PUT /api/templates/{template_id}/default
+#### PUT /api/templates/{id}/default
 
 Set a template as the default.
 
@@ -178,7 +178,7 @@ Set a template as the default.
 
 | Name        | Type      | Required | Description                          |
 |:------------|:----------|:---------|:-------------------------------------|
-| template_id | number    | Yes      | ID of the template to set as default |
+| id | number    | Yes      | ID of the template to set as default |
 
 ##### Example Request
 
@@ -205,7 +205,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/templates/1/default'
 
 ______________________________________________________________________
 
-#### DELETE /api/templates/{template_id}
+#### DELETE /api/templates/{id}
 
 Delete a template.
 
@@ -213,7 +213,7 @@ Delete a template.
 
 | Name        | Type      | Required | Description                  |
 |:------------|:----------|:---------|:-----------------------------|
-| template_id | number    | Yes      | ID of the template to delete |
+| id | number    | Yes      | ID of the template to delete |
 
 ##### Example Request
 
