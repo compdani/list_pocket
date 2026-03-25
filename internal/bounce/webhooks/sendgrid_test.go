@@ -115,3 +115,28 @@ func TestSendgridProcessBounceHandlesURLSafeSignature(t *testing.T) {
 		t.Fatalf("expected dropped event to be hard bounce, got %q", got[0].Type)
 	}
 }
+
+func TestSendgridProcessBounceAcceptsDashedCampaignHeaderJSONField(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("failed to generate key: %v", err)
+	}
+
+	sg := &Sendgrid{pubKey: &priv.PublicKey}
+	payload := []byte(`[
+		{"email":"User@Example.com","timestamp":1710000000,"event":"bounce","bounce_classification":"technical","X-Listpocket-Campaign":"cmp-1"}
+	]`)
+	timestamp := []byte("1710001000")
+	sig := signSendgridPayload(t, priv, timestamp, payload)
+
+	got, err := sg.ProcessBounce(sig, string(timestamp), payload)
+	if err != nil {
+		t.Fatalf("ProcessBounce returned error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 bounce record, got %d", len(got))
+	}
+	if got[0].CampaignUUID != "cmp-1" {
+		t.Fatalf("expected campaign cmp-1, got %q", got[0].CampaignUUID)
+	}
+}

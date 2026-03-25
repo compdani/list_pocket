@@ -402,12 +402,17 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 			createdAt = time.Now()
 		}
 
-		if _, err := tx.Exec(`
-			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
-			VALUES (?, NULLIF(?, ''), ?, ?, ?, ?)`,
-			sub.ID, campID, b.Type, b.Source, meta, createdAt.UTC().Format("2006-01-02 15:04:05")); err != nil {
-			c.log.Printf("error recording bounce: %v", err)
-			return err
+		if campID == "" {
+			// campaign_id is NOT NULL in the DB schema; skip instead of throwing constraint errors.
+			c.log.Printf("skipping bounce: missing/unknown campaign_id (campaign_uuid=%q subscriber=%q)", b.CampaignUUID, b.Email)
+		} else {
+			if _, err := tx.Exec(`
+				INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
+				VALUES (?, NULLIF(?, ''), ?, ?, ?, ?)`,
+				sub.ID, campID, b.Type, b.Source, meta, createdAt.UTC().Format("2006-01-02 15:04:05")); err != nil {
+				c.log.Printf("error recording bounce: %v", err)
+				return err
+			}
 		}
 	}
 
