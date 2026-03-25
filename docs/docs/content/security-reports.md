@@ -4,7 +4,7 @@ If you spot a security vulnerability in List Pocket, please report it via GitHub
 
 ### Subscriber SQL queries
 
-The subscribers UI (and APIs) support issuing of arbitrary SQL expressions via a `query` parameter. While List Pocket ensures that the queries are executed as readonly and has basic checks for target tables to prevent accidental side-effects, it is not really possible to prevent arbitrary Turing-complete SQL expressions from calling various Postgres functions. Postgres itself does not offer an easy way to allow/disallow specific functions.
+The subscribers UI (and APIs) support issuing of arbitrary SQL expressions via a `query` parameter. While List Pocket ensures that the queries are executed as readonly and has basic checks for target tables to prevent accidental side-effects, it is not really possible to prevent arbitrary Turing-complete SQL expressions from calling various SQLite built-in functions. SQLite does not offer a fine-grained way to allow or disallow specific functions per connection in this context.
 
 That's why this feature is behind a special permission `subscribers:sql_query` and its risks are documented in [User roles and permissions](roles-and-permissions.md#user-roles). In a multi-user scenario, it is up to an admin to allow this permission to trusted users.
 

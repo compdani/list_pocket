@@ -1,7 +1,7 @@
 # Configuration
 
 ### TOML Configuration file
-One or more TOML files can be read by passing `--config config.toml` multiple times. Apart from a few low level configuration variables and the database configuration, all other settings can be managed from the `Settings` dashboard on the admin UI.
+One or more TOML files can be read by passing `--config config.toml` multiple times. Apart from a few low-level options (such as `[app]` and built-in docs paths), all other settings can be managed from the `Settings` dashboard on the admin UI. **There is no `[db]` block:** persistence is entirely through embedded PocketBase (SQLite in `pb_data/` by default).
 
 To generate a new sample configuration file, run `listpocket --new-config` (or `go run ./cmd -- --new-config` during development).
 
@@ -15,12 +15,8 @@ Example:
 | `LISTPOCKET_app__address`      | "0.0.0.0:9000" |
 | `LISTPOCKET_app__docs_dir`    | "/var/listpocket/mkdocs-out" |
 | `LISTPOCKET_app__swagger_dir` | "/var/listpocket/swagger" |
-| `LISTPOCKET_db__host`          | db             |
-| `LISTPOCKET_db__port`          | 5432           |
-| `LISTPOCKET_db__user`          | listpocket     |
-| `LISTPOCKET_db__password`      | listpocket     |
-| `LISTPOCKET_db__database`      | listpocket     |
-| `LISTPOCKET_db__ssl_mode`      | disable        |
+
+PocketBase’s own flags (for example data directory) are passed through the PocketBase CLI embedded in the binary; see [PocketBase configuration](https://pocketbase.io/docs/).
 
 ### Built-in documentation URLs
 
@@ -121,7 +117,6 @@ https://docs.docker.com/engine/reference/commandline/logs/
 ```
 sudo docker logs -f
 sudo docker logs listpocket_app -t
-sudo docker logs listpocket_db -t
 sudo docker logs --help
 ```
 Container info: `sudo docker inspect` on your compose project’s containers.

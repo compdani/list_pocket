@@ -2,7 +2,7 @@
 
 [![List Pocket](images/logo.svg)](https://github.com/compdani/list_pocket)
 
-**List Pocket** is a self-hosted newsletter and mailing list manager. It keeps the core [listmonk](https://listmonk.app)-style workflow (campaigns, lists, subscribers, APIs) while moving the stack onto **embedded [PocketBase](https://pocketbase.io)** for auth, realtime, and collection-backed data, alongside **PostgreSQL** for the existing relational core.
+**List Pocket** is a self-hosted newsletter and mailing list manager. It keeps the core [listmonk](https://listmonk.app)-style workflow (campaigns, lists, subscribers, APIs) while running entirely on **embedded [PocketBase](https://pocketbase.io)** — auth, collections, realtime, and the app’s SQL layer (SQLite under the hood). There is no separate PostgreSQL or other external database server.
 
 The admin UI is a **Vue 3** app; the server is a single **Go** binary.
 

@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/querying-and-segmentation/">
+      
       
         <link rel="prev" href="../templating/">
       
@@ -1612,7 +1614,7 @@
 
 
 <h1 id="querying-and-segmenting-subscribers">Querying and segmenting subscribers<a class="headerlink" href="#querying-and-segmenting-subscribers" title="Permanent link">&para;</a></h1>
-<p>List Pocket allows the writing of partial Postgres SQL expressions to query, filter, and segment subscribers.</p>
+<p>List Pocket allows the writing of partial <strong>SQL</strong> expressions (against the PocketBase-backed SQLite database) to query, filter, and segment subscribers.</p>
 <h2 id="database-fields">Database fields<a class="headerlink" href="#database-fields" title="Permanent link">&para;</a></h2>
 <p>These are the fields in the subscriber database that can be queried.</p>
 <table>
@@ -1641,7 +1643,7 @@
 </tr>
 <tr>
 <td><code>subscribers.attribs</code></td>
-<td>Map of arbitrary attributes represented as JSON. Accessed via the <code>-&gt;</code> and <code>-&gt;&gt;</code> Postgres operator.</td>
+<td>Map of arbitrary attributes represented as JSON (use SQLite-compatible JSON access in queries).</td>
 </tr>
 <tr>
 <td><code>subscribers.created_at</code></td>
@@ -1708,7 +1710,7 @@
 <span class="w">    </span><span class="n">subscribers</span><span class="p">.</span><span class="n">attribs</span><span class="o">-&gt;</span><span class="s1">&#39;stack&#39;</span><span class="o">-&gt;</span><span class="s1">&#39;languages&#39;</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s1">&#39;python&#39;</span><span class="w"> </span><span class="k">AND</span>
 <span class="w">    </span><span class="n">subscribers</span><span class="p">.</span><span class="n">attribs</span><span class="o">-&gt;</span><span class="s1">&#39;stack&#39;</span><span class="o">-&gt;&gt;</span><span class="s1">&#39;preferred_language&#39;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">&#39;go&#39;</span>
 </code></pre></div>
-<p>To learn how to write SQL expressions to do advancd querying on JSON attributes, refer to the Postgres <a href="https://www.postgresql.org/docs/11/functions-json.html">JSONB documentation</a>.</p>
+<p>To learn how to write SQL expressions for JSON attributes, refer to SQLite’s <a href="https://www.sqlite.org/json1.html">JSON1 extension</a> (PocketBase uses SQLite under the hood).</p>
 
 
 

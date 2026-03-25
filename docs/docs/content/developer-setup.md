@@ -6,12 +6,11 @@ The app has two parts: the Go backend (with embedded PocketBase) and the Vue 3 f
 
 - Go (see `go.mod` for the toolchain version)
 - Node.js and npm (for the frontend)
-- PostgreSQL — create an empty database and point `[db]` in `config.toml` at it
 
 ### First-time setup
 
 1. Clone this repository (it uses Go modules; clone outside `GOPATH/src` if you still use legacy layouts).
-2. Copy `config.toml.sample` to `config.toml` and set database credentials.
+2. Copy `config.toml.sample` to `config.toml` and set `[app]` as needed.
 3. From the repo root, build the frontend and run the backend (see below).
 
 [MailHog](https://github.com/mailhog/MailHog) is a useful mock SMTP server with a web UI for local e-mail testing.
@@ -24,7 +23,7 @@ The app has two parts: the Go backend (with embedded PocketBase) and the Vue 3 f
    go run ./cmd
    ```
 
-   By default the app listens on `http://127.0.0.1:9000`.
+   By default the app listens on `http://127.0.0.1:9000`. PocketBase stores its data under **`pb_data/`** (SQLite) in the working directory unless you change PocketBase’s data dir.
 
 2. **Frontend** — in a second terminal:
 

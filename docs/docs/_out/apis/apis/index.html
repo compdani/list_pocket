@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/apis/apis/">
+      
       
         <link rel="prev" href="../../oidc/">
       
@@ -1742,7 +1744,9 @@
 </tbody>
 </table>
 <h2 id="openapi-swagger-spec">OpenAPI (Swagger) spec<a class="headerlink" href="#openapi-swagger-spec" title="Permanent link">&para;</a></h2>
-<p>The OpenAPI (Swagger) collection for the PocketBase-backed APIs is maintained in this repository under <a href="https://github.com/compdani/list_pocket/tree/master/docs/swagger"><code>docs/swagger/</code></a>. Serve or import <code>collections.yaml</code> with your OpenAPI tooling.</p>
+<p>When the app is running, the OpenAPI spec is served at <strong><code>/openapi.yaml</code></strong> and interactive <strong>Swagger UI</strong> at <strong><code>/swagger/</code></strong> (when <code>docs/swagger</code> exists or <code>app.swagger_dir</code> is set).</p>
+<p>The same files live in the repository under <a href="https://github.com/compdani/list_pocket/tree/master/docs/swagger"><code>docs/swagger/</code></a>; you can also import <code>collections.yaml</code> into external tooling.</p>
+<p>The MkDocs manual is served at <strong><code>/docs/</code></strong> after you run <code>mkdocs build</code> in <code>docs/docs</code> (or set <code>app.docs_dir</code> to your <code>site_dir</code> output).</p>
 
 
 

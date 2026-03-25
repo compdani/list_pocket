@@ -26,7 +26,7 @@
     <h2 class="center">Download</h2>
     <p class="center">
       Builds are produced from the <a href="{{ .Page.Site.Data.github.url }}">GitHub repository</a>.
-      Follow the README to compile the <code>listpocket</code> binary and run it with PostgreSQL and a <code>config.toml</code>.
+      Follow the README to compile the <code>listpocket</code> binary and run it with a <code>config.toml</code> (data lives in embedded PocketBase / <code>pb_data/</code>).
     </p><br />
 
     <div class="row">
@@ -35,7 +35,7 @@
           <h3>From source</h3>
           <p>Install Go and Node.js, clone the repo, then:</p>
           <ul class="install-steps">
-            <li><code>cp config.toml.sample config.toml</code> and set <code>[db]</code> for Postgres.</li>
+            <li><code>cp config.toml.sample config.toml</code> and adjust <code>[app]</code> if needed.</li>
             <li><code>cd frontend &amp;&amp; npm install &amp;&amp; npm run build</code></li>
             <li><code>go build -o listpocket ./cmd</code></li>
             <li>Run <code>./listpocket</code> and open <code>http://127.0.0.1:9000</code></li>
@@ -47,8 +47,8 @@
         <div class="box">
           <h3>Stack</h3>
           <p>
-            List Pocket combines a listmonk-style campaign engine with <strong>embedded PocketBase</strong> (auth and collections)
-            and <strong>PostgreSQL</strong> for the relational core. It is a fork for self-hosted deployments, not a drop-in
+            List Pocket combines a listmonk-style campaign engine with <strong>embedded PocketBase</strong> for storage,
+            auth, and realtime (SQLite under the hood). It is a fork for self-hosted deployments, not a drop-in
             replacement for upstream Docker images.
           </p>
           <p><a href="/docs">Documentation &rarr;</a></p>

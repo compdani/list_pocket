@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/developer-setup/">
+      
       
         <link rel="prev" href="../maintenance/performance/">
       
@@ -1495,12 +1497,11 @@
 <ul>
 <li>Go (see <code>go.mod</code> for the toolchain version)</li>
 <li>Node.js and npm (for the frontend)</li>
-<li>PostgreSQL — create an empty database and point <code>[db]</code> in <code>config.toml</code> at it</li>
 </ul>
 <h3 id="first-time-setup">First-time setup<a class="headerlink" href="#first-time-setup" title="Permanent link">&para;</a></h3>
 <ol>
 <li>Clone this repository (it uses Go modules; clone outside <code>GOPATH/src</code> if you still use legacy layouts).</li>
-<li>Copy <code>config.toml.sample</code> to <code>config.toml</code> and set database credentials.</li>
+<li>Copy <code>config.toml.sample</code> to <code>config.toml</code> and set <code>[app]</code> as needed.</li>
 <li>From the repo root, build the frontend and run the backend (see below).</li>
 </ol>
 <p><a href="https://github.com/mailhog/MailHog">MailHog</a> is a useful mock SMTP server with a web UI for local e-mail testing.</p>
@@ -1510,7 +1511,7 @@
 </ol>
 <div class="highlight"><pre><span></span><code>go<span class="w"> </span>run<span class="w"> </span>./cmd
 </code></pre></div>
-<p>By default the app listens on <code>http://127.0.0.1:9000</code>.</p>
+<p>By default the app listens on <code>http://127.0.0.1:9000</code>. PocketBase stores its data under <strong><code>pb_data/</code></strong> (SQLite) in the working directory unless you change PocketBase’s data dir.</p>
 <ol>
 <li><strong>Frontend</strong> — in a second terminal:</li>
 </ol>
