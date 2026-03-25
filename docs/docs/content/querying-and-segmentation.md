@@ -1,6 +1,6 @@
 # Querying and segmenting subscribers
 
-List Pocket allows the writing of partial Postgres SQL expressions to query, filter, and segment subscribers.
+List Pocket allows the writing of partial **SQL** expressions (against the PocketBase-backed SQLite database) to query, filter, and segment subscribers.
 
 ## Database fields
 
@@ -12,7 +12,7 @@ These are the fields in the subscriber database that can be queried.
 | `subscribers.email`      | E-mail ID of the subscriber                                                                         |
 | `subscribers.name`       | Name of the subscriber                                                                              |
 | `subscribers.status`     | Status of the subscriber (`enabled`, `disabled`, `blocklisted`)                                     |
-| `subscribers.attribs`    | Map of arbitrary attributes represented as JSON. Accessed via the `->` and `->>` Postgres operator. |
+| `subscribers.attribs`    | Map of arbitrary attributes represented as JSON (use SQLite-compatible JSON access in queries). |
 | `subscribers.created_at` | Timestamp when the subscriber was first added                                                       |
 | `subscribers.updated_at` | Timestamp when the subscriber was modified                                                          |
 
@@ -99,4 +99,4 @@ subscribers.status = 'blocklisted' AND
 
 ```
 
-To learn how to write SQL expressions to do advancd querying on JSON attributes, refer to the Postgres [JSONB documentation](https://www.postgresql.org/docs/11/functions-json.html).
+To learn how to write SQL expressions for JSON attributes, refer to SQLite’s [JSON1 extension](https://www.sqlite.org/json1.html) (PocketBase uses SQLite under the hood).

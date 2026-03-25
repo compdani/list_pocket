@@ -10,20 +10,6 @@ address = "localhost:9000"
 # docs_dir = "docs/docs/_out"
 # swagger_dir = "docs/swagger"
 
-# Database.
-[db]
-host = "localhost"
-port = 5432
-user = "listpocket"
-password = "listpocket"
-
-# Ensure that this database has been created in Postgres.
-database = "listpocket"
-
-ssl_mode = "disable"
-max_open = 25
-max_idle = 25
-max_lifetime = "300s"
-
-# Optional space separated Postgres DSN params. eg: "application_name=listpocket gssencmode=disable"
-params = ""
+# List Pocket uses embedded PocketBase for storage, auth, and realtime. Application
+# data lives in PocketBase’s SQLite database (default directory: pb_data/). There is
+# no separate PostgreSQL server to configure.

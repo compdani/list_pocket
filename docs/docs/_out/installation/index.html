@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/installation/">
+      
       
         <link rel="prev" href="..">
       
@@ -375,10 +377,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#database-setup" class="md-nav__link">
+  <a href="#database-and-migrations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Database setup
+        Database and migrations
       
     </span>
   </a>
@@ -1451,10 +1453,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#database-setup" class="md-nav__link">
+  <a href="#database-and-migrations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Database setup
+        Database and migrations
       
     </span>
   </a>
@@ -1490,24 +1492,24 @@
 
 
 <h1 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h1>
-<p>List Pocket ships as source in this repository. It is a <strong>Go</strong> application that uses <strong>PostgreSQL</strong> for relational data and <strong>embedded PocketBase</strong> for auth and related features. There is no published Docker image or third-party one-click installer for this fork; deploy by building the binary yourself or wrapping it in your own container.</p>
+<p>List Pocket ships as source in this repository. It is a <strong>Go</strong> application built around <strong>embedded PocketBase</strong> for all persistence, authentication, and realtime features. Data is stored in PocketBase’s <strong>SQLite</strong> database (by default under <code>pb_data/</code>). There is no published Docker image or third-party one-click installer for this fork; deploy by building the binary yourself or wrapping it in your own container.</p>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
 <ul>
-<li>PostgreSQL (create a database and user; configure <code>[db]</code> in <code>config.toml</code>)</li>
-<li>Go and Node.js/npm (to build from source)</li>
+<li>Go (see <code>go.mod</code> for the toolchain)</li>
+<li>Node.js/npm (to build the admin frontend from source)</li>
 </ul>
 <h2 id="build-and-run">Build and run<a class="headerlink" href="#build-and-run" title="Permanent link">&para;</a></h2>
 <ol>
 <li>Clone the repository: <code>git clone https://github.com/compdani/list_pocket.git</code></li>
-<li>Copy <code>config.toml.sample</code> to <code>config.toml</code> and set <code>[db]</code> for your Postgres instance.</li>
+<li>Copy <code>config.toml.sample</code> to <code>config.toml</code> and adjust <code>[app]</code> (e.g. <code>address</code>) as needed.</li>
 <li>Build the frontend and backend (see the <a href="https://github.com/compdani/list_pocket#build">repository README</a> or <a href="../developer-setup/">Developer setup</a>).</li>
 <li>Run the <code>listpocket</code> binary and open the app (default <code>http://127.0.0.1:9000</code>).</li>
 </ol>
 <p>Environment variables override <code>config.toml</code> when prefixed with <code>LISTPOCKET_</code>; see <a href="../configuration/">Configuration</a>.</p>
-<h2 id="database-setup">Database setup<a class="headerlink" href="#database-setup" title="Permanent link">&para;</a></h2>
-<p>Schema migrations run automatically when the application starts. The <code>--install</code> and <code>--upgrade</code> CLI flags exist for compatibility with upstream listmonk scripts; in PocketBase mode they only print a message and exit — you do not run a separate SQL install step.</p>
+<h2 id="database-and-migrations">Database and migrations<a class="headerlink" href="#database-and-migrations" title="Permanent link">&para;</a></h2>
+<p>All application data goes through PocketBase. Schema migrations run when the application starts. The <code>--install</code> and <code>--upgrade</code> CLI flags exist for compatibility with older listmonk-style automation; in PocketBase mode they only print a message and exit.</p>
 <h2 id="relationship-to-listmonk">Relationship to listmonk<a class="headerlink" href="#relationship-to-listmonk" title="Permanent link">&para;</a></h2>
-<p>List Pocket inherits concepts and APIs from <a href="https://listmonk.app">listmonk</a>. Upstream guides that reference the <code>listmonk</code> binary, <code>LISTMONK_*</code> variables, or the official Docker image apply to stock listmonk, not this fork.</p>
+<p>List Pocket inherits concepts and APIs from <a href="https://listmonk.app">listmonk</a>. Upstream guides that assume a standalone <strong>PostgreSQL</strong> server and <code>LISTMONK_*</code> / <code>[db]</code> settings describe stock listmonk, not this project’s PocketBase-only stack.</p>
 
 
 

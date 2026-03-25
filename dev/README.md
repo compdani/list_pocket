@@ -1,62 +1,42 @@
 # Docker suite for development
 
-**NOTE**: This exists only for local development. If you're interested in using
-Docker for a production setup, visit the
-[docs](https://listmonk.app/docs/installation/#docker) instead.
+**NOTE**: This exists only for local development. For production-style deployment, see the repository root `Dockerfile` and docs.
 
 ### Objective
 
-The purpose of this Docker suite for local development is to isolate all the dev
-dependencies in a Docker environment. The containers have a host volume mounted
-inside for the entire app directory. This helps us to not do a full
-`docker build` for every single local change, only restarting the Docker
-environment is enough.
+The purpose of this Docker suite is to isolate dev dependencies (e.g. MailHog) and run the frontend/backend with the repo bind-mounted so you do not need a full image rebuild on every change.
+
+List Pocket **does not use PostgreSQL**; all application data goes through **embedded PocketBase** (SQLite in `pb_data/`).
 
 ## Setting up a dev suite
 
-To spin up a local suite of:
+Typical stack:
 
-- PostgreSQL
-- Mailhog
-- Node.js frontend app
-- Golang backend app
+- MailHog (SMTP capture)
+- Node.js frontend dev server
+- Go backend
 
 ### Verify your config file
 
-The config file provided at `dev/config.toml` will be used when running the
-containerized development stack. Make sure the values set within are suitable
-for the feature you're trying to develop.
+The config file at `dev/config.toml` (or the root `config.toml`) is used when running the stack. Adjust `[app]` and paths as needed.
 
-### Setup DB
+### Commands
 
-Running this will build the appropriate images and initialize the database.
+If your project still provides Make targets (or use `docker compose` directly from `dev/`):
 
 ```bash
-make init-dev-docker
+docker compose -f dev/docker-compose.yml up
 ```
 
-### Start frontend and backend apps
-
-Running this start your local development stack.
-
-```bash
-make dev-docker
-```
-
-Visit `http://localhost:8080` on your browser.
+Visit the frontend URL (often `http://localhost:8080`) and the API on port `9000` as configured.
 
 ### Tear down
 
-This will tear down all the data, including DB.
-
 ```bash
-make rm-dev-docker
+docker compose -f dev/docker-compose.yml down
 ```
 
 ### See local changes in action
 
-- Backend: Anytime you do a change to the Go app, it needs to be compiled. Just
-  run `make dev-docker` again and that should automatically handle it for you.
-- Frontend: Anytime you change the frontend code, you don't need to do anything.
-  Since `npm run dev` is watching for all the changes and we have mounted the code
-  inside the docker container, the frontend server automatically restarts.
+- **Backend**: Rebuild or restart the Go process when you change server code.
+- **Frontend**: With `npm run dev`, changes hot-reload when the app directory is mounted into the container.

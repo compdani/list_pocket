@@ -12,7 +12,7 @@ A user role is a collection of user related permissions. User roles are attached
 |             | subscribers:get_all     | Get all subscribers and their details                                                                                                                                                                                                |
 |             | subscribers:manage      | Add, update, and delete subscribers                                                                                                                                                                                                  |
 |             | subscribers:import      | Import subscribers from external files                                                                                                                                                                                               |
-|             | subscribers:sql_query   | Run raw SQL queries on subscriber data.<br /><span style="color: #de4a45;">**WARNING:**</span><span style="font-size: 0.875em; line-height: 1.3; color:#888;">This permission allows execution of arbitrary SQL expressions and SQL functions. While it is readonly on the table data, it allows querying of all lists and subscribers directly from the database superceding individual list and subscriber permissions. Raw SQL expressions make it possible to obtain Postgres database configuration and potentially interact with other Postgres system features. Give this permission ONLY to trusted users. [Learn more](#subscriberssql_query). |
+|             | subscribers:sql_query   | Run raw SQL queries on subscriber data.<br /><span style="color: #de4a45;">**WARNING:**</span><span style="font-size: 0.875em; line-height: 1.3; color:#888;">This permission allows execution of arbitrary SQL expressions and SQL functions. While it is readonly on the table data, it allows querying of all lists and subscribers directly from the database superceding individual list and subscriber permissions. Raw SQL can expose schema and engine details. Give this permission ONLY to trusted users. [Learn more](#subscriberssql_query). |
 |             | tx:send                 | Send transactional messages to subscribers                                                                                                                                                                                           |
 | campaigns   | campaigns:get           | Get and view campaigns belonging to permitted lists                                                                                                                                                                                  |
 |             | campaigns:get_all       | Get and view campaigns across all lists                                                                                                                                                                                              |
@@ -45,16 +45,6 @@ A user account can be of two types, a regular user or an API user. API users are
 
 This permission allowers users to write and execute arbitrary SQL queries on the database. Although it is executed as a read-only transaction disallowing changing of data in the database tables, it allows querying of all lists, subscribers and other data directly from the database superceding individual list and subscriber permissions.
 
-Raw SQL expressions also make it possible to obtain Postgres database configuration and potentially interact with other Postgres system features. Give this permission ONLY to trusted users.
+Raw SQL expressions can expose database engine and schema details. Give this permission ONLY to trusted users.
 
-If this permission is being assigned to many users, it is highly recommended that you create a custom Postgres role disallowing any privileged operations. For example:
-
-```sql
-CREATE ROLE listpocket_app WITH
-    LOGIN
-    PASSWORD '...'
-    NOSUPERUSER
-    NOCREATEDB
-    NOCREATEROLE
-    NOREPLICATION;
-```
+List Pocket runs on PocketBase’s embedded **SQLite** database; there is no separate PostgreSQL role layer. Limit this permission to accounts that truly need ad hoc reporting over subscriber data.

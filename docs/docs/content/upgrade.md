@@ -2,7 +2,7 @@
 
 ## Before upgrading
 
-Always take a **backup of your PostgreSQL database** (and any files your deployment uses for PocketBase data and uploads) before upgrading.
+Always back up **PocketBase’s data** (`pb_data/` by default, or the directory you configured) and any uploaded media or custom static paths before upgrading.
 
 ## Standard upgrade
 
@@ -14,8 +14,8 @@ If you run under systemd or another supervisor, use the usual `stop` / `start` c
 
 ## CLI flags `--install` and `--upgrade`
 
-These flags are kept for compatibility with older listmonk automation. In List Pocket’s PocketBase mode they do not apply SQL migrations themselves; migrations run when the app starts. Prefer backing up the database and restarting with a new binary.
+These flags are kept for compatibility with older listmonk automation. In List Pocket’s PocketBase mode they do not apply SQL migrations themselves; migrations run when the app starts. Prefer backing up `pb_data` and restarting with a new binary.
 
 ## Coming from upstream listmonk
 
-Stock listmonk and List Pocket differ in database layout, auth, and packaging. Migrating an existing listmonk instance is not a simple binary swap; plan a dedicated migration (export/import, API sync, or manual data move) and consult the project repository for any migration notes.
+Stock listmonk (PostgreSQL + standalone app) and List Pocket (PocketBase-only) differ in storage and auth. Migrating an existing listmonk instance is not a simple binary swap; plan a dedicated migration (export/import, API sync, or manual data move) and consult the project repository for any migration notes.

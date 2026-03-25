@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/configuration/">
+      
       
         <link rel="prev" href="../installation/">
       
@@ -396,6 +398,17 @@
     <span class="md-ellipsis">
       
         Environment variables
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#built-in-documentation-urls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in documentation URLs
       
     </span>
   </a>
@@ -1646,6 +1659,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#built-in-documentation-urls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in documentation URLs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#customizing-system-templates" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1881,7 +1905,7 @@
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
 <h3 id="toml-configuration-file">TOML Configuration file<a class="headerlink" href="#toml-configuration-file" title="Permanent link">&para;</a></h3>
-<p>One or more TOML files can be read by passing <code>--config config.toml</code> multiple times. Apart from a few low level configuration variables and the database configuration, all other settings can be managed from the <code>Settings</code> dashboard on the admin UI.</p>
+<p>One or more TOML files can be read by passing <code>--config config.toml</code> multiple times. Apart from a few low-level options (such as <code>[app]</code> and built-in docs paths), all other settings can be managed from the <code>Settings</code> dashboard on the admin UI. <strong>There is no <code>[db]</code> block:</strong> persistence is entirely through embedded PocketBase (SQLite in <code>pb_data/</code> by default).</p>
 <p>To generate a new sample configuration file, run <code>listpocket --new-config</code> (or <code>go run ./cmd -- --new-config</code> during development).</p>
 <h3 id="environment-variables">Environment variables<a class="headerlink" href="#environment-variables" title="Permanent link">&para;</a></h3>
 <p>Variables in <code>config.toml</code> can also be provided as environment variables prefixed by <code>LISTPOCKET_</code>, with periods replaced by <code>__</code> (double underscore). To start List Pocket using only environment variables, set the variables and pass <code>--config=""</code>.</p>
@@ -1899,28 +1923,37 @@
 <td>"0.0.0.0:9000"</td>
 </tr>
 <tr>
-<td><code>LISTPOCKET_db__host</code></td>
-<td>db</td>
+<td><code>LISTPOCKET_app__docs_dir</code></td>
+<td>"/var/listpocket/mkdocs-out"</td>
 </tr>
 <tr>
-<td><code>LISTPOCKET_db__port</code></td>
-<td>5432</td>
+<td><code>LISTPOCKET_app__swagger_dir</code></td>
+<td>"/var/listpocket/swagger"</td>
+</tr>
+</tbody>
+</table>
+<p>PocketBase’s own flags (for example data directory) are passed through the PocketBase CLI embedded in the binary; see <a href="https://pocketbase.io/docs/">PocketBase configuration</a>.</p>
+<h3 id="built-in-documentation-urls">Built-in documentation URLs<a class="headerlink" href="#built-in-documentation-urls" title="Permanent link">&para;</a></h3>
+<p>If <code>docs/docs/_out</code> (MkDocs <code>site_dir</code>) and <code>docs/swagger</code> exist relative to the process working directory—or you set <code>app.docs_dir</code> / <code>app.swagger_dir</code>—the HTTP server exposes:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/docs/</code></td>
+<td>MkDocs manual (static HTML)</td>
 </tr>
 <tr>
-<td><code>LISTPOCKET_db__user</code></td>
-<td>listpocket</td>
+<td><code>/openapi.yaml</code></td>
+<td>OpenAPI 3 spec (<code>collections.yaml</code>)</td>
 </tr>
 <tr>
-<td><code>LISTPOCKET_db__password</code></td>
-<td>listpocket</td>
-</tr>
-<tr>
-<td><code>LISTPOCKET_db__database</code></td>
-<td>listpocket</td>
-</tr>
-<tr>
-<td><code>LISTPOCKET_db__ssl_mode</code></td>
-<td>disable</td>
+<td><code>/swagger/</code></td>
+<td>Swagger UI for the spec</td>
 </tr>
 </tbody>
 </table>
@@ -2038,7 +2071,6 @@ The files will be available inside <code>/data/uploads</code> directory on the h
 <p>https://docs.docker.com/engine/reference/commandline/logs/
 <div class="highlight"><pre><span></span><code>sudo docker logs -f
 sudo docker logs listpocket_app -t
-sudo docker logs listpocket_db -t
 sudo docker logs --help
 </code></pre></div>
 Container info: <code>sudo docker inspect</code> on your compose project’s containers.</p>

@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/upgrade/">
+      
       
         <link rel="prev" href="../configuration/">
       
@@ -1491,7 +1493,7 @@
 
 <h1 id="upgrade">Upgrade<a class="headerlink" href="#upgrade" title="Permanent link">&para;</a></h1>
 <h2 id="before-upgrading">Before upgrading<a class="headerlink" href="#before-upgrading" title="Permanent link">&para;</a></h2>
-<p>Always take a <strong>backup of your PostgreSQL database</strong> (and any files your deployment uses for PocketBase data and uploads) before upgrading.</p>
+<p>Always back up <strong>PocketBase’s data</strong> (<code>pb_data/</code> by default, or the directory you configured) and any uploaded media or custom static paths before upgrading.</p>
 <h2 id="standard-upgrade">Standard upgrade<a class="headerlink" href="#standard-upgrade" title="Permanent link">&para;</a></h2>
 <ol>
 <li>Stop the running <code>listpocket</code> process.</li>
@@ -1500,9 +1502,9 @@
 </ol>
 <p>If you run under systemd or another supervisor, use the usual <code>stop</code> / <code>start</code> cycle around the binary swap.</p>
 <h2 id="cli-flags-install-and-upgrade">CLI flags <code>--install</code> and <code>--upgrade</code><a class="headerlink" href="#cli-flags-install-and-upgrade" title="Permanent link">&para;</a></h2>
-<p>These flags are kept for compatibility with older listmonk automation. In List Pocket’s PocketBase mode they do not apply SQL migrations themselves; migrations run when the app starts. Prefer backing up the database and restarting with a new binary.</p>
+<p>These flags are kept for compatibility with older listmonk automation. In List Pocket’s PocketBase mode they do not apply SQL migrations themselves; migrations run when the app starts. Prefer backing up <code>pb_data</code> and restarting with a new binary.</p>
 <h2 id="coming-from-upstream-listmonk">Coming from upstream listmonk<a class="headerlink" href="#coming-from-upstream-listmonk" title="Permanent link">&para;</a></h2>
-<p>Stock listmonk and List Pocket differ in database layout, auth, and packaging. Migrating an existing listmonk instance is not a simple binary swap; plan a dedicated migration (export/import, API sync, or manual data move) and consult the project repository for any migration notes.</p>
+<p>Stock listmonk (PostgreSQL + standalone app) and List Pocket (PocketBase-only) differ in storage and auth. Migrating an existing listmonk instance is not a simple binary swap; plan a dedicated migration (export/import, API sync, or manual data move) and consult the project repository for any migration notes.</p>
 
 
 

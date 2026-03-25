@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/roles-and-permissions/">
+      
       
         <link rel="prev" href="../external-integration/">
       
@@ -1530,7 +1532,7 @@
 <tr>
 <td></td>
 <td>subscribers:sql_query</td>
-<td>Run raw SQL queries on subscriber data.<br /><span style="color: #de4a45;"><strong>WARNING:</strong></span><span style="font-size: 0.875em; line-height: 1.3; color:#888;">This permission allows execution of arbitrary SQL expressions and SQL functions. While it is readonly on the table data, it allows querying of all lists and subscribers directly from the database superceding individual list and subscriber permissions. Raw SQL expressions make it possible to obtain Postgres database configuration and potentially interact with other Postgres system features. Give this permission ONLY to trusted users. <a href="#subscriberssql_query">Learn more</a>.</td>
+<td>Run raw SQL queries on subscriber data.<br /><span style="color: #de4a45;"><strong>WARNING:</strong></span><span style="font-size: 0.875em; line-height: 1.3; color:#888;">This permission allows execution of arbitrary SQL expressions and SQL functions. While it is readonly on the table data, it allows querying of all lists and subscribers directly from the database superceding individual list and subscriber permissions. Raw SQL can expose schema and engine details. Give this permission ONLY to trusted users. <a href="#subscriberssql_query">Learn more</a>.</td>
 </tr>
 <tr>
 <td></td>
@@ -1635,16 +1637,8 @@
 <p>A user account can be of two types, a regular user or an API user. API users are meant for interacting with the HTTP APIs programmatically. Unlike regular user accounts that have custom passwords or OIDC for authentication, API users get an automatically generated secret token.</p>
 <h2 id="subscriberssql_query"><code>subscribers:sql_query</code><a class="headerlink" href="#subscriberssql_query" title="Permanent link">&para;</a></h2>
 <p>This permission allowers users to write and execute arbitrary SQL queries on the database. Although it is executed as a read-only transaction disallowing changing of data in the database tables, it allows querying of all lists, subscribers and other data directly from the database superceding individual list and subscriber permissions.</p>
-<p>Raw SQL expressions also make it possible to obtain Postgres database configuration and potentially interact with other Postgres system features. Give this permission ONLY to trusted users.</p>
-<p>If this permission is being assigned to many users, it is highly recommended that you create a custom Postgres role disallowing any privileged operations. For example:</p>
-<div class="highlight"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">ROLE</span><span class="w"> </span><span class="n">listpocket_app</span><span class="w"> </span><span class="k">WITH</span>
-<span class="w">    </span><span class="n">LOGIN</span>
-<span class="w">    </span><span class="n">PASSWORD</span><span class="w"> </span><span class="s1">&#39;...&#39;</span>
-<span class="w">    </span><span class="n">NOSUPERUSER</span>
-<span class="w">    </span><span class="k">NOCREATEDB</span>
-<span class="w">    </span><span class="n">NOCREATEROLE</span>
-<span class="w">    </span><span class="n">NOREPLICATION</span><span class="p">;</span>
-</code></pre></div>
+<p>Raw SQL expressions can expose database engine and schema details. Give this permission ONLY to trusted users.</p>
+<p>List Pocket runs on PocketBase’s embedded <strong>SQLite</strong> database; there is no separate PostgreSQL role layer. Limit this permission to accounts that truly need ad hoc reporting over subscriber data.</p>
 
 
 

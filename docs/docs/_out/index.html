@@ -8,6 +8,8 @@
       
       
       
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/">
+      
       
       
         <link rel="next" href="installation/">
@@ -1421,7 +1423,7 @@
 
 <h1 id="introduction">Introduction<a class="headerlink" href="#introduction" title="Permanent link">&para;</a></h1>
 <p><a href="https://github.com/compdani/list_pocket"><img alt="List Pocket" src="images/logo.svg" /></a></p>
-<p><strong>List Pocket</strong> is a self-hosted newsletter and mailing list manager. It keeps the core <a href="https://listmonk.app">listmonk</a>-style workflow (campaigns, lists, subscribers, APIs) while moving the stack onto <strong>embedded <a href="https://pocketbase.io">PocketBase</a></strong> for auth, realtime, and collection-backed data, alongside <strong>PostgreSQL</strong> for the existing relational core.</p>
+<p><strong>List Pocket</strong> is a self-hosted newsletter and mailing list manager. It keeps the core <a href="https://listmonk.app">listmonk</a>-style workflow (campaigns, lists, subscribers, APIs) while running entirely on <strong>embedded <a href="https://pocketbase.io">PocketBase</a></strong> — auth, collections, realtime, and the app’s SQL layer (SQLite under the hood). There is no separate PostgreSQL or other external database server.</p>
 <p>The admin UI is a <strong>Vue 3</strong> app; the server is a single <strong>Go</strong> binary.</p>
 <h2 id="developers">Developers<a class="headerlink" href="#developers" title="Permanent link">&para;</a></h2>
 <p>List Pocket is free and open source software licensed under AGPLv3. See the <a href="https://github.com/compdani/list_pocket">GitHub repository</a> and the <a href="developer-setup/">developer setup</a>. The backend is Go; the frontend is Vue with Vuetify.</p>
