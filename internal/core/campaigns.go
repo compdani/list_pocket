@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -1160,13 +1161,13 @@ func (c *Core) GetRunningCampaignStats() ([]models.CampaignStats, error) {
 	return sqliteCampaignStatsRowsToModels(rows), nil
 }
 
-func (c *Core) GetCampaignAnalyticsCounts(campIDs []int, typ, fromDate, toDate string) ([]models.CampaignAnalyticsCount, error) {
-	return c.getCampaignAnalyticsCountsSQLite(campIDs, typ, fromDate, toDate)
+func (c *Core) GetCampaignAnalyticsCounts(campIDs []int, typ, fromDate, toDate, timeZone string) ([]models.CampaignAnalyticsCount, error) {
+	return c.getCampaignAnalyticsCountsSQLite(campIDs, typ, fromDate, toDate, timeZone)
 }
 
 // GetCampaignAnalyticsLinks returns link click analytics for the given campaign IDs.
-func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate string) ([]models.CampaignAnalyticsLink, error) {
-	return c.getCampaignAnalyticsLinksSQLite(campIDs, fromDate, toDate)
+func (c *Core) GetCampaignAnalyticsLinks(campIDs []int, typ, fromDate, toDate, timeZone string) ([]models.CampaignAnalyticsLink, error) {
+	return c.getCampaignAnalyticsLinksSQLite(campIDs, fromDate, toDate, timeZone)
 }
 
 // RegisterCampaignView registers a subscriber's view on a campaign.
@@ -1260,12 +1261,23 @@ func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (st
 	return out.URL, nil
 }
 
-func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, toDate string) ([]models.CampaignAnalyticsCount, error) {
+func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, toDate, timeZone string) ([]models.CampaignAnalyticsCount, error) {
 	if !strHasLen(fromDate, 10, 30) || !strHasLen(toDate, 10, 30) {
 		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("analytics.invalidDates"))
 	}
 	if len(campIDs) == 0 {
 		return []models.CampaignAnalyticsCount{}, nil
+	}
+
+	tzName := strings.TrimSpace(timeZone)
+	if tzName == "" {
+		tzName = "UTC"
+	}
+	loc, err := time.LoadLocation(tzName)
+	if err != nil {
+		c.log.Printf("invalid analytics timezone %q; falling back to UTC", tzName)
+		tzName = "UTC"
+		loc = time.UTC
 	}
 
 	table := ""
@@ -1332,8 +1344,12 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 	fromTime, _ := time.Parse("2006-01-02 15:04:05", fromSQL)
 	toTime, _ := time.Parse("2006-01-02 15:04:05", toSQL)
-	// Bucket the selected end date by hour, and all previous dates by day.
-	splitTime := time.Date(toTime.Year(), toTime.Month(), toTime.Day(), 0, 0, 0, 0, toTime.Location())
+
+	// Bucket the selected end date by hour in the requested timezone,
+	// and all previous dates by day in that same timezone.
+	toLocal := toTime.In(loc)
+	splitTimeLocal := time.Date(toLocal.Year(), toLocal.Month(), toLocal.Day(), 0, 0, 0, 0, loc)
+	splitTime := splitTimeLocal.UTC()
 	if splitTime.Before(fromTime) {
 		splitTime = fromTime
 	}
@@ -1402,26 +1418,72 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
 	}
 
-	out := make([]models.CampaignAnalyticsCount, 0, len(rows))
+	type groupedKey struct {
+		CampaignID string
+		Bucket     string
+		TS         string
+	}
+	grouped := make(map[groupedKey]int, len(rows))
+
 	for _, r := range rows {
 		t, err := time.Parse("2006-01-02 15:04:05", r.TS)
 		if err != nil {
 			continue
 		}
-		out = append(out, models.CampaignAnalyticsCount{
+
+		// Re-bucket SQL UTC timestamps into the requested timezone so labels align
+		// with user-local day/hour boundaries.
+		local := t.In(loc)
+		var bucketLocal time.Time
+		if r.Bucket == "hour" {
+			bucketLocal = time.Date(local.Year(), local.Month(), local.Day(), local.Hour(), 0, 0, 0, loc)
+		} else {
+			bucketLocal = time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+		}
+		bucketUTC := bucketLocal.UTC()
+		key := groupedKey{
 			CampaignID: r.CampaignID,
 			Bucket:     r.Bucket,
-			Count:      r.Count,
-			Timestamp:  t,
+			TS:         bucketUTC.Format("2006-01-02 15:04:05"),
+		}
+		grouped[key] += r.Count
+	}
+
+	out := make([]models.CampaignAnalyticsCount, 0, len(grouped))
+	for k, count := range grouped {
+		ts, err := time.Parse("2006-01-02 15:04:05", k.TS)
+		if err != nil {
+			continue
+		}
+		out = append(out, models.CampaignAnalyticsCount{
+			CampaignID: k.CampaignID,
+			Bucket:     k.Bucket,
+			Count:      count,
+			Timestamp:  ts,
 		})
 	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Timestamp.Equal(out[j].Timestamp) {
+			return out[i].CampaignID < out[j].CampaignID
+		}
+		return out[i].Timestamp.Before(out[j].Timestamp)
+	})
 
 	return out, nil
 }
 
-func (c *Core) getCampaignAnalyticsLinksSQLite(campIDs []int, fromDate, toDate string) ([]models.CampaignAnalyticsLink, error) {
+func (c *Core) getCampaignAnalyticsLinksSQLite(campIDs []int, fromDate, toDate, timeZone string) ([]models.CampaignAnalyticsLink, error) {
 	if len(campIDs) == 0 {
 		return []models.CampaignAnalyticsLink{}, nil
+	}
+
+	tzName := strings.TrimSpace(timeZone)
+	if tzName == "" {
+		tzName = "UTC"
+	}
+	if _, err := time.LoadLocation(tzName); err != nil {
+		c.log.Printf("invalid analytics timezone %q; falling back to UTC", tzName)
 	}
 
 	fromSQL, err := normalizeAnalyticsDateInput(fromDate, false)

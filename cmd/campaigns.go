@@ -825,6 +825,7 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 		typ  = c.Param("type")
 		from = c.QueryParams().Get("from")
 		to   = c.QueryParams().Get("to")
+		tz   = c.QueryParams().Get("tz")
 	)
 	if typ == "" {
 		path := strings.Trim(c.Request().URL.Path, "/")
@@ -839,7 +840,7 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 
 	// Campaign link stats.
 	if typ == "links" {
-		out, err := a.core.GetCampaignAnalyticsLinks(ids, typ, from, to)
+		out, err := a.core.GetCampaignAnalyticsLinks(ids, typ, from, to, tz)
 		if err != nil {
 			return err
 		}
@@ -848,7 +849,7 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 	}
 
 	// Get the analytics numbers from the DB for the campaigns.
-	out, err := a.core.GetCampaignAnalyticsCounts(ids, typ, from, to)
+	out, err := a.core.GetCampaignAnalyticsCounts(ids, typ, from, to, tz)
 	if err != nil {
 		return err
 	}

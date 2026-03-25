@@ -118,6 +118,15 @@ function toUTCISOString(value) {
   return parsed.toDate().toISOString();
 }
 
+function getUserTimeZone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return typeof tz === 'string' && tz.trim() ? tz : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeAnalyticsParams(params = {}) {
   const out = { ...params };
   ['from', 'to'].forEach((key) => {
@@ -127,6 +136,12 @@ function normalizeAnalyticsParams(params = {}) {
       out[key] = normalized;
     }
   });
+
+  const userTimeZone = getUserTimeZone();
+  if (userTimeZone) {
+    out.tz = userTimeZone;
+  }
+
   return out;
 }
 
