@@ -143,7 +143,6 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 // verifyNotif verifies the signature on a notification payload.
 func (s *Sendgrid) verifyNotif(sig, timestamp string, b []byte) error {
 	sig = strings.TrimSpace(sig)
-	timestamp = strings.TrimSpace(timestamp)
 
 	sigB, err := base64.StdEncoding.DecodeString(sig)
 	if err != nil {
