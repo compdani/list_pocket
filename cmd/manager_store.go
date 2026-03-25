@@ -45,6 +45,8 @@ type sqliteStoreSubscriberRow struct {
 	UpdatedAt string `db:"updated_at"`
 	UUID      string `db:"uuid"`
 	Email     string `db:"email"`
+	FirstName string `db:"first_name"`
+	LastName  string `db:"last_name"`
 	Name      string `db:"name"`
 	Attribs   []byte `db:"attribs"`
 	Status    string `db:"status"`
@@ -104,18 +106,22 @@ func sqliteStoreSubscriberRowsToModels(rows []sqliteStoreSubscriberRow) []models
 			_ = json.Unmarshal(row.Attribs, &attribs)
 		}
 
-		out = append(out, models.Subscriber{
+		sub := models.Subscriber{
 			Base: models.Base{
 				ID:        row.ID,
 				CreatedAt: parseStoreNullTime(row.CreatedAt),
 				UpdatedAt: parseStoreNullTime(row.UpdatedAt),
 			},
-			UUID:    row.UUID,
-			Email:   row.Email,
-			Name:    row.Name,
-			Attribs: attribs,
-			Status:  row.Status,
-		})
+			UUID:      row.UUID,
+			Email:     row.Email,
+			FirstName: row.FirstName,
+			LastName:  row.LastName,
+			Name:      row.Name,
+			Attribs:   attribs,
+			Status:    row.Status,
+		}
+		sub.NormalizeName()
+		out = append(out, sub)
 	}
 	return out
 }
@@ -451,6 +457,8 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		       s.updated AS updated_at,
 		       s.uuid,
 		       s.email,
+		       s.first_name,
+		       s.last_name,
 		       s.name,
 		       s.attribs,
 		       s.status
