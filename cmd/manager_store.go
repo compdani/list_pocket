@@ -28,6 +28,7 @@ type store struct {
 	media   media.Store
 	log     *log.Logger
 	events  *events.Events
+	verbose bool
 }
 
 type runningCamp struct {
@@ -49,7 +50,7 @@ type sqliteStoreSubscriberRow struct {
 	Status    string `db:"status"`
 }
 
-func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger, ev *events.Events) *store {
+func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger, ev *events.Events, verbose bool) *store {
 	return &store{
 		queries: q,
 		db:      db,
@@ -58,6 +59,7 @@ func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store
 		media:   m,
 		log:     l,
 		events:  ev,
+		verbose: verbose,
 	}
 }
 
@@ -139,7 +141,9 @@ func (s *store) sqliteSubscriberRecordID(subID int64) (string, error) {
 // of campaigns that are being processed and updates them in the DB.
 func (s *store) NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models.Campaign, error) {
 	if s.sqlite {
-		s.log.Printf("manager store sqlite: next campaigns current_ids=%v sent_counts=%v", currentIDs, sentCounts)
+		if s.verbose {
+			s.log.Printf("manager store sqlite: next campaigns current_ids=%v sent_counts=%v", currentIDs, sentCounts)
+		}
 		return s.nextCampaignsSQLite(currentIDs, sentCounts)
 	}
 
@@ -316,7 +320,9 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 	if err := s.db.Select(&rowIDs, base, args...); err != nil {
 		return nil, err
 	}
-	s.log.Printf("manager store sqlite: runnable campaign rowids=%v", rowIDs)
+	if s.verbose {
+		s.log.Printf("manager store sqlite: runnable campaign rowids=%v", rowIDs)
+	}
 
 	campaigns := make([]*models.Campaign, 0, len(rowIDs))
 	for _, rowID := range rowIDs {
@@ -362,8 +368,6 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 		`, campaignRecID, c.Type, c.Type); err != nil {
 			return nil, err
 		}
-		s.log.Printf("manager store sqlite: campaign rowid=%d record_id=%q type=%q to_send=%d max_subscriber_id=%d", c.ID, campaignRecID, c.Type, meta.ToSend, meta.MaxID)
-
 		if _, err := s.db.Exec(`
 				UPDATE campaigns
 				SET to_send = ?,
@@ -420,7 +424,9 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		}
 	}
 	if len(listIDs) == 0 {
-		s.log.Printf("manager store sqlite: next subscribers campaign_id=%d has no lists", campID)
+		if s.verbose {
+			s.log.Printf("manager store sqlite: next subscribers campaign_id=%d has no lists", campID)
+		}
 		return nil, false, nil
 	}
 
@@ -469,7 +475,9 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		return nil, false, err
 	}
 	out := sqliteStoreSubscriberRowsToModels(rows)
-	s.log.Printf("manager store sqlite: next subscribers campaign_id=%d list_ids=%v fetched=%d limit=%d", campID, listIDs, len(out), limit)
+	if s.verbose {
+		s.log.Printf("manager store sqlite: next subscribers campaign_id=%d list_ids=%v fetched=%d limit=%d", campID, listIDs, len(out), limit)
+	}
 	if len(out) == 0 {
 		return nil, false, nil
 	}

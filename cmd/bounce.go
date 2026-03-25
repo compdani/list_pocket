@@ -196,13 +196,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		// Sendgrid sends multiple bounces.
 		bs, err := a.bounce.Sendgrid.ProcessBounce(sig, ts, rawReq)
 		if err != nil {
-			a.log.Printf(
-				"error processing sendgrid notification: %v (content_encoding=%q content_type=%q content_length=%d)",
-				err,
-				c.Request().Header.Get("Content-Encoding"),
-				c.Request().Header.Get("Content-Type"),
-				c.Request().ContentLength,
-			)
+			a.log.Printf("error processing sendgrid notification: %v", err)
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 		}
 		bounces = append(bounces, bs...)

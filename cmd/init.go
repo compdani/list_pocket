@@ -83,6 +83,7 @@ type UrlConfig struct {
 type Config struct {
 	SiteName                      string   `koanf:"site_name"`
 	FromEmail                     string   `koanf:"from_email"`
+	LogVerbose                    bool     `koanf:"log_verbose"`
 	NotifyEmails                  []string `koanf:"notify_emails"`
 	EnablePublicSubPage           bool     `koanf:"enable_public_subscription_page"`
 	EnablePublicArchive           bool     `koanf:"enable_public_archive"`
@@ -960,6 +961,7 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.
 		BatchSize:             ko.Int("app.batch_size"),
 		Concurrency:           ko.Int("app.concurrency"),
 		MessageRate:           ko.Int("app.message_rate"),
+		LogVerbose:            ko.Bool("app.log_verbose"),
 		MaxSendErrors:         ko.Int("app.max_send_errors"),
 		FromEmail:             ko.String("app.from_email"),
 		IndividualTracking:    ko.Bool("privacy.individual_tracking"),
@@ -979,7 +981,7 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.
 		SlidingWindowRate:     ko.Int("app.message_sliding_window_rate"),
 		ScanInterval:          time.Second * 5,
 		ScanCampaigns:         false,
-	}, newManagerStore(q, db, co, md, lo, evStream), i, lo)
+	}, newManagerStore(q, db, co, md, lo, evStream, ko.Bool("app.log_verbose")), i, lo)
 
 	// Attach all messengers to the campaign manager.
 	for _, m := range msgrs {

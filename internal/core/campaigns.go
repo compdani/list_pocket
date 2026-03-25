@@ -1027,7 +1027,6 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 }
 
 func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs []int, mediaIDs []int) (models.Campaign, error) {
-	c.log.Printf("update campaign sqlite: begin record_id=%q name=%q content_type=%q list_ids=%v media_ids=%v", recordID, o.Name, o.ContentType, listIDs, mediaIDs)
 	campaignRecID := recordID
 
 	templateRecordID, err := c.sqliteTemplateRecordID(o.TemplateID)
@@ -1038,9 +1037,6 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 	if err != nil {
 		return models.Campaign{}, err
 	}
-	c.log.Printf("update campaign sqlite: normalized fields record_id=%q send_at=%q template_record_id=%q archive_template_record_id=%q archive_slug=%q",
-		recordID, sqliteCampaignTimeValue(o.SendAt), templateRecordID, archiveTemplateRecordID, sqliteCampaignStringValue(o.ArchiveSlug))
-
 	listRows, err := c.sqliteCampaignListRecordRows(listIDs)
 	if err != nil {
 		return models.Campaign{}, err
@@ -1049,8 +1045,6 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 	if err != nil {
 		return models.Campaign{}, err
 	}
-	c.log.Printf("update campaign sqlite: resolved %d list records and %d media records for record_id=%q", len(listRows), len(mediaRows), recordID)
-
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1058,12 +1052,10 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 	}
 
 	if err := pb.RunInTransaction(func(txApp pbcore.App) error {
-		c.log.Printf("update campaign sqlite: tx begin record_id=%q campaign_record_id=%q", recordID, campaignRecID)
 		rec, err := txApp.FindRecordById("campaigns", campaignRecID)
 		if err != nil {
 			return err
 		}
-		c.log.Printf("update campaign sqlite: loaded campaign record record_id=%q campaign_record_id=%q", recordID, campaignRecID)
 
 		rec.Set("name", o.Name)
 		rec.Set("subject", o.Subject)
@@ -1085,12 +1077,10 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 		if err := txApp.Save(rec); err != nil {
 			return err
 		}
-		c.log.Printf("update campaign sqlite: saved campaign record record_id=%q campaign_record_id=%q", recordID, campaignRecID)
 
 		if err := c.sqliteCampaignDeleteRelationRecords(txApp, "campaign_lists", campaignRecID); err != nil {
 			return err
 		}
-		c.log.Printf("update campaign sqlite: deleted existing campaign_lists record_id=%q campaign_record_id=%q", recordID, campaignRecID)
 		if len(listRows) > 0 {
 			campaignListsCol, err := txApp.FindCollectionByNameOrId("campaign_lists")
 			if err != nil {
@@ -1106,12 +1096,9 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 				}
 			}
 		}
-		c.log.Printf("update campaign sqlite: recreated %d campaign_lists rows record_id=%q campaign_record_id=%q", len(listRows), recordID, campaignRecID)
-
 		if err := c.sqliteCampaignDeleteRelationRecords(txApp, "campaign_media", campaignRecID); err != nil {
 			return err
 		}
-		c.log.Printf("update campaign sqlite: deleted existing campaign_media record_id=%q campaign_record_id=%q", recordID, campaignRecID)
 		if len(mediaRows) > 0 {
 			campaignMediaCol, err := txApp.FindCollectionByNameOrId("campaign_media")
 			if err != nil {
@@ -1127,15 +1114,12 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 				}
 			}
 		}
-		c.log.Printf("update campaign sqlite: recreated %d campaign_media rows record_id=%q campaign_record_id=%q", len(mediaRows), recordID, campaignRecID)
-
 		return nil
 	}); err != nil {
 		c.log.Printf("error updating campaign: %v", err)
 		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
 	}
-	c.log.Printf("update campaign sqlite: committed record_id=%q campaign_record_id=%q", recordID, campaignRecID)
 	return c.GetCampaign(recordID, "", "")
 }
 
