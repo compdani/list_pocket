@@ -36,11 +36,22 @@ type runningCamp struct {
 	CampaignType     string `db:"campaign_type"`
 	LastSubscriberID int    `db:"last_subscriber_id"`
 	MaxSubscriberID  int    `db:"max_subscriber_id"`
+	Attribs          []byte `db:"attribs"`
 	ListID           int    `db:"list_id"`
+}
+
+const sqliteBatchCursorAttribKey = "_sqlite_batch_cursor"
+
+type sqliteBatchCursor struct {
+	LastCreated string `json:"last_created"`
+	LastID      string `json:"last_id"`
+	MaxCreated  string `json:"max_created"`
+	MaxID       string `json:"max_id"`
 }
 
 type sqliteStoreSubscriberRow struct {
 	ID        int    `db:"id"`
+	RecordID  string `db:"record_id"`
 	CreatedAt string `db:"created_at"`
 	UpdatedAt string `db:"updated_at"`
 	UUID      string `db:"uuid"`
@@ -96,6 +107,45 @@ func parseStoreNullTime(value string) null.Time {
 	}
 
 	return null.NewTime(t, true)
+}
+
+func sqliteParseCampaignAttribs(raw []byte) models.JSON {
+	out := models.JSON{}
+	if len(raw) == 0 || string(raw) == "null" {
+		return out
+	}
+	_ = json.Unmarshal(raw, &out)
+	if out == nil {
+		return models.JSON{}
+	}
+	return out
+}
+
+func sqliteCampaignBatchCursor(raw []byte) sqliteBatchCursor {
+	attribs := sqliteParseCampaignAttribs(raw)
+	value, ok := attribs[sqliteBatchCursorAttribKey]
+	if !ok {
+		return sqliteBatchCursor{}
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return sqliteBatchCursor{}
+	}
+	out := sqliteBatchCursor{}
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		return sqliteBatchCursor{}
+	}
+	return out
+}
+
+func sqliteSetCampaignBatchCursor(raw []byte, cursor sqliteBatchCursor) []byte {
+	attribs := sqliteParseCampaignAttribs(raw)
+	attribs[sqliteBatchCursorAttribKey] = cursor
+	out, err := json.Marshal(attribs)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func sqliteStoreSubscriberRowsToModels(rows []sqliteStoreSubscriberRow) []models.Subscriber {
@@ -374,15 +424,62 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 		`, campaignRecID, c.Type, c.Type); err != nil {
 			return nil, err
 		}
+		cursor := sqliteBatchCursor{}
+		if err := s.db.Get(&cursor, `
+			SELECT
+				COALESCE(MAX(created), '') AS max_created,
+				COALESCE(MAX(id), '') AS max_id
+			FROM (
+				SELECT s.created, s.id
+				FROM campaign_lists cl
+				JOIN lists l ON l.id = cl.list_id
+				JOIN subscriber_lists sl ON sl.list_id = cl.list_id
+				JOIN subscribers s ON s.id = sl.subscriber_id
+				WHERE cl.campaign_id = ?
+				  AND s.status != 'blocklisted'
+				  AND (
+				    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
+				    (? != 'optin' AND (
+				      (l.optin = 'double' AND sl.status = 'confirmed') OR
+				      (l.optin != 'double' AND sl.status != 'unsubscribed')
+				    ))
+				  )
+				GROUP BY s.id
+				ORDER BY s.created DESC, s.id DESC
+				LIMIT 1
+			) latest
+		`, campaignRecID, c.Type, c.Type); err != nil {
+			return nil, err
+		}
+		currentAttribs := sqliteCampaignBatchCursor(nil)
+		if len(c.Attribs) > 0 {
+			if raw, err := json.Marshal(c.Attribs); err == nil {
+				currentAttribs = sqliteCampaignBatchCursor(raw)
+			}
+		}
+		cursor.LastCreated = ""
+		cursor.LastID = ""
+		if cursor.MaxCreated == "" {
+			cursor.MaxID = ""
+		}
+		if currentAttribs.LastCreated != "" || currentAttribs.LastID != "" || currentAttribs.MaxCreated != "" || currentAttribs.MaxID != "" {
+			// reset any stale cursor values when campaign (re)starts.
+		}
+		var attribsRaw []byte
+		if raw, err := json.Marshal(c.Attribs); err == nil {
+			attribsRaw = raw
+		}
+		attribsRaw = sqliteSetCampaignBatchCursor(attribsRaw, cursor)
 		if _, err := s.db.Exec(`
 				UPDATE campaigns
 				SET to_send = ?,
 				    status = (CASE WHEN status != 'running' THEN 'running' ELSE status END),
 				    max_subscriber_id = ?,
+				    attribs = ?,
 				    started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
 				    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 				WHERE rowid = ?`,
-			meta.ToSend, meta.MaxID, c.ID); err != nil {
+			meta.ToSend, meta.MaxID, string(attribsRaw), c.ID); err != nil {
 			return nil, err
 		}
 		statsChanged = true
@@ -414,6 +511,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		       campaigns.type AS campaign_type,
 		       campaigns.last_subscriber_id AS last_subscriber_id,
 		       campaigns.max_subscriber_id AS max_subscriber_id,
+		       campaigns.attribs AS attribs,
 		       lists.rowid AS list_id
 		FROM campaigns
 		LEFT JOIN campaign_lists ON campaign_lists.campaign_id = campaigns.id
@@ -437,22 +535,17 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 	}
 
 	c := camps[0]
-	args := []any{c.CampaignType, c.CampaignType, c.LastSubscriberID, c.MaxSubscriberID}
-	for _, id := range listIDs {
-		args = append(args, id)
-	}
-	args = append(args, limit)
-
-	// Reorder args for placeholders in query.
-	args = []any{c.LastSubscriberID, c.MaxSubscriberID}
-	for _, id := range listIDs {
-		args = append(args, id)
+	cursor := sqliteCampaignBatchCursor(c.Attribs)
+	args := []any{cursor.LastCreated, cursor.LastCreated, cursor.LastID, cursor.MaxCreated, cursor.MaxCreated, cursor.MaxID}
+	for _, listID := range listIDs {
+		args = append(args, listID)
 	}
 	args = append(args, c.CampaignType, c.CampaignType, limit+1)
 
 	var rows []sqliteStoreSubscriberRow
 	if err := s.db.Select(&rows, `
 		SELECT s.rowid AS id,
+		       s.id AS record_id,
 		       s.created AS created_at,
 		       s.updated AS updated_at,
 		       s.uuid,
@@ -465,8 +558,16 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		FROM subscribers s
 		JOIN subscriber_lists sl ON sl.subscriber_id = s.id
 		JOIN lists l ON l.id = sl.list_id
-		WHERE s.rowid > ?
-		  AND s.rowid <= ?
+		WHERE (
+		    ? = '' OR
+		    s.created > ? OR
+		    (s.created = ? AND s.id > ?)
+		  )
+		  AND (
+		    ? = '' OR
+		    s.created < ? OR
+		    (s.created = ? AND s.id <= ?)
+		  )
 		  AND s.status != 'blocklisted'
 		  AND l.rowid IN (`+placeholders(len(listIDs))+`)
 		  AND (
@@ -476,15 +577,25 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		      (l.optin != 'double' AND sl.status != 'unsubscribed')
 		    ))
 		  )
-		GROUP BY s.rowid
-		ORDER BY s.rowid
+		GROUP BY s.id
+		ORDER BY s.created, s.id
 		LIMIT ?
 	`, args...); err != nil {
 		return nil, false, err
 	}
 	out := sqliteStoreSubscriberRowsToModels(rows)
 	if s.verbose {
-		s.log.Printf("manager store sqlite: next subscribers campaign_id=%d list_ids=%v fetched=%d limit=%d", campID, listIDs, len(out), limit)
+		s.log.Printf(
+			"manager store sqlite: next subscribers campaign_id=%d list_ids=%v cursor_last=(%q,%q) cursor_max=(%q,%q) fetched=%d limit=%d",
+			campID,
+			listIDs,
+			cursor.LastCreated,
+			cursor.LastID,
+			cursor.MaxCreated,
+			cursor.MaxID,
+			len(out),
+			limit,
+		)
 	}
 	if len(out) == 0 {
 		return nil, false, nil
@@ -496,11 +607,17 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 	}
 
 	lastID := out[len(out)-1].ID
+	lastCreated := rows[len(out)-1].CreatedAt
+	lastRecordID := strings.TrimSpace(rows[len(out)-1].RecordID)
+	cursor.LastCreated = lastCreated
+	cursor.LastID = lastRecordID
+	attribsRaw := sqliteSetCampaignBatchCursor(c.Attribs, cursor)
 	if _, err := s.db.Exec(`
 		UPDATE campaigns
 		SET last_subscriber_id = ?,
+		    attribs = ?,
 		    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-		WHERE rowid = ?`, lastID, campID); err != nil {
+		WHERE rowid = ?`, lastID, string(attribsRaw), campID); err != nil {
 		return nil, false, err
 	}
 
