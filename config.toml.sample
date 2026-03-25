@@ -5,6 +5,10 @@
 # port, use port 80 (this will require running with elevated permissions).
 address = "localhost:9000"
 
+# Optional: enable verbose operational logs for campaign scheduler/store internals.
+# Keep this false in production unless debugging delivery issues.
+# log_verbose = false
+
 # Optional: serve MkDocs output at /docs/ and OpenAPI at /openapi.yaml + /swagger/
 # (defaults: docs/docs/_out and docs/swagger relative to the process working directory).
 # docs_dir = "docs/docs/_out"

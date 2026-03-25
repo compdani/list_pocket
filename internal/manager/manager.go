@@ -119,6 +119,7 @@ type Config struct {
 	BatchSize             int
 	Concurrency           int
 	MessageRate           int
+	LogVerbose            bool
 	MaxSendErrors         int
 	SlidingWindow         bool
 	SlidingWindowDuration time.Duration
@@ -312,13 +313,17 @@ func (m *Manager) Run() {
 // ScanCampaignsOnce scans the store for campaigns ready to run and queues them.
 func (m *Manager) ScanCampaignsOnce() {
 	ids, counts := m.getCurrentCampaigns()
-	m.log.Printf("campaign scheduler: scan current_ids=%v sent_counts=%v", ids, counts)
+	if m.cfg.LogVerbose {
+		m.log.Printf("campaign scheduler: scan current_ids=%v sent_counts=%v", ids, counts)
+	}
 	campaigns, err := m.store.NextCampaigns(ids, counts)
 	if err != nil {
 		m.log.Printf("error fetching campaigns: %v", err)
 		return
 	}
-	m.log.Printf("campaign scheduler: found %d runnable campaigns", len(campaigns))
+	if len(campaigns) > 0 || m.cfg.LogVerbose {
+		m.log.Printf("campaign scheduler: found %d runnable campaigns", len(campaigns))
+	}
 
 	for _, c := range campaigns {
 		p, err := m.newPipe(c)

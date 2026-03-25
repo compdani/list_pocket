@@ -248,11 +248,6 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 
 func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, params []string, handler echo.HandlerFunc) func(e *pbcore.RequestEvent) error {
 	return func(e *pbcore.RequestEvent) error {
-		if e.Request.URL.Path == "/mailapi/config" {
-			authHeader := e.Request.Header.Get("Authorization")
-			a.log.Printf("mailapi/config: entered app handler auth_present=%t auth_header_prefix=%q", e.Auth != nil, trimLogPrefix(authHeader))
-		}
-
 		ec := echo.New()
 		ec.HideBanner = true
 		ec.HidePort = true
@@ -287,9 +282,6 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 		}
 
 		if e.Auth != nil {
-			if e.Request.URL.Path == "/mailapi/config" {
-				a.log.Printf("mailapi/config: authenticated record id=%q collection=%q legacy_user_id=%d username=%q", e.Auth.Id, e.Auth.Collection().Name, e.Auth.GetInt("legacy_user_id"), e.Auth.GetString("username"))
-			}
 			c.Set(auth.AuthRecordHTTPCtxKey, e.Auth)
 
 			if strings.TrimSpace(e.Auth.Id) == "" {
