@@ -52,7 +52,7 @@
       <div class="toggle-field">
         <div>
           <div class="text-subtitle-2">{{ $t('settings.bounces.enableWebhooks') }}</div>
-          <a href="https://listmonk.app/docs/bounces" target="_blank" rel="noopener noreferrer">
+          <a :href="$docsUrl('bounces/')" target="_blank" rel="noopener noreferrer">
             {{ $t('globals.buttons.learnMore') }}
           </a>
         </div>

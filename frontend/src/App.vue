@@ -128,7 +128,7 @@
           >
             Remove the <code>admin_username</code> and <code>admin_password</code> fields from the TOML configuration file or environment variables.
             Visit <router-link :to="{ name: 'users' }">Admin -> Settings -> Users</router-link>.
-            <a href="https://listmonk.app/docs/upgrade/#upgrading-to-v4xx" target="_blank" rel="noopener noreferer">Learn more.</a>
+            <a :href="$docsUrl('upgrade/')" target="_blank" rel="noopener noreferrer">Learn more.</a>
           </v-alert>
         </div>
 

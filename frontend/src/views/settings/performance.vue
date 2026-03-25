@@ -121,7 +121,7 @@
         />
       </v-col>
       <v-col cols="12" md="4" class="d-flex align-center">
-        <a href="https://listmonk.app/docs/maintenance/performance/" target="_blank" rel="noopener noreferrer">
+        <a :href="$docsUrl('maintenance/performance/')" target="_blank" rel="noopener noreferrer">
           {{ $t('globals.buttons.learnMore') }}
         </a>
       </v-col>

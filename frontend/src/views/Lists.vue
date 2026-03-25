@@ -226,7 +226,7 @@
 
     <p v-if="settings['app.cache_slow_queries']" class="text-medium-emphasis">
       *{{ $t('globals.messages.slowQueriesCached') }}
-      <a href="https://listmonk.app/docs/maintenance/performance/" target="_blank" rel="noopener noreferer"
+      <a :href="$docsUrl('maintenance/performance/')" target="_blank" rel="noopener noreferrer"
         class="text-medium-emphasis">
         <b-icon icon="link-variant" /> {{ $t('globals.buttons.learnMore') }}
       </a>

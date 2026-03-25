@@ -177,7 +177,7 @@
       name="app.lang"
     />
 
-    <a href="https://listmonk.app/docs/i18n/#additional-language-packs" target="_blank" rel="noopener noreferrer">
+    <a :href="$docsUrl('i18n/')" target="_blank" rel="noopener noreferrer">
       {{ $t('globals.buttons.more') }} →
     </a>
   </div>

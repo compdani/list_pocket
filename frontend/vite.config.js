@@ -17,6 +17,7 @@ const resolveVueFlowAlias = (pkg) => {
 // https://vitejs.dev/config/
 export default defineConfig(({ _, mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const apiTarget = env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000';
   return {
     plugins: [
       vue(),
@@ -45,16 +46,26 @@ export default defineConfig(({ _, mode }) => {
       port: env.LISTPOCKET_FRONTEND_PORT || 8080,
       proxy: {
         '^/$': {
-          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
+          target: apiTarget,
         },
         '^/(api|mailapi|webhooks|subscription|public|health)': {
-          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
+          target: apiTarget,
         },
         '^/admin/login': {
-          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
+          target: apiTarget,
         },
         '^/(admin\/custom\.(css|js))': {
-          target: env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000',
+          target: apiTarget,
+        },
+        // Built-in MkDocs + OpenAPI (same origin as API in production)
+        '^/docs': {
+          target: apiTarget,
+        },
+        '^/openapi.yaml': {
+          target: apiTarget,
+        },
+        '^/swagger': {
+          target: apiTarget,
         },
       },
     },

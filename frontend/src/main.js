@@ -6,6 +6,7 @@ import router from './router';
 import store from './store';
 import * as api from './api';
 import Utils from './utils';
+import { docsUrl } from './utils/docs';
 import vuetify from './plugins/vuetify';
 import { installLegacyUIStyles, registerLegacyUI } from './legacy-ui';
 
@@ -374,6 +375,7 @@ async function initConfig(rootProxy) {
     vueApp.config.globalProperties.$tc = i18n.global.tc;
     vueApp.config.globalProperties.$can = proxy.$can;
     vueApp.config.globalProperties.$canList = proxy.$canList;
+    vueApp.config.globalProperties.$docsUrl = docsUrl;
   }
 
   const to = router.currentRoute.value;
@@ -467,6 +469,7 @@ app.config.globalProperties.$t = i18n.global.t;
 app.config.globalProperties.$tc = i18n.global.tc;
 app.config.globalProperties.$can = () => false;
 app.config.globalProperties.$canList = () => false;
+app.config.globalProperties.$docsUrl = docsUrl;
 
 const rootProxy = app.mount('#app');
 initConfig(rootProxy).catch((err) => {
