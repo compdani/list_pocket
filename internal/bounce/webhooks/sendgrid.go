@@ -71,6 +71,16 @@ func (n *sendgridNotif) UnmarshalJSON(data []byte) error {
 
 	// Fallback: scan all keys for a normalized match.
 	if n.CampaignUUID == "" {
+		// Prefer unique args identifiers if present. When sending via SMTP using
+		// X-SMTPAPI with `unique_args`, SendGrid returns those keys as top-level
+		// fields in the event webhook payload.
+		if v, ok := raw["listpocket_campaign_uuid"].(string); ok {
+			n.CampaignUUID = strings.TrimSpace(v)
+		}
+	}
+
+	// Fallback: scan all keys for a normalized match.
+	if n.CampaignUUID == "" {
 		for k, v := range raw {
 			if normalizeSendgridHeaderKey(k) != "xlistpocketcampaign" {
 				continue
@@ -214,7 +224,7 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 		}
 
 		typ := models.BounceTypeHard
-		if n.BounceClassification == "technical" || n.BounceClassification == "content" {
+		if strings.EqualFold(n.BounceClassification, "technical") || strings.EqualFold(n.BounceClassification, "content") {
 			typ = models.BounceTypeSoft
 		}
 

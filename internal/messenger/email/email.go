@@ -2,6 +2,7 @@ package email
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/smtp"
@@ -154,6 +155,31 @@ func (e *Emailer) Push(m models.Message) error {
 	// Attach e-mail level headers.
 	for k, v := range m.Headers {
 		em.Headers.Set(k, v[0])
+	}
+
+	// SendGrid Event Webhook only reliably echoes identifiers passed via X-SMTPAPI
+	// (e.g. `unique_args`) back to the webhook payload.
+	// We only enable this for SendGrid SMTP servers to avoid impacting other senders.
+	if strings.Contains(strings.ToLower(srv.Host), "sendgrid") {
+		campaignUUID := strings.TrimSpace(em.Headers.Get(models.EmailHeaderCampaignUUID))
+		if campaignUUID != "" {
+			uniqueArgs := map[string]string{
+				"listpocket_campaign_uuid": campaignUUID,
+			}
+
+			// If present, also pass the subscriber UUID for potential future matching/dedup.
+			if subUUID := strings.TrimSpace(em.Headers.Get(models.EmailHeaderSubscriberUUID)); subUUID != "" {
+				uniqueArgs["listpocket_subscriber_uuid"] = subUUID
+			}
+
+			xmtpapi := map[string]any{
+				"unique_args": uniqueArgs,
+			}
+
+			if b, err := json.Marshal(xmtpapi); err == nil {
+				em.Headers.Set("X-SMTPAPI", string(b))
+			}
+		}
 	}
 
 	// If the `Return-Path` header is set, it should be set as the
