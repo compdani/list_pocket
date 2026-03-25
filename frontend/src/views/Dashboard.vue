@@ -54,9 +54,7 @@
             <li v-for="(num, status) in counts.campaigns.byStatus || {}" :key="status">
               <label for="#" :data-cy="`campaigns-${status}`">{{ $utils.niceNumber(num) }}</label>
               {{ $t(`campaigns.status.${status}`) }}
-              <span v-if="status === 'running'" class="spinner is-tiny">
-                <b-loading :is-full-page="false" active />
-              </span>
+              <span v-if="status === 'running' && Number(num) > 0" class="running-indicator" aria-hidden="true" />
             </li>
           </ul>
         </article>
@@ -380,6 +378,28 @@ export default {
   color: #0f172a;
   font-weight: 700;
   margin-right: auto;
+}
+
+.running-indicator {
+  animation: dashboard-running-pulse 1.2s ease-in-out infinite;
+  border-radius: 999px;
+  color: #16a34a;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+  background: currentColor;
+}
+
+@keyframes dashboard-running-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .metric-divider {
