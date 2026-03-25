@@ -1332,9 +1332,10 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campIDs []int, typ, fromDate, to
 	}
 	fromTime, _ := time.Parse("2006-01-02 15:04:05", fromSQL)
 	toTime, _ := time.Parse("2006-01-02 15:04:05", toSQL)
-	splitTime := fromTime
-	if candidate := toTime.Add(-12 * time.Hour); candidate.After(fromTime) {
-		splitTime = candidate
+	// Bucket the selected end date by hour, and all previous dates by day.
+	splitTime := time.Date(toTime.Year(), toTime.Month(), toTime.Day(), 0, 0, 0, 0, toTime.Location())
+	if splitTime.Before(fromTime) {
+		splitTime = fromTime
 	}
 	splitSQL := splitTime.Format("2006-01-02 15:04:05")
 

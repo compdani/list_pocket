@@ -110,6 +110,9 @@
                 {{ $t('analytics.openTracking') }}
               </h3>
               <div v-if="openTrackingBreakdown" class="chart-legend">
+                <span class="legend-chip legend-chip-confirmed">
+                  {{ $t('analytics.confirmedCount') }}
+                </span>
                 <span class="legend-chip legend-chip-all-raw">
                   {{ $t('analytics.rawViews') }}
                 </span>
@@ -184,6 +187,7 @@ export default {
         this.isChartsLoading = false;
         this.campaignClicks = this.makeChart(data.linkClicks);
         this.openTrackingBreakdown = this.makeOpenTrackingChart(
+          data.campaignViews || data.campaignViewsConfirmed || [],
           data.campaignViewsAllRaw || data.campaignViewsAll || [],
           data.campaignViewsRaw,
           data.campaignViewsSuspected,
@@ -209,14 +213,18 @@ export default {
       };
     },
 
-    makeOpenTrackingChart(allRawViews, rawViews, suspectedViews) {
+    makeOpenTrackingChart(confirmedViews, allRawViews, rawViews, suspectedViews) {
+      const hasConfirmed = Array.isArray(confirmedViews) && confirmedViews.length > 0;
       const hasAllRaw = Array.isArray(allRawViews) && allRawViews.length > 0;
       const hasRaw = Array.isArray(rawViews) && rawViews.length > 0;
       const hasSuspected = Array.isArray(suspectedViews) && suspectedViews.length > 0;
-      if (!hasAllRaw && !hasRaw && !hasSuspected) {
+      if (!hasConfirmed && !hasAllRaw && !hasRaw && !hasSuspected) {
         return null;
       }
 
+      const confirmedMap = new Map(
+        (hasConfirmed ? confirmedViews : []).map((point) => [dayjs(point.date).format('DD MMM'), point.count]),
+      );
       const allRawMap = new Map(
         (hasAllRaw ? allRawViews : []).map((point) => [dayjs(point.date).format('DD MMM'), point.count]),
       );
@@ -228,6 +236,7 @@ export default {
       );
 
       const labels = [...new Set([
+        ...Array.from(confirmedMap.keys()),
         ...Array.from(allRawMap.keys()),
         ...Array.from(rawMap.keys()),
         ...Array.from(suspectedMap.keys()),
@@ -236,6 +245,13 @@ export default {
       return {
         labels,
         datasets: [
+          {
+            data: labels.map((label) => confirmedMap.get(label) || 0),
+            borderColor: '#4CAF50',
+            borderWidth: 2,
+            pointHoverBorderWidth: 5,
+            pointBorderWidth: 0.5,
+          },
           {
             data: labels.map((label) => allRawMap.get(label) || 0),
             borderColor: '#9E9E9E',
@@ -410,6 +426,11 @@ export default {
   font-size: 0.75rem;
   font-weight: 600;
   padding: 2px 10px;
+}
+
+.legend-chip-confirmed {
+  background: rgba(76, 175, 80, 0.16);
+  color: #2e7d32;
 }
 
 .legend-chip-raw {
