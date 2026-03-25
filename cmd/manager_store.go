@@ -317,10 +317,9 @@ func (s *store) UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID
 			UPDATE campaigns SET
 				to_send=(CASE WHEN ? != 0 THEN ? ELSE to_send END),
 				sent=sent+?,
-				last_subscriber_id=(CASE WHEN ? > 0 THEN ? ELSE to_send END),
 				updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid=?`,
-			toSend, toSend, sent, lastSubID, lastSubID, campID)
+			toSend, toSend, sent, campID)
 		if err == nil {
 			s.publishCampaignStatsEvent("counts", campID)
 		}
@@ -402,12 +401,10 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 
 		var meta struct {
 			ToSend int `db:"to_send"`
-			MaxID  int `db:"max_subscriber_id"`
 		}
 		if err := s.db.Get(&meta, `
 			SELECT
-				COUNT(DISTINCT s.rowid) AS to_send,
-				COALESCE(MAX(s.rowid), 0) AS max_subscriber_id
+				COUNT(DISTINCT s.rowid) AS to_send
 			FROM campaign_lists cl
 			JOIN lists l ON l.id = cl.list_id
 			JOIN subscriber_lists sl ON sl.list_id = cl.list_id
@@ -474,12 +471,11 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 				UPDATE campaigns
 				SET to_send = ?,
 				    status = (CASE WHEN status != 'running' THEN 'running' ELSE status END),
-				    max_subscriber_id = ?,
 				    attribs = ?,
 				    started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
 				    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 				WHERE rowid = ?`,
-			meta.ToSend, meta.MaxID, string(attribsRaw), c.ID); err != nil {
+			meta.ToSend, string(attribsRaw), c.ID); err != nil {
 			return nil, err
 		}
 		statsChanged = true
@@ -509,8 +505,6 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 	if err := s.db.Select(&camps, `
 		SELECT campaigns.rowid AS campaign_id,
 		       campaigns.type AS campaign_type,
-		       campaigns.last_subscriber_id AS last_subscriber_id,
-		       campaigns.max_subscriber_id AS max_subscriber_id,
 		       campaigns.attribs AS attribs,
 		       lists.rowid AS list_id
 		FROM campaigns
@@ -606,7 +600,6 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		out = out[:limit]
 	}
 
-	lastID := out[len(out)-1].ID
 	lastCreated := rows[len(out)-1].CreatedAt
 	lastRecordID := strings.TrimSpace(rows[len(out)-1].RecordID)
 	cursor.LastCreated = lastCreated
@@ -614,10 +607,9 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 	attribsRaw := sqliteSetCampaignBatchCursor(c.Attribs, cursor)
 	if _, err := s.db.Exec(`
 		UPDATE campaigns
-		SET last_subscriber_id = ?,
-		    attribs = ?,
+		SET attribs = ?,
 		    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-		WHERE rowid = ?`, lastID, string(attribsRaw), campID); err != nil {
+		WHERE rowid = ?`, string(attribsRaw), campID); err != nil {
 		return nil, false, err
 	}
 
