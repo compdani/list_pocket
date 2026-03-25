@@ -231,6 +231,19 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		}
 		bounces = append(bounces, bs...)
 
+	// Brevo (Sendinblue) transactional webhooks — Bearer token must match settings.
+	case service == "brevo" && a.cfg.BounceBrevoEnabled:
+		if a.bounce.Brevo == nil {
+			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
+		}
+		authz := c.Request().Header.Get(echo.HeaderAuthorization)
+		bs, err := a.bounce.Brevo.ProcessBounce(authz, rawReq)
+		if err != nil {
+			a.log.Printf("error processing brevo notification: %v", err)
+			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidData"))
+		}
+		bounces = append(bounces, bs...)
+
 	default:
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
 	}

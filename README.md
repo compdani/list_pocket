@@ -38,6 +38,8 @@ npm run dev
 
 By default, the backend listens on `http://127.0.0.1:9000` and the frontend dev server runs on `http://127.0.0.1:8080`.
 
+With the repo layout unchanged, the server also exposes **`/openapi.yaml`** and **`/swagger/`** (from `docs/swagger/`) and, after `mkdocs build` in `docs/docs`, the manual at **`/docs/`**.
+
 ## Build
 
 Build the frontend assets first, then compile the backend binary:

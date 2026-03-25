@@ -10,7 +10,7 @@ info:
   description: The API collection for listpocket
   license:
     name: AGPL-3.0 license
-    url: https://github.com/knadh/listmonk/blob/master/LICENSE
+    url: https://github.com/compdani/list_pocket/blob/main/LICENSE
 
 tags:
   - name: Miscellaneous
@@ -3560,6 +3560,10 @@ components:
         bounce.forwardemail_enabled:
           type: boolean
         bounce.forwardemail_key:
+          type: string
+        bounce.brevo.enabled:
+          type: boolean
+        bounce.brevo.token:
           type: string
         bounce.postmark_enabled:
           type: boolean

@@ -8,7 +8,7 @@
           <strong>Free and open source.</strong>
         </h3>
         <p class="center demo">
-          <a href="https://demo.listmonk.app" class="button">Live demo</a>
+          <a href="https://github.com/compdani/list_pocket" class="button">Source on GitHub</a>
         </p>
       </div>
 
@@ -16,7 +16,7 @@
         <img class="s1" src="static/images/s1.png" />
         <img class="s2" src="static/images/s2.png" />
         <img class="s3" src="static/images/s3.png" />
-        <img class="box" src="{{ .Site.BaseURL }}static/images/splash.png" alt="listmonk screenshot" />
+        <img class="box" src="{{ .Site.BaseURL }}static/images/splash.png" alt="List Pocket screenshot" />
       </div>
   </div>
 </div>
@@ -25,78 +25,39 @@
   <div class="container">
     <h2 class="center">Download</h2>
     <p class="center">
-      The latest version is <strong>{{ .Page.Site.Data.github.version }}</strong>
-      released on {{ .Page.Site.Data.github.date | dateFormat "02 Jan 2006" }}.
-      See <a href="{{ .Page.Site.Data.github.url }}">release notes.</a>
+      Builds are produced from the <a href="{{ .Page.Site.Data.github.url }}">GitHub repository</a>.
+      Follow the README to compile the <code>listpocket</code> binary and run it with PostgreSQL and a <code>config.toml</code>.
     </p><br />
 
     <div class="row">
       <div class="col-6">
         <div class="box">
-          <h3>Binary</h3>
-          <p>Download binary (64 bit)</p>
-          <div class="download-links">
-            {{ range.Page.Site.Data.github.assets }}
-            <a href="{{ .url }}" class="item">
-              <span class="icon">
-                <img src="{{ .Site.BaseURL }}static/images/logo-{{ .name }}.svg" alt="{{ .name | title }}" title="{{ .name | title }}" />
-              </span>
-              <span class="name">{{ .name | title }}</span>
-            </a>
-            {{ end }}
-          </div>
-          
-          <p>Install</p>
+          <h3>From source</h3>
+          <p>Install Go and Node.js, clone the repo, then:</p>
           <ul class="install-steps">
-            <li>
-              <code>./listmonk --new-config</code> to generate config.toml. Edit it.
-            </li>
-            <li><code>./listmonk --install</code> to setup the Postgres DB or <code>--upgrade</code> to upgrade an existing DB.</li>
-            <li>Run <code>./listmonk</code> and visit <code>http://localhost:9000</code></li>
+            <li><code>cp config.toml.sample config.toml</code> and set <code>[db]</code> for Postgres.</li>
+            <li><code>cd frontend &amp;&amp; npm install &amp;&amp; npm run build</code></li>
+            <li><code>go build -o listpocket ./cmd</code></li>
+            <li>Run <code>./listpocket</code> and open <code>http://127.0.0.1:9000</code></li>
           </ul>
           <p><a href="/docs/installation">Installation docs &rarr;</a></p>
         </div>
       </div>
       <div class="col-6">
         <div class="box">
-          <h3>Docker</h3>
-          <p><a href="https://hub.docker.com/r/listmonk/listmonk/tags?page=1&ordering=last_updated&name=latest"><code>listmonk/listmonk:latest</code></a></p>
+          <h3>Stack</h3>
           <p>
-            Download and use the sample <a href="https://github.com/knadh/listmonk/blob/master/docker-compose.yml">docker-compose.yml</a> 
+            List Pocket combines a listmonk-style campaign engine with <strong>embedded PocketBase</strong> (auth and collections)
+            and <strong>PostgreSQL</strong> for the relational core. It is a fork for self-hosted deployments, not a drop-in
+            replacement for upstream Docker images.
           </p>
-
-<pre>
-# Download the compose file to the current directory.
-curl -LO https://github.com/knadh/listmonk/raw/master/docker-compose.yml
-
-# Run the services in the background.
-docker compose up -d
-</pre>
-          <p>Visit <code>http://localhost:9000</code></p>
-
-          <p><a href="/docs/installation">Installation docs &rarr;</a></p>
+          <p><a href="/docs">Documentation &rarr;</a></p>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="hosting">
-  <div class="container">
-    <h2 class="center">Hosting providers</h2><br />
-    <div>
-      <a href="https://www.nodion.com/en/deploy/listmonk/"><img src="https://nodion-static.nodioncdn.com/nodion-button-s.svg" alt="Deploy to Nodion" style="max-height: 32px;" /></a>
-      <a href="https://www.kloudbean.com/listmonk-self-hosted"><img src="https://storage-basic.kloudbean.com/opensource/deploy_on_kloudbean_listmonk.svg" alt="One-click deploy on Kloudbean" style="max-height: 32px;" /></a>
-      <a href="https://northflank.com/stacks/deploy-listmonk"><img src="https://assets.northflank.com/deploy_to_northflank_smm_36700fb050.svg" alt="One-click deploy on Northflank" style="height: 32px; width: 150px; border-radius: 6px; object-fit: contain;" /></a>
-      <a href="https://railway.app/new/template/listmonk"><img src="https://railway.app/button.svg" alt="One-click deploy on Railway" style="max-height: 32px;" /></a>
-      <a href="https://www.pikapods.com/pods?run=listmonk"><img src="https://www.pikapods.com/static/run-button.svg" alt="Deploy on PikaPod" /></a>
-      <a href="https://elest.io/open-source/listmonk"><img height="33" src="https://raw.githubusercontent.com/elestio-examples/reactjs/refs/heads/master/src/deploy-on-elestio.png" alt="Deploy on Elestio" /></a>
-      <a href="https://zeabur.com/templates/5EDMN6"><img width="148" src="https://zeabur.com/button.svg" alt="Deploy on Zeabur"/></a>
-      <a href="https://cloudzy.com/marketplace/listmonk/"><img src="https://design.cloudzy.com/logo/cloudzy-light-marketplace-badge-147x32.svg" alt="Deploy to Cloudzy" style="max-height: 32px;" /></a>
-    </div>
-    <p class="disclaimer">*listmonk has no affiliation with these providers</p>
-  </div>
-</section>
 
 <div class="container">
   <section class="row feature">
@@ -155,7 +116,7 @@ docker compose up -d
         <img src="static/images/performance.png" alt="Screenshot of performance metrics" />
 
         <figcaption style="font-size:">
-          A production listmonk instance sending a campaign of 7+ million e-mails.<br />
+          A production instance derived from listmonk sending a campaign of 7+ million e-mails.<br />
           CPU usage is a fraction of a single core with peak RAM usage of 57 MB.
         </figcaption>
       </figure>
@@ -211,10 +172,10 @@ docker compose up -d
           <div class="box">
             <h2>Developers</h2>
             <p>
-              listmonk is free and open source software licensed under AGPLv3.
-              If you are interested in contributing, check out the <a href="https://github.com/knadh/listmonk">GitHub repository</a>
+              List Pocket is free and open source software licensed under AGPLv3.
+              If you are interested in contributing, check out the <a href="https://github.com/compdani/list_pocket">GitHub repository</a>
               and refer to the <a href="/docs/developer-setup">developer setup</a>.
-              The backend is written in Go and the frontend is Vue with Buefy for UI. 
+              The backend is written in Go (with embedded PocketBase) and the frontend is Vue with Vuetify.
             </p>
           </div>
         </div>

@@ -6,10 +6,10 @@ The project is in a **hybrid state**:
 
 - Routing and API protection are now handled by PocketBase (`/mailapi` is bound with `apis.RequireAuth()`).
 - Frontend requests are made through the PocketBase JS SDK and login already calls `pb.collection('users').authWithPassword(...)`.
-- At the same time, the backend still contains legacy listmonk auth logic: Echo handlers for login/setup/forgot/reset/TOTP, custom OIDC flow, and cookie/session management via `simplesessions`.
+- At the same time, the backend still contains legacy auth logic inherited from listmonk: Echo handlers for login/setup/forgot/reset/TOTP, custom OIDC flow, and cookie/session management via `simplesessions`.
 - User lifecycle and credential operations are still implemented in the legacy core SQL/query path (`CreateUser`, `UpdateUser`, `LoginUser`, etc.), not native PocketBase auth-record management.
 
-In short: **PocketBase tokens gate API access, but identity and account workflows are still largely listmonk-era code**.
+In short: **PocketBase tokens gate API access, but identity and account workflows are still largely inherited from the pre–PocketBase listmonk design**.
 
 ---
 
@@ -29,7 +29,7 @@ The highest-leverage next move is to make PocketBase the **single source of trut
    - Remove dependence on legacy session destruction for API auth and standardize on token invalidation/clear behavior (frontend + backend).
 
 3. **User create/update sync to PocketBase auth records**
-   - Ensure admin user management endpoints write credentials/status to PocketBase auth records first, then mirror any listmonk-specific role metadata.
+   - Ensure admin user management endpoints write credentials/status to PocketBase auth records first, then mirror any app-specific role metadata.
 
 This gives you a complete “login-to-API-to-user-admin” loop backed by PocketBase identity without trying to migrate every auth feature (OIDC, 2FA, reset flows) in one risky batch.
 

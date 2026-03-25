@@ -35,6 +35,8 @@ type Opt struct {
 		Enabled bool
 		Key     string
 	}
+	BrevoEnabled bool
+	BrevoToken   string
 
 	RecordBounceCB func(models.Bounce) error
 }
@@ -47,6 +49,7 @@ type Manager struct {
 	Sendgrid     *webhooks.Sendgrid
 	Postmark     *webhooks.Postmark
 	Forwardemail *webhooks.Forwardemail
+	Brevo        *webhooks.Brevo
 	queries      *Queries
 	opt          Opt
 	log          *log.Logger
@@ -98,6 +101,10 @@ func New(opt Opt, q *Queries, lo *log.Logger) (*Manager, error) {
 		if opt.ForwardEmail.Enabled {
 			fe := webhooks.NewForwardemail([]byte(opt.ForwardEmail.Key))
 			m.Forwardemail = fe
+		}
+
+		if opt.BrevoEnabled {
+			m.Brevo = webhooks.NewBrevo(opt.BrevoToken)
 		}
 	}
 

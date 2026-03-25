@@ -170,6 +170,43 @@
             />
           </v-col>
         </v-row>
+
+        <v-row>
+          <v-col cols="12" md="3">
+            <div class="toggle-field compact">
+              <div class="text-subtitle-2">{{ $t('settings.bounces.enableBrevo') }}</div>
+              <v-switch
+                v-model="data['bounce.brevo'].enabled"
+                color="primary"
+                hide-details
+                inset
+                name="brevo_enabled"
+                data-cy="btn-enable-bounce-brevo"
+              />
+            </div>
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-text-field
+              v-model="data['bounce.brevo'].token"
+              :disabled="!data['bounce.brevo'].enabled"
+              :hint="$t('settings.bounces.brevoTokenHelp')"
+              :label="$t('settings.bounces.brevoToken')"
+              name="brevo_token"
+              persistent-hint
+              type="password"
+            />
+          </v-col>
+          <v-col cols="12" md="3" class="d-flex align-center">
+            <v-btn
+              variant="tonal"
+              color="primary"
+              :disabled="!data['bounce.brevo'].enabled"
+              @click="generateBrevoToken"
+            >
+              {{ $t('settings.bounces.generateWebhookToken') }}
+            </v-btn>
+          </v-col>
+        </v-row>
       </div>
     </v-card>
 
@@ -346,6 +383,12 @@ export default {
         return ['none', 'userpass'];
       }
       return ['none', 'cram', 'plain', 'login'];
+    },
+
+    generateBrevoToken() {
+      const arr = new Uint8Array(32);
+      crypto.getRandomValues(arr);
+      this.data['bounce.brevo'].token = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
     },
   },
 };

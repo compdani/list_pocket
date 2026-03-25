@@ -11,6 +11,14 @@ COPY frontend/ ./
 RUN npm run build
 
 
+FROM python:3.12-alpine AS docs-builder
+WORKDIR /src/docs/docs
+COPY docs/docs/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY docs/docs/ ./
+RUN mkdocs build
+
+
 FROM golang:1.24.1-alpine AS go-builder
 WORKDIR /src
 
@@ -43,11 +51,13 @@ COPY --from=go-builder /src/config.toml.sample /app/config.toml.sample
 COPY --from=go-builder /src/static /app/static
 COPY --from=go-builder /src/i18n /app/i18n
 COPY --from=frontend-builder /src/frontend/dist /app/frontend/dist
+COPY --from=docs-builder /src/docs/docs/_out /app/docs/docs/_out
+COPY docs/swagger /app/docs/swagger
 
 RUN ln -s /app/frontend/dist /frontend/dist \
     && cp /app/config.toml.sample /app/config.toml \
     && chmod +x /app/listpocket \
-    && chown -R listpocket:listpocket /app /frontend
+    && chown -R listpocket:listpocket /app /frontend /app/docs
 
 ENV LISTPOCKET_APP__ADDRESS=0.0.0.0:9000
 EXPOSE 9000

@@ -3,22 +3,34 @@
 ### TOML Configuration file
 One or more TOML files can be read by passing `--config config.toml` multiple times. Apart from a few low level configuration variables and the database configuration, all other settings can be managed from the `Settings` dashboard on the admin UI.
 
-To generate a new sample configuration file, run `listmonk --new-config`
+To generate a new sample configuration file, run `listpocket --new-config` (or `go run ./cmd -- --new-config` during development).
 
 ### Environment variables
-Variables in config.toml can also be provided as environment variables prefixed by `LISTMONK_` with periods replaced by `__` (double underscore). To start listmonk purely with environment variables without a configuration file, set the environment variables and pass the config flag as `--config=""`.
+Variables in `config.toml` can also be provided as environment variables prefixed by `LISTPOCKET_`, with periods replaced by `__` (double underscore). To start List Pocket using only environment variables, set the variables and pass `--config=""`.
 
 Example:
 
 | **Environment variable**       | Example value  |
 | ------------------------------ | -------------- |
-| `LISTMONK_app__address`        | "0.0.0.0:9000" |
-| `LISTMONK_db__host`            | db             |
-| `LISTMONK_db__port`            | 9432           |
-| `LISTMONK_db__user`            | listmonk       |
-| `LISTMONK_db__password`        | listmonk       |
-| `LISTMONK_db__database`        | listmonk       |
-| `LISTMONK_db__ssl_mode`        | disable        |
+| `LISTPOCKET_app__address`      | "0.0.0.0:9000" |
+| `LISTPOCKET_app__docs_dir`    | "/var/listpocket/mkdocs-out" |
+| `LISTPOCKET_app__swagger_dir` | "/var/listpocket/swagger" |
+| `LISTPOCKET_db__host`          | db             |
+| `LISTPOCKET_db__port`          | 5432           |
+| `LISTPOCKET_db__user`          | listpocket     |
+| `LISTPOCKET_db__password`      | listpocket     |
+| `LISTPOCKET_db__database`      | listpocket     |
+| `LISTPOCKET_db__ssl_mode`      | disable        |
+
+### Built-in documentation URLs
+
+If `docs/docs/_out` (MkDocs `site_dir`) and `docs/swagger` exist relative to the process working directory—or you set `app.docs_dir` / `app.swagger_dir`—the HTTP server exposes:
+
+| Path | Content |
+| ---- | ------- |
+| `/docs/` | MkDocs manual (static HTML) |
+| `/openapi.yaml` | OpenAPI 3 spec (`collections.yaml`) |
+| `/swagger/` | Swagger UI for the spec |
 
 
 ### Customizing system templates
@@ -57,7 +69,7 @@ When configuring `docker` volume mounts for using filesystem media uploads, you 
 
 After making any changes you will need to run `sudo docker compose stop ; sudo docker compose up`. 
 
-And under `https://listmonk.mysite.com/admin/settings` you put `/listmonk/uploads`. 
+And under `https://listpocket.mysite.com/admin/settings` you put `/listpocket/uploads` (paths depend on your deployment). 
 
 #### Using volumes
 
@@ -68,16 +80,16 @@ Using `docker volumes`, you can specify the name of volume and destination for t
 app:
     volumes:
       - type: volume
-        source: listmonk-uploads
-        target: /listmonk/uploads
+        source: listpocket-uploads
+        target: /listpocket/uploads
 
 volumes:
-  listmonk-uploads:
+  listpocket-uploads:
 ```
 
 !!! note
 
-    This volume is managed by `docker` itself, and you can see find the host path with `docker volume inspect listmonk_listmonk-uploads`.
+    This volume is managed by `docker` itself, and you can find the host path with `docker volume inspect` on your stack’s volume name.
 
 #### Using bind mounts
 
@@ -90,7 +102,7 @@ Eg:
 ```yml
   app:
     volumes:
-      - ./data/uploads:/listmonk/uploads
+      - ./data/uploads:/listpocket/uploads
 ```
 The files will be available inside `/data/uploads` directory on the host machine.
 
@@ -98,7 +110,7 @@ To use the default `uploads` folder:
 ```yml
   app:
     volumes:
-      - ./uploads:/listmonk/uploads
+      - ./uploads:/listpocket/uploads
 ```
 
 ## Logs
@@ -108,26 +120,26 @@ To use the default `uploads` folder:
 https://docs.docker.com/engine/reference/commandline/logs/
 ```
 sudo docker logs -f
-sudo docker logs listmonk_app -t
-sudo docker logs listmonk_db -t
+sudo docker logs listpocket_app -t
+sudo docker logs listpocket_db -t
 sudo docker logs --help
 ```
-Container info: `sudo docker inspect listmonk_listmonk`
+Container info: `sudo docker inspect` on your compose project’s containers.
 
 Docker logs to `/dev/stdout` and `/dev/stderr`. The logs are collected by the docker daemon and stored in your node's host path (by default). The same can be configured (/etc/docker/daemon.json) in your docker daemon settings to setup other logging drivers, logrotate policy and more, which you can read about [here](https://docs.docker.com/config/containers/logging/configure/).
 
 ### Binary
 
-listmonk logs to `stdout`, which is usually not saved to any file. To save listmonk logs to a file use `./listmonk > listmonk.log`.
+List Pocket logs to `stdout`, which is usually not saved to any file. To save logs to a file you can redirect output, for example `./listpocket > listpocket.log`.
 
-Settings -> Logs in admin shows the last 1000 lines of the standard log output but gets erased when listmonk is restarted.
+Settings → Logs in the admin UI shows recent log lines from memory; they are cleared when the process restarts.
 
-For the [service file](https://github.com/knadh/listmonk/blob/master/listmonk%40.service), you can use `ExecStart=/bin/bash -ce "exec /usr/bin/listmonk --config /etc/listmonk/config.toml --static-dir /etc/listmonk/static >>/etc/listmonk/listmonk.log 2>&1"` to create a log file that persists after restarts. [More info](https://github.com/knadh/listmonk/issues/1462#issuecomment-1868501606).
+For a systemd unit, redirect `ExecStart` output to a file under `/var/log` or use `journald` — adapt the [upstream listmonk service example](https://github.com/knadh/listmonk/blob/master/listmonk%40.service) for the `listpocket` binary and your paths.
 
 
 ## Time zone
 
-To change listmonk's time zone (logs, etc.) edit `docker-compose.yml`:
+To change the process time zone (logs, etc.) when using Docker Compose, edit `docker-compose.yml`:
 ```
 environment:
     - TZ=Etc/UTC

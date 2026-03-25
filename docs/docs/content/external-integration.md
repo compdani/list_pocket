@@ -1,6 +1,6 @@
 # Integrating with external systems
 
-In many environments, a mailing list manager's subscriber database is not run independently but as a part of an existing customer database or a CRM. There are multiple ways of keeping listmonk in sync with external systems.
+In many environments, a mailing list manager's subscriber database is not run independently but as a part of an existing customer database or a CRM. There are multiple ways of keeping List Pocket in sync with external systems.
 
 ## Using APIs
 
