@@ -402,9 +402,10 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 			createdAt = time.Now()
 		}
 
-		if campID == "" {
-			// campaign_id is NOT NULL in the DB schema; skip instead of throwing constraint errors.
-			// Log the full raw SendGrid payload to help debug missing campaign header mapping.
+		if campID == "" && b.Source == "sendgrid" {
+			// campaign_id is NOT NULL in the DB schema. SendGrid payloads in the wild sometimes
+			// don't include our custom flattened campaign header, so for sendgrid only we skip
+			// instead of spamming constraint errors.
 			c.log.Printf(
 				"skipping bounce: missing/unknown campaign_id (campaign_uuid=%q subscriber=%q raw_payload=%s)",
 				b.CampaignUUID, b.Email, string(meta),
