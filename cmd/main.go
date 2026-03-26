@@ -103,6 +103,12 @@ var (
 )
 
 func init() {
+	// Skip application bootstrapping during `go test` for the cmd package.
+	// The test binary name ends with ".test".
+	if strings.HasSuffix(os.Args[0], ".test") {
+		return
+	}
+
 	// Initialize commandline flags.
 	initFlags(ko)
 

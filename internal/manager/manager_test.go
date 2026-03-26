@@ -152,3 +152,91 @@ func TestNextBatchScheduleTimeAppliesBatchWindowInConfiguredTimezone(t *testing.
 		t.Fatalf("expected next batch at %s, got %s", want, next)
 	}
 }
+
+func TestNextBatchScheduleTimeRespectsAllowedWeekdays(t *testing.T) {
+	loc := time.FixedZone("UTC-5", -5*60*60)
+	anchor := time.Date(2026, time.March, 20, 15, 0, 0, 0, loc) // Friday
+	now := time.Date(2026, time.March, 20, 15, 1, 0, 0, loc)
+
+	next := nextBatchScheduleTime(anchor, now, models.CampaignBatching{
+		Enabled:     true,
+		RepeatValue: 1,
+		RepeatUnit:  "hours",
+		Days:        []string{"mon"},
+		StartTime:   "09:00",
+	})
+
+	want := time.Date(2026, time.March, 23, 9, 0, 0, 0, loc) // Monday
+	if !next.Equal(want) {
+		t.Fatalf("expected next batch at %s, got %s", want, next)
+	}
+}
+
+func TestNextBatchScheduleTimeUsesNowWhenAnchorIsZero(t *testing.T) {
+	loc := time.FixedZone("UTC-5", -5*60*60)
+	now := time.Date(2026, time.March, 20, 10, 1, 0, 0, loc)
+
+	next := nextBatchScheduleTime(time.Time{}, now, models.CampaignBatching{
+		Enabled:     true,
+		RepeatValue: 1,
+		RepeatUnit:  "hours",
+	})
+
+	want := time.Date(2026, time.March, 20, 11, 1, 0, 0, loc)
+	if !next.Equal(want) {
+		t.Fatalf("expected next batch at %s, got %s", want, next)
+	}
+}
+
+func TestNextBatchScheduleTimeFallsBackOnInvalidTimezone(t *testing.T) {
+	loc := time.FixedZone("UTC-5", -5*60*60)
+	anchor := time.Date(2026, time.March, 20, 15, 0, 0, 0, loc)
+	now := time.Date(2026, time.March, 20, 16, 1, 0, 0, loc)
+
+	next := nextBatchScheduleTime(anchor, now, models.CampaignBatching{
+		Enabled:     true,
+		RepeatValue: 1,
+		RepeatUnit:  "hours",
+		Timezone:    "Mars/Phobos",
+	})
+
+	want := time.Date(2026, time.March, 20, 17, 0, 0, 0, loc)
+	if !next.Equal(want) {
+		t.Fatalf("expected next batch at %s, got %s", want, next)
+	}
+}
+
+func TestNextBatchScheduleTimeReturnsNowWhenBatchingDisabled(t *testing.T) {
+	loc := time.FixedZone("UTC-5", -5*60*60)
+	anchor := time.Date(2026, time.March, 20, 15, 0, 0, 0, loc)
+	now := time.Date(2026, time.March, 20, 16, 1, 0, 0, loc)
+
+	next := nextBatchScheduleTime(anchor, now, models.CampaignBatching{
+		Enabled:     false,
+		RepeatValue: 1,
+		RepeatUnit:  "hours",
+	})
+
+	if !next.Equal(now) {
+		t.Fatalf("expected next batch at %s, got %s", now, next)
+	}
+}
+
+func TestNextBatchScheduleTimeWithInvalidStartTimeStillSchedules(t *testing.T) {
+	loc := time.FixedZone("UTC-5", -5*60*60)
+	anchor := time.Date(2026, time.March, 20, 21, 0, 0, 0, loc)
+	now := time.Date(2026, time.March, 20, 22, 1, 0, 0, loc)
+
+	next := nextBatchScheduleTime(anchor, now, models.CampaignBatching{
+		Enabled:     true,
+		RepeatValue: 1,
+		RepeatUnit:  "hours",
+		StartTime:   "not-a-time",
+		EndTime:     "22:00",
+	})
+
+	want := time.Date(2026, time.March, 21, 0, 0, 0, 0, loc)
+	if !next.Equal(want) {
+		t.Fatalf("expected next batch at %s, got %s", want, next)
+	}
+}
