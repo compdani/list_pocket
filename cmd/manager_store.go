@@ -530,7 +530,16 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 
 	c := camps[0]
 	cursor := sqliteCampaignBatchCursor(c.Attribs)
-	args := []any{cursor.LastCreated, cursor.LastCreated, cursor.LastID, cursor.MaxCreated, cursor.MaxCreated, cursor.MaxID}
+	args := []any{
+		cursor.LastCreated,
+		cursor.LastCreated,
+		cursor.LastCreated,
+		cursor.LastID,
+		cursor.MaxCreated,
+		cursor.MaxCreated,
+		cursor.MaxCreated,
+		cursor.MaxID,
+	}
 	for _, listID := range listIDs {
 		args = append(args, listID)
 	}
