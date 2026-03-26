@@ -102,6 +102,9 @@
                     <div class="text-h5 font-weight-bold text-success">
                       {{ $utils.niceNumber(serverConfig.privacy.individual_tracking ? counts.viewsUniqueTotal : counts.views) }}
                     </div>
+                    <div v-if="serverConfig.privacy.individual_tracking" class="text-caption text-medium-emphasis">
+                      {{ $utils.niceNumber(counts.views) }} {{ $t('analytics.totalViews').toLowerCase() }}
+                    </div>
                   </div>
                 </v-col>
                 <v-col cols="12" md="4">
@@ -636,7 +639,7 @@ export default {
 
     openTrackingCountKeys() {
       if (this.serverConfig.privacy.individual_tracking) {
-        return ['viewsUniqueTotal', 'viewsRaw', 'viewsUniqueRawTotal', 'viewsUniqueSuspectedTotal'];
+        return ['views', 'viewsUniqueTotal', 'viewsRaw', 'viewsUniqueRawTotal', 'viewsUniqueSuspectedTotal'];
       }
       return ['views', 'viewsRaw', 'viewsSuspected'];
     },
