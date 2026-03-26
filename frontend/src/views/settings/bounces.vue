@@ -345,6 +345,29 @@
       </template>
     </v-card>
   </div>
+
+  <v-dialog v-model="showBrevoTokenModal" max-width="640">
+    <v-card>
+      <v-card-title>{{ $t('settings.bounces.generateWebhookToken') }}</v-card-title>
+      <v-card-text>
+        <div class="text-body-2 mb-3">{{ $t('settings.bounces.brevoToken') }}</div>
+        <v-text-field
+          :model-value="generatedBrevoToken"
+          readonly
+          variant="outlined"
+          density="comfortable"
+        />
+      </v-card-text>
+      <v-card-actions class="justify-end">
+        <v-btn variant="text" @click="showBrevoTokenModal = false">
+          {{ $t('globals.buttons.close') }}
+        </v-btn>
+        <v-btn color="primary" @click="copyBrevoToken">
+          {{ $t('globals.buttons.copy') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <script>
@@ -359,6 +382,8 @@ export default {
     return {
       bounceTypes: ['soft', 'hard', 'complaint'],
       data: this.form,
+      showBrevoTokenModal: false,
+      generatedBrevoToken: '',
     };
   },
 
@@ -388,7 +413,23 @@ export default {
     generateBrevoToken() {
       const arr = new Uint8Array(32);
       crypto.getRandomValues(arr);
-      this.data['bounce.brevo'].token = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+      const token = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+      this.data['bounce.brevo'].token = token;
+      this.generatedBrevoToken = token;
+      this.showBrevoTokenModal = true;
+    },
+
+    copyBrevoToken() {
+      const input = document.createElement('input');
+      input.setAttribute('type', 'text');
+      input.style.opacity = '0';
+      input.value = this.generatedBrevoToken;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+
+      this.$utils.toast(this.$t('globals.messages.copied'));
     },
   },
 };
