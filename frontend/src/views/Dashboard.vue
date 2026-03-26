@@ -162,6 +162,7 @@ export default {
     return {
       isChartsLoading: true,
       isCountsLoading: true,
+      fetchRequestId: 0,
       campaignClicks: null,
       openTrackingBreakdown: null,
       openTrackingSummary: null,
@@ -176,28 +177,38 @@ export default {
   },
 
   methods: {
-    fetchData() {
+    async fetchData() {
+      const requestId = this.fetchRequestId + 1;
+      this.fetchRequestId = requestId;
       this.isCountsLoading = true;
       this.isChartsLoading = true;
+      try {
+        const [countsData, chartsData] = await Promise.all([
+          this.$api.getDashboardCounts(),
+          this.$api.getDashboardCharts(),
+        ]);
 
-      this.$api.getDashboardCounts().then((data) => {
-        this.counts = data;
-        this.isCountsLoading = false;
-      });
+        if (requestId !== this.fetchRequestId) {
+          return;
+        }
 
-      this.$api.getDashboardCharts().then((data) => {
-        this.isChartsLoading = false;
-        const confirmedViews = data.campaignViews || data.campaignViewsConfirmed || [];
-        const rawUniqueViews = data.campaignViewsRaw || [];
-        this.campaignClicks = this.makeChart(data.linkClicks);
+        this.counts = countsData || this.counts;
+        const confirmedViews = chartsData.campaignViews || chartsData.campaignViewsConfirmed || [];
+        const rawUniqueViews = chartsData.campaignViewsRaw || [];
+        this.campaignClicks = this.makeChart(chartsData.linkClicks);
         this.openTrackingBreakdown = this.makeOpenTrackingChart(
           confirmedViews,
-          data.campaignViewsAllRaw || data.campaignViewsAll || [],
+          chartsData.campaignViewsAllRaw || chartsData.campaignViewsAll || [],
           rawUniqueViews,
-          data.campaignViewsSuspected,
+          chartsData.campaignViewsSuspected,
         );
-        this.openTrackingSummary = this.makeOpenTrackingSummary(confirmedViews, rawUniqueViews);
-      });
+        this.openTrackingSummary = this.makeOpenTrackingSummary(confirmedViews, countsData);
+      } finally {
+        if (requestId === this.fetchRequestId) {
+          this.isCountsLoading = false;
+          this.isChartsLoading = false;
+        }
+      }
     },
 
     makeChart(data) {
@@ -282,9 +293,9 @@ export default {
       };
     },
 
-    makeOpenTrackingSummary(confirmedViews, rawUniqueViews) {
+    makeOpenTrackingSummary(confirmedViews, countsData = this.counts) {
       const confirmed = this.sumCounts(confirmedViews);
-      const sent = Number(this.counts.messages) || 0;
+      const sent = Number(countsData && countsData.messages) || 0;
       if (sent <= 0) {
         return {
           confirmed,
@@ -319,7 +330,7 @@ export default {
     this.$events.$on('page.refresh', this.fetchData);
   },
 
-  destroyed() {
+  beforeUnmount() {
     this.$events.$off('page.refresh', this.fetchData);
   },
 
