@@ -354,7 +354,9 @@ func startOfNextDay(t time.Time, startTime string) time.Time {
 	next := t.AddDate(0, 0, 1)
 	hour, minute, ok := parseClock(startTime)
 	if !ok {
-		return time.Date(next.Year(), next.Month(), next.Day(), next.Hour(), next.Minute(), 0, 0, next.Location())
+		// If startTime is invalid or empty, reset to start-of-day.
+		// Keeping the current hour can lock scheduling out when endTime is earlier.
+		return time.Date(next.Year(), next.Month(), next.Day(), 0, 0, 0, 0, next.Location())
 	}
 	return time.Date(next.Year(), next.Month(), next.Day(), hour, minute, 0, 0, next.Location())
 }

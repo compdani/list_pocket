@@ -176,6 +176,20 @@ func sqliteStoreSubscriberRowsToModels(rows []sqliteStoreSubscriberRow) []models
 	return out
 }
 
+func sqliteAdvanceBatchCursor(cursor sqliteBatchCursor, rows []sqliteStoreSubscriberRow, count int) sqliteBatchCursor {
+	if count < 1 || len(rows) == 0 {
+		return cursor
+	}
+	if count > len(rows) {
+		count = len(rows)
+	}
+
+	last := rows[count-1]
+	cursor.LastCreated = last.CreatedAt
+	cursor.LastID = strings.TrimSpace(last.RecordID)
+	return cursor
+}
+
 func (s *store) sqliteCampaignRecordID(campID int) (string, error) {
 	var recID string
 	if err := s.db.Get(&recID, `SELECT id FROM campaigns WHERE rowid = ?`, campID); err != nil {
@@ -609,10 +623,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		out = out[:limit]
 	}
 
-	lastCreated := rows[len(out)-1].CreatedAt
-	lastRecordID := strings.TrimSpace(rows[len(out)-1].RecordID)
-	cursor.LastCreated = lastCreated
-	cursor.LastID = lastRecordID
+	cursor = sqliteAdvanceBatchCursor(cursor, rows, len(out))
 	attribsRaw := sqliteSetCampaignBatchCursor(c.Attribs, cursor)
 	if _, err := s.db.Exec(`
 		UPDATE campaigns
