@@ -7,7 +7,6 @@ import (
 
 	"github.com/compdani/list_pocket/internal/bounce/mailbox"
 	"github.com/compdani/list_pocket/internal/bounce/webhooks"
-	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
 )
 
@@ -50,24 +49,16 @@ type Manager struct {
 	Postmark     *webhooks.Postmark
 	Forwardemail *webhooks.Forwardemail
 	Brevo        *webhooks.Brevo
-	queries      *Queries
 	opt          Opt
 	log          *log.Logger
 }
 
-// Queries contains the queries.
-type Queries struct {
-	DB          *pbdb.DB
-	RecordQuery *pbdb.Query
-}
-
 // New returns a new instance of the bounce manager.
-func New(opt Opt, q *Queries, lo *log.Logger) (*Manager, error) {
+func New(opt Opt, lo *log.Logger) (*Manager, error) {
 	m := &Manager{
-		opt:     opt,
-		queries: q,
-		queue:   make(chan models.Bounce, 1000),
-		log:     lo,
+		opt:   opt,
+		queue: make(chan models.Bounce, 1000),
+		log:   lo,
 	}
 
 	// Is there a mailbox?

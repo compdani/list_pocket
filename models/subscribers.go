@@ -2,12 +2,9 @@ package models
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 
-	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
@@ -39,11 +36,6 @@ type Subscriber struct {
 	Lists     types.JSONText `db:"lists" json:"lists"`
 }
 
-type subLists struct {
-	SubscriberID int            `db:"subscriber_id"`
-	Lists        types.JSONText `db:"lists"`
-}
-
 // GetIDs returns the list of subscriber IDs.
 func (subs Subscribers) GetIDs() []int {
 	IDs := make([]int, len(subs))
@@ -52,28 +44,6 @@ func (subs Subscribers) GetIDs() []int {
 	}
 
 	return IDs
-}
-
-// LoadLists lazy loads the lists for all the subscribers
-// in the Subscribers slice and attaches them to their []Lists property.
-func (subs Subscribers) LoadLists(stmt *pbdb.Query) error {
-	var sl []subLists
-	err := stmt.Select(&sl, pq.Array(subs.GetIDs()))
-	if err != nil {
-		return err
-	}
-
-	if len(subs) != len(sl) {
-		return errors.New("campaign stats count does not match")
-	}
-
-	for i, s := range sl {
-		if s.SubscriberID == subs[i].ID {
-			subs[i].Lists = s.Lists
-		}
-	}
-
-	return nil
 }
 
 // JoinSubscriberName returns the display name built from the individual fields.

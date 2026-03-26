@@ -18,7 +18,6 @@ import (
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
-	"github.com/lib/pq"
 )
 
 const (
@@ -884,13 +883,12 @@ func formatSQLExp(q string) string {
 // makeOptinNotifyHook returns an enclosed callback that sends optin confirmation e-mails.
 // This is plugged into the 'core' package to send optin confirmations when a new subscriber is
 // created via `core.CreateSubscriber()`.
-func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, q *models.Queries, db *pbdb.DB, i *i18n.I18n) func(sub models.Subscriber, listIDs []int) (int, error) {
+func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, db *pbdb.DB, i *i18n.I18n) func(sub models.Subscriber, listIDs []int) (int, error) {
 	return func(sub models.Subscriber, listIDs []int) (int, error) {
 		// Fetch double opt-in lists from the given list IDs.
 		// Get the list of subscription lists where the subscriber hasn't confirmed.
 		var lists []models.List
-		if db != nil && strings.Contains(strings.ToLower(db.DriverName()), "sqlite") {
-			query := `
+		query := `
 				SELECT
 					l.rowid AS id,
 					l.uuid,
@@ -909,24 +907,18 @@ func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, q *models.Queries, db *
 				  AND sl.status = ?
 				  AND l.optin = ?
 			`
-			args := []any{sub.ID, models.SubscriptionStatusUnconfirmed, models.ListOptinDouble}
-			if len(listIDs) > 0 {
-				query += ` AND l.rowid IN (` + strings.TrimSuffix(strings.Repeat("?,", len(listIDs)), ",") + `)`
-				for _, id := range listIDs {
-					args = append(args, id)
-				}
+		args := []any{sub.ID, models.SubscriptionStatusUnconfirmed, models.ListOptinDouble}
+		if len(listIDs) > 0 {
+			query += ` AND l.rowid IN (` + strings.TrimSuffix(strings.Repeat("?,", len(listIDs)), ",") + `)`
+			for _, id := range listIDs {
+				args = append(args, id)
 			}
-			query += ` ORDER BY l.rowid`
+		}
+		query += ` ORDER BY l.rowid`
 
-			if err := db.Select(&lists, query, args...); err != nil {
-				lo.Printf("error fetching lists for opt-in: %s", err)
-				return 0, err
-			}
-		} else {
-			if err := q.GetSubscriberLists.Select(&lists, sub.ID, nil, pq.Array(listIDs), nil, models.SubscriptionStatusUnconfirmed, models.ListOptinDouble); err != nil {
-				lo.Printf("error fetching lists for opt-in: %s", err)
-				return 0, err
-			}
+		if err := db.Select(&lists, query, args...); err != nil {
+			lo.Printf("error fetching lists for opt-in: %s", err)
+			return 0, err
 		}
 
 		// None.

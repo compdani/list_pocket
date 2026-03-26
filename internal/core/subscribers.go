@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -885,7 +884,7 @@ func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, e
 
 // DeleteOrphanSubscribers deletes orphan subscriber records (subscribers without lists).
 func (c *Core) DeleteOrphanSubscribers() (int, error) {
-	res, err := c.q.DeleteOrphanSubscribers.Exec()
+	res, err := c.db.Exec(`DELETE FROM subscribers WHERE NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = subscribers.id)`)
 	if err != nil {
 		c.log.Printf("error deleting orphan subscribers: %v", err)
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,
@@ -898,7 +897,7 @@ func (c *Core) DeleteOrphanSubscribers() (int, error) {
 
 // DeleteBlocklistedSubscribers deletes blocklisted subscribers.
 func (c *Core) DeleteBlocklistedSubscribers() (int, error) {
-	res, err := c.q.DeleteBlocklistedSubscribers.Exec()
+	res, err := c.db.Exec(`DELETE FROM subscribers WHERE status = 'blocklisted'`)
 	if err != nil {
 		c.log.Printf("error deleting blocklisted subscribers: %v", err)
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,
@@ -910,43 +909,9 @@ func (c *Core) DeleteBlocklistedSubscribers() (int, error) {
 }
 
 func (c *Core) getSubscriberCount(searchStr, queryExp, subStatus string, listIDs []int) (int, error) {
-	if c.isSQLite() {
-		whereSQL, args := c.subscriberFilterSQLite(searchStr, queryExp, listIDs, subStatus)
-		total := 0
-		if err := c.db.Get(&total, `SELECT COUNT(*) FROM subscribers WHERE `+whereSQL, args...); err != nil {
-			return 0, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		return total, nil
-	}
-
-	// If there's no condition, it's a "get all" call which can probably be optionally pulled from cache.
-	if queryExp == "" {
-		_ = c.refreshCache(matListSubStats, false)
-
-		total := 0
-		if err := c.q.QuerySubscribersCountAll.Get(&total, pq.Array(listIDs), subStatus); err != nil {
-			return 0, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
-		}
-
-		return total, nil
-	}
-
-	// Create a readonly transaction that just does COUNT() to obtain the count of results
-	// and to ensure that the arbitrary query is indeed readonly.
-	stmt := strings.ReplaceAll(c.q.QuerySubscribersCount, "%query%", queryExp)
-	tx, err := c.db.BeginTxx(context.Background(), &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		c.log.Printf("error preparing subscriber query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("subscribers.errorPreparingQuery", "error", pqErrMsg(err)))
-	}
-	defer tx.Rollback()
-
-	// Execute the readonly query and get the count of results.
+	whereSQL, args := c.subscriberFilterSQLite(searchStr, queryExp, listIDs, subStatus)
 	total := 0
-	if err := tx.Get(&total, stmt, pq.Array(listIDs), subStatus, searchStr); err != nil {
+	if err := c.db.Get(&total, `SELECT COUNT(*) FROM subscribers WHERE `+whereSQL, args...); err != nil {
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}

@@ -24,10 +24,10 @@ func (c *Core) GetSettings() (models.Settings, error) {
 				c.i18n.Ts("globals.messages.errorFetching",
 					"name", "{globals.terms.settings}", "error", pqErrMsg(err)))
 		}
-	} else if err := c.q.GetSettings.Get(&b); err != nil {
+	} else {
 		return out, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching",
-				"name", "{globals.terms.settings}", "error", pqErrMsg(err)))
+				"name", "{globals.terms.settings}", "error", "settings not configured"))
 	}
 
 	// Unmarshal the settings and filter out sensitive fields.
@@ -54,9 +54,9 @@ func (c *Core) UpdateSettings(s models.Settings) error {
 			return echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", pqErrMsg(err)))
 		}
-	} else if _, err := c.q.UpdateSettings.Exec(b); err != nil {
+	} else {
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", "settings not configured"))
 	}
 
 	return nil
@@ -69,9 +69,9 @@ func (c *Core) UpdateSettingsByKey(key string, value json.RawMessage) error {
 			return echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", pqErrMsg(err)))
 		}
-	} else if _, err := c.q.UpdateSettingsByKey.Exec(key, value); err != nil {
+	} else {
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", "settings not configured"))
 	}
 
 	return nil

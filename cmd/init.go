@@ -16,7 +16,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"syscall"
@@ -26,6 +25,7 @@ import (
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/bounce"
 	"github.com/compdani/list_pocket/internal/bounce/mailbox"
+	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/internal/captcha"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/i18n"
@@ -41,7 +41,6 @@ import (
 	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/knadh/goyesql/v2"
 	koanfmaps "github.com/knadh/koanf/maps"
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/confmap"
@@ -57,9 +56,6 @@ import (
 )
 
 const (
-	// Path to the SQL queries directory in the embedded FS.
-	queryFilePath = "/queries"
-
 	emailMsgr = "email"
 )
 
@@ -341,8 +337,7 @@ func (s stuffbinSubFS) Open(name string) (stdfs.File, error) {
 	return s.base.Open(fullPath)
 }
 
-// initDB initializes the main DB connection pool and parse and loads the app's
-// SQL queries into a prepared query map.
+// initDB initializes the main DB connection pool from PocketBase.
 func initDB() *pbdb.DB {
 	db, err := pbdb.NewFromPocketBase(pb)
 	if err != nil {
@@ -408,137 +403,8 @@ func sqliteTimestampColumns(raw *sql.DB, table string) (string, string) {
 	return createdCol, updatedCol
 }
 
-func readQueries(dir string, fs stuffbin.FileSystem) goyesql.Queries {
-	out := goyesql.Queries{}
-
-	// Glob all the .sql files in the queries directory.
-	qPath := path.Join(dir, "/*.sql")
-	files, err := fs.Glob(qPath)
-	if err != nil {
-		lo.Fatalf("error reading *.sql query files from %s: %v", qPath, err)
-	}
-
-	// Read and merge queries from all files into one map.
-	for _, file := range files {
-		// Read the SQL file.
-		b, err := fs.Read(file)
-		if err != nil {
-			lo.Fatalf("error reading SQL file %s: %v", file, err)
-		}
-
-		// Parse queries in it into a map.
-		mp, err := goyesql.ParseBytes(b)
-		if err != nil {
-			lo.Fatalf("error parsing SQL queries: %v", err)
-		}
-
-		// Merge into the main query map.
-		maps.Copy(out, mp)
-	}
-
-	return out
-}
-
-// prepareQueries queries prepares a query map and returns a *Queries
-func prepareQueries(qMap goyesql.Queries, db *pbdb.DB, ko *koanf.Koanf) *models.Queries {
-	var (
-		countQuery = "get-campaign-analytics-counts"
-		linkSel    = "*"
-	)
-
-	// PocketBase mode is SQLite-backed. Override a few startup-critical
-	// queries that still use PostgreSQL-only syntax.
-	if isSQLiteDB(db) {
-		tplCreatedCol, tplUpdatedCol := sqliteTimestampColumns(db.DB.DB, "templates")
-
-		qMap["get-templates"] = &goyesql.Query{
-			Query: fmt.Sprintf(`SELECT id, name, type, subject,
-	(CASE WHEN $2 = false THEN body ELSE '' END) as body,
-	(CASE WHEN $2 = false THEN body_source ELSE NULL END) as body_source,
-	is_default, %s, %s
-	FROM templates WHERE ($1 = 0 OR id = $1) AND ($3 = '' OR type = $3)
-	ORDER BY %s;`, tplCreatedCol, tplUpdatedCol, tplCreatedCol),
-			Tags: map[string]string{"name": "get-templates"},
-		}
-
-		qMap["get-db-info"] = &goyesql.Query{
-			Query: `SELECT JSON_OBJECT('version', SQLITE_VERSION(), 'size_mb', NULL) AS info;`,
-			Tags:  map[string]string{"name": "get-db-info"},
-		}
-
-		qMap["get-media"] = &goyesql.Query{
-			Query: `SELECT * FROM media WHERE
-				CASE
-					WHEN $1 > 0 THEN id = $1
-					WHEN $2 != '' THEN uuid = $2
-					WHEN $3 != '' THEN filename = $3
-					ELSE false
-				END;`,
-			Tags: map[string]string{"name": "get-media"},
-		}
-	}
-
-	if ko.Bool("privacy.individual_tracking") {
-		countQuery = "get-campaign-analytics-unique-counts"
-		linkSel = "DISTINCT subscriber_id"
-	}
-
-	// These don't exist in the SQL file but are in the queries struct to be prepared.
-	qMap["get-campaign-view-counts"] = &goyesql.Query{
-		Query: fmt.Sprintf(qMap[countQuery].Query, "campaign_views"),
-		Tags:  map[string]string{"name": "get-campaign-view-counts"},
-	}
-	qMap["get-campaign-click-counts"] = &goyesql.Query{
-		Query: fmt.Sprintf(qMap[countQuery].Query, "link_clicks"),
-		Tags:  map[string]string{"name": "get-campaign-click-counts"},
-	}
-	qMap["get-campaign-link-counts"].Query = fmt.Sprintf(qMap["get-campaign-link-counts"].Query, linkSel)
-
-	q, err := bindQueries(qMap, db)
-	if err != nil {
-		lo.Fatalf("error preparing SQL queries: %v", err)
-	}
-
-	return q
-}
-
-func bindQueries(qMap goyesql.Queries, db *pbdb.DB) (*models.Queries, error) {
-	var q models.Queries
-
-	rv := reflect.ValueOf(&q).Elem()
-	rt := rv.Type()
-	queryType := reflect.TypeOf(&pbdb.Query{})
-
-	for i := 0; i < rt.NumField(); i++ {
-		f := rt.Field(i)
-		name := f.Tag.Get("query")
-		if name == "" {
-			continue
-		}
-
-		def, ok := qMap[name]
-		if !ok {
-			return nil, fmt.Errorf("query %q not found", name)
-		}
-
-		switch f.Type {
-		case reflect.TypeOf(""):
-			rv.Field(i).SetString(def.Query)
-		case queryType:
-			rv.Field(i).Set(reflect.ValueOf(pbdb.NewQuery(db, def.Query)))
-		default:
-			return nil, fmt.Errorf("unsupported query field type %s for %s", f.Type, f.Name)
-		}
-	}
-
-	return &q, nil
-}
-
 // initSettings loads settings from the DB into the given Koanf map.
-func initSettings(query string, db *pbdb.DB, ko *koanf.Koanf) {
-	_ = query
-	_ = db
-
+func initSettings(ko *koanf.Koanf) {
 	var s types.JSONText
 
 	if pb != nil {
@@ -915,16 +781,15 @@ func initI18n(lang string, fs stuffbin.FileSystem) *i18n.I18n {
 }
 
 // initCore initializes the CRUD DB core .
-func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), queries *models.Queries, db *pbdb.DB, i *i18n.I18n, ko *koanf.Koanf) *core.Core {
+func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), db *pbdb.DB, i *i18n.I18n, ko *koanf.Koanf) *core.Core {
 	opt := &core.Opt{
 		Constants: core.Constants{
 			SendOptinConfirmation: ko.Bool("app.send_optin_confirmation"),
 			CacheSlowQueries:      ko.Bool("app.cache_slow_queries"),
 		},
-		Queries: queries,
-		DB:      db,
-		I18n:    i,
-		Log:     lo,
+		DB:   db,
+		I18n: i,
+		Log:  lo,
 	}
 
 	if pb != nil {
@@ -952,7 +817,7 @@ func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), 
 }
 
 // initCampaignManager initializes the campaign manager.
-func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.DB, u *UrlConfig, co *core.Core, md media.Store, i *i18n.I18n, ko *koanf.Koanf) *manager.Manager {
+func initCampaignManager(msgrs []manager.Messenger, db *pbdb.DB, u *UrlConfig, co *core.Core, md media.Store, i *i18n.I18n, ko *koanf.Koanf) *manager.Manager {
 	if ko.Bool("passive") {
 		lo.Println("running in passive mode. won't process campaigns.")
 	}
@@ -981,7 +846,7 @@ func initCampaignManager(msgrs []manager.Messenger, q *models.Queries, db *pbdb.
 		SlidingWindowRate:     ko.Int("app.message_sliding_window_rate"),
 		ScanInterval:          time.Second * 5,
 		ScanCampaigns:         false,
-	}, newManagerStore(q, db, co, md, lo, evStream, ko.Bool("app.log_verbose")), i, lo)
+	}, newManagerStore(db, co, md, lo, evStream, ko.Bool("app.log_verbose")), i, lo)
 
 	// Attach all messengers to the campaign manager.
 	for _, m := range msgrs {
@@ -1010,45 +875,16 @@ func initTxTemplates(m *manager.Manager, co *core.Core) {
 }
 
 // initImporter initializes the bulk subscriber importer.
-func initImporter(q *models.Queries, db *pbdb.DB, core *core.Core, i *i18n.I18n, ko *koanf.Koanf) *subimporter.Importer {
-	var (
-		upsertStmt         *sql.Stmt
-		blocklistStmt      *sql.Stmt
-		updateListDateStmt *sql.Stmt
-		err                error
-		useJSONListArgs    bool
-	)
+func initImporter(db *pbdb.DB, core *core.Core, i *i18n.I18n, ko *koanf.Koanf) *subimporter.Importer {
+	_, listUpdatedCol := sqliteTimestampColumns(db.DB.DB, "lists")
 
-	if isSQLiteDB(db) {
-		_, listUpdatedCol := sqliteTimestampColumns(db.DB.DB, "lists")
-
-		updateListDateStmt, err = db.DB.DB.Prepare(`
+	updateListDateStmt, err := db.DB.DB.Prepare(`
 UPDATE lists
 SET ` + listUpdatedCol + `=(strftime('%Y-%m-%d %H:%M:%fZ'))
 WHERE id IN (SELECT value FROM json_each(?1));
 `)
-		useJSONListArgs = true
-	} else {
-		upsertStmt, err = q.UpsertSubscriber.SQLStmt()
-		if err != nil {
-			lo.Printf("disabling importer: unable to prepare subscriber upsert query: %v", err)
-			return nil
-		}
-
-		blocklistStmt, err = q.UpsertBlocklistSubscriber.SQLStmt()
-		if err != nil {
-			lo.Printf("disabling importer: unable to prepare blocklist upsert query: %v", err)
-			return nil
-		}
-
-		updateListDateStmt, err = q.UpdateListsDate.SQLStmt()
-	}
 	if err != nil {
 		lo.Printf("disabling importer: unable to prepare importer queries: %v", err)
-		return nil
-	}
-	if updateListDateStmt == nil {
-		lo.Printf("disabling importer: unable to prepare list update query")
 		return nil
 	}
 
@@ -1056,15 +892,10 @@ WHERE id IN (SELECT value FROM json_each(?1));
 		subimporter.Options{
 			DomainBlocklist:    ko.Strings("privacy.domain_blocklist"),
 			DomainAllowlist:    ko.Strings("privacy.domain_allowlist"),
-			UpsertStmt:         upsertStmt,
-			BlocklistStmt:      blocklistStmt,
+			UpsertStmt:         nil,
+			BlocklistStmt:      nil,
 			UpdateListDateStmt: updateListDateStmt,
-			UseJSONListArgs:    useJSONListArgs,
 			ResolveListIDs: func(listIDs []int) ([]string, error) {
-				if !useJSONListArgs {
-					return nil, nil
-				}
-
 				return core.SQLiteListRecordIDs(listIDs, nil)
 			},
 
@@ -1236,7 +1067,7 @@ func initNotifs(fs stuffbin.FileSystem, i *i18n.I18n, em *email.Emailer, u *UrlC
 
 // initBounceManager initializes the bounce manager that scans mailboxes and listens to webhooks
 // for incoming bounce events.
-func initBounceManager(cb func(models.Bounce) error, stmt *pbdb.Query, lo *log.Logger, ko *koanf.Koanf) *bounce.Manager {
+func initBounceManager(cb func(models.Bounce) error, lo *log.Logger, ko *koanf.Koanf) *bounce.Manager {
 	opt := bounce.Opt{
 		WebhooksEnabled: ko.Bool("bounce.webhooks_enabled"),
 		SESEnabled:      ko.Bool("bounce.ses_enabled"),
@@ -1258,8 +1089,8 @@ func initBounceManager(cb func(models.Bounce) error, stmt *pbdb.Query, lo *log.L
 			ko.Bool("bounce.forwardemail.enabled"),
 			ko.String("bounce.forwardemail.key"),
 		},
-		BrevoEnabled: ko.Bool("bounce.brevo.enabled"),
-		BrevoToken:   ko.String("bounce.brevo.token"),
+		BrevoEnabled:   ko.Bool("bounce.brevo.enabled"),
+		BrevoToken:     ko.String("bounce.brevo.token"),
 		RecordBounceCB: cb,
 	}
 
@@ -1281,7 +1112,7 @@ func initBounceManager(cb func(models.Bounce) error, stmt *pbdb.Query, lo *log.L
 	}
 
 	// Initialize the bounce manager.
-	b, err := bounce.New(opt, &bounce.Queries{RecordQuery: stmt}, lo)
+	b, err := bounce.New(opt, lo)
 	if err != nil {
 		lo.Fatalf("error initializing bounce manager: %v", err)
 	}
@@ -1290,7 +1121,7 @@ func initBounceManager(cb func(models.Bounce) error, stmt *pbdb.Query, lo *log.L
 }
 
 // initAbout initializes the app's /about API endpoint with the app and system info.
-func initAbout(q *models.Queries, db *pbdb.DB) about {
+func initAbout(db *pbdb.DB) about {
 	var (
 		mem runtime.MemStats
 	)
@@ -1299,7 +1130,7 @@ func initAbout(q *models.Queries, db *pbdb.DB) about {
 	runtime.ReadMemStats(&mem)
 
 	info := types.JSONText(`{}`)
-	if err := db.QueryRow(q.GetDBInfo).Scan(&info); err != nil {
+	if err := db.QueryRow(`SELECT JSON_OBJECT('version', SQLITE_VERSION(), 'size_mb', NULL) AS info`).Scan(&info); err != nil {
 		lo.Printf("WARNING: error getting database version: %v", err)
 	}
 
@@ -1335,6 +1166,8 @@ func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.Fi
 	}
 
 	app.tpl = tpl
+
+	campaignledger.RegisterHooks(pb)
 
 	workflow.Register(pb, workflow.Config{
 		FrontendDir: "../frontend/dist",

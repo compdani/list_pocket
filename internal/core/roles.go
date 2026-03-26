@@ -146,16 +146,6 @@ func hasRolesLegacyIDIndex(col *pbcore.Collection) bool {
 	return false
 }
 
-func (c *Core) useSQLRoleStore() bool {
-	pb := c.db.PocketBase()
-	if pb == nil {
-		return true
-	}
-
-	_, err := pb.FindCollectionByNameOrId("roles")
-	return err != nil
-}
-
 func (c *Core) getRoleByID(id int) (*pbcore.Record, error) {
 	if err := c.ensureRolesCollection(); err != nil {
 		return nil, err
@@ -301,16 +291,6 @@ func (c *Core) nextRoleLegacyID() (int, error) {
 
 // GetRoles retrieves all roles.
 func (c *Core) GetRoles() ([]auth.Role, error) {
-	if c.useSQLRoleStore() {
-		out := []auth.Role{}
-		if err := c.q.GetUserRoles.Select(&out, 0); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", pqErrMsg(err)))
-		}
-
-		return out, nil
-	}
-
 	if err := c.ensureRolesCollection(); err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", err.Error()))
@@ -341,26 +321,6 @@ func (c *Core) GetRoles() ([]auth.Role, error) {
 
 // GetRole retrieves a role.
 func (c *Core) GetRole(recordID string) (auth.Role, error) {
-	if c.useSQLRoleStore() {
-		out := []auth.Role{}
-		roleID, err := c.ResolveRoleLegacyID(recordID)
-		if err != nil {
-			return auth.Role{}, echo.NewHTTPError(http.StatusNotFound,
-				c.i18n.Ts("globals.messages.notFound", "name", "role"))
-		}
-		if err := c.q.GetUserRoles.Select(&out, roleID); err != nil {
-			return auth.Role{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", pqErrMsg(err)))
-		}
-
-		if len(out) == 0 {
-			return auth.Role{}, echo.NewHTTPError(http.StatusNotFound,
-				c.i18n.Ts("globals.messages.notFound", "name", "role"))
-		}
-
-		return out[0], nil
-	}
-
 	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -377,16 +337,6 @@ func (c *Core) GetRole(recordID string) (auth.Role, error) {
 
 // GetListRoles retrieves all list roles.
 func (c *Core) GetListRoles() ([]auth.ListRole, error) {
-	if c.useSQLRoleStore() {
-		out := []auth.ListRole{}
-		if err := c.q.GetListRoles.Select(&out); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", pqErrMsg(err)))
-		}
-
-		return out, nil
-	}
-
 	if err := c.ensureRolesCollection(); err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "role", "error", err.Error()))
@@ -460,27 +410,6 @@ func (c *Core) GetListRoles() ([]auth.ListRole, error) {
 
 // CreateRole creates a new role.
 func (c *Core) CreateRole(r auth.Role) (auth.Role, error) {
-	if c.useSQLRoleStore() {
-		var out auth.Role
-		if err := c.q.CreateRole.Get(&out, r.Name, auth.RoleTypeUser, pq.Array(r.Permissions)); err != nil {
-			if isRoleNameUniqueErr(err) {
-				roles, getErr := c.GetRoles()
-				if getErr == nil {
-					for _, role := range roles {
-						if role.Name.Valid && r.Name.Valid && role.Name.String == r.Name.String {
-							return role, nil
-						}
-					}
-				}
-			}
-
-			return out, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", pqErrMsg(err)))
-		}
-
-		return out, nil
-	}
-
 	if err := c.ensureRolesCollection(); err != nil {
 		return auth.Role{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
@@ -547,32 +476,6 @@ func (c *Core) CreateRole(r auth.Role) (auth.Role, error) {
 
 // CreateListRole creates a new list role.
 func (c *Core) CreateListRole(r auth.ListRole) (auth.ListRole, error) {
-	if c.useSQLRoleStore() {
-		var out auth.ListRole
-		if err := c.q.CreateRole.Get(&out, r.Name, auth.RoleTypeList, pq.Array([]string{})); err != nil {
-			if isRoleNameUniqueErr(err) {
-				roles, getErr := c.GetListRoles()
-				if getErr == nil {
-					for _, role := range roles {
-						if role.Name.Valid && r.Name.Valid && role.Name.String == r.Name.String {
-							return role, nil
-						}
-					}
-				}
-			}
-
-			return out, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", pqErrMsg(err)))
-		}
-
-		if err := c.UpsertListPermissions(strconv.Itoa(out.ID), r.Lists); err != nil {
-			return out, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", pqErrMsg(err)))
-		}
-
-		return out, nil
-	}
-
 	if err := c.ensureRolesCollection(); err != nil {
 		return auth.ListRole{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))

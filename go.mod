@@ -13,7 +13,6 @@ require (
 	github.com/gorilla/feeds v1.2.0
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/knadh/go-pop3 v1.0.0
-	github.com/knadh/goyesql/v2 v2.2.0
 	github.com/knadh/koanf/maps v0.1.2
 	github.com/knadh/koanf/parsers/toml v0.1.0
 	github.com/knadh/koanf/providers/confmap v1.0.0

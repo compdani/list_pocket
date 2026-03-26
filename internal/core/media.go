@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gofrs/uuid/v5"
 	"github.com/compdani/list_pocket/internal/media"
 	"github.com/compdani/list_pocket/models"
+	"github.com/gofrs/uuid/v5"
 	"github.com/labstack/echo/v4"
 	"gopkg.in/volatiletech/null.v6"
 )
@@ -46,9 +46,8 @@ func sqliteMediaRowToModel(row sqliteMediaRow) media.Media {
 
 // QueryMedia returns media entries optionally filtered by a query string.
 func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, limit int) ([]media.Media, int, error) {
-	if c.isSQLite() {
-		rows := []sqliteMediaRow{}
-		q := `
+	rows := []sqliteMediaRow{}
+	q := `
 			SELECT
 				COUNT(*) OVER () AS total,
 				rowid AS id,
@@ -62,57 +61,31 @@ func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, 
 			FROM media
 			WHERE provider = ?
 		`
-		args := []any{provider}
-		if query != "" {
-			query = "%" + strings.ToLower(query) + "%"
-			q += ` AND LOWER(filename) LIKE ?`
-			args = append(args, query)
-		}
-		q += ` ORDER BY created DESC LIMIT ? OFFSET ?`
-		args = append(args, limit, offset)
-
-		if err := c.db.Select(&rows, q, args...); err != nil {
-			return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching",
-					"name", "{globals.terms.media}", "error", pqErrMsg(err)))
-		}
-
-		out := make([]media.Media, 0, len(rows))
-		total := 0
-		for _, row := range rows {
-			m := sqliteMediaRowToModel(row)
-			m.URL = s.GetURL(m.Filename)
-			if m.Thumb != "" {
-				m.ThumbURL = null.String{Valid: true, String: s.GetURL(m.Thumb)}
-			}
-			out = append(out, m)
-			total = row.Total
-		}
-
-		return out, total, nil
-	}
-
-	out := []media.Media{}
+	args := []any{provider}
 	if query != "" {
-		query = strings.ToLower(query)
+		query = "%" + strings.ToLower(query) + "%"
+		q += ` AND LOWER(filename) LIKE ?`
+		args = append(args, query)
 	}
-	if err := c.q.QueryMedia.Select(&out, "%"+query+"%", provider, offset, limit); err != nil {
-		return out, 0, echo.NewHTTPError(http.StatusInternalServerError,
+	q += ` ORDER BY created DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	if err := c.db.Select(&rows, q, args...); err != nil {
+		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching",
 				"name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
 
+	out := make([]media.Media, 0, len(rows))
 	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
-
-		for i := 0; i < len(out); i++ {
-			out[i].URL = s.GetURL(out[i].Filename)
-
-			if out[i].Thumb != "" {
-				out[i].ThumbURL = null.String{Valid: true, String: s.GetURL(out[i].Thumb)}
-			}
+	for _, row := range rows {
+		m := sqliteMediaRowToModel(row)
+		m.URL = s.GetURL(m.Filename)
+		if m.Thumb != "" {
+			m.ThumbURL = null.String{Valid: true, String: s.GetURL(m.Thumb)}
 		}
+		out = append(out, m)
+		total = row.Total
 	}
 
 	return out, total, nil
@@ -120,8 +93,7 @@ func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, 
 
 // GetMedia returns a media item.
 func (c *Core) GetMedia(id int, uuid, fileName string, s media.Store) (media.Media, error) {
-	if c.isSQLite() {
-		q := `
+	q := `
 			SELECT
 				rowid AS id,
 				uuid,
@@ -134,58 +106,34 @@ func (c *Core) GetMedia(id int, uuid, fileName string, s media.Store) (media.Med
 				0 AS total
 			FROM media
 			WHERE `
-		args := []any{}
-		switch {
-		case id > 0:
-			q += `rowid = ?`
-			args = append(args, id)
-		case uuid != "":
-			q += `uuid = ?`
-			args = append(args, uuid)
-		default:
-			q += `filename = ?`
-			args = append(args, fileName)
-		}
-		q += ` LIMIT 1`
-
-		var row sqliteMediaRow
-		if err := c.db.Get(&row, q, args...); err != nil {
-			if err == sql.ErrNoRows {
-				return media.Media{}, ErrNotFound
-			}
-			return media.Media{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
-		}
-
-		out := sqliteMediaRowToModel(row)
-		out.URL = s.GetURL(out.Filename)
-		if out.Thumb != "" {
-			out.ThumbURL = null.String{Valid: true, String: s.GetURL(out.Thumb)}
-		}
-		return out, nil
+	args := []any{}
+	switch {
+	case id > 0:
+		q += `rowid = ?`
+		args = append(args, id)
+	case uuid != "":
+		q += `uuid = ?`
+		args = append(args, uuid)
+	default:
+		q += `filename = ?`
+		args = append(args, fileName)
 	}
+	q += ` LIMIT 1`
 
-	var uu any
-	if uuid != "" {
-		uu = uuid
-	}
-
-	var out media.Media
-	if err := c.q.GetMedia.Get(&out, id, uu, fileName); err != nil {
-		// If it's ` sql: no rows in result set`, return a 404.
+	var row sqliteMediaRow
+	if err := c.db.Get(&row, q, args...); err != nil {
 		if err == sql.ErrNoRows {
-			return out, ErrNotFound
+			return media.Media{}, ErrNotFound
 		}
-
-		return out, echo.NewHTTPError(http.StatusInternalServerError,
+		return media.Media{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
 
+	out := sqliteMediaRowToModel(row)
 	out.URL = s.GetURL(out.Filename)
 	if out.Thumb != "" {
 		out.ThumbURL = null.String{Valid: true, String: s.GetURL(out.Thumb)}
 	}
-
 	return out, nil
 }
 
@@ -198,52 +146,29 @@ func (c *Core) InsertMedia(fileName, thumbName, contentType string, meta models.
 			c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
 	}
 
-	if c.isSQLite() {
-		if _, err := c.db.Exec(`INSERT INTO media (uuid, filename, thumb, content_type, provider, meta, created, updated)
+	if _, err := c.db.Exec(`INSERT INTO media (uuid, filename, thumb, content_type, provider, meta, created, updated)
 			VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))`,
-			uu.String(), fileName, thumbName, contentType, provider, meta); err != nil {
-			c.log.Printf("error inserting uploaded file to db: %v", err)
-			return media.Media{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
-		}
-
-		return c.GetMedia(0, uu.String(), "", s)
-	}
-
-	// Write to the DB.
-	var newID int
-	if err := c.q.InsertMedia.Get(&newID, uu, fileName, thumbName, contentType, provider, meta); err != nil {
+		uu.String(), fileName, thumbName, contentType, provider, meta); err != nil {
 		c.log.Printf("error inserting uploaded file to db: %v", err)
 		return media.Media{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
 
-	return c.GetMedia(newID, "", "", s)
+	return c.GetMedia(0, uu.String(), "", s)
 }
 
 // DeleteMedia deletes a given media item and returns the filename of the deleted item.
 func (c *Core) DeleteMedia(id int) (string, error) {
-	if c.isSQLite() {
-		var fname string
-		if err := c.db.Get(&fname, `SELECT filename FROM media WHERE rowid = ?`, id); err != nil {
-			c.log.Printf("error deleting uploaded file from db: %v", err)
-			return "", echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
-		}
-		if _, err := c.db.Exec(`DELETE FROM media WHERE rowid = ?`, id); err != nil {
-			c.log.Printf("error deleting uploaded file from db: %v", err)
-			return "", echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
-		}
-		return fname, nil
-	}
-
 	var fname string
-	if err := c.q.DeleteMedia.Get(&fname, id); err != nil {
-		c.log.Printf("error inserting uploaded file to db: %v", err)
+	if err := c.db.Get(&fname, `SELECT filename FROM media WHERE rowid = ?`, id); err != nil {
+		c.log.Printf("error deleting uploaded file from db: %v", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
-
+	if _, err := c.db.Exec(`DELETE FROM media WHERE rowid = ?`, id); err != nil {
+		c.log.Printf("error deleting uploaded file from db: %v", err)
+		return "", echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+	}
 	return fname, nil
 }
