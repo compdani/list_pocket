@@ -43,7 +43,6 @@ type App struct {
 	urlCfg     *UrlConfig
 	fs         stuffbin.FileSystem
 	db         *pbdb.DB
-	queries    *models.Queries
 	core       *core.Core
 	manager    *manager.Manager
 	messengers []manager.Messenger
@@ -87,9 +86,8 @@ var (
 
 	ko      = koanf.New(".")
 	fs      stuffbin.FileSystem
-	db      *pbdb.DB
-	queries *models.Queries
-	pb      *pocketbase.PocketBase
+	db *pbdb.DB
+	pb *pocketbase.PocketBase
 
 	// Compile-time variables.
 	buildString   string
@@ -163,7 +161,7 @@ func init() {
 	// Initialize the embedded filesystem with static assets.
 	fs = initFS(appDir, frontendDir, ko.String("static-dir"), ko.String("i18n-dir"))
 
-	// Installer mode? This runs before the SQL queries are loaded and prepared
+	// Installer mode? This runs before settings are loaded from the DB
 	// as the installer needs to work on an empty DB.
 	if ko.Bool("install") {
 		lo.Printf("PocketBase mode: app migrations are applied automatically on startup; skipping --install")
@@ -175,16 +173,7 @@ func init() {
 		os.Exit(0)
 	}
 
-	// Read the SQL queries from the queries file.
-	qMap := readQueries(queryFilePath, fs)
-
-	// Load settings from DB.
-	if q, ok := qMap["get-settings"]; ok {
-		initSettings(q.Query, db, ko)
-	}
-
-	// Prepare queries.
-	queries = prepareQueries(qMap, db, ko)
+	initSettings(ko)
 }
 
 func main() {
@@ -201,10 +190,10 @@ func main() {
 		// Initialize the media store.
 		media = initMediaStore(ko)
 
-		fbOptinNotify = makeOptinNotifyHook(ko.Bool("privacy.unsubscribe_header"), urlCfg, queries, db, i18n)
+		fbOptinNotify = makeOptinNotifyHook(ko.Bool("privacy.unsubscribe_header"), urlCfg, db, i18n)
 
 		// Crud core.
-		core = initCore(fbOptinNotify, queries, db, i18n, ko)
+		core = initCore(fbOptinNotify, db, i18n, ko)
 
 		// Auth module.
 		authn = initAuth(core, pb, ko)
@@ -213,10 +202,10 @@ func main() {
 		msgrs = append(initSMTPMessengers(), initPostbackMessengers(ko)...)
 
 		// Campaign manager.
-		mgr = initCampaignManager(msgrs, queries, db, urlCfg, core, media, i18n, ko)
+		mgr = initCampaignManager(msgrs, db, urlCfg, core, media, i18n, ko)
 
 		// Bulk importer.
-		importer = initImporter(queries, db, core, i18n, ko)
+		importer = initImporter(db, core, i18n, ko)
 
 		// Initialize the webhook/POP3 bounce processor.
 		bounce *bounce.Manager
@@ -229,7 +218,7 @@ func main() {
 	// Initialize the bounce manager that processes bounces from webhooks and
 	// POP3 mailbox scanning.
 	if ko.Bool("bounce.enabled") {
-		bounce = initBounceManager(core.RecordBounce, queries.RecordBounce, lo, ko)
+		bounce = initBounceManager(core.RecordBounce, lo, ko)
 	}
 
 	// Assign the default `email` messenger to the app.
@@ -278,9 +267,8 @@ func main() {
 		cfg:        cfg,
 		urlCfg:     urlCfg,
 		fs:         fs,
-		db:         db,
-		queries:    queries,
-		core:       core,
+		db:   db,
+		core: core,
 		manager:    mgr,
 		messengers: msgrs,
 		emailMsgr:  emailMsgr,
@@ -305,7 +293,7 @@ func main() {
 		}),
 
 		fnOptinNotify: fbOptinNotify,
-		about:         initAbout(queries, db),
+		about:         initAbout(db),
 		chReload:      chReload,
 
 		// First time installation with no user records in the DB.

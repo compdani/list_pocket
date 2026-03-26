@@ -3,7 +3,6 @@ package core
 import (
 	"database/sql"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/compdani/list_pocket/models"
@@ -53,35 +52,25 @@ func (c *Core) sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
 
 // GetTemplates retrieves all templates.
 func (c *Core) GetTemplates(status string, noBody bool) ([]models.Template, error) {
-	if c.isSQLite() {
-		pb := c.db.PocketBase()
-		if pb == nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", "pocketbase unavailable"))
-		}
-
-		recs, err := pb.FindRecordsByFilter("templates", "", "created", 0, 0)
-		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", err.Error()))
-		}
-
-		out := make([]models.Template, 0, len(recs))
-		for _, rec := range recs {
-			tpl := c.sqliteTemplateFromRecord(rec)
-			if noBody {
-				tpl.Body = ""
-			}
-			out = append(out, tpl)
-		}
-
-		return out, nil
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", "pocketbase unavailable"))
 	}
 
-	out := []models.Template{}
-	if err := c.q.GetTemplates.Select(&out, 0, noBody, status); err != nil {
+	recs, err := pb.FindRecordsByFilter("templates", "", "created", 0, 0)
+	if err != nil {
 		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", err.Error()))
+	}
+
+	out := make([]models.Template, 0, len(recs))
+	for _, rec := range recs {
+		tpl := c.sqliteTemplateFromRecord(rec)
+		if noBody {
+			tpl.Body = ""
+		}
+		out = append(out, tpl)
 	}
 
 	return out, nil
@@ -89,153 +78,91 @@ func (c *Core) GetTemplates(status string, noBody bool) ([]models.Template, erro
 
 // GetTemplate retrieves a given template.
 func (c *Core) GetTemplate(recordID string, noBody bool) (models.Template, error) {
-	if c.isSQLite() {
-		pb := c.db.PocketBase()
-		if pb == nil {
-			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", "pocketbase unavailable"))
-		}
-
-		rec, err := pb.FindRecordById("templates", recordID)
-		if err != nil {
-			return models.Template{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
-		}
-
-		out := c.sqliteTemplateFromRecord(rec)
-		if noBody {
-			out.Body = ""
-		}
-		return out, nil
-	}
-
-	var out []models.Template
-	if err := c.q.GetTemplates.Select(&out, recordID, noBody, ""); err != nil {
+	pb := c.db.PocketBase()
+	if pb == nil {
 		return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.templates}", "error", "pocketbase unavailable"))
 	}
 
-	if len(out) == 0 {
+	rec, err := pb.FindRecordById("templates", recordID)
+	if err != nil {
 		return models.Template{}, echo.NewHTTPError(http.StatusBadRequest,
 			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
 	}
 
-	return out[0], nil
+	out := c.sqliteTemplateFromRecord(rec)
+	if noBody {
+		out.Body = ""
+	}
+	return out, nil
 }
 
 // CreateTemplate creates a new template.
 func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource null.String) (models.Template, error) {
-	if c.isSQLite() {
-		pb := c.db.PocketBase()
-		col, err := pb.FindCollectionByNameOrId("templates")
-		if err != nil {
-			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-		}
-		rec := pbcore.NewRecord(col)
-		rec.Set("name", name)
-		rec.Set("type", typ)
-		rec.Set("subject", subject)
-		rec.Set("body", string(body))
-		rec.Set("body_source", bodySource.String)
-		rec.Set("is_default", false)
-		if err := pb.Save(rec); err != nil {
-			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-		}
-		return c.sqliteTemplateFromRecord(rec), nil
-	}
-
-	var newID int
-	if err := c.q.CreateTemplate.Get(&newID, name, typ, subject, body, bodySource); err != nil {
+	pb := c.db.PocketBase()
+	col, err := pb.FindCollectionByNameOrId("templates")
+	if err != nil {
 		return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 	}
-
-	return c.GetTemplate(strconv.Itoa(newID), false)
+	rec := pbcore.NewRecord(col)
+	rec.Set("name", name)
+	rec.Set("type", typ)
+	rec.Set("subject", subject)
+	rec.Set("body", string(body))
+	rec.Set("body_source", bodySource.String)
+	rec.Set("is_default", false)
+	if err := pb.Save(rec); err != nil {
+		return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+	}
+	return c.sqliteTemplateFromRecord(rec), nil
 }
 
 // UpdateTemplate updates a given template.
 func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte, bodySource null.String) (models.Template, error) {
-	if c.isSQLite() {
-		pb := c.db.PocketBase()
-		rec, err := pb.FindRecordById("templates", recordID)
-		if err != nil {
-			return models.Template{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
-		}
-		rec.Set("name", name)
-		rec.Set("subject", subject)
-		rec.Set("body", string(body))
-		rec.Set("body_source", bodySource.String)
-		if err := pb.Save(rec); err != nil {
-			return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-		}
-		return c.sqliteTemplateFromRecord(rec), nil
-	}
-
-	res, err := c.q.UpdateTemplate.Exec(recordID, name, subject, body, bodySource)
+	pb := c.db.PocketBase()
+	rec, err := pb.FindRecordById("templates", recordID)
 	if err != nil {
-		return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-	}
-
-	if n, _ := res.RowsAffected(); n == 0 {
 		return models.Template{}, echo.NewHTTPError(http.StatusBadRequest,
 			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
 	}
-
-	return c.GetTemplate(recordID, false)
+	rec.Set("name", name)
+	rec.Set("subject", subject)
+	rec.Set("body", string(body))
+	rec.Set("body_source", bodySource.String)
+	if err := pb.Save(rec); err != nil {
+		return models.Template{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+	}
+	return c.sqliteTemplateFromRecord(rec), nil
 }
 
 // SetDefaultTemplate sets a template as default.
 func (c *Core) SetDefaultTemplate(recordID string) error {
-	if c.isSQLite() {
-		if _, err := c.db.Exec(`UPDATE templates SET is_default = 0`); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-		}
-		if _, err := c.db.Exec(`UPDATE templates SET is_default = 1 WHERE id = ?`, recordID); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-		}
-		return nil
-	}
-
-	if _, err := c.q.SetDefaultTemplate.Exec(recordID); err != nil {
+	if _, err := c.db.Exec(`UPDATE templates SET is_default = 0`); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 	}
-
+	if _, err := c.db.Exec(`UPDATE templates SET is_default = 1 WHERE id = ?`, recordID); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+	}
 	return nil
 }
 
 // DeleteTemplate deletes a given template.
 func (c *Core) DeleteTemplate(recordID string) error {
-	if c.isSQLite() {
-		var isDefault bool
-		if err := c.db.Get(&isDefault, `SELECT is_default FROM templates WHERE id = ? LIMIT 1`, recordID); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
-		}
-		if isDefault {
-			return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("templates.cantDeleteDefault"))
-		}
-		if _, err := c.db.Exec(`DELETE FROM templates WHERE id = ?`, recordID); err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
-		}
-		return nil
+	var isDefault bool
+	if err := c.db.Get(&isDefault, `SELECT is_default FROM templates WHERE id = ? LIMIT 1`, recordID); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
 	}
-
-	var delID int
-	if err := c.q.DeleteTemplate.Get(&delID, recordID); err != nil {
+	if isDefault {
+		return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("templates.cantDeleteDefault"))
+	}
+	if _, err := c.db.Exec(`DELETE FROM templates WHERE id = ?`, recordID); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 	}
-	if delID == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("templates.cantDeleteDefault"))
-	}
-
 	return nil
 }

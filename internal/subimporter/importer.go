@@ -26,7 +26,6 @@ import (
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	"github.com/lib/pq"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -115,7 +114,6 @@ type Options struct {
 	UpsertStmt         *sql.Stmt
 	BlocklistStmt      *sql.Stmt
 	UpdateListDateStmt *sql.Stmt
-	UseJSONListArgs    bool
 	ResolveListIDs     func([]int) ([]string, error)
 	PostCB             func(subject string, data any) error
 
@@ -324,7 +322,6 @@ func (im *Importer) sendNotif(status string) error {
 func (s *Session) Start() {
 	var (
 		tx    *sql.Tx
-		stmt  *sql.Stmt
 		err   error
 		total = 0
 		cur   = 0
@@ -333,32 +330,26 @@ func (s *Session) Start() {
 	listIDs := make([]int, len(s.opt.ListIDs))
 	copy(listIDs, s.opt.ListIDs)
 
-	var (
-		listIDsArg    any = pq.Array(listIDs)
-		listIDsJSON   string
-		listRecordIDs = append([]string(nil), s.opt.ListRecordIDs...)
-	)
-	if s.im.opt.UseJSONListArgs {
-		if len(listRecordIDs) == 0 && s.im.opt.ResolveListIDs != nil {
-			listRecordIDs, err = s.im.opt.ResolveListIDs(listIDs)
-			if err != nil {
-				s.im.setStatus(StatusFailed)
-				s.log.Printf("error resolving list IDs: %v", err)
-				s.im.sendNotif(StatusFailed)
-				return
-			}
-		}
-
-		b, err := json.Marshal(listRecordIDs)
+	listRecordIDs := append([]string(nil), s.opt.ListRecordIDs...)
+	if len(listRecordIDs) == 0 && s.im.opt.ResolveListIDs != nil {
+		listRecordIDs, err = s.im.opt.ResolveListIDs(listIDs)
 		if err != nil {
 			s.im.setStatus(StatusFailed)
-			s.log.Printf("error marshaling list IDs: %v", err)
+			s.log.Printf("error resolving list IDs: %v", err)
 			s.im.sendNotif(StatusFailed)
 			return
 		}
-		listIDsJSON = string(b)
-		listIDsArg = listIDsJSON
 	}
+
+	b, err := json.Marshal(listRecordIDs)
+	if err != nil {
+		s.im.setStatus(StatusFailed)
+		s.log.Printf("error marshaling list IDs: %v", err)
+		s.im.sendNotif(StatusFailed)
+		return
+	}
+	listIDsJSON := string(b)
+	listIDsArg := any(listIDsJSON)
 	s.log.Printf("import session config: mode=%q sub_status=%q list_ids=%v list_record_ids=%v list_ids_json=%s overwrite_userinfo=%v overwrite_subscription_status=%v",
 		s.opt.Mode, s.opt.SubStatus, listIDs, listRecordIDs, listIDsJSON, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
 
@@ -371,11 +362,6 @@ func (s *Session) Start() {
 				continue
 			}
 
-			if !s.im.opt.UseJSONListArgs && s.opt.Mode == ModeSubscribe {
-				stmt = tx.Stmt(s.im.opt.UpsertStmt)
-			} else if !s.im.opt.UseJSONListArgs {
-				stmt = tx.Stmt(s.im.opt.BlocklistStmt)
-			}
 		}
 
 		uu, err := uuid.NewV4()
@@ -385,21 +371,15 @@ func (s *Session) Start() {
 			break
 		}
 
-		if s.im.opt.UseJSONListArgs {
-			if s.opt.Mode == ModeSubscribe {
-				if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
-					s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
-					_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus)
-				}
-			} else if s.opt.Mode == ModeBlocklist {
-				if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs); err == nil {
-					_, err = tx.Exec(sqliteMarkSubscriptionsUnsubscribed, sub.Email)
-				}
+		if s.opt.Mode == ModeSubscribe {
+			if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
+				s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
+				_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus)
 			}
-		} else if s.opt.Mode == ModeSubscribe {
-			_, err = stmt.Exec(uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, listIDsArg, s.opt.SubStatus, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
 		} else if s.opt.Mode == ModeBlocklist {
-			_, err = stmt.Exec(uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs)
+			if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs); err == nil {
+				_, err = tx.Exec(sqliteMarkSubscriptionsUnsubscribed, sub.Email)
+			}
 		}
 		if err != nil {
 			s.log.Printf("error executing insert: %v", err)

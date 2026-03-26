@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/events"
 	"github.com/compdani/list_pocket/internal/manager"
@@ -14,30 +15,18 @@ import (
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
 // store implements DataSource over the primary
 // database.
 type store struct {
-	queries *models.Queries
 	db      *pbdb.DB
-	sqlite  bool
 	core    *core.Core
 	media   media.Store
 	log     *log.Logger
 	events  *events.Events
 	verbose bool
-}
-
-type runningCamp struct {
-	CampaignID       int    `db:"campaign_id"`
-	CampaignType     string `db:"campaign_type"`
-	LastSubscriberID int    `db:"last_subscriber_id"`
-	MaxSubscriberID  int    `db:"max_subscriber_id"`
-	Attribs          []byte `db:"attribs"`
-	ListID           int    `db:"list_id"`
 }
 
 const sqliteBatchCursorAttribKey = "_sqlite_batch_cursor"
@@ -63,11 +52,9 @@ type sqliteStoreSubscriberRow struct {
 	Status    string `db:"status"`
 }
 
-func newManagerStore(q *models.Queries, db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger, ev *events.Events, verbose bool) *store {
+func newManagerStore(db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger, ev *events.Events, verbose bool) *store {
 	return &store{
-		queries: q,
 		db:      db,
-		sqlite:  isSQLiteDB(db),
 		core:    c,
 		media:   m,
 		log:     l,
@@ -159,6 +146,7 @@ func sqliteStoreSubscriberRowsToModels(rows []sqliteStoreSubscriberRow) []models
 		sub := models.Subscriber{
 			Base: models.Base{
 				ID:        row.ID,
+				RecordID:  row.RecordID,
 				CreatedAt: parseStoreNullTime(row.CreatedAt),
 				UpdatedAt: parseStoreNullTime(row.UpdatedAt),
 			},
@@ -210,16 +198,10 @@ func (s *store) sqliteSubscriberRecordID(subID int64) (string, error) {
 // campaigns that are also being processed. Additionally, it takes a map of campaignID:sentCount
 // of campaigns that are being processed and updates them in the DB.
 func (s *store) NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models.Campaign, error) {
-	if s.sqlite {
-		if s.verbose {
-			s.log.Printf("manager store sqlite: next campaigns current_ids=%v sent_counts=%v", currentIDs, sentCounts)
-		}
-		return s.nextCampaignsSQLite(currentIDs, sentCounts)
+	if s.verbose {
+		s.log.Printf("manager store sqlite: next campaigns current_ids=%v sent_counts=%v", currentIDs, sentCounts)
 	}
-
-	var out []*models.Campaign
-	err := s.queries.NextCampaigns.Select(&out, pq.Int64Array(currentIDs), pq.Int64Array(sentCounts))
-	return out, err
+	return s.nextCampaignsSQLite(currentIDs, sentCounts)
 }
 
 // NextSubscribers retrieves a subset of subscribers of a given campaign.
@@ -227,72 +209,31 @@ func (s *store) NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models
 // and every batch takes the last ID of the last batch and fetches the next
 // batch above that.
 func (s *store) NextSubscribers(campID, limit int) ([]models.Subscriber, bool, error) {
-	if s.sqlite {
-		return s.nextSubscribersSQLite(campID, limit)
-	}
-
-	var camps []runningCamp
-	if err := s.queries.GetRunningCampaign.Select(&camps, campID); err != nil {
-		return nil, false, err
-	}
-
-	var listIDs []int
-	for _, c := range camps {
-		listIDs = append(listIDs, c.ListID)
-	}
-
-	if len(listIDs) == 0 {
-		return nil, false, nil
-	}
-
-	var out []models.Subscriber
-	err := s.queries.NextCampaignSubscribers.Select(&out, camps[0].CampaignID, camps[0].CampaignType, camps[0].LastSubscriberID, camps[0].MaxSubscriberID, pq.Array(listIDs), limit+1)
-	if err != nil {
-		return nil, false, err
-	}
-	hasMore := len(out) > limit
-	if hasMore {
-		out = out[:limit]
-	}
-	return out, hasMore, nil
+	return s.nextSubscribersSQLite(campID, limit)
 }
 
 // GetCampaign fetches a campaign from the database.
 func (s *store) GetCampaign(campID int) (*models.Campaign, error) {
-	if s.sqlite {
-		recordID, err := s.sqliteCampaignRecordID(campID)
-		if err != nil {
-			return nil, err
-		}
-
-		c, err := s.core.GetCampaign(recordID, "", "")
-		if err != nil {
-			return nil, err
-		}
-		return &c, nil
+	recordID, err := s.sqliteCampaignRecordID(campID)
+	if err != nil {
+		return nil, err
 	}
 
-	var out = &models.Campaign{}
-	err := s.queries.GetCampaign.Get(out, campID, nil, nil, "default")
-	return out, err
+	c, err := s.core.GetCampaign(recordID, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 // UpdateCampaignStatus updates a campaign's status.
 func (s *store) UpdateCampaignStatus(campID int, status string) error {
-	if s.sqlite {
-		_, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 			UPDATE campaigns
 			SET status=(CASE WHEN send_at IS NOT NULL AND send_at != '' AND ? = 'running' THEN 'scheduled' ELSE ? END),
 			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid = ?`,
-			status, status, campID)
-		if err == nil {
-			s.publishCampaignStatsEvent("status", campID)
-		}
-		return err
-	}
-
-	_, err := s.queries.UpdateCampaignStatus.Exec(campID, status)
+		status, status, campID)
 	if err == nil {
 		s.publishCampaignStatsEvent("status", campID)
 	}
@@ -300,24 +241,13 @@ func (s *store) UpdateCampaignStatus(campID int, status string) error {
 }
 
 func (s *store) ScheduleCampaignBatch(campID int, sendAt time.Time) error {
-	if s.sqlite {
-		_, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 			UPDATE campaigns
 			SET status = 'scheduled',
 			    send_at = ?,
 			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid = ?`,
-			sendAt.UTC().Format("2006-01-02 15:04:05.000Z"), campID)
-		if err == nil {
-			s.publishCampaignStatsEvent("schedule-batch", campID)
-		}
-		return err
-	}
-
-	_, err := s.db.Exec(`
-		UPDATE campaigns
-		SET status='scheduled', send_at=$1, updated_at=NOW()
-		WHERE id=$2`, sendAt.UTC(), campID)
+		sendAt.UTC().Format("2006-01-02 15:04:05.000Z"), campID)
 	if err == nil {
 		s.publishCampaignStatsEvent("schedule-batch", campID)
 	}
@@ -326,23 +256,63 @@ func (s *store) ScheduleCampaignBatch(campID int, sendAt time.Time) error {
 
 // UpdateCampaignCounts updates a campaign's status.
 func (s *store) UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID int) error {
-	if s.sqlite {
-		_, err := s.db.Exec(`
+	_, err := s.db.Exec(`
 			UPDATE campaigns SET
 				to_send=(CASE WHEN ? != 0 THEN ? ELSE to_send END),
 				sent=sent+?,
 				updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE rowid=?`,
-			toSend, toSend, sent, campID)
-		if err == nil {
-			s.publishCampaignStatsEvent("counts", campID)
-		}
-		return err
-	}
-
-	_, err := s.queries.UpdateCampaignCounts.Exec(campID, toSend, sent, lastSubID)
+		toSend, toSend, sent, campID)
 	if err == nil {
 		s.publishCampaignStatsEvent("counts", campID)
+	}
+	return err
+}
+
+// MarkCampaignLedgerSent records a successful delivery in campaign_send_ledger (SQLite only).
+func (s *store) MarkCampaignLedgerSent(campaignID int, subscriberRecordID string) error {
+	if strings.TrimSpace(subscriberRecordID) == "" {
+		return nil
+	}
+	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)
+	if err != nil {
+		return err
+	}
+	err = campaignledger.MarkSent(s.db, campaignRecID, subscriberRecordID)
+	if err == nil {
+		s.publishCampaignStatsEvent("ledger-sent", campaignID)
+	}
+	return err
+}
+
+// RollbackCampaignLedgerInflight resets inflight → pending after a failed delivery (SQLite only).
+func (s *store) RollbackCampaignLedgerInflight(campaignID int, subscriberRecordID string) error {
+	if strings.TrimSpace(subscriberRecordID) == "" {
+		return nil
+	}
+	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)
+	if err != nil {
+		return err
+	}
+	return campaignledger.RollbackInflight(s.db, campaignRecID, subscriberRecordID)
+}
+
+// FinalizeCampaignLedgerStats writes final to_send and sent from the ledger into campaigns (SQLite only).
+func (s *store) FinalizeCampaignLedgerStats(campaignID int) error {
+	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)
+	if err != nil {
+		return err
+	}
+	var n int
+	if err := s.db.Get(&n, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ?`, campaignRecID); err != nil {
+		return err
+	}
+	if n == 0 {
+		return nil
+	}
+	err = campaignledger.FinalizeCampaignStats(s.db, campaignID, campaignRecID)
+	if err == nil {
+		s.publishCampaignStatsEvent("finalize-ledger", campaignID)
 	}
 	return err
 }
@@ -515,125 +485,67 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 }
 
 func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, bool, error) {
-	var camps []runningCamp
-	if err := s.db.Select(&camps, `
-		SELECT campaigns.rowid AS campaign_id,
-		       campaigns.type AS campaign_type,
-		       campaigns.attribs AS attribs,
-		       lists.rowid AS list_id
-		FROM campaigns
-		LEFT JOIN campaign_lists ON campaign_lists.campaign_id = campaigns.id
-		LEFT JOIN lists ON lists.id = campaign_lists.list_id
-		WHERE campaigns.rowid = ? AND campaigns.status='running'
-	`, campID); err != nil {
+	campaignRecID, err := s.sqliteCampaignRecordID(campID)
+	if err != nil {
 		return nil, false, err
 	}
 
-	listIDs := make([]int, 0, len(camps))
-	for _, c := range camps {
-		if c.ListID > 0 {
-			listIDs = append(listIDs, c.ListID)
-		}
-	}
-	if len(listIDs) == 0 {
-		if s.verbose {
-			s.log.Printf("manager store sqlite: next subscribers campaign_id=%d has no lists", campID)
-		}
-		return nil, false, nil
-	}
-
-	c := camps[0]
-	cursor := sqliteCampaignBatchCursor(c.Attribs)
-	args := []any{
-		cursor.LastCreated,
-		cursor.LastCreated,
-		cursor.LastCreated,
-		cursor.LastID,
-		cursor.MaxCreated,
-		cursor.MaxCreated,
-		cursor.MaxCreated,
-		cursor.MaxID,
-	}
-	for _, listID := range listIDs {
-		args = append(args, listID)
-	}
-	args = append(args, c.CampaignType, c.CampaignType, limit+1)
-
-	var rows []sqliteStoreSubscriberRow
-	if err := s.db.Select(&rows, `
-		SELECT s.rowid AS id,
-		       s.id AS record_id,
-		       s.created AS created_at,
-		       s.updated AS updated_at,
-		       s.uuid,
-		       s.email,
-		       s.first_name,
-		       s.last_name,
-		       s.name,
-		       s.attribs,
-		       s.status
-		FROM subscribers s
-		JOIN subscriber_lists sl ON sl.subscriber_id = s.id
-		JOIN lists l ON l.id = sl.list_id
-		WHERE (
-		    ? = '' OR
-		    s.created > ? OR
-		    (s.created = ? AND s.id > ?)
-		  )
-		  AND (
-		    ? = '' OR
-		    s.created < ? OR
-		    (s.created = ? AND s.id <= ?)
-		  )
-		  AND s.status != 'blocklisted'
-		  AND l.rowid IN (`+placeholders(len(listIDs))+`)
-		  AND (
-		    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-		    (? != 'optin' AND (
-		      (l.optin = 'double' AND sl.status = 'confirmed') OR
-		      (l.optin != 'double' AND sl.status != 'unsubscribed')
-		    ))
-		  )
-		GROUP BY s.id
-		ORDER BY s.created, s.id
-		LIMIT ?
-	`, args...); err != nil {
+	var campType string
+	if err := s.db.Get(&campType, `SELECT type FROM campaigns WHERE rowid = ?`, campID); err != nil {
 		return nil, false, err
 	}
-	out := sqliteStoreSubscriberRowsToModels(rows)
+
+	if _, err := campaignledger.BackfillIfEmpty(s.db, campID, campaignRecID, campType); err != nil {
+		return nil, false, err
+	}
+	if err := campaignledger.SyncToSendFromLedger(s.db, campID, campaignRecID); err != nil {
+		return nil, false, err
+	}
+
+	rows, hasMore, err := campaignledger.NextPending(s.db, campaignRecID, limit)
+	if err != nil {
+		return nil, false, err
+	}
+	out := sqliteLedgerRowsToModels(rows)
 	if s.verbose {
 		s.log.Printf(
-			"manager store sqlite: next subscribers campaign_id=%d list_ids=%v cursor_last=(%q,%q) cursor_max=(%q,%q) fetched=%d limit=%d",
+			"manager store sqlite: next subscribers (ledger) campaign_id=%d campaign_rec=%s fetched=%d limit=%d has_more=%v",
 			campID,
-			listIDs,
-			cursor.LastCreated,
-			cursor.LastID,
-			cursor.MaxCreated,
-			cursor.MaxID,
+			campaignRecID,
 			len(out),
 			limit,
+			hasMore,
 		)
 	}
-	if len(out) == 0 {
-		return nil, false, nil
-	}
-
-	hasMore := len(out) > limit
-	if hasMore {
-		out = out[:limit]
-	}
-
-	cursor = sqliteAdvanceBatchCursor(cursor, rows, len(out))
-	attribsRaw := sqliteSetCampaignBatchCursor(c.Attribs, cursor)
-	if _, err := s.db.Exec(`
-		UPDATE campaigns
-		SET attribs = ?,
-		    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-		WHERE rowid = ?`, string(attribsRaw), campID); err != nil {
-		return nil, false, err
-	}
-
 	return out, hasMore, nil
+}
+
+func sqliteLedgerRowsToModels(rows []campaignledger.SubscriberRow) []models.Subscriber {
+	out := make([]models.Subscriber, 0, len(rows))
+	for _, row := range rows {
+		attribs := models.JSON{}
+		if len(row.Attribs) > 0 && string(row.Attribs) != "null" {
+			_ = json.Unmarshal(row.Attribs, &attribs)
+		}
+		sub := models.Subscriber{
+			Base: models.Base{
+				ID:        row.ID,
+				RecordID:  row.RecordID,
+				CreatedAt: parseStoreNullTime(row.CreatedAt),
+				UpdatedAt: parseStoreNullTime(row.UpdatedAt),
+			},
+			UUID:      row.UUID,
+			Email:     row.Email,
+			FirstName: row.FirstName,
+			LastName:  row.LastName,
+			Name:      row.Name,
+			Attribs:   attribs,
+			Status:    row.Status,
+		}
+		sub.NormalizeName()
+		out = append(out, sub)
+	}
+	return out
 }
 
 func placeholders(n int) string {
@@ -672,24 +584,15 @@ func (s *store) CreateLink(url string) (string, error) {
 		return "", err
 	}
 
-	if s.sqlite {
-		var out string
-		if err := s.db.Get(&out, `
+	var out string
+	if err := s.db.Get(&out, `
 			INSERT INTO links (uuid, url)
 			VALUES (?, ?)
 			ON CONFLICT(url) DO UPDATE SET url=excluded.url
 			RETURNING uuid`,
-			uu, url); err != nil {
-			return "", err
-		}
-		return out, nil
-	}
-
-	var out string
-	if err := s.queries.CreateLink.Get(&out, uu, url); err != nil {
+		uu, url); err != nil {
 		return "", err
 	}
-
 	return out, nil
 }
 
@@ -801,112 +704,85 @@ func mustJSON(v any) []byte {
 
 // RecordBounce records a bounce event and returns the bounce count.
 func (s *store) RecordBounce(b models.Bounce) (int64, int, error) {
-	if s.sqlite {
-		subID := int64(0)
-		if b.SubscriberUUID != "" {
-			if err := s.db.Get(&subID, `SELECT id FROM subscribers WHERE uuid = ? LIMIT 1`, b.SubscriberUUID); err != nil {
-				if err == sql.ErrNoRows {
-					return 0, 0, nil
-				}
-				return 0, 0, err
+	subID := int64(0)
+	if b.SubscriberUUID != "" {
+		if err := s.db.Get(&subID, `SELECT id FROM subscribers WHERE uuid = ? LIMIT 1`, b.SubscriberUUID); err != nil {
+			if err == sql.ErrNoRows {
+				return 0, 0, nil
 			}
-		} else if b.Email != "" {
-			if err := s.db.Get(&subID, `SELECT id FROM subscribers WHERE email = ? LIMIT 1`, b.Email); err != nil {
-				if err == sql.ErrNoRows {
-					return 0, 0, nil
-				}
-				return 0, 0, err
-			}
-		}
-
-		if subID == 0 {
-			return 0, 0, nil
-		}
-
-		var campID sql.NullInt64
-		if b.CampaignUUID != "" {
-			_ = s.db.Get(&campID, `SELECT id FROM campaigns WHERE uuid = ? LIMIT 1`, b.CampaignUUID)
-		}
-
-		metaJSON := b.Meta
-		if len(metaJSON) == 0 {
-			metaJSON = json.RawMessage(`{}`)
-		}
-
-		if _, err := s.db.Exec(`
-			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
-			VALUES (?, ?, ?, ?, ?, (strftime('%Y-%m-%d %H:%M:%fZ')))`,
-			subID, campID, b.Type, b.Source, string(metaJSON)); err != nil {
 			return 0, 0, err
 		}
-
-		num := 0
-		if err := s.db.Get(&num, `SELECT COUNT(*) FROM bounces WHERE subscriber_id = ? AND type = ?`, subID, b.Type); err != nil {
-			return subID, 0, err
+	} else if b.Email != "" {
+		if err := s.db.Get(&subID, `SELECT id FROM subscribers WHERE email = ? LIMIT 1`, b.Email); err != nil {
+			if err == sql.ErrNoRows {
+				return 0, 0, nil
+			}
+			return 0, 0, err
 		}
-		return subID, num, nil
 	}
 
-	var res = struct {
-		SubscriberID int64 `db:"subscriber_id"`
-		Num          int   `db:"num"`
-	}{}
+	if subID == 0 {
+		return 0, 0, nil
+	}
 
-	err := s.queries.UpdateCampaignStatus.Select(&res,
-		b.SubscriberUUID,
-		b.Email,
-		b.CampaignUUID,
-		b.Type,
-		b.Source,
-		b.Meta)
+	var campID sql.NullInt64
+	if b.CampaignUUID != "" {
+		_ = s.db.Get(&campID, `SELECT id FROM campaigns WHERE uuid = ? LIMIT 1`, b.CampaignUUID)
+	}
 
-	return res.SubscriberID, res.Num, err
+	metaJSON := b.Meta
+	if len(metaJSON) == 0 {
+		metaJSON = json.RawMessage(`{}`)
+	}
+
+	if _, err := s.db.Exec(`
+			INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
+			VALUES (?, ?, ?, ?, ?, (strftime('%Y-%m-%d %H:%M:%fZ')))`,
+		subID, campID, b.Type, b.Source, string(metaJSON)); err != nil {
+		return 0, 0, err
+	}
+
+	num := 0
+	if err := s.db.Get(&num, `SELECT COUNT(*) FROM bounces WHERE subscriber_id = ? AND type = ?`, subID, b.Type); err != nil {
+		return subID, 0, err
+	}
+	return subID, num, nil
 }
 
 // BlocklistSubscriber blocklists a subscriber permanently.
 func (s *store) BlocklistSubscriber(id int64) error {
-	if s.sqlite {
-		recID, err := s.sqliteSubscriberRecordID(id)
-		if err != nil {
-			return err
-		}
-
-		pb := s.db.PocketBase()
-		rec, err := pb.FindRecordById("subscribers", recID)
-		if err != nil {
-			return err
-		}
-		rec.Set("status", "blocklisted")
-		if err := pb.Save(rec); err != nil {
-			return err
-		}
-
-		_, err = s.db.Exec(`
-			UPDATE subscriber_lists
-			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE subscriber_id = ?`, recID)
+	recID, err := s.sqliteSubscriberRecordID(id)
+	if err != nil {
 		return err
 	}
 
-	_, err := s.queries.BlocklistSubscribers.Exec(pq.Int64Array{id})
+	pb := s.db.PocketBase()
+	rec, err := pb.FindRecordById("subscribers", recID)
+	if err != nil {
+		return err
+	}
+	rec.Set("status", "blocklisted")
+	if err := pb.Save(rec); err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(`
+			UPDATE subscriber_lists
+			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE subscriber_id = ?`, recID)
 	return err
 }
 
 // DeleteSubscriber deletes a subscriber from the DB.
 func (s *store) DeleteSubscriber(id int64) error {
-	if s.sqlite {
-		recID, err := s.sqliteSubscriberRecordID(id)
-		if err != nil {
-			return err
-		}
-		pb := s.db.PocketBase()
-		rec, err := pb.FindRecordById("subscribers", recID)
-		if err != nil {
-			return err
-		}
-		return pb.Delete(rec)
+	recID, err := s.sqliteSubscriberRecordID(id)
+	if err != nil {
+		return err
 	}
-
-	_, err := s.queries.DeleteSubscribers.Exec(pq.Int64Array{id})
-	return err
+	pb := s.db.PocketBase()
+	rec, err := pb.FindRecordById("subscribers", recID)
+	if err != nil {
+		return err
+	}
+	return pb.Delete(rec)
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
-	"github.com/lib/pq"
 )
 
 var bounceQuerySortFields = []string{"email", "campaign_name", "source", "created_at", "type"}
@@ -58,151 +57,71 @@ func sqliteBounceRowToModel(row sqliteBounceRow) models.Bounce {
 // QueryBounces retrieves paginated bounce entries based on the given params.
 // It also returns the total number of bounce records in the DB.
 func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, offset, limit int) ([]models.Bounce, int, error) {
-	if c.isSQLite() {
-		var (
-			campRecordID string
-			subRecordID  string
-		)
+	var (
+		campRecordID string
+		subRecordID  string
+	)
 
-		if campID > 0 {
-			recordIDs, err := c.ResolveCampaignRecordIDs([]int{campID})
-			if err != nil {
-				return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
-					c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
-			}
-			if len(recordIDs) > 0 {
-				campRecordID = recordIDs[0]
-			}
+	if campID > 0 {
+		recordIDs, err := c.ResolveCampaignRecordIDs([]int{campID})
+		if err != nil {
+			return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
+				c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
 		}
-
-		if subID > 0 {
-			recordIDs, err := c.ResolveSubscriberRecordIDs([]int{subID})
-			if err != nil {
-				return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
-					c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
-			}
-			if len(recordIDs) > 0 {
-				subRecordID = recordIDs[0]
-			}
+		if len(recordIDs) > 0 {
+			campRecordID = recordIDs[0]
 		}
-
-		return c.queryBouncesSQLite(campRecordID, subRecordID, source, orderBy, order, offset, limit)
 	}
 
-	if !strSliceContains(orderBy, bounceQuerySortFields) {
-		orderBy = "created_at"
-	}
-	if order != SortAsc && order != SortDesc {
-		order = SortDesc
-	}
-
-	out := []models.Bounce{}
-	stmt := strings.ReplaceAll(c.q.QueryBounces, "%order%", orderBy+" "+order)
-	if err := c.db.Select(&out, stmt, 0, campID, subID, source, offset, limit); err != nil {
-		c.log.Printf("error fetching bounces: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.bounce}", "error", pqErrMsg(err)))
+	if subID > 0 {
+		recordIDs, err := c.ResolveSubscriberRecordIDs([]int{subID})
+		if err != nil {
+			return nil, 0, echo.NewHTTPError(http.StatusBadRequest,
+				c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
+		}
+		if len(recordIDs) > 0 {
+			subRecordID = recordIDs[0]
+		}
 	}
 
-	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
-	}
-
-	return out, total, nil
+	return c.queryBouncesSQLite(campRecordID, subRecordID, source, orderBy, order, offset, limit)
 }
 
 // GetBounce retrieves bounce entries based on the given params.
 func (c *Core) GetBounce(id string) (models.Bounce, error) {
-	if c.isSQLite() {
-		out, _, err := c.queryBouncesSQLite("", "", "", "id", SortAsc, 0, 1, id)
-		if err != nil {
-			return models.Bounce{}, err
-		}
-		if len(out) == 0 {
-			return models.Bounce{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.bounce}"))
-		}
-		return out[0], nil
+	out, _, err := c.queryBouncesSQLite("", "", "", "id", SortAsc, 0, 1, id)
+	if err != nil {
+		return models.Bounce{}, err
 	}
-
-	var out []models.Bounce
-	stmt := strings.ReplaceAll(c.q.QueryBounces, "%order%", "id "+SortAsc)
-	if err := c.db.Select(&out, stmt, id, 0, 0, "", 0, 1); err != nil {
-		c.log.Printf("error fetching bounces: %v", err)
-		return models.Bounce{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.bounce}", "error", pqErrMsg(err)))
-	}
-
 	if len(out) == 0 {
 		return models.Bounce{}, echo.NewHTTPError(http.StatusBadRequest,
 			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.bounce}"))
-
 	}
-
 	return out[0], nil
 }
 
 // RecordBounce records a new bounce.
 func (c *Core) RecordBounce(b models.Bounce) error {
-	if c.isSQLite() {
-		return c.recordBounceSQLite(b)
-	}
-
-	action, ok := c.consts.BounceActions[b.Type]
-	if !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.invalidData")+": "+b.Type)
-	}
-
-	_, err := c.q.RecordBounce.Exec(b.SubscriberUUID,
-		b.Email,
-		b.CampaignUUID,
-		b.Type,
-		b.Source,
-		b.Meta,
-		b.CreatedAt,
-		action.Count,
-		action.Action)
-
-	if err != nil {
-		// Ignore the error if it complained of no subscriber.
-		if pqErr, ok := err.(*pq.Error); ok && pqErr.Column == "subscriber_id" {
-			c.log.Printf("bounced subscriber (%s / %s) not found", b.SubscriberUUID, b.Email)
-			return nil
-		}
-
-		c.log.Printf("error recording bounce: %v", err)
-	}
-
-	return err
+	return c.recordBounceSQLite(b)
 }
 
 // BlocklistBouncedSubscribers blocklists all bounced subscribers.
 func (c *Core) BlocklistBouncedSubscribers() error {
-	if c.isSQLite() {
-		if _, err := c.db.Exec(`
+	if _, err := c.db.Exec(`
 			UPDATE subscribers
 			SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id IN (SELECT DISTINCT subscriber_id FROM bounces)
 		`); err != nil {
-			c.log.Printf("error blocklisting bounced subscribers: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
-		}
+		c.log.Printf("error blocklisting bounced subscribers: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
+	}
 
-		if _, err := c.db.Exec(`
+	if _, err := c.db.Exec(`
 			UPDATE subscriber_lists
 			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id IN (SELECT DISTINCT subscriber_id FROM bounces)
 		`); err != nil {
-			c.log.Printf("error unsubscribing bounced subscriber lists: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
-		}
-
-		return nil
-	}
-
-	if _, err := c.q.BlocklistBouncedSubscribers.Exec(); err != nil {
-		c.log.Printf("error blocklisting bounced subscribers: %v", err)
+		c.log.Printf("error unsubscribing bounced subscriber lists: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
 	}
 
@@ -216,26 +135,8 @@ func (c *Core) DeleteBounce(id string) error {
 
 // DeleteBounces deletes multiple lists.
 func (c *Core) DeleteBounces(ids []string, all bool) error {
-	if c.isSQLite() {
-		if all {
-			if _, err := c.db.Exec(`DELETE FROM bounces`); err != nil {
-				c.log.Printf("error deleting bounces: %v", err)
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
-			}
-			return nil
-		}
-
-		if len(ids) == 0 {
-			return nil
-		}
-
-		q := `DELETE FROM bounces WHERE id IN (` + sqlitePlaceholders(len(ids)) + `)`
-		args := make([]any, 0, len(ids))
-		for _, id := range ids {
-			args = append(args, id)
-		}
-		if _, err := c.db.Exec(q, args...); err != nil {
+	if all {
+		if _, err := c.db.Exec(`DELETE FROM bounces`); err != nil {
 			c.log.Printf("error deleting bounces: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
@@ -243,8 +144,17 @@ func (c *Core) DeleteBounces(ids []string, all bool) error {
 		return nil
 	}
 
-	if _, err := c.q.DeleteBounces.Exec(pq.Array(ids), all); err != nil {
-		c.log.Printf("error deleting lists: %v", err)
+	if len(ids) == 0 {
+		return nil
+	}
+
+	q := `DELETE FROM bounces WHERE id IN (` + sqlitePlaceholders(len(ids)) + `)`
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	if _, err := c.db.Exec(q, args...); err != nil {
+		c.log.Printf("error deleting bounces: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}

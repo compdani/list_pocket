@@ -209,6 +209,10 @@ func (p *pipe) cleanup() {
 		p.m.log.Printf("error updating campaign counts (%s): %v", p.camp.Name, err)
 	}
 
+	if err := p.m.store.FinalizeCampaignLedgerStats(p.camp.ID); err != nil {
+		p.m.log.Printf("error finalizing campaign ledger stats (%s): %v", p.camp.Name, err)
+	}
+
 	// The campaign was auto-paused due to errors.
 	if p.withErrors.Load() {
 		if err := p.m.store.UpdateCampaignStatus(p.camp.ID, models.CampaignStatusPaused); err != nil {

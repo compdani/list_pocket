@@ -19,6 +19,9 @@ func (testStore) GetAttachment(int) (models.Attachment, error)                { 
 func (testStore) UpdateCampaignStatus(int, string) error                      { return nil }
 func (testStore) ScheduleCampaignBatch(int, time.Time) error                  { return nil }
 func (testStore) UpdateCampaignCounts(int, int, int, int) error               { return nil }
+func (testStore) MarkCampaignLedgerSent(int, string) error                    { return nil }
+func (testStore) RollbackCampaignLedgerInflight(int, string) error            { return nil }
+func (testStore) FinalizeCampaignLedgerStats(int) error                       { return nil }
 func (testStore) CreateLink(url string) (string, error)                       { return "link-uuid", nil }
 func (testStore) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
 	return msg, nil

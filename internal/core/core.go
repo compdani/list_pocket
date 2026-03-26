@@ -7,7 +7,6 @@ package core
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -18,16 +17,11 @@ import (
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
 	"github.com/labstack/echo/v4"
-	"github.com/lib/pq"
 )
 
 const (
 	SortAsc  = "asc"
 	SortDesc = "desc"
-
-	matDashboardCharts = "mat_dashboard_charts"
-	matDashboardCounts = "mat_dashboard_counts"
-	matListSubStats    = "mat_list_subscriber_stats"
 )
 
 // Core represents the listmonk core with all shared, global functions.
@@ -37,7 +31,6 @@ type Core struct {
 	consts Constants
 	i18n   *i18n.I18n
 	db     *pbdb.DB
-	q      *models.Queries
 	log    *log.Logger
 
 	getSettings      func() (types.JSONText, error)
@@ -65,7 +58,6 @@ type Opt struct {
 	Constants Constants
 	I18n      *i18n.I18n
 	DB        *pbdb.DB
-	Queries   *models.Queries
 	Log       *log.Logger
 
 	GetSettings      func() (types.JSONText, error)
@@ -90,7 +82,6 @@ func New(o *Opt, h *Hooks) *Core {
 		consts: o.Constants,
 		i18n:   o.I18n,
 		db:     o.DB,
-		q:      o.Queries,
 		log:    o.Log,
 
 		getSettings:      o.GetSettings,
@@ -99,55 +90,23 @@ func New(o *Opt, h *Hooks) *Core {
 	}
 }
 
-// RefreshMatViews refreshes all materialized views.
+// RefreshMatViews is a no-op (SQLite / PocketBase; no materialized views).
 func (c *Core) RefreshMatViews(concurrent bool) error {
-	if c.isSQLite() {
-		return nil
-	}
-
-	for _, v := range []string{matDashboardCharts, matDashboardCounts, matListSubStats} {
-		_ = c.RefreshMatView(v, true)
-	}
 	return nil
 }
 
-// RefreshMatView refreshes a Postgres materialized view.
+// RefreshMatView is a no-op (SQLite / PocketBase; no materialized views).
 func (c *Core) RefreshMatView(name string, concurrent bool) error {
-	if c.isSQLite() {
-		return nil
-	}
-
-	q := "REFRESH MATERIALIZED VIEW %s %s"
-	if concurrent {
-		q = fmt.Sprintf(q, "CONCURRENTLY", name)
-	} else {
-		q = fmt.Sprintf(q, "", name)
-	}
-
-	if _, err := c.db.Exec(q); err != nil {
-		c.log.Printf("error refreshing materialized view: %s: %v", name, err)
-		return err
-	}
-
 	return nil
 }
 
-// refreshCache refreshes a Postgres materialized view if caching is disabled.
 func (c *Core) refreshCache(name string, concurrent bool) error {
-	if c.consts.CacheSlowQueries {
-		return nil
-	}
-
-	return c.RefreshMatView(name, concurrent)
+	return nil
 }
 
-// Given an error, pqErrMsg will try to return pq error details
-// if it's a pq error.
 func pqErrMsg(err error) string {
-	if err, ok := err.(*pq.Error); ok {
-		if err.Detail != "" {
-			return fmt.Sprintf("%s. %s", err, err.Detail)
-		}
+	if err == nil {
+		return ""
 	}
 	return err.Error()
 }

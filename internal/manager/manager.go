@@ -40,6 +40,9 @@ type Store interface {
 	UpdateCampaignStatus(campID int, status string) error
 	ScheduleCampaignBatch(campID int, sendAt time.Time) error
 	UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID int) error
+	MarkCampaignLedgerSent(campaignID int, subscriberRecordID string) error
+	RollbackCampaignLedgerInflight(campaignID int, subscriberRecordID string) error
+	FinalizeCampaignLedgerStats(campaignID int) error
 	CreateLink(url string) (string, error)
 	CreateTransactionalMessage(models.TransactionalMessage) (models.TransactionalMessage, error)
 	UpdateTransactionalMessageStatus(recordID, status, errorMessage string, sent bool) error
@@ -555,6 +558,11 @@ func (m *Manager) worker() {
 			err := m.messengers[msg.Campaign.Messenger].Push(out)
 			if err != nil {
 				m.log.Printf("error sending message in campaign %s: subscriber %d: %v", msg.Campaign.Name, msg.Subscriber.ID, err)
+				if msg.pipe != nil {
+					if rbErr := m.store.RollbackCampaignLedgerInflight(msg.Campaign.ID, msg.Subscriber.RecordID); rbErr != nil {
+						m.log.Printf("error rolling back campaign ledger inflight (campaign %d): %v", msg.Campaign.ID, rbErr)
+					}
+				}
 			}
 
 			// Increment the send rate or the error counter if there was an error.
@@ -573,6 +581,9 @@ func (m *Manager) worker() {
 					}
 					msg.pipe.rate.Incr(1)
 					msg.pipe.sent.Add(1)
+					if err := m.store.MarkCampaignLedgerSent(msg.Campaign.ID, msg.Subscriber.RecordID); err != nil {
+						m.log.Printf("error marking campaign ledger sent (campaign %d, subscriber %s): %v", msg.Campaign.ID, msg.Subscriber.RecordID, err)
+					}
 				}
 			}
 
