@@ -410,13 +410,30 @@ export default {
 
     // Returns the list of valid (visual vs. normal) templates for the template dropdown.
     validTemplates() {
-      let typ = 'campaign';
+      const templates = Array.isArray(this.templates) ? this.templates : [];
+      const hasContentPlaceholder = (body = '') => /\{\{(\s+)?template\s+?"content"(\s+)?\.(\s+)?}}/.test(String(body || ''));
+
       if (this.self.contentType === 'visual') {
-        typ = 'campaign_visual';
-      } else if (this.self.contentType === 'grapes_mjml') {
-        typ = 'campaign_grapes_mjml';
+        return templates.filter((t) => t.type === 'campaign_visual');
       }
-      return this.templates.filter((t) => (t.type === typ));
+
+      if (this.self.contentType === 'grapes_mjml') {
+        return templates.filter((t) => t.type === 'campaign_grapes_mjml');
+      }
+
+      // For text editors, allow any campaign template type
+      // as long as it exposes the {{ template "content" . }} insertion point.
+      if (this.self.contentType === 'richtext'
+        || this.self.contentType === 'html'
+        || this.self.contentType === 'markdown'
+        || this.self.contentType === 'plain') {
+        return templates.filter((t) => (
+          (t.type === 'campaign' || t.type === 'campaign_visual' || t.type === 'campaign_grapes_mjml')
+          && hasContentPlaceholder(t.body)
+        ));
+      }
+
+      return templates.filter((t) => (t.type === 'campaign'));
     },
 
     isContentTypeLocked() {
