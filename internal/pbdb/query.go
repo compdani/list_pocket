@@ -107,19 +107,24 @@ func toNamedParams(sqlStr string, args ...any) (string, dbx.Params, error) {
 
 	if strings.Contains(sqlStr, "$") {
 		params := dbx.Params{}
-		matches := dollarArgRegexp.FindAllStringSubmatch(sqlStr, -1)
-		for _, m := range matches {
-			n, err := strconv.Atoi(m[1])
-			if err != nil {
-				return "", nil, fmt.Errorf("invalid positional arg placeholder %q", m[0])
+		sqlStr = dollarArgRegexp.ReplaceAllStringFunc(sqlStr, func(ph string) string {
+			m := dollarArgRegexp.FindStringSubmatch(ph)
+			if len(m) != 2 {
+				return ph
 			}
-			if n < 1 || n > len(args) {
-				return "", nil, fmt.Errorf("placeholder %s references missing arg", m[0])
-			}
-			params["p"+m[1]] = args[n-1]
-		}
 
-		return dollarArgRegexp.ReplaceAllString(sqlStr, "{:p$1}"), params, nil
+			n, err := strconv.Atoi(m[1])
+			if err != nil || n < 1 || n > len(args) {
+				// Leave out-of-range placeholders untouched. This avoids false
+				// positives from placeholders that appear in SQL comments.
+				return ph
+			}
+
+			params["p"+m[1]] = args[n-1]
+			return "{:p" + m[1] + "}"
+		})
+
+		return sqlStr, params, nil
 	}
 
 	if strings.Contains(sqlStr, "?") {
