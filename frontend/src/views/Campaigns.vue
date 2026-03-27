@@ -232,7 +232,7 @@
               <v-progress-circular indeterminate size="16" width="2" class="ml-1" />
             </div>
             <v-progress-linear
-              :model-value="getCampaignStats(item).sent / getCampaignStats(item).toSend * 100"
+              :model-value="campaignProgressPercent(getCampaignStats(item))"
               class="mt-1"
             />
           </div>
@@ -563,6 +563,15 @@ export default {
         return this.campaignStatsData[c.id];
       }
       return c;
+    },
+
+    campaignProgressPercent(stats) {
+      const sent = Number(stats?.sent) || 0;
+      const toSend = Number(stats?.toSend) || 0;
+      if (toSend <= 0) {
+        return 0;
+      }
+      return Math.min(100, (sent / toSend) * 100);
     },
 
     refreshCampaignStats() {

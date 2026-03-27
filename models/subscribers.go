@@ -108,8 +108,9 @@ type SubscriberExportProfile struct {
 	LinkClicks    json.RawMessage `db:"link_clicks" json:"link_clicks,omitempty"`
 }
 
-// SubscriberActivity represents a subscriber's campaign views and link clicks for the Activity tab.
+// SubscriberActivity represents a subscriber's campaign sends (ledger), views, and link clicks for the Activity tab.
 type SubscriberActivity struct {
+	CampaignSends json.RawMessage `json:"campaign_sends"`
 	CampaignViews json.RawMessage `db:"campaign_views" json:"campaign_views"`
 	LinkClicks    json.RawMessage `db:"link_clicks" json:"link_clicks"`
 }

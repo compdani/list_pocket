@@ -106,7 +106,7 @@ func (a *App) GetSubscriber(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{out})
 }
 
-// GetSubscriberActivity handles the retrieval of a subscriber's campaign views and link clicks.
+// GetSubscriberActivity handles campaign sends (ledger), views, and link clicks for the Activity tab.
 func (a *App) GetSubscriberActivity(c echo.Context) error {
 	user := auth.GetUser(c)
 
