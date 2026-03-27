@@ -92,3 +92,17 @@ func TestCampaignPrivacyReferenceFallsBackToStartedAt(t *testing.T) {
 		t.Fatalf("expected campaign_started_at reference type, got %q", refType)
 	}
 }
+
+func TestCampaignPrivacyReferenceWithLedgerPrefersSubscriberSentAt(t *testing.T) {
+	ledgerSentAt := time.Date(2026, time.March, 23, 12, 3, 0, 0, time.UTC)
+	sendAt := time.Date(2026, time.March, 23, 11, 59, 0, 0, time.UTC)
+	startedAt := time.Date(2026, time.March, 23, 12, 0, 0, 0, time.UTC)
+
+	refAt, refType := campaignPrivacyReferenceWithLedger(ledgerSentAt, sendAt, startedAt)
+	if !refAt.Equal(ledgerSentAt) {
+		t.Fatalf("expected ledger sent_at reference %s, got %s", ledgerSentAt, refAt)
+	}
+	if refType != "campaign_subscriber_sent_at" {
+		t.Fatalf("expected campaign_subscriber_sent_at reference type, got %q", refType)
+	}
+}

@@ -1221,11 +1221,7 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 		ledgerSentAt = parsed.Time
 	}
 
-	referenceAt, referenceType := campaignPrivacyReference(sendAt, startedAt)
-	if !ledgerSentAt.IsZero() {
-		referenceAt = ledgerSentAt
-		referenceType = "campaign_subscriber_sent_at"
-	}
+	referenceAt, referenceType := campaignPrivacyReferenceWithLedger(ledgerSentAt, sendAt, startedAt)
 	suspected, meta, err := classifyPrivacyOpen(event, referenceAt, referenceType)
 	if err != nil {
 		c.log.Printf("error marshaling campaign view metadata: %s", err)
