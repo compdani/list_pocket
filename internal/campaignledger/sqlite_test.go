@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/jmoiron/sqlx"
@@ -132,6 +133,68 @@ func TestSyncToSendFromLedgerNoLedgerRows(t *testing.T) {
 	mustGet(t, db, &toSend, `SELECT to_send FROM campaigns WHERE rowid = ?`, campRowID)
 	if toSend != 5 {
 		t.Fatalf("to_send unchanged when no ledger: got %d", toSend)
+	}
+}
+
+func TestCleanupSentOlderThan(t *testing.T) {
+	pbdbDB := newTestLedgerPBDB(t)
+	campRec := "camp_finished"
+	var campRowID int
+	mustExec(t, pbdbDB, `INSERT INTO campaigns (id, type, status, to_send, sent) VALUES (?, 'broadcast', 'finished', 0, 0)`, campRec)
+	mustGet(t, pbdbDB, &campRowID, `SELECT rowid FROM campaigns WHERE id = ?`, campRec)
+
+	mustExec(t, pbdbDB, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s1', 'u1', 'a@b.c', 'enabled')`)
+	mustExec(t, pbdbDB, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s2', 'u2', 'b@b.c', 'enabled')`)
+	mustExec(t, pbdbDB, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', ?, 's1', 'sent', '2026-01-01', '2026-01-01')`, campRec)
+	mustExec(t, pbdbDB, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', ?, 's2', 'sent', '2026-01-02', '2026-01-02')`, campRec)
+
+	deleted, reconciled, err := CleanupSentOlderThan(pbdbDB, time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 2 {
+		t.Fatalf("deleted=%d, want 2", deleted)
+	}
+	if reconciled != 1 {
+		t.Fatalf("reconciled=%d, want 1", reconciled)
+	}
+
+	var toSend, sent, remaining int
+	mustGet(t, pbdbDB, &toSend, `SELECT to_send FROM campaigns WHERE rowid = ?`, campRowID)
+	mustGet(t, pbdbDB, &sent, `SELECT sent FROM campaigns WHERE rowid = ?`, campRowID)
+	mustGet(t, pbdbDB, &remaining, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ?`, campRec)
+	if toSend != 2 || sent != 2 {
+		t.Fatalf("campaign stats after cleanup: to_send=%d sent=%d, want 2/2", toSend, sent)
+	}
+	if remaining != 0 {
+		t.Fatalf("remaining ledger rows=%d, want 0", remaining)
+	}
+}
+
+func TestCleanupSentOlderThanSkipsRunningAndPending(t *testing.T) {
+	pbdbDB := newTestLedgerPBDB(t)
+	mustExec(t, pbdbDB, `INSERT INTO campaigns (id, type, status, to_send, sent) VALUES ('camp_running', 'broadcast', 'running', 0, 0)`)
+	mustExec(t, pbdbDB, `INSERT INTO campaigns (id, type, status, to_send, sent) VALUES ('camp_finished', 'broadcast', 'finished', 0, 0)`)
+	mustExec(t, pbdbDB, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s1', 'u1', 'a@b.c', 'enabled')`)
+	mustExec(t, pbdbDB, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s2', 'u2', 'b@b.c', 'enabled')`)
+	mustExec(t, pbdbDB, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', 'camp_running', 's1', 'sent', '2026-01-01', '2026-01-01')`)
+	mustExec(t, pbdbDB, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', 'camp_finished', 's2', 'pending', '2026-01-01', '2026-01-01')`)
+
+	deleted, reconciled, err := CleanupSentOlderThan(pbdbDB, time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 0 {
+		t.Fatalf("deleted=%d, want 0", deleted)
+	}
+	if reconciled != 0 {
+		t.Fatalf("reconciled=%d, want 0", reconciled)
+	}
+
+	var n int
+	mustGet(t, pbdbDB, &n, `SELECT COUNT(1) FROM campaign_send_ledger`)
+	if n != 2 {
+		t.Fatalf("ledger row count=%d, want 2", n)
 	}
 }
 

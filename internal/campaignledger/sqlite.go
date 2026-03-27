@@ -9,6 +9,7 @@
 //
 // Audit trail: application code does not delete ledger rows when a message is sent; rows remain (typically with
 // status='sent') so you can see what was delivered. FinalizeCampaignStats only updates aggregate counts on campaigns.
+// A maintenance cleanup may later prune old sent rows after campaign counters are reconciled.
 // Note: PocketBase relation fields may still cascade-delete ledger rows if a parent campaign or subscriber record
 // is removed from the DB; this package does not delete rows as part of the send pipeline.
 package campaignledger
@@ -225,6 +226,65 @@ UPDATE campaigns SET
   updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
 WHERE rowid = ?`, campaignRecID, campaignRecID, campaignRowID)
 	return err
+}
+
+// CleanupSentOlderThan reconciles campaign counters from the ledger and then deletes old
+// sent rows for completed campaigns.
+//
+// Only ledger rows that are:
+//   - status = 'sent'
+//   - older than olderThan (based on updated timestamp)
+//   - attached to campaigns in status finished/cancelled
+// are deleted.
+//
+// It returns (deletedRows, reconciledCampaigns, error).
+func CleanupSentOlderThan(db *pbdb.DB, olderThan time.Time) (int, int, error) {
+	ctx := context.Background()
+	cutoff := olderThan.UTC().Format("2006-01-02 15:04:05.000Z")
+
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+
+	var campaigns []struct {
+		RowID int    `db:"rowid"`
+		ID    string `db:"id"`
+	}
+	if err := sqlx.SelectContext(ctx, tx, &campaigns, `
+SELECT DISTINCT c.rowid, c.id
+FROM campaigns c
+JOIN `+tableName+` l ON l.campaign_id = c.id
+WHERE c.status IN ('finished', 'cancelled')
+  AND l.status = 'sent'
+  AND datetime(l.updated) <= datetime(?)`, cutoff); err != nil {
+		return 0, 0, err
+	}
+
+	for _, c := range campaigns {
+		if err := FinalizeCampaignStats(tx, c.RowID, c.ID); err != nil {
+			return 0, 0, err
+		}
+	}
+
+	res, err := tx.ExecContext(ctx, `
+DELETE FROM `+tableName+`
+WHERE status = 'sent'
+  AND datetime(updated) <= datetime(?)
+  AND campaign_id IN (
+    SELECT id FROM campaigns WHERE status IN ('finished', 'cancelled')
+  )`, cutoff)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	n, _ := res.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+
+	return int(n), len(campaigns), nil
 }
 
 // InsertPendingIfEligible adds a ledger row when subscriber_lists gains an eligible membership
