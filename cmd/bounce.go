@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,14 +13,6 @@ import (
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 )
-
-func trimLogBody(body []byte, max int) string {
-	body = bytes.TrimSpace(body)
-	if len(body) <= max {
-		return string(body)
-	}
-	return string(body[:max]) + "...(truncated)"
-}
 
 // GetBounce handles retrieval of a specific bounce record by ID.
 func (a *App) GetBounce(c echo.Context) error {
@@ -245,27 +236,11 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		if a.bounce.Brevo == nil {
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
 		}
-		a.log.Printf("brevo webhook received: method=%s path=%s content_type=%q user_agent=%q body=%s",
-			c.Request().Method,
-			c.Request().URL.Path,
-			c.Request().Header.Get(echo.HeaderContentType),
-			c.Request().UserAgent(),
-			trimLogBody(rawReq, 8192),
-		)
 		authz := c.Request().Header.Get(echo.HeaderAuthorization)
 		bs, err := a.bounce.Brevo.ProcessBounce(authz, rawReq)
 		if err != nil {
 			a.log.Printf("error processing brevo notification: %v", err)
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidData"))
-		}
-		for _, b := range bs {
-			a.log.Printf("brevo webhook parsed bounce: email=%q type=%q campaign_uuid=%q created_at=%s meta=%s",
-				b.Email,
-				b.Type,
-				b.CampaignUUID,
-				b.CreatedAt.UTC().Format(time.RFC3339),
-				trimLogBody(b.Meta, 4096),
-			)
 		}
 		bounces = append(bounces, bs...)
 
