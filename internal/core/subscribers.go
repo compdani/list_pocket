@@ -50,6 +50,16 @@ type sqliteSubscriberActivityClickRow struct {
 	LastClickedAt   string `db:"last_clicked_at" json:"last_clicked_at"`
 }
 
+type sqliteSubscriberCampaignSendRow struct {
+	ID      string `db:"id" json:"id"`
+	UUID    string `db:"uuid" json:"uuid"`
+	Name    string `db:"name" json:"name"`
+	Subject string `db:"subject" json:"subject"`
+	Status  string `db:"status" json:"status"`
+	Created string `db:"created" json:"created"`
+	Updated string `db:"updated" json:"updated"`
+}
+
 func sqliteSubscriberRowsToModels(rows []sqliteSubscriberRow) models.Subscribers {
 	out := make(models.Subscribers, 0, len(rows))
 	for _, row := range rows {
@@ -829,6 +839,26 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 }
 
 func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, error) {
+	var sends []sqliteSubscriberCampaignSendRow
+	if err := c.db.Select(&sends, `
+		SELECT
+			c.id,
+			c.uuid,
+			c.name,
+			c.subject,
+			l.status,
+			COALESCE(l.created, '') AS created,
+			COALESCE(l.updated, '') AS updated
+		FROM campaign_send_ledger l
+		INNER JOIN subscribers s ON l.subscriber_id = s.id
+		INNER JOIN campaigns c ON l.campaign_id = c.id
+		WHERE s.rowid = ?
+		ORDER BY l.updated DESC, l.created DESC`, id); err != nil {
+		c.log.Printf("error fetching subscriber campaign sends: %v", err)
+		return models.SubscriberActivity{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
+	}
+
 	var views []sqliteSubscriberActivityViewRow
 	if err := c.db.Select(&views, `
 		SELECT
@@ -873,10 +903,12 @@ func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, e
 			c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
 	}
 
+	sendsJSON, _ := json.Marshal(sends)
 	viewsJSON, _ := json.Marshal(views)
 	clicksJSON, _ := json.Marshal(clicks)
 
 	return models.SubscriberActivity{
+		CampaignSends: sendsJSON,
 		CampaignViews: viewsJSON,
 		LinkClicks:    clicksJSON,
 	}, nil

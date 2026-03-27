@@ -223,14 +223,6 @@
         />
       </div>
     </v-overlay>
-
-    <p v-if="settings['app.cache_slow_queries']" class="text-medium-emphasis">
-      *{{ $t('globals.messages.slowQueriesCached') }}
-      <a :href="$docsUrl('maintenance/performance/')" target="_blank" rel="noopener noreferrer"
-        class="text-medium-emphasis">
-        <b-icon icon="link-variant" /> {{ $t('globals.buttons.learnMore') }}
-      </a>
-    </p>
   </section>
 </template>
 

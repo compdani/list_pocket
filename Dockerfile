@@ -28,7 +28,6 @@ RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY models/ ./models/
-COPY queries/ ./queries/
 COPY i18n/ ./i18n/
 COPY static/ ./static/
 COPY permissions.json config.toml.sample ./
@@ -45,7 +44,6 @@ RUN apk add --no-cache ca-certificates tzdata \
 WORKDIR /app
 
 COPY --from=go-builder /out/listpocket /app/listpocket
-COPY --from=go-builder /src/queries /app/queries
 COPY --from=go-builder /src/permissions.json /app/permissions.json
 COPY --from=go-builder /src/config.toml.sample /app/config.toml.sample
 COPY --from=go-builder /src/static /app/static

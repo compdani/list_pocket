@@ -11,9 +11,9 @@
           <v-card class="text-center">
             <v-card-text>
               <p class="text-uppercase text-caption font-weight-bold">
-                {{ $t('globals.terms.campaigns') }}
+                {{ $t('subscribers.activity.summarySent') }}
               </p>
-              <p class="text-h4">{{ activity.campaignViews ? activity.campaignViews.length : 0 }}</p>
+              <p class="text-h4">{{ countSent }}</p>
             </v-card-text>
           </v-card>
         </v-col>
@@ -38,6 +38,49 @@
           </v-card>
         </v-col>
       </v-row>
+
+      <!-- Campaign sends (send ledger) -->
+      <div class="mb-6">
+        <h5 class="text-h5 mb-4">
+          {{ $t('subscribers.activity.campaignSends') }}
+        </h5>
+
+        <v-data-table
+          v-if="activity.campaignSends && activity.campaignSends.length > 0"
+          :items="activity.campaignSends"
+          :headers="campaignSendsHeaders"
+          hover
+          sort-by="updated"
+          sort-order="desc"
+          :page-size="10"
+          class="campaign-sends-table"
+        >
+          <template #item.name="{ item }">
+            <div v-if="item.uuid">
+              <router-link :to="{ name: 'campaign', params: { id: item.id } }">
+                {{ item.name }}
+              </router-link>
+              <p class="text-caption text-grey">{{ item.subject }}</p>
+            </div>
+            <div v-else>
+              <em class="text-grey">{{ $t('subscribers.activity.campaignDeleted') }}</em>
+            </div>
+          </template>
+          <template #item.status="{ item }">
+            <v-chip label size="small" :color="sendStatusColor(item.status)">
+              {{ sendStatusLabel(item.status) }}
+            </v-chip>
+          </template>
+          <template #item.updated="{ item }">
+            <span v-if="item.updated">
+              {{ formatActivityTimestamp(item.updated) }}
+            </span>
+          </template>
+        </v-data-table>
+        <div v-else class="text-center text-grey py-12">
+          <p>{{ $t('globals.messages.emptyState') }}</p>
+        </div>
+      </div>
 
       <!-- Campaign Views Section -->
       <div class="mb-6">
@@ -143,9 +186,15 @@ export default {
     return {
       isLoading: false,
       activity: {
+        campaignSends: [],
         campaignViews: [],
         linkClicks: [],
       },
+      campaignSendsHeaders: [
+        { key: 'name', title: this.$tc('globals.terms.campaign', 1), sortable: true },
+        { key: 'status', title: this.$t('subscribers.activity.sendStatus'), sortable: true },
+        { key: 'updated', title: this.$t('globals.fields.updatedAt'), sortable: true },
+      ],
       campaignViewsHeaders: [
         { key: 'name', title: this.$tc('globals.terms.campaign', 1), sortable: true },
         { key: 'viewCount', title: this.$t('campaigns.views'), sortable: true, align: 'end' },
@@ -161,6 +210,13 @@ export default {
   },
 
   computed: {
+    countSent() {
+      if (!this.activity.campaignSends || !this.activity.campaignSends.length) {
+        return 0;
+      }
+      return this.activity.campaignSends.filter((r) => r.status === 'sent').length;
+    },
+
     totalViews() {
       if (!this.activity.campaignViews) return 0;
       return this.activity.campaignViews.reduce((sum, v) => sum + (v.viewCount || 0), 0);
@@ -183,6 +239,30 @@ export default {
   },
 
   methods: {
+    sendStatusColor(status) {
+      switch (status) {
+        case 'sent':
+          return 'success';
+        case 'inflight':
+          return 'warning';
+        case 'pending':
+          return 'surface-variant';
+        case 'skipped':
+          return 'grey';
+        default:
+          return 'default';
+      }
+    },
+
+    sendStatusLabel(status) {
+      if (!status) {
+        return '—';
+      }
+      const key = `subscribers.activity.sendStatus.${status}`;
+      const translated = this.$t(key);
+      return translated === key ? status : translated;
+    },
+
     formatActivityTimestamp(value) {
       if (!value) {
         return '';
@@ -194,6 +274,7 @@ export default {
     getActivity() {
       if (!this.subscriberId) {
         this.activity = {
+          campaignSends: [],
           campaignViews: [],
           linkClicks: [],
         };
@@ -203,7 +284,11 @@ export default {
 
       this.isLoading = true;
       this.$api.getSubscriberActivity(this.subscriberId).then((data) => {
-        this.activity = data;
+        this.activity = {
+          campaignSends: data.campaignSends || [],
+          campaignViews: data.campaignViews || [],
+          linkClicks: data.linkClicks || [],
+        };
         this.isLoading = false;
       }).catch(() => {
         this.isLoading = false;

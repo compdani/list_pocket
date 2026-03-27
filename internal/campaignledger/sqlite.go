@@ -1,5 +1,16 @@
 // Package campaignledger implements per-campaign send deduplication using SQLite
 // and PocketBase collections (campaign_send_ledger).
+//
+// Double-send prevention (same campaign, same subscriber):
+//   - The collection enforces a unique (campaign_id, subscriber_id) pair: at most one ledger row per pair.
+//   - NextPending only selects status='pending'; after a successful send, MarkSent sets status='sent', so that
+//     recipient is never claimed again for that campaign.
+//   - Backfill and InsertPendingIfEligible use INSERT OR IGNORE, so they cannot add a second row for the same pair.
+//
+// Audit trail: application code does not delete ledger rows when a message is sent; rows remain (typically with
+// status='sent') so you can see what was delivered. FinalizeCampaignStats only updates aggregate counts on campaigns.
+// Note: PocketBase relation fields may still cascade-delete ledger rows if a parent campaign or subscriber record
+// is removed from the DB; this package does not delete rows as part of the send pipeline.
 package campaignledger
 
 import (
@@ -180,6 +191,7 @@ WHERE campaign_id = ? AND subscriber_id = ? AND status = 'inflight'`, campaignRe
 }
 
 // MarkSent sets the ledger row to sent for this campaign + subscriber pair.
+// Only rows in status inflight are updated, so a row already marked sent is never changed again.
 func MarkSent(db sqlx.ExecerContext, campaignRecID, subscriberRecID string) error {
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `

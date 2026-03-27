@@ -135,21 +135,12 @@
           </div>
         </article>
       </div>
-
-      <p v-if="settings['app.cache_slow_queries']" class="has-text-grey">
-        *{{ $t('globals.messages.slowQueriesCached') }}
-        <a :href="$docsUrl('maintenance/performance/')" target="_blank" rel="noopener noreferrer"
-          class="has-text-grey">
-          <b-icon icon="link-variant" /> {{ $t('globals.buttons.learnMore') }}
-        </a>
-      </p>
     </section>
   </section>
 </template>
 
 <script>
 import dayjs from 'dayjs';
-import { mapState } from 'vuex';
 import { colors } from '../constants';
 import Chart from '../components/Chart.vue';
 
@@ -320,7 +311,6 @@ export default {
   },
 
   computed: {
-    ...mapState(['settings']),
     dayjs() {
       return dayjs;
     },

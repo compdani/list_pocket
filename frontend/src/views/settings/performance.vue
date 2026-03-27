@@ -93,39 +93,6 @@
         />
       </v-col>
     </v-row>
-
-    <v-divider class="my-2" />
-
-    <v-row>
-      <v-col cols="12" md="4">
-        <div class="toggle-field">
-          <div>
-            <div class="text-subtitle-2">{{ $t('settings.performance.cacheSlowQueries') }}</div>
-            <div class="text-body-2 text-medium-emphasis">{{ $t('settings.performance.cacheSlowQueriesHelp') }}</div>
-          </div>
-          <v-switch
-            v-model="data['app.cache_slow_queries']"
-            color="primary"
-            hide-details
-            inset
-            name="app.cache_slow_queries"
-          />
-        </div>
-      </v-col>
-      <v-col cols="12" md="4">
-        <v-text-field
-          v-model="data['app.cache_slow_queries_interval']"
-          :disabled="!data['app.cache_slow_queries']"
-          :label="$t('settings.maintenance.cron')"
-          placeholder="0 3 * * *"
-        />
-      </v-col>
-      <v-col cols="12" md="4" class="d-flex align-center">
-        <a :href="$docsUrl('maintenance/performance/')" target="_blank" rel="noopener noreferrer">
-          {{ $t('globals.buttons.learnMore') }}
-        </a>
-      </v-col>
-    </v-row>
   </div>
 </template>
 

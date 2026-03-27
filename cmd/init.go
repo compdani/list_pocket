@@ -213,7 +213,6 @@ func initFS(appDir, frontendDir, staticDir, i18nDir string) stuffbin.FileSystem 
 		// These paths are joined with appDir.
 		appFiles = []string{
 			"./config.toml.sample:config.toml.sample",
-			"./queries:queries",
 			"./permissions.json:permissions.json",
 		}
 
