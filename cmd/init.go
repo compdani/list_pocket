@@ -1301,6 +1301,32 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 		}
 	}
 
+	// Campaign send ledger cleanup cron job.
+	if pb != nil && db != nil {
+		const (
+			ledgerCleanupCron = "15 3 * * *"
+			ledgerRetention   = 14
+		)
+		err := pb.Cron().Add("campaign-ledger-cleanup", ledgerCleanupCron, func() {
+			cutoff := time.Now().UTC().AddDate(0, 0, -ledgerRetention)
+			deleted, reconciled, err := campaignledger.CleanupSentOlderThan(db, cutoff)
+			if err != nil {
+				lo.Printf("error cleaning campaign ledger (cutoff=%s): %v", cutoff.Format(time.RFC3339), err)
+				return
+			}
+			if deleted > 0 || reconciled > 0 {
+				lo.Printf("campaign ledger cleanup: deleted=%d reconciled_campaigns=%d cutoff=%s",
+					deleted, reconciled, cutoff.Format(time.RFC3339))
+			}
+		})
+		if err != nil {
+			lo.Printf("error initializing campaign ledger cleanup cron: %v", err)
+		} else {
+			lo.Printf("campaign ledger cleanup cron enabled at interval: %s (retention=%d days)",
+				ledgerCleanupCron, ledgerRetention)
+		}
+	}
+
 }
 
 // awaitReload waits for a SIGHUP signal to reload the app. Every setting change on the UI causes a reload.
