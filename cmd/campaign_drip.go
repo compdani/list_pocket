@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/workflow"
@@ -40,9 +41,7 @@ func parseCampaignDripMetadata(attribs models.JSON) campaignDripMetadata {
 
 func mergeCampaignDripMetadata(attribs models.JSON, meta campaignDripMetadata) models.JSON {
 	out := models.JSON{}
-	for key, value := range attribs {
-		out[key] = value
-	}
+	maps.Copy(out, attribs)
 
 	out[campaignDripAttribKey] = map[string]any{
 		"enabled":     meta.Enabled,
