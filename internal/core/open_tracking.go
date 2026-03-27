@@ -11,7 +11,7 @@ import (
 
 const privacyOpenWindow = 2 * time.Minute
 
-var privacyOpenUserAgentRe = regexp.MustCompile(`(?i)(applewebkit|apple mail|iphone|ipad|mac os x|googleimageproxy|ggpht\.com)`)
+var privacyOpenUserAgentRe = regexp.MustCompile(`(?i)(applewebkit|apple mail|iphone|ipad|mac os x|googleimageproxy|ggpht\.com|brevo/1\.0)`)
 
 func sqliteTimestampValue(t time.Time) string {
 	return t.UTC().Format("2006-01-02 15:04:05.000Z")
