@@ -1182,11 +1182,21 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 		SubscriberID sql.NullString `db:"subscriber_id"`
 		StartedAt    string         `db:"started_at"`
 		SendAt       string         `db:"send_at"`
+		LedgerSentAt string         `db:"ledger_sent_at"`
 	}
 	if err := c.db.Get(&row, `
-		SELECT c.id AS campaign_id, s.id AS subscriber_id, COALESCE(c.started_at, '') AS started_at, COALESCE(c.send_at, '') AS send_at
+		SELECT
+			c.id AS campaign_id,
+			s.id AS subscriber_id,
+			COALESCE(c.started_at, '') AS started_at,
+			COALESCE(c.send_at, '') AS send_at,
+			COALESCE(csl.updated, '') AS ledger_sent_at
 		FROM campaigns c
 		LEFT JOIN subscribers s ON s.uuid = ?
+		LEFT JOIN campaign_send_ledger csl
+			ON csl.campaign_id = c.id
+			AND csl.subscriber_id = s.id
+			AND csl.status = 'sent'
 		WHERE c.uuid = ?
 		LIMIT 1
 	`, subUUID, campUUID); err != nil {
@@ -1206,7 +1216,16 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 	if parsed := parseNullTime(row.SendAt); parsed.Valid {
 		sendAt = parsed.Time
 	}
+	ledgerSentAt := time.Time{}
+	if parsed := parseNullTime(row.LedgerSentAt); parsed.Valid {
+		ledgerSentAt = parsed.Time
+	}
+
 	referenceAt, referenceType := campaignPrivacyReference(sendAt, startedAt)
+	if !ledgerSentAt.IsZero() {
+		referenceAt = ledgerSentAt
+		referenceType = "campaign_subscriber_sent_at"
+	}
 	suspected, meta, err := classifyPrivacyOpen(event, referenceAt, referenceType)
 	if err != nil {
 		c.log.Printf("error marshaling campaign view metadata: %s", err)
