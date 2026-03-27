@@ -320,19 +320,6 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 				INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
 				VALUES (?, NULLIF(?, ''), ?, ?, ?, ?)`,
 				sub.ID, campID, b.Type, b.Source, meta, createdAt.UTC().Format("2006-01-02 15:04:05")); err != nil {
-				if b.Source == "brevo" {
-					c.log.Printf("brevo bounce insert failed: subscriber_id=%q email=%q subscriber_uuid=%q campaign_uuid=%q resolved_campaign_id=%q type=%q created_at=%s meta=%s err=%v",
-						sub.ID,
-						b.Email,
-						b.SubscriberUUID,
-						b.CampaignUUID,
-						campID,
-						b.Type,
-						createdAt.UTC().Format(time.RFC3339),
-						string(meta),
-						err,
-					)
-				}
 				c.log.Printf("error recording bounce: %v", err)
 				return err
 			}
