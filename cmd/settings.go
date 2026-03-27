@@ -14,7 +14,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/messenger/email"
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/models"
@@ -75,8 +74,6 @@ func (a *App) GetSettings(c echo.Context) error {
 	s.BouncePostmark.Password = strings.Repeat(pwdMask, utf8.RuneCountInString(s.BouncePostmark.Password))
 	s.BounceForwardEmail.Key = strings.Repeat(pwdMask, utf8.RuneCountInString(s.BounceForwardEmail.Key))
 	s.SecurityCaptcha.HCaptcha.Secret = strings.Repeat(pwdMask, utf8.RuneCountInString(s.SecurityCaptcha.HCaptcha.Secret))
-	s.OIDC.ClientSecret = strings.Repeat(pwdMask, utf8.RuneCountInString(s.OIDC.ClientSecret))
-
 	return c.JSON(http.StatusOK, okResp{s})
 }
 
@@ -229,25 +226,6 @@ func (a *App) UpdateSettings(c echo.Context) error {
 	if set.SecurityCaptcha.HCaptcha.Secret == "" {
 		set.SecurityCaptcha.HCaptcha.Secret = cur.SecurityCaptcha.HCaptcha.Secret
 	}
-	if set.OIDC.ClientSecret == "" {
-		set.OIDC.ClientSecret = cur.OIDC.ClientSecret
-	}
-
-	// OIDC user auto-creation is enabled. Validate.
-	if set.OIDC.AutoCreateUsers {
-		roleID, err := a.core.ResolveRoleLegacyID(set.OIDC.DefaultUserRoleID.String)
-		if err != nil || roleID < auth.SuperAdminRoleID {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", a.i18n.T("settings.security.OIDCDefaultRole")))
-		}
-		if strings.TrimSpace(set.OIDC.DefaultListRoleID.String) != "" {
-			if _, err := a.core.ResolveRoleLegacyID(set.OIDC.DefaultListRoleID.String); err != nil {
-				return echo.NewHTTPError(http.StatusBadRequest,
-					a.i18n.Ts("globals.messages.invalidFields", "name", a.i18n.T("settings.security.OIDCDefaultRole")))
-			}
-		}
-	}
-
 	for n, v := range set.UploadExtensions {
 		set.UploadExtensions[n] = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(v), "."))
 	}

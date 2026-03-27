@@ -1,7 +1,5 @@
 package models
 
-import "gopkg.in/volatiletech/null.v6"
-
 type SMTPSettings struct {
 	Name             string              `json:"name"`
 	UUID             string              `json:"uuid"`
@@ -72,17 +70,6 @@ type Settings struct {
 			Secret  string `json:"secret"`
 		} `json:"hcaptcha"`
 	} `json:"security.captcha"`
-
-	OIDC struct {
-		Enabled           bool        `json:"enabled"`
-		ProviderURL       string      `json:"provider_url"`
-		ProviderName      string      `json:"provider_name"`
-		ClientID          string      `json:"client_id"`
-		ClientSecret      string      `json:"client_secret"`
-		AutoCreateUsers   bool        `json:"auto_create_users"`
-		DefaultUserRoleID null.String `json:"default_user_role_id"`
-		DefaultListRoleID null.String `json:"default_list_role_id"`
-	} `json:"security.oidc"`
 
 	SecurityCORSOrigins []string `json:"security.cors_origins"`
 

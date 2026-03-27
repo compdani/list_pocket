@@ -1,5 +1,0 @@
-[app]
-# Interface and port where the app will run its webserver.
-address = "0.0.0.0:9000"
-
-# List Pocket uses embedded PocketBase; data is stored under pb_data/ (SQLite).

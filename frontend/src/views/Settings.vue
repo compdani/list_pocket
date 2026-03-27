@@ -203,8 +203,6 @@ export default {
       };
       d['security.captcha'].hcaptcha = d['security.captcha'].hcaptcha || { enabled: false, key: '', secret: '' };
 
-      d['security.oidc'] = d['security.oidc'] || { client_secret: '' };
-
       return d;
     },
 
@@ -254,12 +252,6 @@ export default {
         form['security.captcha'].hcaptcha.secret = '';
       } else if (this.hasDummy(form['security.captcha'].hcaptcha.secret)) {
         hasDummy = 'captcha';
-      }
-
-      if (this.isDummy(form['security.oidc'].client_secret)) {
-        form['security.oidc'].client_secret = '';
-      } else if (this.hasDummy(form['security.oidc'].client_secret)) {
-        hasDummy = 'oidc';
       }
 
       if (this.isDummy(form['bounce.postmark'].password)) {
