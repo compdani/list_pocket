@@ -160,8 +160,9 @@ func (e *Emailer) Push(m models.Message) error {
 	// SendGrid Event Webhook only reliably echoes identifiers passed via X-SMTPAPI
 	// (e.g. `unique_args`) back to the webhook payload.
 	// We only enable this for SendGrid SMTP servers to avoid impacting other senders.
-	if strings.Contains(strings.ToLower(srv.Host), "sendgrid") {
-		campaignUUID := strings.TrimSpace(em.Headers.Get(models.EmailHeaderCampaignUUID))
+	host := strings.ToLower(srv.Host)
+	campaignUUID := strings.TrimSpace(em.Headers.Get(models.EmailHeaderCampaignUUID))
+	if strings.Contains(host, "sendgrid") {
 		if campaignUUID != "" {
 			uniqueArgs := map[string]string{
 				"listpocket_campaign_uuid": campaignUUID,
@@ -180,6 +181,12 @@ func (e *Emailer) Push(m models.Message) error {
 				em.Headers.Set("X-SMTPAPI", string(b))
 			}
 		}
+	}
+
+	// Brevo transactional webhooks include `X-Mailin-custom` if set at send time.
+	// Inject campaign UUID so bounce webhooks can map events back to campaigns.
+	if campaignUUID != "" && (strings.Contains(host, "brevo") || strings.Contains(host, "sendinblue")) {
+		em.Headers.Set("X-Mailin-custom", campaignUUID)
 	}
 
 	// If the `Return-Path` header is set, it should be set as the

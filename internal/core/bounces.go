@@ -312,9 +312,9 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 			createdAt = time.Now()
 		}
 
-		if campID == "" && b.Source == "sendgrid" {
-			// campaign_id is required by schema; skip unresolved sendgrid records.
-			c.log.Printf("skipping bounce: missing/unknown campaign_id (campaign_uuid=%q subscriber=%q)", b.CampaignUUID, b.Email)
+		if campID == "" && (b.Source == "sendgrid" || b.Source == "brevo") {
+			// campaign_id is required by schema; skip unresolved provider records.
+			c.log.Printf("skipping bounce: missing/unknown campaign_id (source=%q campaign_uuid=%q subscriber=%q)", b.Source, b.CampaignUUID, b.Email)
 		} else {
 			if _, err := tx.Exec(`
 				INSERT INTO bounces (subscriber_id, campaign_id, type, source, meta, created)
