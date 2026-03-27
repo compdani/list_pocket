@@ -536,6 +536,11 @@ func (c *Core) DeleteCampaign(recordID string) error {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
 	}
+	if _, err := c.db.Exec(`DELETE FROM campaign_send_ledger WHERE campaign_id = ?`, recordID); err != nil {
+		c.log.Printf("error deleting campaign: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
 
 	res, err := c.db.Exec(`DELETE FROM campaigns WHERE id = ?`, recordID)
 	if err != nil {
