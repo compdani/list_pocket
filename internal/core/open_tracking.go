@@ -90,3 +90,10 @@ func campaignPrivacyReference(sendAt time.Time, startedAt time.Time) (time.Time,
 	}
 	return startedAt, "campaign_started_at"
 }
+
+func campaignPrivacyReferenceWithLedger(ledgerSentAt time.Time, sendAt time.Time, startedAt time.Time) (time.Time, string) {
+	if !ledgerSentAt.IsZero() {
+		return ledgerSentAt, "campaign_subscriber_sent_at"
+	}
+	return campaignPrivacyReference(sendAt, startedAt)
+}
