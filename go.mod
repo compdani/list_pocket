@@ -5,7 +5,6 @@ go 1.24.1
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/altcha-org/altcha-lib-go v1.0.0
-	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/dop251/goja v0.0.0-20260106131823-651366fbe6e3
 	github.com/emersion/go-message v0.18.2
@@ -34,10 +33,11 @@ require (
 	github.com/yuin/goldmark v1.7.12
 	github.com/zerodha/easyjson v1.0.1
 	golang.org/x/mod v0.32.0
-	golang.org/x/oauth2 v0.35.0
 	golang.org/x/text v0.34.0
 	gopkg.in/volatiletech/null.v6 v6.0.0-20170828023728-0bef4e07ae1b
 )
+
+require golang.org/x/oauth2 v0.35.0 // indirect
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -52,7 +52,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/ganigeorgiev/fexpr v0.5.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.1 // indirect
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
@@ -85,5 +84,5 @@ require (
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.46.1 // indirect
+	modernc.org/sqlite v1.46.1
 )

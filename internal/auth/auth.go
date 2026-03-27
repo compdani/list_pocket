@@ -1,12 +1,10 @@
 package auth
 
 import (
-	"context"
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,33 +12,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"golang.org/x/oauth2"
 )
-
-type OIDCclaim struct {
-	Email             string `json:"email"`
-	EmailVerified     bool   `json:"email_verified"`
-	Sub               string `json:"sub"`
-	Picture           string `json:"picture"`
-	Name              string `json:"name"`
-	PreferredUsername string `json:"preferred_username"`
-}
-
-type OIDCConfig struct {
-	Enabled           bool   `json:"enabled"`
-	ProviderURL       string `json:"provider_url"`
-	RedirectURL       string `json:"redirect_url"`
-	ClientID          string `json:"client_id"`
-	ClientSecret      string `json:"client_secret"`
-	AutoCreateUsers   bool   `json:"auto_create_users"`
-	DefaultUserRoleID string `json:"default_user_role_id"`
-	DefaultListRoleID string `json:"default_list_role_id"`
-}
 
 type BasicAuthConfig struct {
 	Enabled  bool   `json:"enabled"`
@@ -49,7 +25,6 @@ type BasicAuthConfig struct {
 }
 
 type Config struct {
-	OIDC      OIDCConfig
 	BasicAuth BasicAuthConfig
 
 	AuthCollection string
@@ -68,9 +43,6 @@ type Auth struct {
 	cfg       Config
 	pb        *pocketbase.PocketBase
 	authCol   string
-	oauthCfg  oauth2.Config
-	verifier  *oidc.IDTokenVerifier
-	provider  *oidc.Provider
 	cb        *Callbacks
 	log       *log.Logger
 	pbAuth    *PocketBaseAuthService
@@ -355,140 +327,6 @@ func (o *Auth) LoadCachedUsersFromPocketBase() (bool, error) {
 
 	o.CacheAPIUsers(apiUsers)
 	return hasUser, nil
-}
-
-// initOIDC initializes the OIDC provider, verifier, and OAuth config.
-func (o *Auth) initOIDC() error {
-	if !o.cfg.OIDC.Enabled {
-		return fmt.Errorf("OIDC is not enabled")
-	}
-
-	provider, err := oidc.NewProvider(context.Background(), o.cfg.OIDC.ProviderURL)
-	if err != nil {
-		return fmt.Errorf("error initializing OIDC OAuth provider: %v", err)
-	}
-
-	o.verifier = provider.Verifier(&oidc.Config{
-		ClientID: o.cfg.OIDC.ClientID,
-	})
-
-	o.oauthCfg = oauth2.Config{
-		ClientID:     o.cfg.OIDC.ClientID,
-		ClientSecret: o.cfg.OIDC.ClientSecret,
-		Endpoint:     provider.Endpoint(),
-		RedirectURL:  o.cfg.OIDC.RedirectURL,
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
-	}
-	o.provider = provider
-
-	return nil
-}
-
-// getProvider returns the OIDC provider, initializing it if necessary.
-func (o *Auth) getProvider() (*oidc.Provider, error) {
-	o.Lock()
-	defer o.Unlock()
-
-	if o.provider == nil {
-		if err := o.initOIDC(); err != nil {
-			return nil, err
-		}
-	}
-	return o.provider, nil
-}
-
-// getVerifier returns the OIDC verifier, initializing it if necessary.
-func (o *Auth) getVerifier() (*oidc.IDTokenVerifier, error) {
-	o.Lock()
-	defer o.Unlock()
-
-	if o.verifier == nil {
-		if err := o.initOIDC(); err != nil {
-			return nil, err
-		}
-	}
-	return o.verifier, nil
-}
-
-// getOAuthConfig returns the OAuth config, initializing it if necessary.
-func (o *Auth) getOAuthConfig() (*oauth2.Config, error) {
-	o.Lock()
-	defer o.Unlock()
-
-	if o.oauthCfg.ClientID == "" {
-		if err := o.initOIDC(); err != nil {
-			return nil, err
-		}
-	}
-	return &o.oauthCfg, nil
-}
-
-// GetOIDCAuthURL returns the OIDC provider's auth URL to redirect to.
-func (o *Auth) GetOIDCAuthURL(state, nonce string) string {
-	cfg, err := o.getOAuthConfig()
-	if err != nil {
-		o.log.Printf("error getting OAuth config: %v", err)
-		return ""
-	}
-	return cfg.AuthCodeURL(state, oidc.Nonce(nonce))
-}
-
-// ExchangeOIDCToken takes an OIDC authorization code (recieved via redirect from the OIDC provider),
-// validates it, and returns an OIDC token for subsequent auth.
-func (o *Auth) ExchangeOIDCToken(code, nonce string) (string, OIDCclaim, error) {
-	cfg, err := o.getOAuthConfig()
-	if err != nil {
-		return "", OIDCclaim{}, echo.NewHTTPError(http.StatusUnauthorized, fmt.Sprintf("error getting OAuth config: %v", err))
-	}
-
-	tk, err := cfg.Exchange(context.TODO(), code)
-	if err != nil {
-		return "", OIDCclaim{}, echo.NewHTTPError(http.StatusUnauthorized, fmt.Sprintf("error exchanging token: %v", err))
-	}
-
-	rawIDTk, ok := tk.Extra("id_token").(string)
-	if !ok {
-		return "", OIDCclaim{}, echo.NewHTTPError(http.StatusUnauthorized, "`id_token` missing.")
-	}
-
-	verifier, err := o.getVerifier()
-	if err != nil {
-		return "", OIDCclaim{}, echo.NewHTTPError(http.StatusUnauthorized, fmt.Sprintf("error getting verifier: %v", err))
-	}
-
-	idTk, err := verifier.Verify(context.TODO(), rawIDTk)
-	if err != nil {
-		return "", OIDCclaim{}, echo.NewHTTPError(http.StatusUnauthorized, fmt.Sprintf("error verifying ID token: %v", err))
-	}
-
-	if idTk.Nonce != nonce {
-		return "", OIDCclaim{}, echo.NewHTTPError(http.StatusUnauthorized, "nonce did not match")
-	}
-
-	var claims OIDCclaim
-	if err := idTk.Claims(&claims); err != nil {
-		return "", OIDCclaim{}, errors.New("error getting user from OIDC")
-	}
-
-	// If claims doesn't have the e-mail, attempt to fetch it from the userinfo endpoint.
-	if claims.Email == "" {
-		provider, err := o.getProvider()
-		if err != nil {
-			return "", OIDCclaim{}, fmt.Errorf("error getting provider: %v", err)
-		}
-
-		userInfo, err := provider.UserInfo(context.TODO(), oauth2.StaticTokenSource(tk))
-		if err != nil {
-			return "", OIDCclaim{}, errors.New("error fetching user info from OIDC")
-		}
-
-		// Parse the UserInfo claims into the claims struct
-		if err := userInfo.Claims(&claims); err != nil {
-			return "", OIDCclaim{}, errors.New("error parsing user info claims")
-		}
-	}
-
-	return rawIDTk, claims, nil
 }
 
 // Middleware is the HTTP middleware used for wrapping HTTP handlers registered on the echo router.

@@ -6,7 +6,6 @@
 	{{ if .Data.PasswordEnabled }}
 	<form method="post" action="/admin/login" class="form">
 		<div>
-			<input type="hidden" name="nonce" value="{{ .Data.Nonce }}" />
 			<input type="hidden" name="next" value="{{ .Data.NextURI }}" />
 			<p>
 				<label for="username">{{ .L.T "users.username" }}</label>
@@ -20,19 +19,6 @@
 			{{ if .Data.Error }}<p><span class="error">{{ .Data.Error }}</span></p>{{ end }}
 
 			<p class="submit"><button class="button" type="submit">{{ .L.T "users.login" }}</button></p>
-		</div>
-	</form>
-	{{ end }}
-	
-	{{ if .Data.OIDCProvider }}
-	<form method="post" action="/auth/oidc">
-		<div>
-			<input type="hidden" name="nonce" value="{{ .Data.Nonce }}" />
-			<input type="hidden" name="next" value="{{ .Data.NextURI }}" />
-			<p><button class="button button-outline" type="submit">
-				<img src="{{ .RootURL }}/public/static/auth/{{ .Data.OIDCProviderLogo }}" alt="" />
-				{{ .L.Ts "users.loginOIDC" "name" .Data.OIDCProvider }}
-			</button></p>
 		</div>
 	</form>
 	{{ end }}

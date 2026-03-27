@@ -54,10 +54,6 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	admin.GET("/custom.js", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
 	admin.GET(path.Join(uriAdmin, "/{path...}"), wrapEcho(a, tpl, cfg, urlCfg, []string{"path"}, a.AdminPage))
 
-	publicAuth := se.Group("")
-	publicAuth.POST("/auth/oidc", wrapEcho(a, tpl, cfg, urlCfg, nil, a.OIDCLogin))
-	publicAuth.GET("/auth/oidc/callback", wrapEcho(a, tpl, cfg, urlCfg, nil, a.OIDCFinish))
-
 	pm := a.auth.Perm
 	api := se.Group("/mailapi").Bind(apis.RequireAuth())
 

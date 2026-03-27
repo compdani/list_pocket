@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"image/png"
 	"net/http"
-	"net/mail"
 	"net/url"
 	"path"
 	"strings"
@@ -38,17 +36,9 @@ type loginTpl struct {
 	Title       string
 	Description string
 
-	NextURI          string
-	Nonce            string
-	PasswordEnabled  bool
-	OIDCProvider     string
-	OIDCProviderLogo string
-	Error            string
-}
-
-type oidcState struct {
-	Nonce string `json:"nonce"`
-	Next  string `json:"next"`
+	NextURI         string
+	PasswordEnabled bool
+	Error           string
 }
 
 type forgotPasswordTpl struct {
@@ -79,15 +69,6 @@ type authBridgeTpl struct {
 	NextURI     string
 	PayloadJSON template.JS
 }
-
-var (
-	oidcProviders = map[string]struct{}{
-		"google.com":          {},
-		"microsoftonline.com": {},
-		"auth0.com":           {},
-		"github.com":          {},
-	}
-)
 
 func getRequestedNextURI(c echo.Context) string {
 	if c.Request().Method == http.MethodGet {
@@ -198,102 +179,6 @@ func (a *App) Logout(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{true})
 }
 
-// OIDCLogin initializes an OIDC request and redirects to the OIDC provider for login.
-func (a *App) OIDCLogin(c echo.Context) error {
-	// Verify that the request came from the login page (CSRF).
-	nonce, err := c.Cookie("nonce")
-	if err != nil || nonce.Value == "" || nonce.Value != c.FormValue("nonce") {
-		return echo.NewHTTPError(http.StatusUnauthorized, a.i18n.T("users.invalidRequest"))
-	}
-
-	// Sanitize the URL and make it relative.
-	next := utils.SanitizeURI(c.FormValue("next"))
-	if next == "/" {
-		next = uriAdmin
-	}
-
-	// Preparethe OIDC payload to send to the provider.
-	state := oidcState{Nonce: nonce.Value, Next: next}
-
-	b, err := json.Marshal(state)
-	if err != nil {
-		a.log.Printf("error marshalling OIDC state: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
-	}
-
-	// Redirect to the external OIDC provider.
-	return c.Redirect(http.StatusFound, a.auth.GetOIDCAuthURL(base64.URLEncoding.EncodeToString(b), nonce.Value))
-}
-
-// OIDCFinish receives the redirect callback from the OIDC provider and completes the handshake.
-func (a *App) OIDCFinish(c echo.Context) error {
-	// Verify that the request actually originated from the login request (which sets the nonce value).
-	nonce, err := c.Cookie("nonce")
-	if err != nil || nonce.Value == "" {
-		return a.renderLoginPage(c, echo.NewHTTPError(http.StatusUnauthorized, a.i18n.T("users.invalidRequest")))
-	}
-
-	// Validate the OIDC token.
-	_, claims, err := a.auth.ExchangeOIDCToken(c.Request().URL.Query().Get("code"), nonce.Value)
-	if err != nil {
-		return a.renderLoginPage(c, err)
-	}
-
-	// Validate the state.
-	var state oidcState
-	stateB, err := base64.URLEncoding.DecodeString(c.QueryParam("state"))
-	if err != nil {
-		a.log.Printf("error decoding OIDC state: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
-	}
-	if err := json.Unmarshal(stateB, &state); err != nil {
-		a.log.Printf("error unmarshalling OIDC state: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
-	}
-	if state.Nonce != nonce.Value {
-		return a.renderLoginPage(c, echo.NewHTTPError(http.StatusUnauthorized, a.i18n.T("users.invalidRequest")))
-	}
-
-	// Validate e-mail from the claim.
-	email := strings.TrimSpace(claims.Email)
-	if email == "" {
-		return a.renderLoginPage(c, errors.New(a.i18n.Ts("globals.messages.invalidFields", "name", "email")))
-	}
-	em, err := mail.ParseAddress(email)
-	if err != nil {
-		return a.renderLoginPage(c, err)
-	}
-	email = strings.ToLower(em.Address)
-	claims.Email = email
-
-	// Get the user by e-mail received from OIDC.
-	user, userErr := a.core.GetUser("", "", email)
-	if userErr != nil {
-		// If the user doesn't exist, and auto-creation is enabled, create a new user.
-		if httpErr, ok := userErr.(*echo.HTTPError); ok && httpErr.Code == http.StatusNotFound && a.cfg.Security.OIDC.AutoCreateUsers {
-			u, err := a.createOIDCUser(claims)
-			if err != nil {
-				return a.renderLoginPage(c, err)
-			}
-			user = u
-			userErr = nil
-		} else {
-			return a.renderLoginPage(c, userErr)
-		}
-	}
-
-	// Update the user login state (avatar, logged in date) in the DB.
-	if err := a.core.UpdateUserLogin(user.RecordID, claims.Picture); err != nil {
-		return a.renderLoginPage(c, err)
-	}
-
-	if err := a.completeAuth(c, user, utils.SanitizeURI(state.Next)); err != nil {
-		return a.renderLoginPage(c, err)
-	}
-
-	return nil
-}
-
 // ForgotPage renders the forgot password page and handles the forgot password form.
 func (a *App) ForgotPage(c echo.Context) error {
 	// Process the forgot password request.
@@ -346,44 +231,10 @@ func (a *App) renderLoginPage(c echo.Context, loginErr error) error {
 		next = uriAdmin
 	}
 
-	var (
-		oidcProviderName = ""
-		oidcLogo         = ""
-	)
-	if a.cfg.Security.OIDC.Enabled {
-		// Defaults.
-		oidcProviderName = a.cfg.Security.OIDC.ProviderName
-		oidcLogo = "oidc.png"
-
-		u, err := url.Parse(a.cfg.Security.OIDC.ProviderURL)
-		if err == nil {
-			h := strings.Split(u.Hostname(), ".")
-
-			// Get the last two h for the root domain
-			prov := ""
-			if len(h) >= 2 {
-				prov = h[len(h)-2] + "." + h[len(h)-1]
-			} else {
-				prov = u.Hostname()
-			}
-
-			if oidcProviderName == "" {
-				oidcProviderName = prov
-			}
-
-			// Lookup the logo in the known providers map.
-			if _, ok := oidcProviders[prov]; ok {
-				oidcLogo = prov + ".png"
-			}
-		}
-	}
-
 	out := loginTpl{
-		Title:            a.i18n.T("users.login"),
-		PasswordEnabled:  true,
-		OIDCProvider:     oidcProviderName,
-		OIDCProviderLogo: oidcLogo,
-		NextURI:          next,
+		Title:           a.i18n.T("users.login"),
+		PasswordEnabled: true,
+		NextURI:         next,
 	}
 
 	// If there was an error in the previous state (POST reqest), set it to render in the template.
@@ -394,21 +245,6 @@ func (a *App) renderLoginPage(c echo.Context, loginErr error) error {
 			out.Error = loginErr.Error()
 		}
 	}
-
-	// Generate and set a nonce for preventing CSRF requests that will be valided in the subsequent requests.
-	nonce, err := utils.GenerateRandomString(16)
-	if err != nil {
-		a.log.Printf("error generating OIDC nonce: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.internalError"))
-	}
-	c.SetCookie(&http.Cookie{
-		Name:     "nonce",
-		Value:    nonce,
-		HttpOnly: true,
-		Path:     "/",
-		SameSite: http.SameSiteLaxMode,
-	})
-	out.Nonce = nonce
 
 	// Render the login page.
 	return c.Render(http.StatusOK, "admin-login", out)
@@ -437,51 +273,6 @@ func (a *App) renderLoginSetupPage(c echo.Context, loginErr error) error {
 	}
 
 	return c.Render(http.StatusOK, "admin-login-setup", out)
-}
-
-// createOIDCUser creates a new user in the DB with the OIDC claims.
-func (a *App) createOIDCUser(claims auth.OIDCclaim) (auth.User, error) {
-	name := claims.Name
-	if name == "" {
-		name = strings.TrimSpace(claims.PreferredUsername)
-	}
-	if name == "" {
-		name = strings.Split(claims.Email, "@")[0]
-	}
-
-	var (
-		listRoleID  *int
-		listRoleRec string
-	)
-	if strings.TrimSpace(a.cfg.Security.OIDC.DefaultListRoleID) != "" {
-		id, err := a.core.ResolveRoleLegacyID(a.cfg.Security.OIDC.DefaultListRoleID)
-		if err != nil {
-			return auth.User{}, err
-		}
-		listRoleID = &id
-		listRoleRec = a.cfg.Security.OIDC.DefaultListRoleID
-	}
-
-	userRoleID, err := a.core.ResolveRoleLegacyID(a.cfg.Security.OIDC.DefaultUserRoleID)
-	if err != nil {
-		return auth.User{}, err
-	}
-
-	user, err := a.core.CreateUser(auth.User{
-		Type:          auth.UserTypeUser,
-		HasPassword:   false,
-		PasswordLogin: false,
-		Username:      claims.Email,
-		Name:          name,
-		Email:         null.NewString(claims.Email, true),
-		UserRoleID:    userRoleID,
-		UserRoleRecID: a.cfg.Security.OIDC.DefaultUserRoleID,
-		ListRoleID:    listRoleID,
-		ListRoleRecID: listRoleRec,
-		Status:        auth.UserStatusEnabled,
-	})
-
-	return user, err
 }
 
 // doLogin logs a user in with a username and password.

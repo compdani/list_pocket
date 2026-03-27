@@ -100,17 +100,6 @@ type Config struct {
 		DomainAllowlist    []string        `koanf:"-"`
 	} `koanf:"privacy"`
 	Security struct {
-		OIDC struct {
-			Enabled           bool   `koanf:"enabled"`
-			ProviderURL       string `koanf:"provider_url"`
-			ProviderName      string `koanf:"provider_name"`
-			ClientID          string `koanf:"client_id"`
-			ClientSecret      string `koanf:"client_secret"`
-			AutoCreateUsers   bool   `koanf:"auto_create_users"`
-			DefaultUserRoleID string `koanf:"default_user_role_id"`
-			DefaultListRoleID string `koanf:"default_list_role_id"`
-		} `koanf:"oidc"`
-
 		Captcha struct {
 			Altcha struct {
 				Enabled    bool `koanf:"enabled"`
