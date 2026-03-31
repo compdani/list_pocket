@@ -759,8 +759,14 @@ func (a *App) TestCampaign(c echo.Context) error {
 	}
 
 	// Override certain values from the DB with incoming values.
+	// Prefix the subject for test sends so recipients can easily identify
+	// that these are non-production campaign messages.
+	testSubject := strings.TrimSpace(req.Subject)
+	if !strings.HasPrefix(strings.ToUpper(testSubject), "TEST:") {
+		testSubject = "TEST: " + testSubject
+	}
 	camp.Name = req.Name
-	camp.Subject = req.Subject
+	camp.Subject = testSubject
 	camp.FromEmail = req.FromEmail
 	camp.Body = req.Body
 	camp.AltBody = req.AltBody
