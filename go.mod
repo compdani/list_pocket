@@ -37,7 +37,10 @@ require (
 	gopkg.in/volatiletech/null.v6 v6.0.0-20170828023728-0bef4e07ae1b
 )
 
-require golang.org/x/oauth2 v0.35.0 // indirect
+require (
+	github.com/joho/godotenv v1.5.1 // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
+)
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

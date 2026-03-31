@@ -19,6 +19,9 @@
         aria-keyshortcuts="F9">
         <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
       </v-btn>
+      <v-btn color="primary" variant="outlined" prepend-icon="mdi-creation-outline" :disabled="disabled" @click="isAIDialogOpen = true">
+        AI Builder
+      </v-btn>
 
       <template #extension v-if="self.contentType !== 'visual'">
         <v-select v-model="templateId" :label="$tc('globals.terms.template')" :placeholder="$t('globals.terms.none')"
@@ -64,6 +67,14 @@
     <!-- campaign preview //-->
     <campaign-preview v-if="isPreviewing" is-post @close="onTogglePreview" type="campaign" :id="id" :title="title"
       :content-type="self.contentType" :template-id="templateId" :body="self.body" :preheader="preheader" />
+
+    <ai-campaign-builder-dialog
+      v-model="isAIDialogOpen"
+      :context="aiContext"
+      :current="aiCurrent"
+      :session-key="aiSessionKey"
+      @apply="onApplyAIResult"
+    />
   </div>
 </template>
 
@@ -78,6 +89,7 @@ import VisualEditor from './VisualEditor.vue';
 import GrapesMjmlEditor from './GrapesMjmlEditor.vue';
 import markdownToVisualBlock from './editor';
 import CodeEditor from './CodeEditor.vue';
+import AICampaignBuilderDialog from './AICampaignBuilderDialog.vue';
 
 const turndown = new TurndownService();
 
@@ -88,9 +100,10 @@ export default {
     'code-editor': CodeEditor,
     'visual-editor': VisualEditor,
     'grapes-mjml-editor': GrapesMjmlEditor,
+    'ai-campaign-builder-dialog': AICampaignBuilderDialog,
   },
 
-  emits: ['update:modelValue'],
+  emits: ['update:modelValue', 'ai-generated'],
 
   props: {
     contentTypes: { type: Object, default: () => ({}) },
@@ -99,6 +112,7 @@ export default {
     disabled: { type: Boolean, default: false },
     templates: { type: Array, default: null },
     preheader: { type: String, default: '' },
+    subject: { type: String, default: '' },
 
     // modelValue is provided by the parent component.
     // Throughout the editor, `this.self` references that reactive object.
@@ -122,6 +136,7 @@ export default {
       templateId: null,
       visualTemplateId: null,
       isTypeSelectorLocked: true,
+      isAIDialogOpen: false,
     };
   },
 
@@ -342,6 +357,46 @@ export default {
       this.setDefaultTemplate();
     },
 
+    onApplyAIResult(result) {
+      if (!result || typeof result !== 'object') {
+        return;
+      }
+
+      if (result.contentType && this.contentTypes[result.contentType]) {
+        this.self.contentType = result.contentType;
+        this.contentTypeSel = result.contentType;
+        if (this.isGuardedType(result.contentType)) {
+          this.isTypeSelectorLocked = true;
+        }
+      }
+
+      const nextType = result.contentType || this.self.contentType;
+      if (typeof result.body === 'string') {
+        if (nextType === 'visual' || nextType === 'grapes_mjml') {
+          this.self.bodySource = result.body;
+          if (nextType === 'visual') {
+            try {
+              this.$refs.visualEditor?.render?.(JSON.parse(result.body || '{}'));
+            } catch {
+              // Keep the source in state even if it's not valid JSON.
+            }
+          }
+          if (nextType === 'grapes_mjml') {
+            this.$refs.grapesEditor?.loadMjml?.(result.body);
+            this.syncGrapesHtml();
+          }
+        } else {
+          this.self.body = result.body;
+          this.self.bodySource = '';
+        }
+      }
+
+      this.$emit('ai-generated', {
+        subject: result.subject || '',
+        preheader: result.preheader || '',
+      });
+    },
+
     onImportVisualTpl() {
       if (!this.visualTemplateId) {
         return;
@@ -442,6 +497,34 @@ export default {
 
     isContentTypeSelectDisabled() {
       return this.disabled || this.isContentTypeLocked;
+    },
+
+    aiContext() {
+      return {
+        origin: 'campaign_editor',
+        campaignType: 'regular',
+        templateType: '',
+        contentType: this.self.contentType,
+        editorMode: this.self.contentType,
+      };
+    },
+
+    aiCurrent() {
+      const contentType = this.self.contentType;
+      const isVisual = contentType === 'visual';
+      const isGrapes = contentType === 'grapes_mjml';
+      const body = (isVisual || isGrapes) ? (this.self.bodySource || '') : (this.self.body || '');
+
+      return {
+        subject: this.subject || '',
+        preheader: this.preheader || '',
+        body,
+        templateId: this.templateId || '',
+      };
+    },
+
+    aiSessionKey() {
+      return `campaign:${this.id || 'new'}`;
     },
   },
 

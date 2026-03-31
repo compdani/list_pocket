@@ -102,21 +102,33 @@
             <div class="editor-label">
               {{ currentEditorLabel }}
             </div>
-            <v-btn
-              v-if="form.type === 'tx'"
-              type="button"
-              size="small"
-              variant="text"
-              prepend-icon="mdi-code-braces"
-              @click="insertContentPlaceholder"
-            >
-              Insert Content Placeholder
-            </v-btn>
+            <div class="d-flex ga-2">
+              <v-btn
+                type="button"
+                size="small"
+                variant="outlined"
+                prepend-icon="mdi-creation-outline"
+                @click="isAIDialogOpen = true"
+              >
+                AI Builder
+              </v-btn>
+              <v-btn
+                v-if="form.type === 'tx'"
+                type="button"
+                size="small"
+                variant="text"
+                prepend-icon="mdi-code-braces"
+                @click="insertContentPlaceholder"
+              >
+                Insert Content Placeholder
+              </v-btn>
+            </div>
           </div>
 
           <div class="editor-surface">
             <visual-editor
               v-if="useVisualEditor"
+              ref="visualEditor"
               name="body"
               :source="form.bodySource"
               height="62vh"
@@ -191,6 +203,13 @@
     :body="form.body"
     @close="onTogglePreview"
   />
+  <ai-campaign-builder-dialog
+    v-model="isAIDialogOpen"
+    :context="aiContext"
+    :current="aiCurrent"
+    :session-key="aiSessionKey"
+    @apply="onApplyAIResult"
+  />
 </template>
 
 <script>
@@ -201,6 +220,7 @@ import RichtextEditor from '../components/RichtextEditor.vue';
 import VisualEditor from '../components/VisualEditor.vue';
 import GrapesMjmlEditor from '../components/GrapesMjmlEditor.vue';
 import CopyText from '../components/CopyText.vue';
+import AICampaignBuilderDialog from '../components/AICampaignBuilderDialog.vue';
 
 const baseForm = () => ({
   name: '',
@@ -221,6 +241,7 @@ export default {
     'richtext-editor': RichtextEditor,
     'visual-editor': VisualEditor,
     'grapes-mjml-editor': GrapesMjmlEditor,
+    'ai-campaign-builder-dialog': AICampaignBuilderDialog,
   },
 
   props: {
@@ -235,6 +256,7 @@ export default {
       previewItem: null,
       egPlaceholder: '{{ template "content" . }}',
       editorMode: 'html',
+      isAIDialogOpen: false,
     };
   },
 
@@ -282,6 +304,40 @@ export default {
         return 'TinyMCE';
       }
       return this.$t('templates.rawHTML');
+    },
+
+    aiContext() {
+      const contentType = this.useVisualEditor
+        ? 'visual'
+        : this.useGrapesEditor
+          ? 'grapes_mjml'
+          : this.useRichtextEditor
+            ? 'richtext'
+            : 'html';
+      return {
+        origin: 'template_editor',
+        campaignType: '',
+        templateType: this.form.type || '',
+        contentType,
+        editorMode: this.editorMode || contentType,
+      };
+    },
+
+    aiCurrent() {
+      const isVisual = this.useVisualEditor;
+      const isGrapes = this.useGrapesEditor;
+      const body = (isVisual || isGrapes) ? (this.form.bodySource || '') : (this.form.body || '');
+
+      return {
+        subject: this.form.subject || '',
+        preheader: '',
+        body,
+        templateId: this.form.id || this.data.id || '',
+      };
+    },
+
+    aiSessionKey() {
+      return `template:${this.data?.id || 'new'}:${this.form.type || 'campaign'}:${this.editorMode || 'html'}`;
     },
   },
 
@@ -418,6 +474,35 @@ export default {
         return;
       }
       this.form.body = this.form.body ? `${this.form.body}\n${placeholder}` : placeholder;
+    },
+
+    onApplyAIResult(result) {
+      if (!result || typeof result !== 'object') {
+        return;
+      }
+
+      if (typeof result.body === 'string') {
+        if (this.useVisualEditor || this.useGrapesEditor) {
+          this.form.bodySource = result.body;
+          if (this.useVisualEditor) {
+            try {
+              this.$refs.visualEditor?.render?.(JSON.parse(result.body || '{}'));
+            } catch {
+              // Keep the source in state even if it's not valid JSON.
+            }
+          }
+          if (this.useGrapesEditor) {
+            this.$refs.grapesEditor?.loadMjml?.(result.body);
+            this.syncGrapesBeforeAction();
+          }
+        } else {
+          this.form.body = result.body;
+          this.form.bodySource = '';
+        }
+      }
+      if (this.form.type === 'tx' && typeof result.subject === 'string' && result.subject.trim()) {
+        this.form.subject = result.subject.trim();
+      }
     },
   },
 
