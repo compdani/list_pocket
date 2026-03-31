@@ -280,7 +280,7 @@ export const getDashboardCounts = () => http.get(
 
 export const getDashboardCharts = () => http.get(
   '/api/dashboard/charts',
-  { loading: models.dashboard },
+  { params: { tz: getUserTimeZone() || undefined }, loading: models.dashboard },
 );
 
 export const getWorkflowDashboard = (workflowId) => sendControlPlane(

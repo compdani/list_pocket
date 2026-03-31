@@ -129,8 +129,10 @@ func (a *App) GetServerConfig(c echo.Context) error {
 
 // GetDashboardCharts returns chart data points to render ont he dashboard.
 func (a *App) GetDashboardCharts(c echo.Context) error {
+	tz := c.QueryParam("tz")
+
 	// Get the chart data from the DB.
-	out, err := a.core.GetDashboardCharts()
+	out, err := a.core.GetDashboardCharts(tz)
 	if err != nil {
 		return err
 	}
