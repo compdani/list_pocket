@@ -29,6 +29,7 @@ import (
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
+	"github.com/joho/godotenv"
 	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/v2"
 	"github.com/knadh/paginator"
@@ -55,6 +56,7 @@ type App struct {
 	i18n       *i18n.I18n
 	pg         *paginator.Paginator
 	events     *events.Events
+	aiBuilder  *aiBuilderService
 	log        *log.Logger
 	bufLog     *buflog.BufLog
 	pb         *pocketbase.PocketBase
@@ -84,8 +86,8 @@ var (
 	bufLog   = buflog.New(5000)
 	lo       = log.New(io.MultiWriter(os.Stdout, bufLog, evStream.ErrWriter()), "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 
-	ko      = koanf.New(".")
-	fs      stuffbin.FileSystem
+	ko = koanf.New(".")
+	fs stuffbin.FileSystem
 	db *pbdb.DB
 	pb *pocketbase.PocketBase
 
@@ -105,6 +107,14 @@ func init() {
 	// The test binary name ends with ".test".
 	if strings.HasSuffix(os.Args[0], ".test") {
 		return
+	}
+
+	// In local/dev mode, load environment variables from .env.
+	tempIsProd := os.Getenv("is_prod")
+	if strings.ToLower(strings.TrimSpace(tempIsProd)) != "true" {
+		if err := godotenv.Load(); err != nil {
+			lo.Fatal("Error loading .env file")
+		}
 	}
 
 	// Initialize commandline flags.
@@ -267,8 +277,8 @@ func main() {
 		cfg:        cfg,
 		urlCfg:     urlCfg,
 		fs:         fs,
-		db:   db,
-		core: core,
+		db:         db,
+		core:       core,
 		manager:    mgr,
 		messengers: msgrs,
 		emailMsgr:  emailMsgr,
@@ -280,6 +290,7 @@ func main() {
 		i18n:       i18n,
 		log:        lo,
 		events:     evStream,
+		aiBuilder:  newAIBuilderService(newAIBuilderProvider(), lo),
 		bufLog:     bufLog,
 		pb:         pb,
 

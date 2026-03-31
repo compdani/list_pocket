@@ -746,6 +746,24 @@ export const deleteTemplate = async (id) => http.delete(
   { loading: models.templates },
 );
 
+// AI campaign builder.
+export const createAICampaignBuilderJob = async (data) => http.post(
+  '/api/ai/campaign-builder/jobs',
+  data,
+  { loading: models.campaigns },
+);
+
+export const getAICampaignBuilderJob = async (id) => http.get(
+  `/api/ai/campaign-builder/jobs/${id}`,
+  { loading: models.campaigns, disableToast: true },
+);
+
+export const cancelAICampaignBuilderJob = async (id) => http.post(
+  `/api/ai/campaign-builder/jobs/${id}/cancel`,
+  {},
+  { loading: models.campaigns, disableToast: true },
+);
+
 // Settings.
 export const getServerConfig = async () => http.get(
   '/api/config',

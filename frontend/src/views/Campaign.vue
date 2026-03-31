@@ -427,12 +427,14 @@
         ref="contentEditor"
         :key="editorKey"
         v-model="form.content"
+        :subject="form.subject"
         :preheader="form.preheader"
         :id="data.id"
         :title="data.name"
         :disabled="!canEdit"
         :templates="templates"
         :content-types="contentTypes"
+        @ai-generated="onEditorAIGenerated"
       />
 
       <v-row class="mt-4">
@@ -854,6 +856,18 @@ export default {
       }
 
       this.form.media.push(o);
+    },
+
+    onEditorAIGenerated(payload) {
+      if (!payload || typeof payload !== 'object') {
+        return;
+      }
+      if (payload.subject) {
+        this.form.subject = payload.subject;
+      }
+      if (typeof payload.preheader === 'string') {
+        this.form.preheader = payload.preheader;
+      }
     },
 
     getBatching(attribs) {
