@@ -42,10 +42,12 @@ type aiBuilderCurrent struct {
 }
 
 type aiBuilderGenerateReq struct {
-	Context      aiBuilderContext `json:"context"`
-	Current      aiBuilderCurrent `json:"current"`
-	Instructions string           `json:"instructions"`
-	SystemPrompt string           `json:"systemPrompt,omitempty"`
+	Context        aiBuilderContext `json:"context"`
+	Current        aiBuilderCurrent `json:"current"`
+	Instructions   string           `json:"instructions"`
+	SystemPrompt   string           `json:"systemPrompt,omitempty"`
+	Model          string           `json:"model,omitempty"`
+	TimeoutSeconds int              `json:"timeoutSeconds,omitempty"`
 }
 
 type aiBuilderResult struct {
@@ -203,7 +205,11 @@ func (s *aiBuilderService) runJob(jobID string) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	timeoutSeconds := req.TimeoutSeconds
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = defaultAIBuilderTimeoutSeconds
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	s.mu.Lock()
 	s.cancels[jobID] = cancel
 	s.mu.Unlock()
@@ -333,6 +339,13 @@ func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGen
 	if system == "" {
 		system = defaultAIBuilderSystemPrompt
 	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = strings.TrimSpace(p.model)
+	}
+	if model == "" {
+		model = defaultAIBuilderModel
+	}
 	user := map[string]any{
 		"context":      req.Context,
 		"current":      req.Current,
@@ -345,7 +358,7 @@ func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGen
 	}
 
 	payload := map[string]any{
-		"model": p.model,
+		"model": model,
 		"messages": []map[string]string{
 			{"role": "system", "content": system},
 			{"role": "user", "content": toJSONString(user)},
@@ -445,7 +458,12 @@ func toJSONString(v any) string {
 	return string(b)
 }
 
-const defaultAIBuilderSystemPrompt = "You generate email campaign drafts. Return strict JSON only with keys: subject, preheader, contentType, body, notes."
+const (
+	defaultAIBuilderSystemPrompt     = "You generate email campaign drafts. Return strict JSON only with keys: subject, preheader, contentType, body, notes."
+	defaultAIBuilderModel            = "gpt-5.4-mini"
+	defaultAIBuilderTimeoutSeconds   = 180
+	aiBuilderSystemMessageCollection = "ai_builder_system_messages"
+)
 
 func (a *App) getAIBuilderSystemPrompt(editorMode string) string {
 	mode := strings.TrimSpace(editorMode)
@@ -454,7 +472,7 @@ func (a *App) getAIBuilderSystemPrompt(editorMode string) string {
 	}
 
 	rec, err := a.pb.FindFirstRecordByFilter(
-		"ai_builder_system_messages",
+		aiBuilderSystemMessageCollection,
 		"editor_mode={:mode}",
 		dbx.Params{"mode": mode},
 	)
@@ -483,6 +501,9 @@ func (a *App) CreateAICampaignBuilderJob(c echo.Context) error {
 		req.Context.EditorMode = strings.TrimSpace(req.Context.ContentType)
 	}
 	req.SystemPrompt = a.getAIBuilderSystemPrompt(req.Context.EditorMode)
+	model, timeout, _ := a.getAIBuilderSettingsValues()
+	req.Model = model
+	req.TimeoutSeconds = timeout
 
 	job, err := a.aiBuilder.Submit(req)
 	if err != nil {

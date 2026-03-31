@@ -793,6 +793,17 @@ export const testSMTP = async (data) => http.post(
   { loading: models.settings, disableToast: true },
 );
 
+export const getAIBuilderSettings = async () => http.get(
+  '/api/settings/ai-builder',
+  { loading: models.settings },
+);
+
+export const updateAIBuilderSettings = async (data) => http.put(
+  '/api/settings/ai-builder',
+  data,
+  { loading: models.settings },
+);
+
 export const getLogs = async () => http.get(
   '/api/logs',
   { loading: models.logs, camelCase: false },

@@ -20,6 +20,8 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx/types"
 	"github.com/labstack/echo/v4"
+	"github.com/pocketbase/dbx"
+	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/cron"
 )
 
@@ -442,4 +444,179 @@ func (a *App) GetAboutInfo(c echo.Context) error {
 	out.System.OSMB = mem.Sys / 1024 / 1024
 
 	return c.JSON(http.StatusOK, out)
+}
+
+type aiBuilderSettingsPayload struct {
+	Model           string   `json:"model"`
+	TimeoutSeconds  int      `json:"timeoutSeconds"`
+	AvailableModels []string `json:"availableModels"`
+}
+
+func (a *App) GetAIBuilderSettings(c echo.Context) error {
+	model, timeout, availableModels := a.getAIBuilderSettingsValues()
+	return c.JSON(http.StatusOK, okResp{aiBuilderSettingsPayload{
+		Model:           model,
+		TimeoutSeconds:  timeout,
+		AvailableModels: availableModels,
+	}})
+}
+
+func (a *App) UpdateAIBuilderSettings(c echo.Context) error {
+	var in aiBuilderSettingsPayload
+	if err := c.Bind(&in); err != nil {
+		return err
+	}
+
+	availableModels, err := sanitizeAIBuilderAvailableModels(in.AvailableModels)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	model := strings.TrimSpace(in.Model)
+	if model == "" {
+		model = availableModels[0]
+	}
+	if len(model) > 120 {
+		return echo.NewHTTPError(http.StatusBadRequest, "model is too long")
+	}
+	if !containsString(availableModels, model) {
+		return echo.NewHTTPError(http.StatusBadRequest, "model must be one of availableModels")
+	}
+	if a == nil || a.pb == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings backend unavailable")
+	}
+	timeout := in.TimeoutSeconds
+	if timeout <= 0 {
+		_, currentTimeout, _ := a.getAIBuilderSettingsValues()
+		timeout = currentTimeout
+	}
+	if timeout < 30 || timeout > 900 {
+		return echo.NewHTTPError(http.StatusBadRequest, "timeoutSeconds must be between 30 and 900")
+	}
+
+	savePayload := map[string]any{
+		"model":            model,
+		"timeout_seconds":  timeout,
+		"available_models": availableModels,
+	}
+	payloadBytes, err := json.Marshal(savePayload)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save ai settings")
+	}
+
+	if err := a.upsertTypedSettingsRecord("ai_builder", string(payloadBytes)); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, okResp{aiBuilderSettingsPayload{
+		Model:           model,
+		TimeoutSeconds:  timeout,
+		AvailableModels: availableModels,
+	}})
+}
+
+func (a *App) getAIBuilderSettingsValues() (string, int, []string) {
+	model := defaultAIBuilderModel
+	timeout := defaultAIBuilderTimeoutSeconds
+	availableModels := defaultAIBuilderAvailableModels()
+
+	if a == nil || a.pb == nil {
+		return model, timeout, availableModels
+	}
+
+	rec, err := a.pb.FindFirstRecordByFilter("listpocket_settings", "type={:type}", dbx.Params{"type": "ai_builder"})
+	if err != nil || rec == nil {
+		return model, timeout, availableModels
+	}
+
+	raw := strings.TrimSpace(rec.GetString("value"))
+	if raw == "" {
+		return model, timeout, availableModels
+	}
+
+	var parsed struct {
+		Model           string   `json:"model"`
+		TimeoutSeconds  int      `json:"timeout_seconds"`
+		AvailableModels []string `json:"available_models"`
+	}
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return model, timeout, availableModels
+	}
+
+	if cleaned, err := sanitizeAIBuilderAvailableModels(parsed.AvailableModels); err == nil {
+		availableModels = cleaned
+	}
+	if v := strings.TrimSpace(parsed.Model); v != "" {
+		model = v
+	}
+	if parsed.TimeoutSeconds >= 30 && parsed.TimeoutSeconds <= 900 {
+		timeout = parsed.TimeoutSeconds
+	}
+	if !containsString(availableModels, model) {
+		model = availableModels[0]
+	}
+
+	return model, timeout, availableModels
+}
+
+func sanitizeAIBuilderAvailableModels(in []string) ([]string, error) {
+	if len(in) == 0 {
+		return defaultAIBuilderAvailableModels(), nil
+	}
+
+	out := make([]string, 0, len(in))
+	seen := make(map[string]struct{}, len(in))
+	for _, raw := range in {
+		model := strings.TrimSpace(raw)
+		if model == "" {
+			continue
+		}
+		if len(model) > 120 {
+			return nil, errors.New("available model name is too long")
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		out = append(out, model)
+		if len(out) >= 50 {
+			break
+		}
+	}
+
+	if len(out) == 0 {
+		return nil, errors.New("at least one available model is required")
+	}
+	return out, nil
+}
+
+func containsString(items []string, value string) bool {
+	for _, v := range items {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+func defaultAIBuilderAvailableModels() []string {
+	return []string{"gpt-5.4-mini", "gpt-5.4-nano", "gpt-5.4"}
+}
+
+func (a *App) upsertTypedSettingsRecord(recordType, value string) error {
+	if a == nil || a.pb == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings backend unavailable")
+	}
+
+	col, err := a.pb.FindCollectionByNameOrId("listpocket_settings")
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "settings collection not found")
+	}
+
+	rec, err := a.pb.FindFirstRecordByFilter("listpocket_settings", "type={:type}", dbx.Params{"type": recordType})
+	if err != nil || rec == nil {
+		rec = core.NewRecord(col)
+		rec.Set("type", recordType)
+	}
+	rec.Set("value", value)
+	return a.pb.Save(rec)
 }
