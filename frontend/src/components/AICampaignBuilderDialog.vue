@@ -189,6 +189,7 @@ export default {
       isRunning: false,
       isCancelling: false,
       errorMessage: '',
+      streamAbortController: null,
     };
   },
   methods: {
@@ -202,6 +203,10 @@ export default {
       this.$emit('update:modelValue', false);
     },
     resetJobState() {
+      if (this.streamAbortController) {
+        this.streamAbortController.abort();
+        this.streamAbortController = null;
+      }
       this.job = {
         id: '',
         status: '',
@@ -285,11 +290,14 @@ export default {
           ...this.job,
           ...job,
         };
-        await this.pollJob();
+        await this.streamJob();
       } catch (e) {
         this.errorMessage = e?.response?.message || e?.message || 'Failed to start generation.';
       } finally {
         this.isRunning = false;
+        if (this.streamAbortController) {
+          this.streamAbortController = null;
+        }
       }
     },
     async cancelGeneration(silent = false) {
@@ -298,6 +306,10 @@ export default {
       }
       this.isCancelling = true;
       try {
+        if (this.streamAbortController) {
+          this.streamAbortController.abort();
+          this.streamAbortController = null;
+        }
         const out = await this.$api.cancelAICampaignBuilderJob(this.job.id);
         this.job = out;
         if (!silent && out?.status === 'canceled') {
@@ -307,35 +319,63 @@ export default {
         this.isCancelling = false;
       }
     },
+    applyJobTerminalState(out) {
+      if (out.status === 'success') {
+        const result = out.result || {};
+        this.pendingResult = result;
+        const aiText = [
+          'Draft ready. Review and click Apply.',
+          result.subject ? `Subject: ${result.subject}` : '',
+          result.preheader ? `Preheader: ${result.preheader}` : '',
+          result.notes ? `Notes: ${result.notes}` : '',
+        ].filter(Boolean).join('\n');
+        this.messages.push({
+          role: 'assistant',
+          content: aiText || 'Applied updated content.',
+        });
+        return true;
+      }
+      if (out.status === 'failed') {
+        this.errorMessage = out.error || 'Generation failed.';
+        return true;
+      }
+      if (out.status === 'canceled') {
+        return true;
+      }
+      return false;
+    },
+    async streamJob() {
+      if (!this.job.id) {
+        return;
+      }
+      const controller = new AbortController();
+      this.streamAbortController = controller;
+      try {
+        await this.$api.streamAICampaignBuilderJob(this.job.id, {
+          signal: controller.signal,
+          onJob: (out) => {
+            this.job = out;
+            this.applyJobTerminalState(out);
+          },
+        });
+      } catch (e) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        // Fallback when SSE isn't available in current runtime/proxy.
+        await this.pollJob();
+      }
+    },
     async pollJob() {
       if (!this.job.id) {
         return;
       }
-      const maxAttempts = 60;
+      const maxAttempts = 240;
       for (let i = 0; i < maxAttempts; i += 1) {
         const out = await this.$api.getAICampaignBuilderJob(this.job.id);
         this.job = out;
 
-        if (out.status === 'success') {
-          const result = out.result || {};
-          this.pendingResult = result;
-          const aiText = [
-            'Draft ready. Review and click Apply.',
-            result.subject ? `Subject: ${result.subject}` : '',
-            result.preheader ? `Preheader: ${result.preheader}` : '',
-            result.notes ? `Notes: ${result.notes}` : '',
-          ].filter(Boolean).join('\n');
-          this.messages.push({
-            role: 'assistant',
-            content: aiText || 'Applied updated content.',
-          });
-          return;
-        }
-        if (out.status === 'failed') {
-          this.errorMessage = out.error || 'Generation failed.';
-          return;
-        }
-        if (out.status === 'canceled') {
+        if (this.applyJobTerminalState(out)) {
           return;
         }
         // Poll every second until done or timeout.

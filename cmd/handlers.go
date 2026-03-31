@@ -169,6 +169,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 
 	api.POST("/ai/campaign-builder/jobs", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateAICampaignBuilderJob, "campaigns:manage_all", "campaigns:manage", "templates:manage")))
 	api.GET("/ai/campaign-builder/jobs/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetAICampaignBuilderJob, "campaigns:manage_all", "campaigns:manage", "templates:manage")))
+	api.GET("/ai/campaign-builder/jobs/{id}/stream", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.StreamAICampaignBuilderJob, "campaigns:manage_all", "campaigns:manage", "templates:manage")))
 	api.POST("/ai/campaign-builder/jobs/{id}/cancel", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.CancelAICampaignBuilderJob, "campaigns:manage_all", "campaigns:manage", "templates:manage")))
 
 	api.DELETE("/maintenance/subscribers/{type}", wrapEcho(a, tpl, cfg, urlCfg, []string{"type"}, pm(a.GCSubscribers, "settings:maintain")))
