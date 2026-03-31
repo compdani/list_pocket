@@ -764,6 +764,76 @@ export const cancelAICampaignBuilderJob = async (id) => http.post(
   { loading: models.campaigns, disableToast: true },
 );
 
+export const streamAICampaignBuilderJob = async (id, { onJob, signal } = {}) => {
+  const token = pb.authStore.token;
+  const response = await fetch(`${pbBaseURL}/mailapi/ai/campaign-builder/jobs/${encodeURIComponent(id)}/stream`, {
+    method: 'GET',
+    headers: {
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    signal,
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`SSE request failed (${response.status})`);
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  const reader = response.body.getReader();
+  let buffer = '';
+  let eventType = '';
+  let data = '';
+
+  const emit = () => {
+    if (!data) {
+      eventType = '';
+      return;
+    }
+    const payloadText = data.endsWith('\n') ? data.slice(0, -1) : data;
+    let payload = {};
+    try {
+      payload = JSON.parse(payloadText);
+    } catch {
+      payload = {};
+    }
+
+    if (eventType === 'job' && typeof onJob === 'function') {
+      onJob(payload);
+    }
+    eventType = '';
+    data = '';
+  };
+
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    const { done, value } = await reader.read();
+    if (done) {
+      emit();
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    let idx = buffer.indexOf('\n');
+    while (idx !== -1) {
+      const rawLine = buffer.slice(0, idx).replace(/\r$/, '');
+      buffer = buffer.slice(idx + 1);
+
+      if (rawLine === '') {
+        emit();
+      } else if (rawLine.startsWith(':')) {
+        // SSE comment/heartbeat.
+      } else if (rawLine.startsWith('event:')) {
+        eventType = rawLine.slice(6).trim();
+      } else if (rawLine.startsWith('data:')) {
+        data += `${rawLine.slice(5).trim()}\n`;
+      }
+
+      idx = buffer.indexOf('\n');
+    }
+  }
+};
+
 // Settings.
 export const getServerConfig = async () => http.get(
   '/api/config',

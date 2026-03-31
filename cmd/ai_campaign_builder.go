@@ -88,6 +88,12 @@ type loggerLike interface {
 	Printf(format string, v ...any)
 }
 
+func (s *aiBuilderService) logf(format string, v ...any) {
+	if s != nil && s.log != nil {
+		s.log.Printf(format, v...)
+	}
+}
+
 func newAIBuilderService(provider aiBuilderProvider, log loggerLike) *aiBuilderService {
 	s := &aiBuilderService{
 		log:      log,
@@ -125,6 +131,17 @@ func (s *aiBuilderService) Submit(req aiBuilderGenerateReq) (*aiBuilderJob, erro
 	s.jobs[job.ID] = job
 	s.mu.Unlock()
 
+	s.logf("ai builder job queued id=%s origin=%s editor_mode=%s content_type=%s model=%s timeout_s=%d instructions_len=%d body_len=%d",
+		job.ID,
+		strings.TrimSpace(req.Context.Origin),
+		strings.TrimSpace(req.Context.EditorMode),
+		strings.TrimSpace(req.Context.ContentType),
+		strings.TrimSpace(req.Model),
+		req.TimeoutSeconds,
+		len(req.Instructions),
+		len(req.Current.Body),
+	)
+
 	select {
 	case s.queue <- job.ID:
 		return cloneAIBuilderJob(job), nil
@@ -160,6 +177,7 @@ func (s *aiBuilderService) Cancel(id string) (*aiBuilderJob, error) {
 		job.Progress = 100
 		job.Error = "generation cancelled"
 		job.UpdatedAt = time.Now().UTC()
+		s.logf("ai builder job canceled while queued id=%s", id)
 		return cloneAIBuilderJob(job), nil
 	case aiBuilderStatusRunning:
 		if cancel, ok := s.cancels[id]; ok && cancel != nil {
@@ -169,6 +187,7 @@ func (s *aiBuilderService) Cancel(id string) (*aiBuilderJob, error) {
 		job.Progress = 100
 		job.Error = "generation cancelled"
 		job.UpdatedAt = time.Now().UTC()
+		s.logf("ai builder job cancel signal sent id=%s", id)
 		return cloneAIBuilderJob(job), nil
 	default:
 		return cloneAIBuilderJob(job), nil
@@ -209,6 +228,8 @@ func (s *aiBuilderService) runJob(jobID string) {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = defaultAIBuilderTimeoutSeconds
 	}
+	s.logf("ai builder job running id=%s model=%s timeout_s=%d", jobID, strings.TrimSpace(req.Model), timeoutSeconds)
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 	s.mu.Lock()
 	s.cancels[jobID] = cancel
@@ -222,6 +243,7 @@ func (s *aiBuilderService) runJob(jobID string) {
 
 	res, err := s.provider.Generate(ctx, req)
 	if err != nil {
+		s.logf("ai builder provider error id=%s elapsed_ms=%d err=%v", jobID, time.Since(start).Milliseconds(), err)
 		s.failJob(jobID, err)
 		return
 	}
@@ -235,6 +257,7 @@ func (s *aiBuilderService) runJob(jobID string) {
 		return
 	}
 	if job.Status == aiBuilderStatusCanceled {
+		s.logf("ai builder job ignored success after cancel id=%s elapsed_ms=%d", jobID, time.Since(start).Milliseconds())
 		return
 	}
 	job.Status = aiBuilderStatusSuccess
@@ -242,12 +265,17 @@ func (s *aiBuilderService) runJob(jobID string) {
 	job.Result = res
 	job.Error = ""
 	job.UpdatedAt = time.Now().UTC()
+	s.logf("ai builder job succeeded id=%s elapsed_ms=%d subject_len=%d preheader_len=%d body_len=%d",
+		jobID,
+		time.Since(start).Milliseconds(),
+		len(job.Result.Subject),
+		len(job.Result.Preheader),
+		len(job.Result.Body),
+	)
 }
 
 func (s *aiBuilderService) failJob(jobID string, err error) {
-	if s.log != nil {
-		s.log.Printf("ai builder job failed id=%s err=%v", jobID, err)
-	}
+	s.logf("ai builder job failed id=%s err=%v", jobID, err)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	job, ok := s.jobs[jobID]
@@ -255,6 +283,7 @@ func (s *aiBuilderService) failJob(jobID string, err error) {
 		return
 	}
 	if job.Status == aiBuilderStatusCanceled {
+		s.logf("ai builder job already canceled id=%s", jobID)
 		return
 	}
 	job.Status = aiBuilderStatusFailed
@@ -346,6 +375,7 @@ func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGen
 	if model == "" {
 		model = defaultAIBuilderModel
 	}
+	start := time.Now()
 	user := map[string]any{
 		"context":      req.Context,
 		"current":      req.Current,
@@ -394,13 +424,19 @@ func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGen
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
+			return aiBuilderResult{}, fmt.Errorf("provider timeout after %dms: %w", time.Since(start).Milliseconds(), err)
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled {
+			return aiBuilderResult{}, fmt.Errorf("provider request canceled after %dms: %w", time.Since(start).Milliseconds(), err)
+		}
 		return aiBuilderResult{}, err
 	}
 	defer resp.Body.Close()
 
 	out, _ := io.ReadAll(io.LimitReader(resp.Body, 1_000_000))
 	if resp.StatusCode >= 300 {
-		return aiBuilderResult{}, fmt.Errorf("provider returned %d: %s", resp.StatusCode, string(out))
+		return aiBuilderResult{}, fmt.Errorf("provider returned %d after %dms: %s", resp.StatusCode, time.Since(start).Milliseconds(), string(out))
 	}
 
 	var parsed struct {
@@ -504,6 +540,10 @@ func (a *App) CreateAICampaignBuilderJob(c echo.Context) error {
 	model, timeout, _ := a.getAIBuilderSettingsValues()
 	req.Model = model
 	req.TimeoutSeconds = timeout
+	if a.log != nil {
+		a.log.Printf("ai builder create request origin=%s editor_mode=%s content_type=%s model=%s timeout_s=%d",
+			req.Context.Origin, req.Context.EditorMode, req.Context.ContentType, req.Model, req.TimeoutSeconds)
+	}
 
 	job, err := a.aiBuilder.Submit(req)
 	if err != nil {
@@ -527,6 +567,86 @@ func (a *App) GetAICampaignBuilderJob(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "job not found")
 	}
 	return c.JSON(http.StatusOK, okResp{job})
+}
+
+func (a *App) StreamAICampaignBuilderJob(c echo.Context) error {
+	if a.aiBuilder == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
+	}
+
+	jobID := strings.TrimSpace(c.Param("id"))
+	if jobID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+
+	if _, ok := a.aiBuilder.Get(jobID); !ok {
+		return echo.NewHTTPError(http.StatusNotFound, "job not found")
+	}
+
+	res := c.Response()
+	req := c.Request()
+	res.Header().Set(echo.HeaderContentType, "text/event-stream")
+	res.Header().Set("Cache-Control", "no-cache")
+	res.Header().Set("Connection", "keep-alive")
+	res.WriteHeader(http.StatusOK)
+	res.Flush()
+
+	lastSig := ""
+	lastHeartbeat := time.Now()
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	sendJob := func(job *aiBuilderJob) error {
+		payload, err := json.Marshal(job)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(res, "event: job\ndata: %s\n\n", payload); err != nil {
+			return err
+		}
+		res.Flush()
+		return nil
+	}
+
+	for {
+		select {
+		case <-req.Context().Done():
+			return nil
+		case <-ticker.C:
+			job, ok := a.aiBuilder.Get(jobID)
+			if !ok {
+				return nil
+			}
+
+			sig := fmt.Sprintf("%s|%d|%s", job.Status, job.Progress, strings.TrimSpace(job.Error))
+			if job.Status == aiBuilderStatusSuccess {
+				sig = sig + fmt.Sprintf("|%d", len(job.Result.Body))
+			}
+			if sig != lastSig {
+				lastSig = sig
+				if err := sendJob(job); err != nil {
+					return nil
+				}
+			}
+
+			// Keep connection alive for proxies that close idle streams.
+			if time.Since(lastHeartbeat) >= 15*time.Second {
+				if _, err := fmt.Fprint(res, ": keep-alive\n\n"); err != nil {
+					return nil
+				}
+				res.Flush()
+				lastHeartbeat = time.Now()
+			}
+
+			if job.Status == aiBuilderStatusSuccess || job.Status == aiBuilderStatusFailed || job.Status == aiBuilderStatusCanceled {
+				if _, err := fmt.Fprint(res, "event: done\ndata: {}\n\n"); err != nil {
+					return nil
+				}
+				res.Flush()
+				return nil
+			}
+		}
+	}
 }
 
 func (a *App) CancelAICampaignBuilderJob(c echo.Context) error {
