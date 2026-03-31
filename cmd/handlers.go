@@ -65,6 +65,8 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 
 	api.GET("/settings", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetSettings, "settings:get")))
 	api.PUT("/settings", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UpdateSettings, "settings:manage")))
+	api.GET("/settings/ai-builder", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetAIBuilderSettings, "settings:get")))
+	api.PUT("/settings/ai-builder", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UpdateAIBuilderSettings, "settings:manage")))
 	api.PUT("/settings/{key}", wrapEcho(a, tpl, cfg, urlCfg, []string{"key"}, pm(a.UpdateSettingsByKey, "settings:manage")))
 	api.POST("/settings/smtp/test", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.TestSMTPSettings, "settings:manage")))
 	api.POST("/admin/reload", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ReloadApp, "settings:manage")))

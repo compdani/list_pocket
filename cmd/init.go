@@ -579,8 +579,13 @@ func getPBSettings(pb *pocketbase.PocketBase) (types.JSONText, bool, error) {
 		Value []byte `db:"value"`
 	}
 
-	for _, table := range []string{"listpocket_settings", "listmonk_settings"} {
-		err := pb.DB().NewQuery("SELECT value FROM " + table + " LIMIT 1").One(&row)
+	queries := []string{
+		"SELECT value FROM listpocket_settings WHERE type='app' LIMIT 1",
+		"SELECT value FROM listpocket_settings LIMIT 1",
+		"SELECT value FROM listmonk_settings LIMIT 1",
+	}
+	for _, q := range queries {
+		err := pb.DB().NewQuery(q).One(&row)
 		if err == nil {
 			return row.Value, true, nil
 		}
@@ -608,21 +613,34 @@ func setPBSettings(pb *pocketbase.PocketBase, value []byte) error {
 		return err
 	}
 
-	// Check if a settings record already exists
+	// Check if an app settings record already exists.
 	var existingRecord *pbcore.Record
-	records, err := pb.FindRecordsByFilter(collection, "", "", 1, 0)
+	records, err := pb.FindRecordsByFilter(collection, "type='app'", "", 1, 0)
 	if err == nil && len(records) > 0 {
 		existingRecord = records[0]
+	}
+	if existingRecord == nil {
+		// Backward compatibility with older databases that had no `type` field set.
+		records, err = pb.FindRecordsByFilter(collection, "", "", 1, 0)
+		if err == nil && len(records) > 0 {
+			existingRecord = records[0]
+		}
 	}
 
 	if existingRecord != nil {
 		// Update existing record
 		existingRecord.Set("value", string(value))
+		if collection.Fields.GetByName("type") != nil {
+			existingRecord.Set("type", "app")
+		}
 		return pb.Save(existingRecord)
 	} else {
 		// Create new record
 		record := pbcore.NewRecord(collection)
 		record.Set("value", string(value))
+		if collection.Fields.GetByName("type") != nil {
+			record.Set("type", "app")
+		}
 		return pb.Save(record)
 	}
 }

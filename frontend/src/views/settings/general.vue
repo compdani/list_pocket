@@ -168,6 +168,62 @@
 
     <v-divider class="my-6" />
 
+    <section class="settings-group">
+      <h2 class="text-h6 mb-4">
+        AI Builder
+      </h2>
+      <v-row>
+        <v-col cols="12">
+          <v-combobox
+            v-model="aiAvailableModels"
+            label="Available models"
+            hint="These models are available in the model dropdown below."
+            persistent-hint
+            multiple
+            chips
+            closable-chips
+            clearable
+          />
+        </v-col>
+        <v-col cols="12" md="8">
+          <v-select
+            v-model="aiBuilderModel"
+            :items="aiAvailableModels"
+            label="Model"
+            hint="Used for AI campaign generation jobs."
+            persistent-hint
+          />
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-text-field
+            v-model.number="aiBuilderTimeoutSeconds"
+            label="Timeout (seconds)"
+            type="number"
+            min="30"
+            max="900"
+            hint="Allowed range: 30 to 900 seconds."
+            persistent-hint
+          />
+        </v-col>
+      </v-row>
+      <v-row>
+        <v-col cols="12" md="4" class="d-flex align-end">
+          <v-btn
+            color="primary"
+            variant="outlined"
+            block
+            :loading="isSavingAIModel"
+            :disabled="!aiBuilderModel || !isValidAIBuilderTimeout || !hasAvailableModels"
+            @click="saveAIBuilderModel"
+          >
+            Save AI Settings
+          </v-btn>
+        </v-col>
+      </v-row>
+    </section>
+
+    <v-divider class="my-6" />
+
     <v-select
       v-model="data['app.lang']"
       :items="serverConfig.langs"
@@ -196,7 +252,79 @@ export default {
   data() {
     return {
       data: this.form,
+      aiBuilderModel: '',
+      aiBuilderTimeoutSeconds: 180,
+      isSavingAIModel: false,
+      aiAvailableModels: ['gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.4'],
     };
+  },
+
+  methods: {
+    sanitizeModelList(models) {
+      const input = Array.isArray(models) ? models : [];
+      const seen = new Set();
+      const out = [];
+
+      input.forEach((name) => {
+        const cleaned = String(name || '').trim();
+        if (!cleaned || seen.has(cleaned)) {
+          return;
+        }
+        seen.add(cleaned);
+        out.push(cleaned);
+      });
+
+      return out;
+    },
+    async loadAIBuilderSettings() {
+      try {
+        const out = await this.$api.getAIBuilderSettings();
+        const available = this.sanitizeModelList(out?.availableModels);
+        this.aiAvailableModels = available.length > 0 ? available : ['gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.4'];
+        this.aiBuilderModel = out?.model || this.aiAvailableModels[0];
+        if (!this.aiAvailableModels.includes(this.aiBuilderModel)) {
+          this.aiBuilderModel = this.aiAvailableModels[0];
+        }
+        this.aiBuilderTimeoutSeconds = Number(out?.timeoutSeconds || 180);
+      } catch {
+        this.aiAvailableModels = ['gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.4'];
+        this.aiBuilderModel = 'gpt-5.4-mini';
+        this.aiBuilderTimeoutSeconds = 180;
+      }
+    },
+    async saveAIBuilderModel() {
+      if (!this.aiBuilderModel) {
+        return;
+      }
+      const availableModels = this.sanitizeModelList(this.aiAvailableModels);
+      if (availableModels.length === 0) {
+        this.$utils.toast('Add at least one available model.', 'is-danger');
+        return;
+      }
+      if (!availableModels.includes(this.aiBuilderModel)) {
+        this.aiBuilderModel = availableModels[0];
+      }
+      if (!this.isValidAIBuilderTimeout) {
+        this.$utils.toast('Timeout must be between 30 and 900 seconds.', 'is-danger');
+        return;
+      }
+      this.isSavingAIModel = true;
+      try {
+        await this.$api.updateAIBuilderSettings({
+          model: this.aiBuilderModel,
+          timeoutSeconds: Number(this.aiBuilderTimeoutSeconds),
+          availableModels,
+        });
+        this.aiAvailableModels = availableModels;
+        this.$utils.toast('AI Builder settings updated.');
+      } finally {
+        this.isSavingAIModel = false;
+      }
+    },
+  },
+
+  mounted() {
+    this.loadAIBuilderSettings();
   },
 
   computed: {
@@ -213,6 +341,13 @@ export default {
           .filter(Boolean)
           .filter((email, index, all) => all.indexOf(email) === index);
       },
+    },
+    isValidAIBuilderTimeout() {
+      const value = Number(this.aiBuilderTimeoutSeconds);
+      return Number.isFinite(value) && value >= 30 && value <= 900;
+    },
+    hasAvailableModels() {
+      return this.sanitizeModelList(this.aiAvailableModels).length > 0;
     },
   },
 };
