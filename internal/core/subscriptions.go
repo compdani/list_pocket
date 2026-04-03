@@ -48,7 +48,7 @@ func nullStringFrom(v string) null.String {
 
 // AddSubscriptions adds list subscriptions to subscribers.
 func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
-	if err := c.addSubscriptionsSQLite(subIDs, listIDs, status); err != nil {
+	if _, err := c.addSubscriptionsSQLite(subIDs, listIDs, status); err != nil {
 		c.log.Printf("error adding subscriptions: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -59,25 +59,26 @@ func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
 
 // AddSubscriptionsByQuery adds list subscriptions to subscribers by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
-func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, status string, subStatus string) error {
+func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, status string, subStatus string) (int, error) {
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
+		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
-	if err := c.addSubscriptionsSQLite(subIDs, targetListIDs, status); err != nil {
+	affected, err := c.addSubscriptionsSQLite(subIDs, targetListIDs, status)
+	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
+		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
-	return nil
+	return affected, nil
 }
 
 // DeleteSubscriptions delete list subscriptions from subscribers.
 func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
-	if err := c.deleteSubscriptionsSQLite(subIDs, listIDs); err != nil {
+	if _, err := c.deleteSubscriptionsSQLite(subIDs, listIDs); err != nil {
 		c.log.Printf("error deleting subscriptions: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -89,20 +90,21 @@ func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
 
 // DeleteSubscriptionsByQuery deletes list subscriptions from subscribers by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
-func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) error {
+func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) (int, error) {
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
+		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
-	if err := c.deleteSubscriptionsSQLite(subIDs, targetListIDs); err != nil {
+	affected, err := c.deleteSubscriptionsSQLite(subIDs, targetListIDs)
+	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
+		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
-	return nil
+	return affected, nil
 }
 
 // UnsubscribeLists sets list subscriptions to 'unsubscribed'.
@@ -140,7 +142,7 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 		deduped = append(deduped, id)
 	}
 
-	if err := c.unsubscribeSubscriptionsSQLite(subIDs, deduped); err != nil {
+	if _, err := c.unsubscribeSubscriptionsSQLite(subIDs, deduped); err != nil {
 		c.log.Printf("error unsubscribing from lists: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -150,20 +152,21 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 
 // UnsubscribeListsByQuery sets list subscriptions to 'unsubscribed' by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
-func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) error {
+func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) (int, error) {
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
+		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
-	if err := c.unsubscribeSubscriptionsSQLite(subIDs, targetListIDs); err != nil {
+	affected, err := c.unsubscribeSubscriptionsSQLite(subIDs, targetListIDs)
+	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
+		return 0, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
-	return nil
+	return affected, nil
 }
 
 // DeleteUnconfirmedSubscriptions sets list subscriptions to 'unsubscribed' by a given arbitrary query expression.
@@ -184,10 +187,12 @@ func (c *Core) DeleteUnconfirmedSubscriptions(beforeDate time.Time) (int, error)
 	return int(n), nil
 }
 
-func (c *Core) addSubscriptionsSQLite(subIDs, listIDs []int, status string) error {
+func (c *Core) addSubscriptionsSQLite(subIDs, listIDs []int, status string) (int, error) {
 	if len(subIDs) == 0 || len(listIDs) == 0 {
-		return nil
+		return 0, nil
 	}
+
+	affected := 0
 
 	for i := 0; i < len(subIDs); i += 300 {
 		end := i + 300
@@ -203,8 +208,8 @@ func (c *Core) addSubscriptionsSQLite(subIDs, listIDs []int, status string) erro
 			       (strftime('%Y-%m-%d %H:%M:%fZ'))
 			FROM subscribers s
 			CROSS JOIN lists l
-			WHERE s.id IN (` + sqlitePlaceholders(len(chunk)) + `)
-			  AND l.id IN (` + sqlitePlaceholders(len(listIDs)) + `)
+			WHERE s.rowid IN (` + sqlitePlaceholders(len(chunk)) + `)
+			  AND l.rowid IN (` + sqlitePlaceholders(len(listIDs)) + `)
 			ON CONFLICT (subscriber_id, list_id) DO NOTHING
 		`
 
@@ -217,18 +222,24 @@ func (c *Core) addSubscriptionsSQLite(subIDs, listIDs []int, status string) erro
 			args = append(args, id)
 		}
 
-		if _, err := c.db.Exec(q, args...); err != nil {
-			return err
+		res, err := c.db.Exec(q, args...)
+		if err != nil {
+			return 0, err
 		}
+
+		n, _ := res.RowsAffected()
+		affected += int(n)
 	}
 
-	return nil
+	return affected, nil
 }
 
-func (c *Core) deleteSubscriptionsSQLite(subIDs, listIDs []int) error {
+func (c *Core) deleteSubscriptionsSQLite(subIDs, listIDs []int) (int, error) {
 	if len(subIDs) == 0 || len(listIDs) == 0 {
-		return nil
+		return 0, nil
 	}
+
+	affected := 0
 
 	for i := 0; i < len(subIDs); i += 400 {
 		end := i + 400
@@ -238,8 +249,12 @@ func (c *Core) deleteSubscriptionsSQLite(subIDs, listIDs []int) error {
 		chunk := subIDs[i:end]
 
 		q := `DELETE FROM subscriber_lists
-			WHERE subscriber_id IN (` + sqlitePlaceholders(len(chunk)) + `)
-			  AND list_id IN (` + sqlitePlaceholders(len(listIDs)) + `)`
+			WHERE subscriber_id IN (
+				SELECT id FROM subscribers WHERE rowid IN (` + sqlitePlaceholders(len(chunk)) + `)
+			)
+			  AND list_id IN (
+				SELECT id FROM lists WHERE rowid IN (` + sqlitePlaceholders(len(listIDs)) + `)
+			)`
 
 		args := make([]any, 0, len(chunk)+len(listIDs))
 		for _, id := range chunk {
@@ -249,18 +264,24 @@ func (c *Core) deleteSubscriptionsSQLite(subIDs, listIDs []int) error {
 			args = append(args, id)
 		}
 
-		if _, err := c.db.Exec(q, args...); err != nil {
-			return err
+		res, err := c.db.Exec(q, args...)
+		if err != nil {
+			return 0, err
 		}
+
+		n, _ := res.RowsAffected()
+		affected += int(n)
 	}
 
-	return nil
+	return affected, nil
 }
 
-func (c *Core) unsubscribeSubscriptionsSQLite(subIDs, listIDs []int) error {
+func (c *Core) unsubscribeSubscriptionsSQLite(subIDs, listIDs []int) (int, error) {
 	if len(subIDs) == 0 || len(listIDs) == 0 {
-		return nil
+		return 0, nil
 	}
+
+	affected := 0
 
 	for i := 0; i < len(subIDs); i += 400 {
 		end := i + 400
@@ -272,8 +293,12 @@ func (c *Core) unsubscribeSubscriptionsSQLite(subIDs, listIDs []int) error {
 		q := `UPDATE subscriber_lists
 			SET status='unsubscribed',
 			    updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE subscriber_id IN (` + sqlitePlaceholders(len(chunk)) + `)
-			  AND list_id IN (` + sqlitePlaceholders(len(listIDs)) + `)`
+			WHERE subscriber_id IN (
+				SELECT id FROM subscribers WHERE rowid IN (` + sqlitePlaceholders(len(chunk)) + `)
+			)
+			  AND list_id IN (
+				SELECT id FROM lists WHERE rowid IN (` + sqlitePlaceholders(len(listIDs)) + `)
+			)`
 
 		args := make([]any, 0, len(chunk)+len(listIDs))
 		for _, id := range chunk {
@@ -283,10 +308,14 @@ func (c *Core) unsubscribeSubscriptionsSQLite(subIDs, listIDs []int) error {
 			args = append(args, id)
 		}
 
-		if _, err := c.db.Exec(q, args...); err != nil {
-			return err
+		res, err := c.db.Exec(q, args...)
+		if err != nil {
+			return 0, err
 		}
+
+		n, _ := res.RowsAffected()
+		affected += int(n)
 	}
 
-	return nil
+	return affected, nil
 }
