@@ -464,7 +464,7 @@ installLegacyUIStyles();
 
 app.config.globalProperties.$api = api;
 app.config.globalProperties.$utils = sharedUtils;
-app.config.globalProperties.$events = null;
+app.config.globalProperties.$events = eventBus;
 app.config.globalProperties.$t = i18n.global.t;
 app.config.globalProperties.$tc = i18n.global.tc;
 app.config.globalProperties.$can = () => false;
