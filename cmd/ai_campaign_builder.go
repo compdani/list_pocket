@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -41,13 +43,23 @@ type aiBuilderCurrent struct {
 	TemplateID string `json:"templateId"`
 }
 
+// aiBuilderStatusAttachment is optional context for the model (briefs, screenshots, PDFs, etc.).
+// Binary payloads are base64 (no data: URL prefix). The server forwards them to OpenAI via the
+// Responses API (input_file / input_image) without parsing document contents.
+type aiBuilderStatusAttachment struct {
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	Data     string `json:"data"`
+}
+
 type aiBuilderGenerateReq struct {
-	Context        aiBuilderContext `json:"context"`
-	Current        aiBuilderCurrent `json:"current"`
-	Instructions   string           `json:"instructions"`
-	SystemPrompt   string           `json:"systemPrompt,omitempty"`
-	Model          string           `json:"model,omitempty"`
-	TimeoutSeconds int              `json:"timeoutSeconds,omitempty"`
+	Context           aiBuilderContext            `json:"context"`
+	Current           aiBuilderCurrent            `json:"current"`
+	Instructions      string                      `json:"instructions"`
+	StatusAttachments []aiBuilderStatusAttachment `json:"statusAttachments,omitempty"`
+	SystemPrompt      string                      `json:"systemPrompt,omitempty"`
+	Model             string                      `json:"model,omitempty"`
+	TimeoutSeconds    int                         `json:"timeoutSeconds,omitempty"`
 }
 
 type aiBuilderResult struct {
@@ -107,7 +119,7 @@ func newAIBuilderService(provider aiBuilderProvider, log loggerLike) *aiBuilderS
 }
 
 func (s *aiBuilderService) Submit(req aiBuilderGenerateReq) (*aiBuilderJob, error) {
-	if err := validateAIBuilderReq(req); err != nil {
+	if err := validateAIBuilderReq(&req); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +143,7 @@ func (s *aiBuilderService) Submit(req aiBuilderGenerateReq) (*aiBuilderJob, erro
 	s.jobs[job.ID] = job
 	s.mu.Unlock()
 
-	s.logf("ai builder job queued id=%s origin=%s editor_mode=%s content_type=%s model=%s timeout_s=%d instructions_len=%d body_len=%d",
+	s.logf("ai builder job queued id=%s origin=%s editor_mode=%s content_type=%s model=%s timeout_s=%d instructions_len=%d body_len=%d status_attachments=%d",
 		job.ID,
 		strings.TrimSpace(req.Context.Origin),
 		strings.TrimSpace(req.Context.EditorMode),
@@ -140,6 +152,7 @@ func (s *aiBuilderService) Submit(req aiBuilderGenerateReq) (*aiBuilderJob, erro
 		req.TimeoutSeconds,
 		len(req.Instructions),
 		len(req.Current.Body),
+		len(req.StatusAttachments),
 	)
 
 	select {
@@ -301,7 +314,7 @@ func cloneAIBuilderJob(in *aiBuilderJob) *aiBuilderJob {
 	return &out
 }
 
-func validateAIBuilderReq(req aiBuilderGenerateReq) error {
+func validateAIBuilderReq(req *aiBuilderGenerateReq) error {
 	req.Context.Origin = strings.TrimSpace(req.Context.Origin)
 	req.Context.ContentType = strings.TrimSpace(req.Context.ContentType)
 	req.Context.EditorMode = strings.TrimSpace(req.Context.EditorMode)
@@ -324,7 +337,101 @@ func validateAIBuilderReq(req aiBuilderGenerateReq) error {
 	if len(req.Current.Body) > 250000 {
 		return errors.New("current content is too large")
 	}
+	return validateAIBuilderStatusAttachments(req)
+}
+
+const (
+	aiBuilderMaxStatusAttachments      = 12
+	aiBuilderMaxStatusAttachmentBytes  = 6 << 20  // per file
+	aiBuilderMaxStatusAttachmentsTotal = 20 << 20 // decoded bytes across all files
+)
+
+func validateAIBuilderStatusAttachments(req *aiBuilderGenerateReq) error {
+	if len(req.StatusAttachments) == 0 {
+		return nil
+	}
+	if len(req.StatusAttachments) > aiBuilderMaxStatusAttachments {
+		return fmt.Errorf("too many status attachments (max %d)", aiBuilderMaxStatusAttachments)
+	}
+	total := 0
+	for i := range req.StatusAttachments {
+		a := &req.StatusAttachments[i]
+		a.Filename = filepath.Base(strings.TrimSpace(a.Filename))
+		if a.Filename == "" || a.Filename == "." {
+			return fmt.Errorf("status attachment %d: filename is required", i+1)
+		}
+		if len(a.Filename) > 240 {
+			return fmt.Errorf("status attachment %d: filename too long", i+1)
+		}
+		raw := strings.TrimSpace(a.Data)
+		raw = strings.ReplaceAll(raw, "\n", "")
+		raw = strings.ReplaceAll(raw, "\r", "")
+		a.Data = raw
+		if raw == "" {
+			return fmt.Errorf("status attachment %d: empty data", i+1)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil {
+			return fmt.Errorf("status attachment %d: invalid base64", i+1)
+		}
+		n := len(decoded)
+		if n > aiBuilderMaxStatusAttachmentBytes {
+			return fmt.Errorf("status attachment %d exceeds max size (%d MiB)", i+1, aiBuilderMaxStatusAttachmentBytes>>20)
+		}
+		total += n
+		if total > aiBuilderMaxStatusAttachmentsTotal {
+			return fmt.Errorf("status attachments exceed combined max size (%d MiB)", aiBuilderMaxStatusAttachmentsTotal>>20)
+		}
+		mime := normalizeAIBuilderStatusMIME(a.Filename, strings.TrimSpace(a.MimeType))
+		if mime == "" {
+			return fmt.Errorf("status attachment %q: unsupported type (use images, PDF, txt, rtf, or Word docx)", a.Filename)
+		}
+		a.MimeType = mime
+	}
 	return nil
+}
+
+func normalizeAIBuilderStatusMIME(filename, declared string) string {
+	d := strings.TrimSpace(strings.ToLower(declared))
+	switch d {
+	case "image/jpeg", "image/jpg":
+		return "image/jpeg"
+	case "image/png", "image/gif", "image/webp":
+		return d
+	case "text/plain":
+		return "text/plain"
+	case "text/rtf", "application/rtf":
+		return "application/rtf"
+	case "application/pdf":
+		return "application/pdf"
+	case "application/msword":
+		return "application/msword"
+	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".txt":
+		return "text/plain"
+	case ".rtf":
+		return "application/rtf"
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	default:
+		return ""
+	}
 }
 
 func normalizeAIBuilderResult(res *aiBuilderResult, req aiBuilderGenerateReq) {
@@ -363,6 +470,61 @@ func newAIBuilderProvider() aiBuilderProvider {
 	return &aiBuilderOpenAIProvider{apiKey: apiKey, model: model, baseURL: baseURL}
 }
 
+func aiBuilderOpenAIResultSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"subject":     map[string]any{"type": "string"},
+			"preheader":   map[string]any{"type": "string"},
+			"contentType": map[string]any{"type": "string"},
+			"body":        map[string]any{"type": "string"},
+			"notes":       map[string]any{"type": "string"},
+		},
+		"required":             []string{"subject", "preheader", "contentType", "body", "notes"},
+		"additionalProperties": false,
+	}
+}
+
+func aiBuilderOpenAIJSONResponseFormat() map[string]any {
+	return map[string]any{
+		"type": "json_schema",
+		"json_schema": map[string]any{
+			"name":   "campaign_builder_result",
+			"strict": true,
+			"schema": aiBuilderOpenAIResultSchema(),
+		},
+	}
+}
+
+// aiBuilderOpenAIResponsesTextFormat is the text.format object for POST /v1/responses.
+// Responses expect name/schema on format itself; chat/completions nests them under json_schema.
+func aiBuilderOpenAIResponsesTextFormat() map[string]any {
+	return map[string]any{
+		"type":   "json_schema",
+		"name":   "campaign_builder_result",
+		"strict": true,
+		"schema": aiBuilderOpenAIResultSchema(),
+	}
+}
+
+func aiBuilderUserPayload(req aiBuilderGenerateReq) map[string]any {
+	return map[string]any{
+		"context":      req.Context,
+		"current":      req.Current,
+		"instructions": req.Instructions,
+		"rules": []string{
+			"contentType must match the editor context unless there is a critical reason.",
+			"For visual or grapes_mjml contentType, put source JSON/MJML in body.",
+			"Return concise subject and preheader.",
+			"Reference files (if any) are separate from campaign image URLs; use them only as context.",
+		},
+	}
+}
+
+func openAIDataURL(mime, b64 string) string {
+	return "data:" + mime + ";base64," + strings.TrimSpace(b64)
+}
+
 func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGenerateReq) (aiBuilderResult, error) {
 	system := strings.TrimSpace(req.SystemPrompt)
 	if system == "" {
@@ -376,46 +538,28 @@ func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGen
 		model = defaultAIBuilderModel
 	}
 	start := time.Now()
-	user := map[string]any{
-		"context":      req.Context,
-		"current":      req.Current,
-		"instructions": req.Instructions,
-		"rules": []string{
-			"contentType must match the editor context unless there is a critical reason.",
-			"For visual or grapes_mjml contentType, put source JSON/MJML in body.",
-			"Return concise subject and preheader.",
-		},
+	if len(req.StatusAttachments) > 0 {
+		return p.generateOpenAIResponses(ctx, req, system, model, start)
 	}
+	return p.generateOpenAIChatCompletions(ctx, req, system, model, start)
+}
 
+func (p *aiBuilderOpenAIProvider) generateOpenAIChatCompletions(ctx context.Context, req aiBuilderGenerateReq, system, model string, start time.Time) (aiBuilderResult, error) {
+	user := aiBuilderUserPayload(req)
 	payload := map[string]any{
 		"model": model,
 		"messages": []map[string]string{
 			{"role": "system", "content": system},
 			{"role": "user", "content": toJSONString(user)},
 		},
-		"response_format": map[string]any{
-			"type": "json_schema",
-			"json_schema": map[string]any{
-				"name":   "campaign_builder_result",
-				"strict": true,
-				"schema": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"subject":     map[string]any{"type": "string"},
-						"preheader":   map[string]any{"type": "string"},
-						"contentType": map[string]any{"type": "string"},
-						"body":        map[string]any{"type": "string"},
-						"notes":       map[string]any{"type": "string"},
-					},
-					"required":             []string{"subject", "preheader", "contentType", "body", "notes"},
-					"additionalProperties": false,
-				},
-			},
-		},
+		"response_format": aiBuilderOpenAIJSONResponseFormat(),
 	}
+	return p.doOpenAIChatCompletion(ctx, payload, start)
+}
 
+func (p *aiBuilderOpenAIProvider) doOpenAIChatCompletion(ctx context.Context, payload map[string]any, start time.Time) (aiBuilderResult, error) {
 	b, _ := json.Marshal(payload)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/chat/completions", bytes.NewReader(b))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(p.baseURL, "/")+"/chat/completions", bytes.NewReader(b))
 	if err != nil {
 		return aiBuilderResult{}, err
 	}
@@ -460,6 +604,123 @@ func (p *aiBuilderOpenAIProvider) Generate(ctx context.Context, req aiBuilderGen
 	return result, nil
 }
 
+func (p *aiBuilderOpenAIProvider) generateOpenAIResponses(ctx context.Context, req aiBuilderGenerateReq, system, model string, start time.Time) (aiBuilderResult, error) {
+	user := aiBuilderUserPayload(req)
+	textPayload := toJSONString(user)
+	parts := []any{
+		map[string]any{"type": "input_text", "text": textPayload},
+	}
+	for _, att := range req.StatusAttachments {
+		filename := att.Filename
+		if filename == "" {
+			filename = "attachment"
+		}
+		mime := att.MimeType
+		if strings.HasPrefix(mime, "image/") {
+			// Responses API expects image_url as a string (URL or data: URL), not { "url": "..." }.
+			parts = append(parts, map[string]any{
+				"type":      "input_image",
+				"image_url": openAIDataURL(mime, att.Data),
+			})
+			continue
+		}
+		parts = append(parts, map[string]any{
+			"type":      "input_file",
+			"filename":  filename,
+			"file_data": openAIDataURL(mime, att.Data),
+		})
+	}
+
+	payload := map[string]any{
+		"model":        model,
+		"instructions": system,
+		"input": []any{
+			map[string]any{
+				"role":    "user",
+				"content": parts,
+			},
+		},
+		"text": map[string]any{
+			"format": aiBuilderOpenAIResponsesTextFormat(),
+		},
+	}
+
+	b, _ := json.Marshal(payload)
+	url := strings.TrimSuffix(p.baseURL, "/") + "/responses"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return aiBuilderResult{}, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
+			return aiBuilderResult{}, fmt.Errorf("provider timeout after %dms: %w", time.Since(start).Milliseconds(), err)
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() == context.Canceled {
+			return aiBuilderResult{}, fmt.Errorf("provider request canceled after %dms: %w", time.Since(start).Milliseconds(), err)
+		}
+		return aiBuilderResult{}, err
+	}
+	defer resp.Body.Close()
+
+	out, _ := io.ReadAll(io.LimitReader(resp.Body, 2_000_000))
+	if resp.StatusCode >= 300 {
+		return aiBuilderResult{}, fmt.Errorf("responses API returned %d after %dms: %s (reference files need a provider that supports POST /v1/responses)", resp.StatusCode, time.Since(start).Milliseconds(), string(out))
+	}
+
+	content, err := parseOpenAIResponsesOutputText(out)
+	if err != nil {
+		return aiBuilderResult{}, err
+	}
+	var result aiBuilderResult
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return aiBuilderResult{}, fmt.Errorf("invalid provider JSON: %w", err)
+	}
+	return result, nil
+}
+
+func parseOpenAIResponsesOutputText(body []byte) (string, error) {
+	var envelope struct {
+		Output     []map[string]any `json:"output"`
+		OutputText string           `json:"output_text"`
+		Error      *struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return "", err
+	}
+	if envelope.Error != nil && strings.TrimSpace(envelope.Error.Message) != "" {
+		return "", errors.New(envelope.Error.Message)
+	}
+	if t := strings.TrimSpace(envelope.OutputText); t != "" {
+		return t, nil
+	}
+	for _, item := range envelope.Output {
+		if item == nil || item["type"] != "message" {
+			continue
+		}
+		content, _ := item["content"].([]any)
+		for _, block := range content {
+			cm, ok := block.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cm["type"] != "output_text" {
+				continue
+			}
+			if text, ok := cm["text"].(string); ok && strings.TrimSpace(text) != "" {
+				return strings.TrimSpace(text), nil
+			}
+		}
+	}
+	return "", errors.New("no model output text in Responses API payload")
+}
+
 type aiBuilderFallbackProvider struct{}
 
 func (aiBuilderFallbackProvider) Generate(_ context.Context, req aiBuilderGenerateReq) (aiBuilderResult, error) {
@@ -480,12 +741,16 @@ func (aiBuilderFallbackProvider) Generate(_ context.Context, req aiBuilderGenera
 		preheader = "A quick preview of what is inside."
 	}
 
+	notes := "Generated with fallback provider because LISTPOCKET_AI_API_KEY is not configured."
+	if len(req.StatusAttachments) > 0 {
+		notes += " Reference files were not sent to the model."
+	}
 	return aiBuilderResult{
 		Subject:     subject,
 		Preheader:   preheader,
 		ContentType: ct,
 		Body:        body,
-		Notes:       "Generated with fallback provider because LISTPOCKET_AI_API_KEY is not configured.",
+		Notes:       notes,
 	}, nil
 }
 

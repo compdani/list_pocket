@@ -166,6 +166,7 @@ export default {
       accountMenuOpen: false,
       drawer: true,
       rail: false,
+      railBeforeAI: undefined,
       eventsTopic: 'events/error',
       windowWidth: window.innerWidth,
     };
@@ -238,6 +239,20 @@ export default {
       this.$events.$emit('page.refresh');
     },
 
+    onAIPanel(open) {
+      if (open) {
+        if (this.railBeforeAI === undefined) {
+          this.railBeforeAI = this.rail;
+        }
+        this.rail = true;
+        return;
+      }
+      if (this.railBeforeAI !== undefined) {
+        this.rail = this.railBeforeAI;
+        this.railBeforeAI = undefined;
+      }
+    },
+
     reloadApp() {
       this.$api.reloadApp().then(() => {
         this.$utils.toast('Reloading app ...');
@@ -288,12 +303,14 @@ export default {
   mounted() {
     this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
     window.addEventListener('resize', this.onResize);
+    this.$events.$on('layout.aiPanel', this.onAIPanel);
     this.listenEvents();
   },
 
   beforeUnmount() {
     pb.realtime.unsubscribe(this.eventsTopic);
     window.removeEventListener('resize', this.onResize);
+    this.$events.$off('layout.aiPanel', this.onAIPanel);
   },
 
   created() {

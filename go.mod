@@ -11,6 +11,7 @@ require (
 	github.com/gofrs/uuid/v5 v5.3.2
 	github.com/gorilla/feeds v1.2.0
 	github.com/jmoiron/sqlx v1.4.0
+	github.com/joho/godotenv v1.5.1
 	github.com/knadh/go-pop3 v1.0.0
 	github.com/knadh/koanf/maps v0.1.2
 	github.com/knadh/koanf/parsers/toml v0.1.0
@@ -37,10 +38,7 @@ require (
 	gopkg.in/volatiletech/null.v6 v6.0.0-20170828023728-0bef4e07ae1b
 )
 
-require (
-	github.com/joho/godotenv v1.5.1 // indirect
-	golang.org/x/oauth2 v0.35.0 // indirect
-)
+require golang.org/x/oauth2 v0.35.0 // indirect
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

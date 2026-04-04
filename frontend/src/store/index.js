@@ -1,7 +1,12 @@
 import { createStore } from 'vuex';
 import { models } from '../constants';
+import aiCampaignBuilderThreads from './modules/aiCampaignBuilderThreads';
 
 export default createStore({
+  modules: {
+    aiCampaignBuilderThreads,
+  },
+
   state: {
     ...Object.keys(models).reduce((obj, cur) => ({ ...obj, [cur]: [] }), {}),
     loading: Object.keys(models).reduce((obj, cur) => ({ ...obj, [cur]: false }), {}),
