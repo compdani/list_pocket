@@ -4,6 +4,7 @@
       v-if="$root.isLoaded"
       v-model="drawer"
       :rail="!isMobile && rail"
+      :rail-width="72"
       :expand-on-hover="!isMobile && rail"
       :temporary="isMobile"
       :permanent="!isMobile"
@@ -331,6 +332,10 @@ export default {
 
 .app-drawer .v-navigation-drawer__content {
   padding: 16px 12px;
+}
+
+.app-drawer.v-navigation-drawer--rail .v-navigation-drawer__content {
+  padding: 12px 6px;
 }
 
 .app-drawer-brand {
