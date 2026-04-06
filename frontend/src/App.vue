@@ -4,6 +4,7 @@
       v-if="$root.isLoaded"
       v-model="drawer"
       :rail="!isMobile && rail"
+      :expand-on-hover="!isMobile && rail"
       :temporary="isMobile"
       :permanent="!isMobile"
       width="280"
