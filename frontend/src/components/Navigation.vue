@@ -25,18 +25,18 @@
         <v-menu
           v-else
           :key="`rail-${item.key}`"
-          location="right start"
+          :activator="`#rail-nav-item-${item.key}`"
+          location="end"
+          origin="start top"
           offset="8"
         >
-          <template #activator="{ props: menuProps }">
-            <v-list-item
-              v-bind="menuProps"
-              :active="item.children.some((child) => Boolean(activeItem[child.key]))"
-              :prepend-icon="item.icon"
-              rounded="lg"
-              class="workflow-nav-rail-item"
-            />
-          </template>
+          <v-list-item
+            :id="`rail-nav-item-${item.key}`"
+            :active="item.children.some((child) => Boolean(activeItem[child.key]))"
+            :prepend-icon="item.icon"
+            rounded="lg"
+            class="workflow-nav-rail-item"
+          />
 
           <v-list min-width="220" density="comfortable">
             <v-list-subheader>{{ item.label }}</v-list-subheader>
