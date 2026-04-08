@@ -387,6 +387,65 @@ export default {
   },
 
   methods: {
+    resetChartState() {
+      Object.keys(this.counts).forEach((k) => {
+        this.counts[k] = 0;
+      });
+
+      Object.keys(this.charts).forEach((k) => {
+        this.charts[k].data = null;
+        this.charts[k].donutData = null;
+        this.charts[k].loading = false;
+      });
+    },
+
+    fetchAnalyticsForSelection() {
+      const confirmedChartKey = this.serverConfig.privacy.individual_tracking ? 'viewsUnique' : 'views';
+      const allKeys = [...new Set([
+        ...this.analyticsChartKeys(),
+        ...this.openTrackingChartKeys(),
+        ...this.openTrackingCountKeys(),
+        confirmedChartKey,
+      ])];
+
+      allKeys.forEach((k) => {
+        this.getData(k, this.form.campaigns);
+      });
+    },
+
+    loadFromRouteQuery() {
+      const now = dayjs().set('hour', 23).set('minute', 59).set('seconds', 0);
+      const weekAgo = now.subtract(7, 'day').set('hour', 0).set('minute', 0);
+      const fromUnix = Number(this.$route.query.from);
+      const toUnix = Number(this.$route.query.to);
+      const from = Number.isFinite(fromUnix) && fromUnix > 0 ? dayjs.unix(fromUnix) : weekAgo;
+      const to = Number.isFinite(toUnix) && toUnix > 0 ? dayjs.unix(toUnix) : now;
+      this.form.from = from.toDate();
+      this.form.to = to.toDate();
+
+      const ids = this.$utils.parseQueryIDs(this.$route.query.id);
+      if (ids.length === 0) {
+        this.form.campaigns = [];
+        this.resetChartState();
+        this.ensureCampaignOptions();
+        return;
+      }
+
+      this.isSearchLoading = true;
+      Promise.allSettled(ids.map((id) => this.$api.getCampaign(id))).then((responses) => {
+        const selectedCampaigns = responses
+          .filter((r) => r.status === 'fulfilled')
+          .map((r) => this.formatCampaignOption(r.value));
+
+        this.form.campaigns = selectedCampaigns;
+        this.mergeCampaignOptions(selectedCampaigns);
+        this.resetChartState();
+        this.fetchAnalyticsForSelection();
+      }).finally(() => {
+        this.isSearchLoading = false;
+      });
+    },
+
     formatCampaignOption(campaign) {
       return {
         ...campaign,
@@ -578,7 +637,6 @@ export default {
         per_page: 20,
       }).then((data) => {
         const options = (data.results || []).map((c) => this.formatCampaignOption(c));
-        this.queriedCampaigns = [];
         this.mergeCampaignOptions([...this.form.campaigns, ...options]);
       }).finally(() => {
         this.isSearchLoading = false;
@@ -642,6 +700,15 @@ export default {
         return ['views', 'viewsUniqueTotal', 'viewsRaw', 'viewsUniqueRawTotal', 'viewsUniqueSuspectedTotal'];
       }
       return ['views', 'viewsRaw', 'viewsSuspected'];
+    },
+  },
+
+  watch: {
+    '$route.query': {
+      handler() {
+        this.loadFromRouteQuery();
+      },
+      immediate: true,
     },
   },
 
@@ -747,60 +814,6 @@ export default {
     },
   },
 
-  created() {
-    const now = dayjs().set('hour', 23).set('minute', 59).set('seconds', 0);
-    const weekAgo = now.subtract(7, 'day').set('hour', 0).set('minute', 0);
-    const fromUnix = Number(this.$route.query.from);
-    const toUnix = Number(this.$route.query.to);
-    const from = Number.isFinite(fromUnix) && fromUnix > 0 ? dayjs.unix(fromUnix) : weekAgo;
-    const to = Number.isFinite(toUnix) && toUnix > 0 ? dayjs.unix(toUnix) : now;
-    this.form.from = from.toDate();
-    this.form.to = to.toDate();
-  },
-
-  mounted() {
-    // Fetch one or more campaigns if there are ?id params, wait for the fetches
-    // to finish, add them to the campaign selector and submit the form.
-    const ids = this.$utils.parseQueryIDs(this.$route.query.id);
-    if (ids.length > 0) {
-      this.isSearchLoading = true;
-      Promise.allSettled(ids.map((id) => this.$api.getCampaign(id))).then((data) => {
-        data.forEach((d) => {
-          if (d.status !== 'fulfilled') {
-            return;
-          }
-
-          const camp = {
-            ...this.formatCampaignOption(d.value),
-          };
-          this.form.campaigns.push(camp);
-        });
-
-        this.$nextTick(() => {
-          this.isSearchLoading = false;
-          this.mergeCampaignOptions(this.form.campaigns);
-
-          // Fetch count for each analytics type (views, counts, bounces);
-          const confirmedChartKey = this.serverConfig.privacy.individual_tracking ? 'viewsUnique' : 'views';
-          const allKeys = [...new Set([
-            ...this.analyticsChartKeys(),
-            ...this.openTrackingChartKeys(),
-            ...this.openTrackingCountKeys(),
-            confirmedChartKey,
-          ])];
-          allKeys.forEach((k) => {
-            this.charts[k].data = null;
-            this.charts[k].donutData = null;
-
-            // Fetch views, clicks, bounces for every campaign.
-            this.getData(k, this.form.campaigns);
-          });
-        });
-      });
-    } else {
-      this.ensureCampaignOptions();
-    }
-  },
 };
 </script>
 
