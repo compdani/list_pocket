@@ -18,7 +18,10 @@
                 </p>
 
                 {{ if .Data.AllowPreferences }}
-                    <a href="?manage=true">{{ L.T "public.managePrefs" }}</a>
+                    <p class="manage-lists-wrap">
+                        <a class="button button-outline" href="?manage=true">{{ L.T "public.manageLists" }}</a>
+                    </p>
+                    <p class="manage-lists-hint">{{ L.T "public.manageListsHelp" }}</p>
                 {{ end }}
             </div>
         </form>

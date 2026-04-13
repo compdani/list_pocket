@@ -373,6 +373,8 @@
     "public.invalidCaptcha": "Invalid CAPTCHA.",
     "public.invalidFeature": "That feature is not available.",
     "public.invalidLink": "Invalid link",
+    "public.manageLists": "Manage lists",
+    "public.manageListsHelp": "Update your contact details and choose which public lists you’re on.",
     "public.managePrefs": "Manage preferences",
     "public.managePrefsUnsub": "Uncheck lists to unsubscribe from them.",
     "public.noListsAvailable": "No lists available to subscribe.",
