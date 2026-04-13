@@ -1182,7 +1182,7 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 		args = append(args, subStatus)
 	}
 	if listType != "" {
-		q += ` AND l.optin = ?`
+		q += ` AND l.type = ?`
 		args = append(args, listType)
 	}
 	q += ` ORDER BY l.id`

@@ -214,9 +214,13 @@ func (a *App) ViewCampaignMessage(c echo.Context) error {
 // This is the view that {{ UnsubscribeURL }} in campaigns link to.
 func (a *App) SubscriptionPage(c echo.Context) error {
 	var (
-		subUUID       = c.Param("subUUID")
-		showManage, _ = strconv.ParseBool(c.FormValue("manage"))
+		subUUID = c.Param("subUUID")
 	)
+	// Prefer query string (?manage=true) so the link from the unsubscribe page always works.
+	showManage, _ := strconv.ParseBool(c.QueryParam("manage"))
+	if !showManage {
+		showManage, _ = strconv.ParseBool(c.FormValue("manage"))
+	}
 
 	// Get the subscriber from the DB.
 	s, err := a.core.GetSubscriber(0, subUUID, "")
