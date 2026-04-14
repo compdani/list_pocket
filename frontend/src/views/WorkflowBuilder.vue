@@ -595,9 +595,10 @@ onBeforeUnmount(() => {
 
       <v-expansion-panels
         class="workflow-run-history-dock"
-        :model-value="runHistoryCollapsed ? null : 0"
+        :model-value="runHistoryCollapsed ? [] : [0]"
+        multiple
         variant="accordion"
-        @update:model-value="setRunHistoryExpanded($event === 0)"
+        @update:model-value="setRunHistoryExpanded(Array.isArray($event) && $event.includes(0))"
       >
         <v-expansion-panel>
           <v-expansion-panel-title>
