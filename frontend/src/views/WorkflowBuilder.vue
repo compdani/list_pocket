@@ -100,10 +100,12 @@ function toggleRunHistory() {
 
 function setRunHistoryExpanded(expanded) {
   const nextCollapsed = !expanded;
-  if (runHistoryCollapsed.value === nextCollapsed) {
-    return;
+  runHistoryCollapsed.value = nextCollapsed;
+  try {
+    window.localStorage.setItem(RUN_HISTORY_COLLAPSED_KEY, runHistoryCollapsed.value ? "1" : "0");
+  } catch (_error) {
+    /* ignore */
   }
-  toggleRunHistory();
 }
 
 watch(
@@ -593,9 +595,9 @@ onBeforeUnmount(() => {
 
       <v-expansion-panels
         class="workflow-run-history-dock"
-        :model-value="runHistoryCollapsed ? [] : [0]"
+        :model-value="runHistoryCollapsed ? null : 0"
         variant="accordion"
-        @update:model-value="setRunHistoryExpanded(Boolean($event?.length))"
+        @update:model-value="setRunHistoryExpanded($event === 0)"
       >
         <v-expansion-panel>
           <v-expansion-panel-title>
