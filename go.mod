@@ -39,9 +39,8 @@ require (
 )
 
 require (
-	github.com/chzyer/readline v1.5.1 // indirect
-	github.com/ianlancetaylor/demangle v0.0.0-20250417193237-f615e6bd150b // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 )
 
 require (
@@ -80,7 +79,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/image v0.39.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
