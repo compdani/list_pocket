@@ -52,10 +52,8 @@ const subscriberTagOptions = ref([]);
 const pendingCatalogTag = ref(null);
 const tagCatalogConfirmLoading = ref(false);
 const localMapDrafts = ref({});
-const localRichtextDrafts = ref({});
 let demoContactSearchTimer;
 let tagCatalogCheckTimer;
-let richtextSaveTimers = {};
 
 const sortedContacts = computed(() => [...props.contacts].sort((left, right) => String(left.fullName || left.email || "").localeCompare(String(right.fullName || right.email || ""))));
 const selectedDemoContactId = computed(() => String(configValue("demoContactId") ?? "").trim());
@@ -410,22 +408,11 @@ function configMapEntries(key) {
 }
 
 function richtextValue(key) {
-  if (Object.prototype.hasOwnProperty.call(localRichtextDrafts.value, key)) {
-    return localRichtextDrafts.value[key];
-  }
   return String(configValue(key) ?? "");
 }
 
 function queueRichtextSave(key, value) {
-  localRichtextDrafts.value = {
-    ...localRichtextDrafts.value,
-    [key]: value,
-  };
-
-  window.clearTimeout(richtextSaveTimers[key]);
-  richtextSaveTimers[key] = window.setTimeout(() => {
-    setDraftConfigValue(key, value);
-  }, 250);
+  setDraftConfigValue(key, value);
 }
 
 function mapEntries(key) {
@@ -530,7 +517,6 @@ watch(
     draftLabel.value = String(props.node?.data?.label ?? "");
     draftConfig.value = { ...(props.node?.data?.config ?? {}) };
     localMapDrafts.value = {};
-    localRichtextDrafts.value = {};
   },
   { immediate: true }
 );
@@ -571,8 +557,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.clearTimeout(demoContactSearchTimer);
   window.clearTimeout(tagCatalogCheckTimer);
-  Object.values(richtextSaveTimers).forEach((timer) => window.clearTimeout(timer));
-  richtextSaveTimers = {};
 });
 </script>
 
