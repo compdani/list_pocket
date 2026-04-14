@@ -1,6 +1,9 @@
 <script setup>
 /* eslint-disable */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import dayjs from "dayjs";
+import dayjsTimezone from "dayjs/plugin/timezone";
+import dayjsUtc from "dayjs/plugin/utc";
 import {
   ensureSubscriberTags,
   getSubscriber,
@@ -10,6 +13,22 @@ import {
   searchSubscribers,
 } from "../api";
 import RichtextEditor from "./RichtextEditor.vue";
+
+dayjs.extend(dayjsUtc);
+dayjs.extend(dayjsTimezone);
+
+function isValidIanaTimeZone(id) {
+  const trimmed = String(id ?? "").trim();
+  if (!trimmed) {
+    return false;
+  }
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: trimmed });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const props = defineProps({
   contacts: { type: Array, default: () => [] },
@@ -94,6 +113,48 @@ const showTagCatalogActions = computed(() => {
   }
   return pending === currentTagNameNormalized.value && !tagExistsInCatalog(pending);
 });
+
+const isEventStartNode = computed(() => props.node?.data?.type === "event_start");
+
+const eventStartTimezone = computed(() => {
+  const tz = String(configValue("timezone") ?? "").trim();
+  if (tz && isValidIanaTimeZone(tz)) {
+    return tz;
+  }
+  return "UTC";
+});
+
+const fallbackAtDatetimeLocal = computed(() => {
+  if (!isEventStartNode.value) {
+    return "";
+  }
+  const raw = String(configValue("fallbackAt") ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  const asUtc = dayjs.utc(raw);
+  if (!asUtc.isValid()) {
+    return "";
+  }
+  return asUtc.tz(eventStartTimezone.value).format("YYYY-MM-DDTHH:mm");
+});
+
+function isEventStartFallbackField(field) {
+  return props.node?.data?.type === "event_start" && field?.key === "fallbackAt";
+}
+
+function saveFallbackAtPicker(value) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    emit("save", "fallbackAt", "");
+    return;
+  }
+  const tz = eventStartTimezone.value;
+  const parsed = dayjs.tz(String(value).trim(), "YYYY-MM-DDTHH:mm", tz);
+  if (!parsed.isValid()) {
+    return;
+  }
+  emit("save", "fallbackAt", parsed.utc().format("YYYY-MM-DDTHH:mm:ss[Z]"));
+}
 
 function saveValue(key, event) {
   emit("save", key, event.target?.value ?? "");
@@ -586,6 +647,17 @@ onBeforeUnmount(() => {
           </div>
           <button type="button" class="ghost-button" @click="addMapEntry(field.key)">Add Field</button>
         </div>
+        <v-text-field
+          v-else-if="isEventStartFallbackField(field)"
+          :id="`node-field-${field.key}`"
+          :model-value="fallbackAtDatetimeLocal"
+          type="datetime-local"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          clearable
+          @update:model-value="saveFallbackAtPicker"
+        />
         <v-combobox
           v-else-if="field.key === 'tagName'"
           :id="`node-field-${field.key}`"
