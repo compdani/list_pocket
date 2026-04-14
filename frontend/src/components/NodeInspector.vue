@@ -392,18 +392,16 @@ function configMapEntries(key) {
   }));
 }
 
-function richtextValue(key) {
-  if (Object.prototype.hasOwnProperty.call(localRichtextDrafts.value, key)) {
-    return localRichtextDrafts.value[key];
+function buildRichtextDraftsForNode(node) {
+  if (!node?.data?.schema?.length) {
+    return {};
   }
-  return String(configValue(key) ?? "");
-}
 
-function queueRichtextSave(key, value) {
-  localRichtextDrafts.value = {
-    ...localRichtextDrafts.value,
-    [key]: value,
-  };
+  const draftEntries = node.data.schema
+    .filter((field) => field.kind === "richtext")
+    .map((field) => [field.key, String(node?.data?.config?.[field.key] ?? "")]);
+
+  return Object.fromEntries(draftEntries);
 }
 
 async function flushPendingChanges() {
@@ -512,7 +510,7 @@ watch(
   () => props.node?.id,
   () => {
     localMapDrafts.value = {};
-    localRichtextDrafts.value = {};
+    localRichtextDrafts.value = buildRichtextDraftsForNode(props.node);
   },
   { immediate: true }
 );
@@ -632,9 +630,8 @@ defineExpose({
         />
         <div v-else-if="field.kind === 'richtext'" class="richtext-field-wrap">
           <RichtextEditor
-            :model-value="richtextValue(field.key)"
+            v-model="localRichtextDrafts[field.key]"
             :preserve-go-template="true"
-            @update:model-value="queueRichtextSave(field.key, $event)"
           />
         </div>
         <div v-else-if="field.kind === 'kv_map'" class="map-field-editor">

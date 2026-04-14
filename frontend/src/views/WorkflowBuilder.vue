@@ -554,7 +554,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main v-if="authenticated" class="app-shell workflow-route">
+  <main v-if="authenticated" class="c-shell workflow-route">
     <section class="workspace-main workspace-main-wide workflow-editor-shell">
       <div class="workflow-editor-shell-top">
         <p v-if="error" class="workflow-editor-error" role="alert">
@@ -618,7 +618,7 @@ onBeforeUnmount(() => {
     </section>
   </main>
 
-  <main v-else class="app-shell workflow-route">
+  <main v-else class="c-shell workflow-route">
     <section class="login-card">
       <div class="panel-header">
         <span class="eyebrow">Workflow Control Plane</span>
@@ -643,20 +643,16 @@ onBeforeUnmount(() => {
   font: inherit;
 }
 
-.workflow-route .app-shell {
+.workflow-route .c-shell {
   min-height: 100vh;
-  padding: 16px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }
 
-main.workflow-route.app-shell {
-  padding: 8px 10px;
-}
 
-.workflow-route .workspace-main,
-.workflow-route .panel,
+
+.workflow-route .workflow-route .panel,
 .workflow-route .builder-shell,
 .workflow-route .login-card {
   border: 1px solid var(--wf-border);
@@ -727,7 +723,7 @@ main.workflow-route.app-shell {
 }
 
 .workflow-route .workspace-main-wide {
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
   width: 100%;
 }
@@ -1530,7 +1526,6 @@ main.workflow-route.app-shell {
 .workflow-route .login-card {
   max-width: 640px;
   margin: 48px auto 0;
-  padding: 24px;
 }
 
 @media (max-width: 1200px) {
@@ -1542,10 +1537,20 @@ main.workflow-route.app-shell {
 }
 
 @media (max-width: 760px) {
+  .workflow-route .workspace-main.workflow-editor-shell {
+    grid-template-rows: auto minmax(220px, 1fr) auto;
+    gap: 6px;
+    min-height: calc(100dvh - 84px);
+  }
+
+  .workflow-route .workflow-editor-shell > .builder-shell {
+    padding: 8px;
+    gap: 6px;
+  }
+
   .workflow-route .workspace-topbar,
   .workflow-route .builder-toolbar,
   .workflow-route .modal-header,
-  .workflow-route .toolbar-actions,
   .workflow-route .run-row,
   .workflow-route .workspace-session {
     flex-direction: column;
@@ -1557,10 +1562,31 @@ main.workflow-route.app-shell {
     align-items: flex-start;
   }
 
-  .workflow-route .toolbar-actions {
+  .workflow-route .workflow-editor-shell .toolbar-actions {
     grid-template-columns: 1fr;
     justify-content: stretch;
     width: 100%;
+  }
+
+  .workflow-route .workflow-editor-shell .builder-toolbar {
+    width: 100%;
+    gap: 8px;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+
+  .workflow-route .workflow-editor-shell .builder-heading,
+  .workflow-route .workflow-editor-shell .builder-editor-bar,
+  .workflow-route .workflow-editor-shell .builder-meta {
+    width: 100%;
+  }
+
+  .workflow-route .workflow-editor-shell .builder-heading {
+    flex: 0 0 auto;
+  }
+
+  .workflow-route .workflow-editor-shell .builder-meta {
+    gap: 6px;
   }
 
   .workflow-route .inspector-fields,
