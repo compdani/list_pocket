@@ -171,6 +171,7 @@ export default {
       richtextConf: {},
       richTextSourceBody: '',
       contentType: '',
+      localValue: '',
     };
   },
 
@@ -350,6 +351,7 @@ export default {
   },
 
   mounted() {
+    this.localValue = this.encodeEditorValue(this.modelValue);
     void this.initRichtextEditor();
   },
 
@@ -358,11 +360,21 @@ export default {
 
     computedValue: {
       get() {
-        return this.encodeEditorValue(this.modelValue);
+        return this.localValue;
       },
       set(newValue) {
+        this.localValue = newValue;
         this.$emit('update:modelValue', this.decodeEditorValue(newValue));
       },
+    },
+  },
+
+  watch: {
+    modelValue(nextValue) {
+      const encoded = this.encodeEditorValue(nextValue);
+      if (encoded !== this.localValue) {
+        this.localValue = encoded;
+      }
     },
   },
 };
