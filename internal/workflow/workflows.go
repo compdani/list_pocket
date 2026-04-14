@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -41,6 +42,8 @@ type workflowCreateRequest struct {
 type workflowRunRequest struct {
 	ContactID string `json:"contactId"`
 }
+
+const retainedWorkflowHistoryVersionsPerKey = 5
 
 func createWorkflowHandler(re *core.RequestEvent) error {
 	collection, err := re.App.FindCollectionByNameOrId("workflows")
@@ -155,12 +158,82 @@ func saveWorkflowHandler(re *core.RequestEvent) error {
 	if err := applyWorkflowMutation(re.App, workflow, req); err != nil {
 		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	if err := pruneWorkflowHistory(re.App, workflow.Id, retainedWorkflowHistoryVersionsPerKey); err != nil {
+		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
 
 	payload, err := buildDashboardPayload(re.App, workflow.Id)
 	if err != nil {
 		return re.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 	return re.JSON(http.StatusOK, payload)
+}
+
+func pruneWorkflowHistory(app core.App, workflowID string, retainPerKey int) error {
+	activeRuns, err := app.FindRecordsByFilter("workflow_runs", fmt.Sprintf(`workflow="%s" && (status="queued" || status="running" || status="waiting")`, workflowID), "", 1, 0)
+	if err != nil {
+		return err
+	}
+	if len(activeRuns) > 0 {
+		// Keep full graph history while any run is still in-flight.
+		return nil
+	}
+
+	if retainPerKey < 0 {
+		retainPerKey = 0
+	}
+	if err := pruneCollectionHistory(app, "workflow_nodes", "node_key", workflowID, retainPerKey); err != nil {
+		return err
+	}
+	if err := pruneCollectionHistory(app, "workflow_edges", "edge_key", workflowID, retainPerKey); err != nil {
+		return err
+	}
+	return nil
+}
+
+func pruneCollectionHistory(app core.App, collectionName string, keyField string, workflowID string, retainPerKey int) error {
+	records, err := app.FindRecordsByFilter(collectionName, fmt.Sprintf(`workflow="%s"`, workflowID), "", 10000, 0)
+	if err != nil {
+		return err
+	}
+
+	recordsByKey := make(map[string][]*core.Record, len(records))
+	for _, record := range records {
+		key := record.GetString(keyField)
+		if key == "" {
+			key = record.Id
+		}
+		recordsByKey[key] = append(recordsByKey[key], record)
+	}
+
+	for _, keyRecords := range recordsByKey {
+		nonCurrent := make([]*core.Record, 0, len(keyRecords))
+		for _, record := range keyRecords {
+			if !record.GetBool("is_current") {
+				nonCurrent = append(nonCurrent, record)
+			}
+		}
+		if len(nonCurrent) <= retainPerKey {
+			continue
+		}
+
+		sort.Slice(nonCurrent, func(i, j int) bool {
+			iv := nonCurrent[i].GetInt("version")
+			jv := nonCurrent[j].GetInt("version")
+			if iv != jv {
+				return iv > jv
+			}
+			return nonCurrent[i].Id > nonCurrent[j].Id
+		})
+
+		for _, stale := range nonCurrent[retainPerKey:] {
+			if err := app.Delete(stale); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func defaultWorkflowName(name string) string {
