@@ -75,8 +75,9 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 	}
 
 	var (
-		tpl models.Template
-		err error
+		tpl                 models.Template
+		err                 error
+		usingInlineTemplate bool
 	)
 	switch {
 	case req.TemplateLegacyID > 0:
@@ -88,7 +89,13 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 	case strings.TrimSpace(req.TemplateID) != "":
 		tpl, err = s.Core.GetTemplate(strings.TrimSpace(req.TemplateID), false)
 	default:
-		err = fmt.Errorf("template ID is required")
+		usingInlineTemplate = true
+		tpl = models.Template{
+			Name:    "Workflow inline template",
+			Type:    models.TemplateTypeTx,
+			Subject: strings.TrimSpace(req.Subject),
+			Body:    `{{ define "base" }}` + req.ContentTpl + `{{ end }}`,
+		}
 	}
 	if err != nil {
 		return models.TransactionalMessage{}, err
@@ -136,7 +143,7 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 	}
 
 	renderTpl := tpl
-	if strings.TrimSpace(req.ContentTpl) != "" {
+	if !usingInlineTemplate && strings.TrimSpace(req.ContentTpl) != "" {
 		renderTpl.Body = renderTpl.Body + `{{ define "content" }}` + req.ContentTpl + `{{ end }}`
 	}
 	if err := renderTpl.Compile(models.TxAliasTemplateFuncs(s.Manager.TxTemplateFuncs(&record), sub, &tx)); err != nil {
