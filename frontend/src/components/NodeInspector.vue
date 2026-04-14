@@ -473,12 +473,27 @@ function syncRichtextDraftsForNode(node, forceReset = false) {
 
   // Keep in-progress editor text stable for existing keys, only seed new keys.
   const mergedDrafts = {};
+  let hasChanges = false;
   Object.entries(nextDrafts).forEach(([key, value]) => {
-    mergedDrafts[key] = Object.prototype.hasOwnProperty.call(localRichtextDrafts.value, key)
-      ? localRichtextDrafts.value[key]
-      : value;
+    const hasLocalValue = Object.prototype.hasOwnProperty.call(localRichtextDrafts.value, key);
+    mergedDrafts[key] = hasLocalValue ? localRichtextDrafts.value[key] : value;
+    if (!hasLocalValue) {
+      hasChanges = true;
+    }
   });
-  localRichtextDrafts.value = mergedDrafts;
+
+  // Avoid replacing the draft object when schema keys did not change.
+  const previousKeys = Object.keys(localRichtextDrafts.value);
+  const nextKeys = Object.keys(mergedDrafts);
+  if (previousKeys.length !== nextKeys.length) {
+    hasChanges = true;
+  } else if (!hasChanges) {
+    hasChanges = previousKeys.some((key) => !Object.prototype.hasOwnProperty.call(mergedDrafts, key));
+  }
+
+  if (hasChanges) {
+    localRichtextDrafts.value = mergedDrafts;
+  }
 }
 
 async function flushPendingChanges() {

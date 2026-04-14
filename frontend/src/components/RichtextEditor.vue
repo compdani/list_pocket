@@ -1,6 +1,6 @@
 <template>
   <div class="richtext-editor" v-if="isRichtextReady">
-    <tiny-mce v-model="computedValue" :disabled="disabled" :init="richtextConf" license-key="gpl" />
+    <tiny-mce v-model="internalEditorValue" :disabled="disabled" :init="richtextConf" license-key="gpl" />
 
     <!-- Source code editor modal -->
     <v-dialog v-model="isRichtextSourceVisible" max-width="1200">
@@ -171,6 +171,9 @@ export default {
       richtextConf: {},
       richTextSourceBody: '',
       contentType: '',
+      internalEditorValue: '',
+      isSyncingEditorValue: false,
+      lastEmittedModelValue: null,
     };
   },
 
@@ -181,6 +184,23 @@ export default {
 
     decodeEditorValue(value) {
       return this.preserveGoTemplate ? decodeGoTemplates(value) : value;
+    },
+
+    syncInternalValueFromModel() {
+      const incomingModelValue = String(this.modelValue || '');
+      if (this.lastEmittedModelValue !== null && incomingModelValue === this.lastEmittedModelValue) {
+        this.lastEmittedModelValue = null;
+        return;
+      }
+      const encodedValue = this.encodeEditorValue(this.modelValue || '');
+      if (encodedValue === this.internalEditorValue) {
+        return;
+      }
+      this.isSyncingEditorValue = true;
+      this.internalEditorValue = encodedValue;
+      this.$nextTick(() => {
+        this.isSyncingEditorValue = false;
+      });
     },
 
     async initRichtextEditor() {
@@ -307,8 +327,15 @@ export default {
 
     onSaveRichTextSource() {
       const decoded = this.decodeEditorValue(this.richTextSourceBody);
-      this.computedValue = decoded;
-      window.tinymce.activeEditor?.setContent(this.encodeEditorValue(decoded));
+      const encoded = this.encodeEditorValue(decoded);
+      this.isSyncingEditorValue = true;
+      this.internalEditorValue = encoded;
+      this.lastEmittedModelValue = decoded;
+      this.$emit('update:modelValue', decoded);
+      window.tinymce.activeEditor?.setContent(encoded);
+      this.$nextTick(() => {
+        this.isSyncingEditorValue = false;
+      });
       this.richTextSourceBody = '';
       this.isRichtextSourceVisible = false;
     },
@@ -350,19 +377,30 @@ export default {
   },
 
   mounted() {
+    this.syncInternalValueFromModel();
     void this.initRichtextEditor();
   },
 
   computed: {
     ...mapState(['serverConfig']),
+  },
 
-    computedValue: {
-      get() {
-        return this.encodeEditorValue(this.modelValue);
-      },
-      set(newValue) {
-        this.$emit('update:modelValue', this.decodeEditorValue(newValue));
-      },
+  watch: {
+    modelValue() {
+      this.syncInternalValueFromModel();
+    },
+
+    internalEditorValue(newValue) {
+      if (this.isSyncingEditorValue) {
+        return;
+      }
+      const decodedNext = this.decodeEditorValue(newValue);
+      const decodedCurrent = this.decodeEditorValue(this.modelValue || '');
+      if (decodedNext === decodedCurrent) {
+        return;
+      }
+      this.lastEmittedModelValue = decodedNext;
+      this.$emit('update:modelValue', decodedNext);
     },
   },
 };
