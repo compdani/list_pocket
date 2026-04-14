@@ -35,6 +35,22 @@
             ref="query"
             data-cy="search"
           />
+          <v-combobox
+            v-model="queryParams.tags"
+            :items="campaignTagOptions"
+            :aria-label="$t('globals.terms.tags')"
+            :label="$t('globals.terms.tags')"
+            :placeholder="$t('globals.terms.tags')"
+            class="query-tags"
+            variant="outlined"
+            density="comfortable"
+            multiple
+            chips
+            closable-chips
+            clearable
+            hide-details
+            @update:model-value="onTagFilterChange"
+          />
           <v-btn
             type="submit"
             class="query-submit"
@@ -418,9 +434,11 @@ export default {
       queryParams: {
         page: 1,
         query: '',
+        tags: [],
         orderBy: 'created_at',
         order: 'desc',
       },
+      campaignTagOptions: [],
       campaignStatsData: {},
       campaignStatsRefreshTimer: null,
 
@@ -433,6 +451,26 @@ export default {
   },
 
   methods: {
+    normalizeTagsArray(values = []) {
+      const seen = new Set();
+      return (Array.isArray(values) ? values : [])
+        .map((tag) => String(tag || '').trim())
+        .filter((tag) => {
+          const key = tag.toLowerCase();
+          if (!key || seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        });
+    },
+
+    loadCampaignTagsCatalog() {
+      this.$api.getCampaignTagsCatalog().then((tags) => {
+        this.campaignTagOptions = this.normalizeTagsArray(tags);
+      });
+    },
+
     formatListTimestamp(value) {
       if (!value) {
         return '';
@@ -497,6 +535,12 @@ export default {
       this.getCampaigns();
     },
 
+    onTagFilterChange(values) {
+      this.queryParams.tags = this.normalizeTagsArray(values);
+      this.queryParams.page = 1;
+      this.getCampaigns();
+    },
+
     onSort(field, direction) {
       this.queryParams.orderBy = field;
       this.queryParams.order = direction;
@@ -545,9 +589,12 @@ export default {
     },
 
     getCampaigns() {
+      const tags = this.normalizeTagsArray(this.queryParams.tags);
+      this.queryParams.tags = tags;
       this.$api.getCampaigns({
         page: this.queryParams.page,
         query: this.queryParams.query.replace(/[^\p{L}\p{N}\s]/gu, ' '),
+        tag: tags,
         order_by: this.queryParams.orderBy,
         order: this.queryParams.order,
         no_body: true,
@@ -767,6 +814,7 @@ export default {
   },
 
   mounted() {
+    this.loadCampaignTagsCatalog();
     this.getCampaigns();
     this.refreshCampaignStats();
     this.subscribeCampaignStats();
@@ -823,6 +871,11 @@ export default {
 
 .query-input {
   flex: 1;
+}
+
+.query-tags {
+  max-width: 320px;
+  min-width: 220px;
 }
 
 .query-input :deep(.v-field) {

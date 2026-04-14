@@ -396,13 +396,16 @@ defineExpose({
           <span v-if="webhookEndpoint" class="builder-meta-chip builder-meta-chip-wide">{{ webhookEndpoint }}</span>
         </div>
       </div>
-      <div class="toolbar-actions toolbar-actions-compact">
-        <button class="ghost-button" type="button" :disabled="!workflow" @click="emit('createWorkflow')">
-          New workflow
-        </button>
+      <div class="toolbar-actions toolbar-actions-compact toolbar-actions-primary">
         <button class="ghost-button" :disabled="saveState === 'saving'" @click="saveWorkflow('manual')">
           <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-label="Unsaved changes" />
           {{ saveState === 'saving' ? "Saving..." : "Save" }}
+        </button>
+        <button class="primary-button" :disabled="!workflow" @click="workflow && emit('run', workflow.workflow.id)">Run Test</button>
+      </div>
+      <div class="toolbar-actions toolbar-actions-compact toolbar-actions-secondary">
+        <button class="ghost-button" type="button" :disabled="!workflow" @click="emit('createWorkflow')">
+          New workflow
         </button>
         <button class="ghost-button" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</button>
         <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('validate', workflow.workflow.id)">Validate</button>
@@ -410,8 +413,21 @@ defineExpose({
         <button class="danger-button" :disabled="!workflow || saveState === 'saving'" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)">
           Delete
         </button>
-        <button class="primary-button" :disabled="!workflow" @click="workflow && emit('run', workflow.workflow.id)">Run Test</button>
       </div>
+      <details class="toolbar-actions-mobile-more">
+        <summary>More actions</summary>
+        <div class="toolbar-actions-mobile-menu">
+          <button class="ghost-button" type="button" :disabled="!workflow" @click="emit('createWorkflow')">
+            New workflow
+          </button>
+          <button class="ghost-button" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</button>
+          <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('validate', workflow.workflow.id)">Validate</button>
+          <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('publish', workflow.workflow.id)">Publish</button>
+          <button class="danger-button" :disabled="!workflow || saveState === 'saving'" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)">
+            Delete
+          </button>
+        </div>
+      </details>
     </div>
 
     <div v-if="workflow" class="builder-body builder-body-single">
@@ -706,5 +722,60 @@ defineExpose({
   margin: 0;
   color: #64748b;
   padding: 8px 2px;
+}
+
+.builder-toolbar .toolbar-actions-primary {
+  grid-template-columns: repeat(2, max-content);
+}
+
+.builder-toolbar .toolbar-actions-mobile-more {
+  display: none;
+}
+
+.builder-toolbar .toolbar-actions-mobile-menu {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+@media (max-width: 760px) {
+  .builder-toolbar .toolbar-actions-primary {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .builder-toolbar .toolbar-actions-primary .ghost-button,
+  .builder-toolbar .toolbar-actions-primary .primary-button {
+    width: 100%;
+  }
+
+  .builder-toolbar .toolbar-actions-secondary {
+    display: none !important;
+  }
+
+  .builder-toolbar .toolbar-actions-mobile-more {
+    display: block;
+    width: 100%;
+    border: 1px solid #dde5ef;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 6px 8px;
+  }
+
+  .builder-toolbar .toolbar-actions-mobile-more > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #334155;
+    list-style: none;
+  }
+
+  .builder-toolbar .toolbar-actions-mobile-more[open] {
+    padding-bottom: 8px;
+  }
+
+  .builder-toolbar .toolbar-actions-mobile-more > summary::-webkit-details-marker {
+    display: none;
+  }
 }
 </style>
