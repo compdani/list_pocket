@@ -1,7 +1,14 @@
 <script setup>
 /* eslint-disable */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { getSubscriber, getTemplate, getTemplates, searchSubscribers } from "../api";
+import {
+  ensureSubscriberTags,
+  getSubscriber,
+  getSubscriberTagsCatalog,
+  getTemplate,
+  getTemplates,
+  searchSubscribers,
+} from "../api";
 import RichtextEditor from "./RichtextEditor.vue";
 
 const props = defineProps({
@@ -20,9 +27,13 @@ const demoContactLoading = ref(false);
 const demoContactSearch = ref("");
 const templateItems = ref([]);
 const templateLoading = ref(false);
+const subscriberTagOptions = ref([]);
+const pendingCatalogTag = ref(null);
+const tagCatalogConfirmLoading = ref(false);
 const localMapDrafts = ref({});
 const localRichtextDrafts = ref({});
 let demoContactSearchTimer;
+let tagCatalogCheckTimer;
 let richtextSaveTimers = {};
 
 const sortedContacts = computed(() => [...props.contacts].sort((left, right) => String(left.fullName || left.email || "").localeCompare(String(right.fullName || right.email || ""))));
@@ -74,8 +85,80 @@ const fields = computed(() => {
 });
 const contextTokens = computed(() => describeContextTokens(props.node?.data?.type, triggerMode.value));
 
+const currentTagNameNormalized = computed(() => normalizeTagInput(configValue("tagName")));
+
+const showTagCatalogActions = computed(() => {
+  const pending = pendingCatalogTag.value;
+  if (!pending) {
+    return false;
+  }
+  return pending === currentTagNameNormalized.value && !tagExistsInCatalog(pending);
+});
+
 function saveValue(key, event) {
   emit("save", key, event.target?.value ?? "");
+}
+
+function normalizeTagInput(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  return String(value).trim();
+}
+
+function tagExistsInCatalog(normalized) {
+  return subscriberTagOptions.value.some((tag) => tag.toLowerCase() === normalized.toLowerCase());
+}
+
+function queueTagCatalogCreateCheck() {
+  window.clearTimeout(tagCatalogCheckTimer);
+  tagCatalogCheckTimer = window.setTimeout(() => {
+    const normalized = normalizeTagInput(configValue("tagName"));
+    if (!normalized) {
+      pendingCatalogTag.value = null;
+      return;
+    }
+    if (tagExistsInCatalog(normalized)) {
+      pendingCatalogTag.value = null;
+      return;
+    }
+    pendingCatalogTag.value = normalized;
+  }, 400);
+}
+
+function saveTagName(value) {
+  const normalized = normalizeTagInput(value);
+  emit("save", "tagName", normalized);
+  window.clearTimeout(tagCatalogCheckTimer);
+  pendingCatalogTag.value = null;
+  if (!normalized) {
+    return;
+  }
+  queueTagCatalogCreateCheck();
+}
+
+async function confirmCreateCatalogTag() {
+  const name = normalizeTagInput(pendingCatalogTag.value || configValue("tagName"));
+  if (!name || name !== currentTagNameNormalized.value) {
+    pendingCatalogTag.value = null;
+    return;
+  }
+  tagCatalogConfirmLoading.value = true;
+  try {
+    await ensureSubscriberTags([name], subscriberTagOptions.value);
+    if (!tagExistsInCatalog(name)) {
+      subscriberTagOptions.value = [...subscriberTagOptions.value, name].sort((left, right) => left.localeCompare(right));
+    }
+    pendingCatalogTag.value = null;
+  } catch {
+    // Keep editing uninterrupted if catalog sync fails.
+  } finally {
+    tagCatalogConfirmLoading.value = false;
+  }
+}
+
+function dismissPendingCatalogTag() {
+  pendingCatalogTag.value = null;
 }
 
 function saveLabel(event) {
@@ -173,6 +256,19 @@ async function loadDemoContactOptions(search = "") {
     await ensureSelectedDemoContactLoaded();
   } finally {
     demoContactLoading.value = false;
+  }
+}
+
+async function loadSubscriberTagOptions() {
+  try {
+    const tags = await getSubscriberTagsCatalog();
+    subscriberTagOptions.value = [...new Set(
+      tags
+        .map((tag) => String(tag || "").trim())
+        .filter(Boolean),
+    )].sort((left, right) => left.localeCompare(right));
+  } catch {
+    subscriberTagOptions.value = [];
   }
 }
 
@@ -305,23 +401,23 @@ function emitMap(configKey, entries) {
 }
 
 function describeContextTokens(type, mode) {
-  const shared = ["ctx.run.triggerPayload", "ctx.previous", "ctx.contact", "ctx.company", "ctx.run.users", "ctx.run.events"];
+  const shared = ["run.triggerPayload", "previous", "contact", "company", "run.users", "run.events"];
 
   switch (type) {
     case "trigger":
       if (mode === "tag_added" || mode === "tag_removed") {
-        return ["ctx.contact", "ctx.run.triggerPayload.tag", "ctx.run.triggerPayload.tagsBefore", "ctx.run.triggerPayload.tagsAfter", "ctx.run.users"];
+        return ["contact", "run.triggerPayload.tag", "run.triggerPayload.tagsBefore", "run.triggerPayload.tagsAfter", "run.users"];
       }
       if (mode === "manual") {
-        return ["ctx.run.triggerPayload", "ctx.run.users", "ctx.contact (optional)"];
+        return ["run.triggerPayload", "run.users", "contact (optional)"];
       }
-      return ["ctx.run.triggerPayload", "ctx.run.triggerSchema", "ctx.run.security", "ctx.run.users", "ctx.contact (optional)"];
+      return ["run.triggerPayload", "run.triggerSchema", "run.security", "run.users", "contact (optional)"];
     case "event_start":
-      return ["ctx.run.events", "ctx.run.triggerPayload", "ctx.previous"];
+      return ["run.events", "run.triggerPayload", "previous"];
     case "wait_until":
-      return ["ctx.run.events", "ctx.previous", "ctx.run.triggerPayload"];
+      return ["run.events", "previous", "run.triggerPayload"];
     case "campaign_launch":
-      return ["ctx.previous.campaignId", "ctx.run.triggerPayload", "ctx.contact"];
+      return ["previous.campaignId", "run.triggerPayload", "contact"];
     case "send_transactional_email":
       return [
         "contact.id",
@@ -368,6 +464,21 @@ watch(selectedTemplateId, () => {
   void ensureSelectedTemplateLoaded();
 });
 
+watch(triggerMode, (mode) => {
+  if (mode !== "tag_added" && mode !== "tag_removed") {
+    window.clearTimeout(tagCatalogCheckTimer);
+    pendingCatalogTag.value = null;
+  }
+});
+
+watch(
+  () => props.node?.id,
+  () => {
+    window.clearTimeout(tagCatalogCheckTimer);
+    pendingCatalogTag.value = null;
+  },
+);
+
 onMounted(() => {
   if (showDemoContactPicker.value) {
     void loadDemoContactOptions("");
@@ -375,10 +486,12 @@ onMounted(() => {
   if (isTransactionalEmailNode.value) {
     void loadTransactionalTemplates();
   }
+  void loadSubscriberTagOptions();
 });
 
 onBeforeUnmount(() => {
   window.clearTimeout(demoContactSearchTimer);
+  window.clearTimeout(tagCatalogCheckTimer);
   Object.values(richtextSaveTimers).forEach((timer) => window.clearTimeout(timer));
   richtextSaveTimers = {};
 });
@@ -473,6 +586,41 @@ onBeforeUnmount(() => {
           </div>
           <button type="button" class="ghost-button" @click="addMapEntry(field.key)">Add Field</button>
         </div>
+        <v-combobox
+          v-else-if="field.key === 'tagName'"
+          :id="`node-field-${field.key}`"
+          :model-value="configValue(field.key) ?? ''"
+          :items="subscriberTagOptions"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          clearable
+          @update:model-value="saveTagName"
+        >
+          <template v-if="showTagCatalogActions" #append-inner>
+            <div class="tag-catalog-append" @click.stop @mousedown.stop>
+              <v-btn
+                type="button"
+                icon="mdi-check"
+                size="x-small"
+                variant="text"
+                color="success"
+                :loading="tagCatalogConfirmLoading"
+                aria-label="Add tag to catalog"
+                @click="confirmCreateCatalogTag"
+              />
+              <v-btn
+                type="button"
+                icon="mdi-close"
+                size="x-small"
+                variant="text"
+                :disabled="tagCatalogConfirmLoading"
+                aria-label="Dismiss"
+                @click="dismissPendingCatalogTag"
+              />
+            </div>
+          </template>
+        </v-combobox>
         <select
           v-else-if="field.kind === 'select'"
           :id="`node-field-${field.key}`"
@@ -537,5 +685,14 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
   </aside>
 </template>
+
+<style scoped>
+.tag-catalog-append {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-end: 2px;
+}
+</style>

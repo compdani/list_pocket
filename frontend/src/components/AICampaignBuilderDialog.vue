@@ -1,18 +1,11 @@
 <template>
-  <v-navigation-drawer
-    ref="drawerRef"
+  <AppRightSidebar
     :model-value="modelValue"
-    location="right"
-    width="520"
-    border="start"
-    color="surface"
-    :temporary="layoutCompact"
-    :mobile="layoutCompact"
-    :scrim="layoutCompact"
+    :width="520"
     @update:model-value="onDialogToggle"
   >
-    <v-card flat class="ai-chat-shell d-flex flex-column h-100 bg-surface">
-      <v-toolbar density="comfortable" flat class="ai-chat-toolbar border-b px-2">
+    <template #header>
+      <v-toolbar density="comfortable" flat class="ai-chat-toolbar px-2">
         <div class="d-flex flex-column flex-grow-1 py-1" style="min-width: 0">
           <span class="text-subtitle-1 font-weight-semibold text-truncate">AI assistant</span>
           <span class="text-caption text-medium-emphasis">Campaign threads saved in this browser</span>
@@ -21,7 +14,9 @@
           Clear chat
         </v-btn>
       </v-toolbar>
+    </template>
 
+    <div class="ai-chat-body d-flex flex-column h-100">
       <div class="ai-chat-thread-row px-2 py-2 border-b d-flex align-center ga-2 flex-wrap">
         <v-select
           :model-value="activeThreadId"
@@ -199,8 +194,10 @@
           </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
+    </div>
 
-      <div class="ai-chat-composer border-t pa-3 bg-surface">
+    <template #footer>
+      <div class="ai-chat-composer pa-3 bg-surface">
         <v-textarea
           v-model="draftMessage"
           placeholder="Message…"
@@ -211,7 +208,7 @@
           hide-details
           :disabled="isRunning"
           :maxlength="20000"
-          class="mb-2"
+          class="mb-2 composer-input"
           @paste="onComposerPaste"
           @keydown.enter.exact.prevent="onComposerEnter"
         />
@@ -238,7 +235,7 @@
           </v-btn>
         </div>
       </div>
-    </v-card>
+    </template>
 
     <v-dialog v-model="isMediaVisible" max-width="900">
       <v-card>
@@ -252,11 +249,12 @@
         </v-card-text>
       </v-card>
     </v-dialog>
-  </v-navigation-drawer>
+  </AppRightSidebar>
 </template>
 
 <script>
 import Media from '../views/Media.vue';
+import AppRightSidebar from './AppRightSidebar.vue';
 
 const STATUS_MAX_FILES = 12;
 const STATUS_MAX_BYTES = 6 * 1024 * 1024;
@@ -266,6 +264,7 @@ export default {
   name: 'AICampaignBuilderDialog',
   components: {
     Media,
+    AppRightSidebar,
   },
   props: {
     modelValue: { type: Boolean, default: false },
@@ -276,7 +275,6 @@ export default {
   emits: ['update:modelValue', 'apply'],
   data() {
     return {
-      layoutWidth: typeof window !== 'undefined' ? window.innerWidth : 1200,
       draftMessage: '',
       messages: [],
       pendingResult: null,
@@ -302,9 +300,6 @@ export default {
   },
 
   computed: {
-    layoutCompact() {
-      return this.layoutWidth <= 960;
-    },
     effectiveSessionKey() {
       const k = (this.sessionKey && String(this.sessionKey).trim()) || '';
       return k || '_default';
@@ -903,15 +898,7 @@ export default {
     },
   },
 
-  mounted() {
-    this._layoutOnResize = () => {
-      this.layoutWidth = window.innerWidth;
-    };
-    window.addEventListener('resize', this._layoutOnResize);
-  },
-
   beforeUnmount() {
-    window.removeEventListener('resize', this._layoutOnResize);
     clearTimeout(this._persistTimer);
     this.flushToSession(this.effectiveSessionKey);
     if (this.modelValue) {
@@ -922,8 +909,14 @@ export default {
 </script>
 
 <style scoped>
-.ai-chat-shell {
-  min-height: 100%;
+:deep(.app-right-sidebar__body) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-chat-body {
+  min-height: 0;
 }
 
 .ai-chat-toolbar {
@@ -965,6 +958,7 @@ export default {
   border-radius: 16px;
   line-height: 1.45;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .chat-bubble--user {
@@ -1008,6 +1002,11 @@ export default {
 
 .ai-chat-composer {
   flex-shrink: 0;
+}
+
+:deep(.composer-input textarea) {
+  max-height: 220px;
+  overflow-y: auto !important;
 }
 
 .draft-preview-card {

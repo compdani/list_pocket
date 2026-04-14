@@ -1,6 +1,6 @@
 <script setup>
 /* eslint-disable */
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import RunHistory from "../components/RunHistory.vue";
 import WorkflowBuilderPanel from "../components/WorkflowBuilderPanel.vue";
@@ -9,7 +9,6 @@ import {
   cancelWorkflowRun as cancelWorkflowRunRequest,
   createWorkflow as createWorkflowRequest,
   deleteWorkflow as deleteWorkflowRequest,
-  getAuthRecord,
   getWorkflowDashboard,
   getWorkflowRunDetail,
   getWorkflowWebhookCapture,
@@ -60,14 +59,44 @@ const nodeLibrary = [
   { label: "Launch Campaign", type: "campaign_launch" },
 ];
 
-const authIdentity = computed(() => {
-  const record = getAuthRecord();
-  return record?.email || record?.username || "Authenticated";
-});
 const workflows = computed(() => dashboard.value.workflows || []);
 const contacts = computed(() => dashboard.value.contacts || []);
 const runLogs = computed(() => dashboard.value.runLogs || []);
 const activeWorkflow = computed(() => dashboard.value.activeWorkflow);
+
+const RUN_HISTORY_COLLAPSED_KEY = "workflow-builder:run-history-collapsed";
+const runHistoryCollapsed = ref(true);
+
+const runHistoryCount = computed(() => {
+  const id = activeWorkflow.value?.workflow?.id;
+  if (!id) {
+    return runLogs.value.length;
+  }
+  const matching = runLogs.value.filter((run) => run.workflowId === id);
+  return matching.length;
+});
+
+onMounted(() => {
+  try {
+    const stored = window.localStorage.getItem(RUN_HISTORY_COLLAPSED_KEY);
+    if (stored === "0") {
+      runHistoryCollapsed.value = false;
+    } else if (stored === "1") {
+      runHistoryCollapsed.value = true;
+    }
+  } catch (_error) {
+    /* ignore */
+  }
+});
+
+function toggleRunHistory() {
+  runHistoryCollapsed.value = !runHistoryCollapsed.value;
+  try {
+    window.localStorage.setItem(RUN_HISTORY_COLLAPSED_KEY, runHistoryCollapsed.value ? "1" : "0");
+  } catch (_error) {
+    /* ignore */
+  }
+}
 
 watch(
   workflows,
@@ -404,10 +433,6 @@ function stopRealtimeSubscriptions() {
   }
 }
 
-function addNode(type) {
-  builderRef.value?.addNode(type);
-}
-
 async function selectWorkflow(workflowId) {
   currentWorkflowId.value = workflowId;
   validationErrors.value = [];
@@ -530,56 +555,16 @@ onBeforeUnmount(() => {
 
 <template>
   <main v-if="authenticated" class="app-shell workflow-route">
-    <section class="workspace-main workspace-main-wide">
-      <header class="workspace-topbar">
-        <div>
-          <span class="eyebrow">Workflows / Workflow Runs</span>
-          <p v-if="error" class="topbar-note">
-            Live API unavailable. {{ error }}
-          </p>
-        </div>
-        <div class="workspace-session">
-          <div>
-            <strong>{{ authIdentity }}</strong>
-            <span>PocketBase admin session</span>
-          </div>
-        </div>
-      </header>
-
-      <section class="builder-controls panel">
-        <div class="builder-controls-header">
-          <div class="builder-controls-copy">
-            <span class="builder-controls-label">Workflow</span>
-            <input
-              class="workflow-name-input"
-              :value="activeWorkflow?.workflow.name ?? ''"
-              placeholder="Untitled Workflow"
-              @input="updateWorkflowName($event.target.value)"
-            />
-          </div>
-          <button class="primary-button" type="button" @click="createWorkflow">
-            New Workflow
-          </button>
-        </div>
-
-        <div class="builder-controls-row builder-controls-row-compact">
-          <span class="builder-controls-label">Quick Add</span>
-          <div class="quick-add-list">
-            <button
-              v-for="node in nodeLibrary"
-              :key="node.type"
-              type="button"
-              class="quick-add-chip"
-              @click="addNode(node.type)"
-            >
-              {{ node.label }}
-            </button>
-          </div>
-        </div>
-      </section>
+    <section class="workspace-main workspace-main-wide workflow-editor-shell">
+      <div class="workflow-editor-shell-top">
+        <p v-if="error" class="workflow-editor-error" role="alert">
+          Live API unavailable. {{ error }}
+        </p>
+      </div>
 
       <WorkflowBuilderPanel
         :contacts="contacts"
+        :node-library="nodeLibrary"
         ref="builderRef"
         :key="activeWorkflow?.workflow?.id ?? 'empty'"
         :on-save-request="saveWorkflow"
@@ -589,24 +574,47 @@ onBeforeUnmount(() => {
         :validation-findings="validationFindings"
         :workflow="activeWorkflow"
         @capture-schema="(workflowId, nodeId) => armWebhookCapture(workflowId, 'infer_schema', nodeId)"
+        @create-workflow="createWorkflow"
         @delete-workflow="deleteWorkflow"
         @publish="publishWorkflow"
         @run="runWorkflow"
         @save="saveWorkflow"
+        @update-workflow-name="updateWorkflowName"
         @validate="validateWorkflow"
       />
 
-      <section class="bottom-grid">
-        <RunHistory
-          :active-workflow-id="activeWorkflow?.workflow.id"
-          :runs="runLogs"
-          :selected-run-detail="selectedRunDetail"
-          :selected-run-id="selectedRunId"
-          :selected-run-loading="selectedRunLoading"
-          @cancel-run="cancelRun"
-          @select-run="selectRun"
-        />
-      </section>
+      <div
+        class="workflow-run-history-dock"
+        :class="{ 'workflow-run-history-dock--collapsed': runHistoryCollapsed }"
+      >
+        <button
+          type="button"
+          class="workflow-run-history-toggle"
+          :aria-expanded="!runHistoryCollapsed"
+          aria-controls="workflow-run-history-panel"
+          @click="toggleRunHistory"
+        >
+          <span class="workflow-run-history-toggle-label">Run history</span>
+          <span v-if="runHistoryCount" class="workflow-run-history-toggle-count">{{ runHistoryCount }}</span>
+          <span class="workflow-run-history-toggle-chevron" aria-hidden="true">{{ runHistoryCollapsed ? "▼" : "▲" }}</span>
+        </button>
+        <div
+          v-show="!runHistoryCollapsed"
+          id="workflow-run-history-panel"
+          class="workflow-run-history-body"
+        >
+          <RunHistory
+            :active-workflow-id="activeWorkflow?.workflow.id"
+            :runs="runLogs"
+            :selected-run-detail="selectedRunDetail"
+            :selected-run-id="selectedRunId"
+            :selected-run-loading="selectedRunLoading"
+            compact
+            @cancel-run="cancelRun"
+            @select-run="selectRun"
+          />
+        </div>
+      </div>
     </section>
   </main>
 
@@ -637,7 +645,14 @@ onBeforeUnmount(() => {
 
 .workflow-route .app-shell {
   min-height: 100vh;
-  padding: 20px;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+main.workflow-route.app-shell {
+  padding: 8px 10px;
 }
 
 .workflow-route .workspace-main,
@@ -645,7 +660,7 @@ onBeforeUnmount(() => {
 .workflow-route .builder-shell,
 .workflow-route .login-card {
   border: 1px solid var(--wf-border);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--wf-panel);
   box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
 }
@@ -661,7 +676,6 @@ onBeforeUnmount(() => {
 
 .workflow-route .workspace-session strong,
 .workflow-route .panel-header h2,
-.workflow-route .builder-toolbar h1,
 .workflow-route .workspace-topbar h1 {
   margin: 0;
 }
@@ -716,6 +730,162 @@ onBeforeUnmount(() => {
   max-width: 1400px;
   margin: 0 auto;
   width: 100%;
+}
+
+/* Grid: error strip (optional) + editor + run history. Tight padding — session lives in app bar. */
+.workflow-route .workflow-editor-shell-top {
+  min-height: 0;
+}
+
+.workflow-route .workflow-editor-error {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fdebec;
+  color: #b42318;
+  font-size: 0.84rem;
+}
+
+.workflow-route .workspace-main.workflow-editor-shell {
+  display: grid;
+  grid-template-rows: auto minmax(280px, 1fr) auto;
+  gap: 8px;
+  align-content: stretch;
+  min-height: calc(100dvh - 96px);
+  max-width: none;
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+.workflow-route .workflow-editor-shell > .builder-shell {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.workflow-route .workflow-editor-shell .builder-toolbar {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding: 0;
+  align-items: flex-start;
+}
+
+.workflow-route .workflow-editor-shell .toolbar-actions.toolbar-actions-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  justify-content: flex-end;
+}
+
+.workflow-route .workflow-editor-shell .primary-button,
+.workflow-route .workflow-editor-shell .ghost-button,
+.workflow-route .workflow-editor-shell .danger-button {
+  min-height: 36px;
+  padding: 6px 12px;
+}
+
+.workflow-route .workflow-editor-shell .save-indicator {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.workflow-route .workflow-editor-shell .builder-meta-chip {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 0.76rem;
+}
+
+.workflow-route .workflow-editor-shell .builder-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workflow-route .workflow-editor-shell .builder-body-single {
+  min-height: 0;
+}
+
+.workflow-route .workflow-editor-shell .canvas-frame {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: min(280px, 40vh);
+}
+
+.workflow-route .workflow-editor-shell .workflow-canvas {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.workflow-route .workflow-editor-shell .vue-flow {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 280px;
+  height: 100%;
+}
+
+.workflow-route .workflow-run-history-dock {
+  flex: 0 0 auto;
+  border: 1px solid var(--wf-border);
+  border-radius: 12px;
+  background: var(--wf-panel);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.workflow-route .workflow-run-history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  color: #334155;
+}
+
+.workflow-route .workflow-run-history-dock:not(.workflow-run-history-dock--collapsed) .workflow-run-history-toggle {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.workflow-route .workflow-run-history-toggle-label {
+  flex: 1;
+  text-align: left;
+}
+
+.workflow-route .workflow-run-history-toggle-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.workflow-route .workflow-run-history-toggle-chevron {
+  color: #64748b;
+  font-size: 0.7rem;
+}
+
+.workflow-route .workflow-run-history-body {
+  max-height: min(38vh, 440px);
+  overflow: auto;
+  padding: 0 10px 12px;
+}
+
+.workflow-route .workflow-run-history-body .run-history-card--compact {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }
 
 .workflow-route .builder-controls {
@@ -839,15 +1009,16 @@ onBeforeUnmount(() => {
 
 .workflow-route .workspace-main,
 .workflow-route .builder-shell {
-  padding: 18px;
+  padding: 14px;
   align-content: start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .workflow-route .builder-toolbar {
   align-items: flex-start;
   justify-content: space-between;
   flex-wrap: wrap;
+  padding: 4px 2px 0;
 }
 
 .workflow-route .builder-heading {
@@ -990,7 +1161,7 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .builder-empty-state {
-  min-height: 280px;
+  min-height: 140px;
   align-content: center;
 }
 
@@ -1008,33 +1179,11 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.workflow-route .modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.32);
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  z-index: 50;
-  backdrop-filter: blur(4px);
-}
-
-.workflow-route .modal-shell {
-  width: min(880px, 100%);
-  max-height: min(86vh, 920px);
-  overflow: auto;
-  border-radius: 24px;
-  border: 1px solid var(--wf-border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 250, 252, 0.98));
-  box-shadow: 0 28px 90px rgba(15, 23, 42, 0.22);
-  padding: 22px;
-  display: grid;
-  gap: 18px;
-}
-
 .workflow-route .modal-header {
+  display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
   padding-bottom: 14px;
   border-bottom: 1px solid #e6ebf2;
 }
@@ -1043,10 +1192,15 @@ onBeforeUnmount(() => {
   font-size: 1.55rem;
 }
 
+.workflow-route .modal-header > div:first-child {
+  min-width: 0;
+}
+
 .workflow-route .node-modal-actions,
 .workflow-route .template-picker-actions {
   display: flex;
   gap: 10px;
+  align-items: center;
   flex-wrap: wrap;
 }
 
@@ -1137,21 +1291,20 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .canvas-frame {
-  min-height: 640px;
+  min-height: 680px;
   width: 100%;
   min-width: 0;
-  border-radius: 18px;
+  border-radius: 12px;
   overflow: hidden;
-  border: 1px solid #dde3eb;
-  background: radial-gradient(circle at 1px 1px, rgba(157, 169, 186, 0.35) 1px, transparent 0);
-  background-size: 18px 18px;
+  border: 1px solid #e2e8f1;
+  background: #f6f8fb;
 }
 
 .workflow-route .workflow-canvas {
   height: 100%;
   width: 100%;
   min-width: 0;
-  background: linear-gradient(180deg, rgba(251, 252, 254, 0.98), rgba(246, 248, 251, 0.98));
+  background: linear-gradient(180deg, rgba(249, 251, 253, 0.98), rgba(245, 248, 251, 0.98));
 }
 
 .workflow-route .vue-flow {
@@ -1241,14 +1394,15 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .vue-flow__controls {
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid #dde5ef;
 }
 
 .workflow-route .vue-flow__controls-button {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: rgba(255, 255, 255, 0.96);
   color: #334155;
@@ -1257,6 +1411,8 @@ onBeforeUnmount(() => {
 .workflow-route .vue-flow__minimap {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid #dde3eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
 .workflow-route .status-pill,

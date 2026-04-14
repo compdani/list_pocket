@@ -712,6 +712,91 @@ export const uploadPicture = async (file) => {
 
 export const deletePicture = async (id) => pb.collection('pictures').delete(id);
 
+// Subscriber tag catalog (PocketBase collection).
+export const getSubscriberTagsCatalog = async () => {
+  const records = await pb.collection('subscriber_tags').getFullList({
+    sort: 'tag',
+  });
+  return records.map((record) => String(record.tag || '').trim()).filter(Boolean);
+};
+
+function isUniqueConstraintError(err) {
+  const chunks = [err && err.message ? String(err.message) : ''];
+  const data = err && (err.data ?? err.response);
+  if (data !== undefined && data !== null) {
+    try {
+      chunks.push(typeof data === 'string' ? data : JSON.stringify(data));
+    } catch {
+      chunks.push(String(data));
+    }
+  }
+  const blob = chunks.join(' ').toLowerCase();
+  return (
+    blob.includes('unique')
+    || blob.includes('already exists')
+    || blob.includes('not_unique')
+    || blob.includes('duplicate')
+  );
+}
+
+/** Tags not present in alreadyHave (case-insensitive). */
+function tagsMissingFromCatalog(tags, alreadyHave = []) {
+  const have = new Set(
+    (Array.isArray(alreadyHave) ? alreadyHave : [])
+      .map((t) => String(t || '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+  return [...new Set(
+    tags
+      .map((tag) => String(tag || '').trim())
+      .filter(Boolean),
+  )].filter((tag) => !have.has(tag.toLowerCase()));
+}
+
+export const ensureSubscriberTags = async (tags = [], alreadyHave = []) => {
+  const normalized = tagsMissingFromCatalog(tags, alreadyHave);
+  if (!normalized.length) {
+    return;
+  }
+
+  for (const tag of normalized) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await pb.collection('subscriber_tags').create({ tag });
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) {
+        throw err;
+      }
+    }
+  }
+};
+
+// Campaign tag catalog (PocketBase collection) — labels for campaigns, not subscriber audience tags.
+export const getCampaignTagsCatalog = async () => {
+  const records = await pb.collection('campaign_tags').getFullList({
+    sort: 'tag',
+  });
+  return records.map((record) => String(record.tag || '').trim()).filter(Boolean);
+};
+
+export const ensureCampaignTags = async (tags = [], alreadyHave = []) => {
+  const normalized = tagsMissingFromCatalog(tags, alreadyHave);
+  if (!normalized.length) {
+    return;
+  }
+
+  for (const tag of normalized) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await pb.collection('campaign_tags').create({ tag });
+    } catch (err) {
+      if (!isUniqueConstraintError(err)) {
+        throw err;
+      }
+    }
+  }
+};
+
 // Templates.
 export const createTemplate = async (data) => http.post(
   '/api/templates',
