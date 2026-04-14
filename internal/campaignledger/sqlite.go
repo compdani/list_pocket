@@ -16,6 +16,7 @@ package campaignledger
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -364,8 +365,8 @@ func isUniqueViolation(err error) bool {
 func campaignTagFilters(db sqlx.ExtContext, campaignRecID string) ([]string, []string, error) {
 	ctx := context.Background()
 	row := struct {
-		Include []string `db:"include_tags"`
-		Exclude []string `db:"exclude_tags"`
+		Include []byte `db:"include_tags"`
+		Exclude []byte `db:"exclude_tags"`
 	}{}
 	if err := sqlx.GetContext(ctx, db, &row, `
 SELECT
@@ -379,7 +380,18 @@ LIMIT 1`, campaignRecID); err != nil {
 		}
 		return nil, nil, err
 	}
-	return normalizeTagFilterSet(row.Include), normalizeTagFilterSet(row.Exclude), nil
+	return decodeTagFilterJSON(row.Include), decodeTagFilterJSON(row.Exclude), nil
+}
+
+func decodeTagFilterJSON(raw []byte) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var tags []string
+	if err := json.Unmarshal(raw, &tags); err != nil {
+		return nil
+	}
+	return normalizeTagFilterSet(tags)
 }
 
 func normalizeTagFilterSet(tags []string) []string {
