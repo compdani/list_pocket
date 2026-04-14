@@ -69,8 +69,17 @@ WHERE cl.campaign_id = ?
     ))
   )`
 
+	includeTags, excludeTags, err := campaignTagFilters(db, campaignRecID)
+	if err != nil {
+		return false, err
+	}
+	tagClause, tagArgs := sqliteSubscriberTagFilterClause(includeTags, excludeTags)
+	q += tagClause
+
 	var subIDs []string
-	if err := sqlx.SelectContext(ctx, db, &subIDs, q, campaignRecID, campaignType, campaignType); err != nil {
+	args := []any{campaignRecID, campaignType, campaignType}
+	args = append(args, tagArgs...)
+	if err := sqlx.SelectContext(ctx, db, &subIDs, q, args...); err != nil {
 		return false, err
 	}
 
@@ -235,6 +244,7 @@ WHERE rowid = ?`, campaignRecID, campaignRecID, campaignRowID)
 //   - status = 'sent'
 //   - older than olderThan (based on updated timestamp)
 //   - attached to campaigns in status finished/cancelled
+//
 // are deleted.
 //
 // It returns (deletedRows, reconciledCampaigns, error).
@@ -314,6 +324,22 @@ WHERE c.status IN ('scheduled', 'running', 'paused')
 		return err
 	}
 
+	filteredCampaignIDs := make([]string, 0, len(campaignIDs))
+	for _, campaignID := range campaignIDs {
+		includeTags, excludeTags, err := campaignTagFilters(db, campaignID)
+		if err != nil {
+			return err
+		}
+		matches, err := subscriberMatchesTagFilters(db, subscriberRecordID, includeTags, excludeTags)
+		if err != nil {
+			return err
+		}
+		if matches {
+			filteredCampaignIDs = append(filteredCampaignIDs, campaignID)
+		}
+	}
+	campaignIDs = filteredCampaignIDs
+
 	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
 	for _, cid := range campaignIDs {
 		id := security.RandomString(15)
@@ -333,4 +359,108 @@ func isUniqueViolation(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint")
+}
+
+func campaignTagFilters(db sqlx.ExtContext, campaignRecID string) ([]string, []string, error) {
+	ctx := context.Background()
+	row := struct {
+		Include []string `db:"include_tags"`
+		Exclude []string `db:"exclude_tags"`
+	}{}
+	if err := sqlx.GetContext(ctx, db, &row, `
+SELECT
+  COALESCE(c.include_tags, '[]') AS include_tags,
+  COALESCE(c.exclude_tags, '[]') AS exclude_tags
+FROM campaigns c
+WHERE c.id = ?
+LIMIT 1`, campaignRecID); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such column") {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	return normalizeTagFilterSet(row.Include), normalizeTagFilterSet(row.Exclude), nil
+}
+
+func normalizeTagFilterSet(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(tags))
+	for _, raw := range tags {
+		tag := strings.ToLower(strings.TrimSpace(raw))
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
+}
+
+func sqliteSubscriberTagFilterClause(includeTags, excludeTags []string) (string, []any) {
+	args := []any{}
+	var b strings.Builder
+
+	if len(includeTags) > 0 {
+		b.WriteString(`
+  AND EXISTS (
+    SELECT 1
+    FROM json_each(COALESCE(json_extract(s.attribs, '$.tags'), '[]')) jt
+    WHERE lower(trim(CAST(jt.value AS TEXT))) IN (` + placeholders(len(includeTags)) + `)
+  )`)
+		for _, tag := range includeTags {
+			args = append(args, tag)
+		}
+	}
+
+	if len(excludeTags) > 0 {
+		b.WriteString(`
+  AND NOT EXISTS (
+    SELECT 1
+    FROM json_each(COALESCE(json_extract(s.attribs, '$.tags'), '[]')) jt
+    WHERE lower(trim(CAST(jt.value AS TEXT))) IN (` + placeholders(len(excludeTags)) + `)
+  )`)
+		for _, tag := range excludeTags {
+			args = append(args, tag)
+		}
+	}
+
+	return b.String(), args
+}
+
+func subscriberMatchesTagFilters(db sqlx.ExtContext, subscriberRecID string, includeTags, excludeTags []string) (bool, error) {
+	if len(includeTags) == 0 && len(excludeTags) == 0 {
+		return true, nil
+	}
+	ctx := context.Background()
+
+	args := []any{subscriberRecID}
+	q := `
+SELECT EXISTS (
+  SELECT 1
+  FROM subscribers s
+  WHERE s.id = ?`
+
+	includeClause, includeArgs := sqliteSubscriberTagFilterClause(includeTags, nil)
+	excludeClause, excludeArgs := sqliteSubscriberTagFilterClause(nil, excludeTags)
+	q += includeClause
+	q += excludeClause
+	q += `
+)`
+	args = append(args, includeArgs...)
+	args = append(args, excludeArgs...)
+
+	var matches bool
+	if err := sqlx.GetContext(ctx, db, &matches, q, args...); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such function: json_extract") {
+			return true, nil
+		}
+		return false, err
+	}
+	return matches, nil
 }

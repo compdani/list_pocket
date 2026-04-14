@@ -3,7 +3,7 @@
     :opened="openedGroups"
     nav
     density="comfortable"
-    class="workflow-nav"
+    :class="['workflow-nav', { 'workflow-nav--rail': rail }]"
     @update:opened="updateOpenedGroups"
   >
     <template v-for="item in navItems">
@@ -32,16 +32,27 @@
           />
         </template>
 
-        <v-list-item
-          v-for="child in item.children"
+        <template
+          v-for="(child, index) in item.children"
           :key="child.key"
-          :active="Boolean(activeItem[child.key])"
-          :prepend-icon="child.icon"
-          :title="child.label"
-          rounded="lg"
-          class="workflow-nav-child"
-          @click="navigate(child)"
-        />
+        >
+          <v-divider
+            v-if="rail && index === 0"
+            class="workflow-nav-rail-divider"
+          />
+          <v-list-item
+            :active="Boolean(activeItem[child.key])"
+            :prepend-icon="child.icon"
+            :title="child.label"
+            rounded="lg"
+            class="workflow-nav-child"
+            @click="navigate(child)"
+          />
+          <v-divider
+            v-if="rail && index === item.children.length - 1"
+            class="workflow-nav-rail-divider"
+          />
+        </template>
       </v-list-group>
     </template>
   </v-list>
@@ -277,7 +288,42 @@ function navigate(item) {
   background: transparent;
 }
 
+.workflow-nav :deep(.v-list-item--active) {
+  background: rgba(var(--v-theme-primary), 0.24);
+  color: rgb(var(--v-theme-primary));
+}
+
+.workflow-nav :deep(.v-list-item--active .v-icon) {
+  color: rgb(var(--v-theme-primary));
+}
+
 .workflow-nav-child {
   margin-left: 12px;
+}
+
+.workflow-nav--rail :deep(.v-list-item) {
+  padding-inline: 10px !important;
+}
+
+.workflow-nav--rail :deep(.v-list-item__prepend) {
+  margin-inline-end: 0;
+}
+
+.workflow-nav--rail :deep(.v-list-item__append) {
+  display: none;
+}
+
+.workflow-nav--rail :deep(.workflow-nav-child) {
+  margin-left: 0;
+}
+
+.workflow-nav--rail :deep(.v-list-item:hover) {
+  background: rgba(var(--v-theme-primary), 0.14);
+}
+
+.workflow-nav-rail-divider {
+  margin: 2px 10px 8px;
+  border-color: rgba(var(--v-theme-primary), 0.4);
+  opacity: 1;
 }
 </style>

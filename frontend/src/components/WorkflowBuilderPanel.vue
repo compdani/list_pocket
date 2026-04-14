@@ -1,6 +1,6 @@
 <script setup>
 /* eslint-disable */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
 import "@vue-flow/controls/dist/style.css";
@@ -11,10 +11,12 @@ import { MiniMap } from "@vue-flow/minimap";
 import { useVueFlow, VueFlow } from "@vue-flow/core";
 import { useBuilderState } from "../composables/useBuilderState";
 import NodeInspector from "./NodeInspector.vue";
+import AppRightSidebar from "./AppRightSidebar.vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 
 const props = defineProps({
   contacts: { type: Array, default: () => [] },
+  nodeLibrary: { type: Array, default: () => [] },
   onSaveRequest: { type: Function, default: null },
   saveMessage: { type: String, default: "" },
   saveState: { type: String, default: "idle" },
@@ -23,15 +25,19 @@ const props = defineProps({
   workflow: { type: Object, default: null },
 });
 
-const emit = defineEmits(["captureSchema", "deleteWorkflow", "publish", "run", "save", "validate"]);
+const emit = defineEmits(["captureSchema", "createWorkflow", "deleteWorkflow", "publish", "run", "save", "updateWorkflowName", "validate"]);
 
 const builder = useBuilderState(computed(() => props.workflow));
-const { setCenter } = useVueFlow();
+const { fitView, setCenter, setViewport, viewport, zoomIn, zoomOut } = useVueFlow();
 const autosaveTimer = ref(undefined);
 const committedSignature = ref("");
 const initializedWorkflowId = ref("");
 const isDirty = ref(false);
-const nodeTypes = { workflow: WorkflowNodeCard };
+const nodeTypes = { workflow: markRaw(WorkflowNodeCard) };
+const restoredViewport = ref({ x: 0, y: 0, zoom: 1 });
+const hasRestoredViewport = ref(false);
+const showNodeCommand = ref(false);
+const commandSearch = ref("");
 
 const selectedNode = computed(() => builder.nodes.value.find((node) => node.id === builder.selectedNodeId.value));
 const selectedEdge = computed(() => builder.edges.value.find((edge) => edge.id === builder.selectedEdgeId.value));
@@ -63,6 +69,13 @@ const decoratedEdges = computed(() => builder.edges.value.map((edge) => ({ ...ed
 const showNodeModal = computed(() => Boolean(selectedNode.value));
 const selectedNodeLabel = computed(() => selectedNode.value?.data?.label ?? "Selected Node");
 const canCaptureSelectedNodeSchema = computed(() => selectedNode.value?.data?.type === "trigger" && String(selectedNode.value?.data?.config?.mode ?? "manual") === "webhook");
+const filteredNodeLibrary = computed(() => {
+  const needle = commandSearch.value.trim().toLowerCase();
+  if (!needle) {
+    return props.nodeLibrary;
+  }
+  return props.nodeLibrary.filter((node) => String(node.label ?? "").toLowerCase().includes(needle) || String(node.type ?? "").toLowerCase().includes(needle));
+});
 
 watch(
   () => props.workflow,
@@ -78,6 +91,8 @@ watch(
       committedSignature.value = currentSignature.value;
       initializedWorkflowId.value = "";
       isDirty.value = false;
+      restoredViewport.value = { x: 0, y: 0, zoom: 1 };
+      hasRestoredViewport.value = false;
       return;
     }
 
@@ -85,6 +100,14 @@ watch(
       initializedWorkflowId.value = props.workflow.workflow.id;
       committedSignature.value = currentSignature.value;
       isDirty.value = false;
+      const savedViewport = loadSavedViewport(props.workflow.workflow.id);
+      hasRestoredViewport.value = Boolean(savedViewport);
+      restoredViewport.value = savedViewport ?? { x: 0, y: 0, zoom: 1 };
+
+      if (savedViewport) {
+        await nextTick();
+        setViewport(savedViewport, { duration: 0 });
+      }
     }
   },
   { immediate: true, deep: true }
@@ -123,10 +146,23 @@ watch(currentSignature, (signature) => {
   }, 800);
 });
 
+watch(
+  viewport,
+  (nextViewport) => {
+    persistViewport(nextViewport);
+  },
+  { deep: true }
+);
+
 onBeforeUnmount(() => {
   if (autosaveTimer.value) {
     window.clearTimeout(autosaveTimer.value);
   }
+  window.removeEventListener("keydown", onWindowKeydown);
+});
+
+onMounted(() => {
+  window.addEventListener("keydown", onWindowKeydown);
 });
 
 function saveNodeConfig(key, value) {
@@ -171,6 +207,133 @@ function focusFinding(finding) {
   if (finding.targetType === "edge" && finding.targetId) {
     builder.selectEdge(finding.targetId);
   }
+}
+
+function normalizeViewport(value) {
+  const x = Number(value?.x);
+  const y = Number(value?.y);
+  const zoom = Number(value?.zoom);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(zoom)) {
+    return null;
+  }
+
+  return { x, y, zoom: Math.min(2, Math.max(0.1, zoom)) };
+}
+
+function loadSavedViewport(workflowId) {
+  if (!workflowId || typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(`workflow-builder:viewport:${workflowId}`);
+    if (!raw) {
+      return null;
+    }
+    return normalizeViewport(JSON.parse(raw));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function persistViewport(viewport) {
+  if (!props.workflow?.workflow?.id || typeof window === "undefined") {
+    return;
+  }
+
+  const normalized = normalizeViewport(viewport);
+  if (!normalized) {
+    return;
+  }
+
+  restoredViewport.value = normalized;
+  hasRestoredViewport.value = true;
+  window.localStorage.setItem(`workflow-builder:viewport:${props.workflow.workflow.id}`, JSON.stringify(normalized));
+}
+
+async function fitCanvasToGraph() {
+  await nextTick();
+  if (typeof fitView === "function") {
+    fitView({ padding: 0.22, minZoom: 0.2, maxZoom: 1.1, duration: 180 });
+  }
+}
+
+function centerOnSelection() {
+  if (selectedNode.value) {
+    void focusNode(selectedNode.value.id);
+    return;
+  }
+
+  void fitCanvasToGraph();
+}
+
+function clearSavedViewport() {
+  if (!props.workflow?.workflow?.id || typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(`workflow-builder:viewport:${props.workflow.workflow.id}`);
+  hasRestoredViewport.value = false;
+  restoredViewport.value = { x: 0, y: 0, zoom: 1 };
+  setViewport(restoredViewport.value, { duration: 120 });
+  void fitCanvasToGraph();
+}
+
+function openNodeCommand() {
+  showNodeCommand.value = true;
+  commandSearch.value = "";
+}
+
+function closeNodeCommand() {
+  showNodeCommand.value = false;
+  commandSearch.value = "";
+}
+
+function addNodeFromCommand(type) {
+  void addNode(type);
+  closeNodeCommand();
+}
+
+function onWindowKeydown(event) {
+  const target = event.target;
+  const tag = target?.tagName ? String(target.tagName).toLowerCase() : "";
+  const isTypingTarget = tag === "input" || tag === "textarea" || target?.isContentEditable;
+  if (isTypingTarget) {
+    return;
+  }
+
+  if ((event.metaKey || event.ctrlKey) && event.key === "0") {
+    event.preventDefault();
+    void clearSavedViewport();
+    return;
+  }
+
+  if (event.key === "f" || event.key === "F") {
+    event.preventDefault();
+    void fitCanvasToGraph();
+    return;
+  }
+
+  if (event.key === "a" || event.key === "A") {
+    event.preventDefault();
+    openNodeCommand();
+    return;
+  }
+
+  if (event.key === "=" || event.key === "+") {
+    event.preventDefault();
+    zoomIn?.({ duration: 120 });
+    return;
+  }
+
+  if (event.key === "-") {
+    event.preventDefault();
+    zoomOut?.({ duration: 120 });
+  }
+}
+
+function onNodeDragStop({ node }) {
+  builder.updateNodePosition(node.id, node.position.x, node.position.y);
 }
 
 async function saveWorkflow(mode = "manual") {
@@ -224,6 +387,7 @@ async function addNode(type) {
 defineExpose({
   addNode,
   applyNodeConfigValues,
+  openNodeCommand,
 });
 </script>
 
@@ -231,9 +395,15 @@ defineExpose({
   <section class="builder-shell">
     <div class="builder-toolbar">
       <div class="builder-heading">
-        <span class="builder-eyebrow">Workflow Runs</span>
-        <div class="builder-title-row">
-          <h1>{{ workflow?.workflow.name ?? "Workflow Builder" }}</h1>
+        <div class="builder-editor-bar">
+          <input
+            class="workflow-title-input"
+            type="text"
+            :value="workflow?.workflow.name ?? ''"
+            placeholder="Untitled workflow"
+            :disabled="!workflow"
+            @input="emit('updateWorkflowName', $event.target.value)"
+          />
           <span class="save-indicator" :data-state="(isDirty && saveState !== 'saving' ? 'dirty' : saveState) ?? 'idle'">
             {{ saveMessage || (isDirty ? "Unsaved changes" : "Up to date") }}
           </span>
@@ -246,6 +416,9 @@ defineExpose({
         </div>
       </div>
       <div class="toolbar-actions toolbar-actions-compact">
+        <button class="ghost-button" type="button" :disabled="!workflow" @click="emit('createWorkflow')">
+          New workflow
+        </button>
         <button class="ghost-button" :disabled="saveState === 'saving'" @click="saveWorkflow('manual')">
           {{ saveState === 'saving' ? "Saving..." : "Save" }}
         </button>
@@ -261,21 +434,68 @@ defineExpose({
 
     <div v-if="workflow" class="builder-body builder-body-single">
       <div class="canvas-frame">
+        <div class="canvas-action-dock" role="toolbar" aria-label="Canvas actions">
+          <button type="button" class="canvas-action-btn canvas-action-btn-wide" title="Add node (A)" @click="openNodeCommand">
+            + Add node
+          </button>
+          <button type="button" class="canvas-action-btn canvas-action-btn-wide" title="Center selected node" @click="centerOnSelection">
+            Center
+          </button>
+          <button type="button" class="canvas-action-btn canvas-action-btn-wide" title="Reset saved view" @click="clearSavedViewport">
+            Reset
+          </button>
+        </div>
         <VueFlow
           :node-types="nodeTypes"
           :nodes="decoratedNodes"
           :edges="decoratedEdges"
-          fit-view-on-init
+          :default-viewport="restoredViewport"
+          :fit-view-on-init="!hasRestoredViewport"
+          :min-zoom="0.2"
+          :max-zoom="1.2"
+          :pan-on-scroll="true"
+          :pan-on-drag="true"
+          :zoom-on-double-click="false"
+          :zoom-on-scroll="true"
+          :selection-on-drag="false"
           class="workflow-canvas"
           @connect="builder.connectNodes"
           @edge-click="({ edge }) => builder.selectEdge(edge.id)"
           @node-click="({ node }) => builder.selectNode(node.id)"
-          @node-drag-stop="({ node }) => builder.updateNodePosition(node.id, node.position.x, node.position.y)"
+          @node-drag-stop="onNodeDragStop"
         >
-          <MiniMap />
-          <Controls />
+          <MiniMap position="bottom-right" :pannable="true" />
+          <Controls position="bottom-left" />
           <Background :gap="22" :size="1.2" :pattern-color="'#d9dee7'" />
         </VueFlow>
+
+        <div v-if="showNodeCommand" class="node-command-overlay" @click.self="closeNodeCommand">
+          <div class="node-command-card">
+            <div class="node-command-header">
+              <strong>Add node</strong>
+              <button type="button" class="canvas-action-btn" @click="closeNodeCommand">x</button>
+            </div>
+            <input
+              v-model="commandSearch"
+              class="node-command-input"
+              placeholder="Search nodes (A)"
+              autofocus
+            />
+            <div class="node-command-list">
+              <button
+                v-for="node in filteredNodeLibrary"
+                :key="node.type"
+                type="button"
+                class="node-command-item"
+                @click="addNodeFromCommand(node.type)"
+              >
+                <span>{{ node.label }}</span>
+                <small>{{ node.type }}</small>
+              </button>
+              <p v-if="!filteredNodeLibrary.length" class="node-command-empty">No matching node types.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -314,37 +534,184 @@ defineExpose({
       </aside>
     </div>
 
-    <section v-else class="panel detail-panel builder-empty-state">
+    <section v-if="!workflow" class="panel detail-panel builder-empty-state">
       <div class="panel-header">
         <h2>No workflow selected</h2>
         <p>Create or select a workflow to start editing the graph.</p>
       </div>
     </section>
 
-    <div v-if="showNodeModal" class="modal-backdrop" @click="closeNodeModal">
-      <div class="modal-shell" @click.stop>
-        <div class="modal-header">
+    <AppRightSidebar
+      :model-value="showNodeModal"
+      :width="700"
+      @update:model-value="(next) => !next && closeNodeModal()"
+      @close="closeNodeModal"
+    >
+      <template #header>
+        <div class="modal-header mt-2 px-2">
           <div>
             <span class="builder-eyebrow">Node Settings</span>
             <h2>{{ selectedNodeLabel }}</h2>
             <p v-if="selectedNodeDescription" class="field-help">{{ selectedNodeDescription }}</p>
           </div>
           <div class="node-modal-actions">
-            <button v-if="canCaptureSelectedNodeSchema" type="button" class="ghost-button" @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)">
+            <button
+              v-if="canCaptureSelectedNodeSchema"
+              type="button"
+              class="ghost-button"
+              @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)"
+            >
               Infer Schema
             </button>
             <button type="button" class="danger-button" @click="removeSelectedNode">Delete Node</button>
             <button type="button" class="ghost-button" @click="closeNodeModal">Close</button>
           </div>
         </div>
+      </template>
 
-        <NodeInspector
-          :contacts="contacts"
-          :node="selectedNode"
-          @save="saveNodeConfig"
-          @save-label="saveNodeLabel"
-        />
-      </div>
-    </div>
+      <NodeInspector
+        :contacts="contacts"
+        :node="selectedNode"
+        @save="saveNodeConfig"
+        @save-label="saveNodeLabel"
+      />
+    </AppRightSidebar>
   </section>
 </template>
+
+<style scoped>
+.builder-editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.workflow-title-input {
+  flex: 1 1 200px;
+  min-width: 140px;
+  max-width: min(520px, 100%);
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #ccd5e2;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.workflow-title-input:disabled {
+  opacity: 0.6;
+}
+
+.canvas-frame {
+  position: relative;
+}
+
+.canvas-action-dock {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 7;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(6px);
+}
+
+.canvas-action-btn {
+  border: 1px solid #dce4ee;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+}
+
+.canvas-action-btn:hover {
+  background: #f8fafc;
+}
+
+.canvas-action-btn-wide {
+  min-width: 52px;
+}
+
+.node-command-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.node-command-card {
+  width: min(560px, calc(100% - 32px));
+  max-height: 70%;
+  border-radius: 12px;
+  border: 1px solid #d7dfeb;
+  background: #fff;
+  box-shadow: 0 24px 44px rgba(15, 23, 42, 0.18);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.node-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.node-command-input {
+  min-height: 40px;
+  border: 1px solid #d4dde9;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.node-command-list {
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.node-command-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  text-align: left;
+  padding: 9px 10px;
+}
+
+.node-command-item small {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.node-command-item:hover {
+  background: #f1f5f9;
+}
+
+.node-command-empty {
+  margin: 0;
+  color: #64748b;
+  padding: 8px 2px;
+}
+</style>

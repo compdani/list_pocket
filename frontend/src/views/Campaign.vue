@@ -192,6 +192,10 @@
               class="mb-4"
               @update:model-value="onListsChange"
             />
+            <p v-if="isEditing" class="form-help mb-4">
+              Estimated sends: <strong>{{ estimatedSends }}</strong>
+              <span class="text-caption">(updates when you save)</span>
+            </p>
 
             <v-row>
               <v-col cols="12" md="6">
@@ -221,17 +225,55 @@
               </v-col>
             </v-row>
 
-            <v-text-field
-              v-model="tagsInput"
+            <v-combobox
+              v-model="form.tags"
+              :items="campaignTagOptions"
               :aria-label="$t('globals.terms.tags')"
               :label="$t('globals.terms.tags')"
               :disabled="!canEdit"
               :placeholder="$t('globals.terms.tags')"
-              type="text"
+              multiple
+              chips
+              closable-chips
               variant="outlined"
               density="comfortable"
-              class="mb-4"
+              class="mb-2"
             />
+            <p class="form-help mb-4">
+              Campaign labels for organization and reporting. These are stored separately from subscriber tags (include/exclude below).
+            </p>
+
+            <v-combobox
+              v-model="form.includeTags"
+              :items="subscriberTagOptions"
+              aria-label="Include subscriber tags"
+              label="Include subscriber tags"
+              :disabled="!canEdit"
+              placeholder="vip, early-access"
+              multiple
+              chips
+              closable-chips
+              variant="outlined"
+              density="comfortable"
+              class="mb-2"
+            />
+            <p class="form-help mb-4">Only subscribers with at least one of these tags will receive the campaign.</p>
+
+            <v-combobox
+              v-model="form.excludeTags"
+              :items="subscriberTagOptions"
+              aria-label="Exclude subscriber tags"
+              label="Exclude subscriber tags"
+              :disabled="!canEdit"
+              placeholder="internal, do-not-contact"
+              multiple
+              chips
+              closable-chips
+              variant="outlined"
+              density="comfortable"
+              class="mb-2"
+            />
+            <p class="form-help mb-4">Subscribers with any of these tags will be skipped.</p>
 
             <v-divider class="my-6" />
 
@@ -726,6 +768,8 @@ export default {
         messenger: 'email',
         lists: [],
         tags: [],
+        includeTags: [],
+        excludeTags: [],
         sendAt: null,
         content: {
           contentType: 'richtext',
@@ -756,10 +800,72 @@ export default {
       },
       lastAutoFromEmail: '',
       isHydratingCampaignForm: false,
+      subscriberTagOptions: [],
+      campaignTagOptions: [],
     };
   },
 
   methods: {
+    normalizeTagsArray(values = []) {
+      const seen = new Set();
+      return (Array.isArray(values) ? values : [])
+        .map((tag) => String(tag || '').trim())
+        .filter((tag) => {
+          const key = tag.toLowerCase();
+          if (!key || seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        });
+    },
+
+    loadSubscriberTagsCatalog() {
+      this.$api.getSubscriberTagsCatalog().then((tags) => {
+        this.subscriberTagOptions = this.normalizeTagsArray(tags);
+      });
+    },
+
+    loadCampaignTagsCatalog() {
+      this.$api.getCampaignTagsCatalog().then((tags) => {
+        this.campaignTagOptions = this.normalizeTagsArray(tags);
+      });
+    },
+
+    persistTagCatalogs() {
+      const subscriberTags = this.normalizeTagsArray([
+        ...(this.form.includeTags || []),
+        ...(this.form.excludeTags || []),
+      ]);
+      const campaignTags = this.normalizeTagsArray(this.form.tags || []);
+
+      const tasks = [];
+      if (subscriberTags.length) {
+        tasks.push(
+          this.$api.ensureSubscriberTags(subscriberTags, this.subscriberTagOptions).then(() => {
+            this.subscriberTagOptions = this.normalizeTagsArray([
+              ...this.subscriberTagOptions,
+              ...subscriberTags,
+            ]);
+          }),
+        );
+      }
+      if (campaignTags.length) {
+        tasks.push(
+          this.$api.ensureCampaignTags(campaignTags, this.campaignTagOptions).then(() => {
+            this.campaignTagOptions = this.normalizeTagsArray([
+              ...this.campaignTagOptions,
+              ...campaignTags,
+            ]);
+          }),
+        );
+      }
+      if (!tasks.length) {
+        return Promise.resolve();
+      }
+      return Promise.all(tasks);
+    },
+
     syncEditorBeforeSubmit() {
       if (this.form.content.contentType !== 'grapes_mjml') {
         return;
@@ -957,8 +1063,13 @@ export default {
       this.form.archiveMetaStr = this.$utils.getPref('campaign.archiveMetaStr') || JSON.stringify(JSON.parse(archiveStr), null, 4);
     },
 
-    onSubmit(typ) {
+    async onSubmit(typ) {
       this.syncEditorBeforeSubmit();
+      this.form.tags = this.normalizeTagsArray(this.form.tags);
+      this.form.includeTags = this.normalizeTagsArray(this.form.includeTags);
+      this.form.excludeTags = this.normalizeTagsArray(this.form.excludeTags);
+      await this.persistTagCatalogs();
+
       // Validate custom JSON headers.
       if (this.form.headersStr && this.form.headersStr !== '[]') {
         try {
@@ -1073,6 +1184,8 @@ export default {
         type: 'regular',
         headers: this.form.headers,
         tags: this.form.tags,
+        include_tags: this.form.includeTags,
+        exclude_tags: this.form.excludeTags,
         template_id: this.form.content.templateId,
         content_type: this.form.content.contentType,
         body: this.form.content.body,
@@ -1102,6 +1215,8 @@ export default {
         messenger: this.form.messenger,
         type: 'regular',
         tags: this.form.tags,
+        include_tags: this.form.includeTags,
+        exclude_tags: this.form.excludeTags,
         send_at: this.form.sendLater ? this.form.sendAtDate : null,
         headers: this.form.headers,
         attribs: this.form.attribs,
@@ -1136,6 +1251,8 @@ export default {
         messenger: this.form.messenger,
         type: 'regular',
         tags: this.form.tags,
+        include_tags: this.form.includeTags,
+        exclude_tags: this.form.excludeTags,
         send_at: this.form.sendLater ? this.form.sendAtDate : null,
         headers: this.form.headers,
         attribs: this.form.attribs,
@@ -1375,18 +1492,6 @@ export default {
       return Object.entries(this.contentTypes).map(([value, title]) => ({ value, title }));
     },
 
-    tagsInput: {
-      get() {
-        return Array.isArray(this.form.tags) ? this.form.tags.join(', ') : '';
-      },
-      set(value) {
-        this.form.tags = value
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean);
-      },
-    },
-
     testEmailsInput: {
       get() {
         return Array.isArray(this.form.testEmails) ? this.form.testEmails.join(', ') : '';
@@ -1402,6 +1507,14 @@ export default {
 
     archiveTemplates() {
       return this.templates.filter((t) => t.type === 'campaign');
+    },
+
+    estimatedSends() {
+      const value = Number(this.data && this.data.toSend);
+      if (!Number.isFinite(value) || value < 0) {
+        return '0';
+      }
+      return value.toLocaleString();
     },
 
     editorKey() {
@@ -1506,6 +1619,8 @@ export default {
     this.$events.$on('campaign.update', () => {
       this.onSubmit('update');
     });
+    this.loadSubscriberTagsCatalog();
+    this.loadCampaignTagsCatalog();
   },
 
   beforeUnmount() {

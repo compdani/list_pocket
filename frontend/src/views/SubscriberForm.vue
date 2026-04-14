@@ -259,12 +259,15 @@
           </v-window-item>
         </v-window>
 
-        <v-text-field
-          v-model="tagsInput"
+        <v-combobox
+          v-model="form.tags"
+          :items="subscriberTagOptions"
           :aria-label="$t('globals.terms.tags')"
           :label="$t('globals.terms.tags')"
           :placeholder="$t('globals.terms.tags')"
-          type="text"
+          multiple
+          chips
+          closable-chips
           variant="outlined"
           density="comfortable"
           class="mt-6 mb-2"
@@ -347,6 +350,7 @@ const isBounceVisible = ref(false);
 const bounces = ref([]);
 const visibleMeta = ref({});
 const activeTab = ref('lists');
+const subscriberTagOptions = ref([]);
 
 const egAttribs = '{"job": "developer", "location": "Mars", "has_rocket": true}';
 
@@ -375,18 +379,34 @@ const selectedListIds = computed(() => (
     : []
 ));
 
-const tagsInput = computed({
-  get() {
-    return Array.isArray(form.value.tags) ? form.value.tags.join(', ') : '';
-  },
-  set(value) {
-    form.value.tags = value
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .filter((tag, index, all) => all.indexOf(tag) === index);
-  },
-});
+function normalizeTags(values = []) {
+  const seen = new Set();
+  return (Array.isArray(values) ? values : [])
+    .map((tag) => String(tag || '').trim())
+    .filter((tag) => {
+      const key = tag.toLowerCase();
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+async function loadSubscriberTagOptions() {
+  const tags = await proxy.$api.getSubscriberTagsCatalog();
+  subscriberTagOptions.value = normalizeTags(tags);
+}
+
+async function persistSubscriberTagOptions() {
+  const tags = normalizeTags(form.value.tags);
+  form.value.tags = tags;
+  if (tags.length === 0) {
+    return;
+  }
+  await proxy.$api.ensureSubscriberTags(tags, subscriberTagOptions.value);
+  subscriberTagOptions.value = normalizeTags([...subscriberTagOptions.value, ...tags]);
+}
 
 const hasOptinList = computed(() => (
   Array.isArray(form.value.lists) && form.value.lists.some((l) => l.optin === 'double')
@@ -478,7 +498,7 @@ function onSubmit() {
   createSubscriber();
 }
 
-function createSubscriber() {
+async function createSubscriber() {
   let attribs = {};
   if (form.value.strAttribs) {
     attribs = validateAttribs(form.value.strAttribs);
@@ -492,6 +512,7 @@ function createSubscriber() {
   } else {
     delete attribs.tags;
   }
+  await persistSubscriberTagOptions();
 
   const payload = {
     email: form.value.email,
@@ -515,7 +536,7 @@ function createSubscriber() {
   });
 }
 
-function updateSubscriber() {
+async function updateSubscriber() {
   let attribs = {};
   if (form.value.strAttribs) {
     attribs = validateAttribs(form.value.strAttribs);
@@ -529,6 +550,7 @@ function updateSubscriber() {
   } else {
     delete attribs.tags;
   }
+  await persistSubscriberTagOptions();
 
   const payload = {
     id: form.value.id,
@@ -592,6 +614,7 @@ watch(isEditing, () => {
 
 onMounted(() => {
   initForm();
+  loadSubscriberTagOptions();
 
   nextTick(() => {
     if (focus.value && typeof focus.value.focus === 'function') {

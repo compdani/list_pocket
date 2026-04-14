@@ -383,10 +383,14 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			return nil, err
 		}
 
+		includeTags := normalizeCampaignFilterTags(c.IncludeTags)
+		excludeTags := normalizeCampaignFilterTags(c.ExcludeTags)
+		tagClause, tagArgs := sqliteSubscriberTagFilterClause(includeTags, excludeTags, "s")
+
 		var meta struct {
 			ToSend int `db:"to_send"`
 		}
-		if err := s.db.Get(&meta, `
+		metaQuery := `
 			SELECT
 				COUNT(DISTINCT s.rowid) AS to_send
 			FROM campaign_lists cl
@@ -402,11 +406,15 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			      (l.optin != 'double' AND sl.status != 'unsubscribed')
 			    ))
 			  )
-		`, campaignRecID, c.Type, c.Type); err != nil {
+		`
+		metaQuery += tagClause
+		metaArgs := []any{campaignRecID, c.Type, c.Type}
+		metaArgs = append(metaArgs, tagArgs...)
+		if err := s.db.Get(&meta, metaQuery, metaArgs...); err != nil {
 			return nil, err
 		}
 		cursor := sqliteBatchCursor{}
-		if err := s.db.Get(&cursor, `
+		cursorQuery := `
 			SELECT
 				COALESCE(MAX(created), '') AS max_created,
 				COALESCE(MAX(id), '') AS max_id
@@ -429,7 +437,11 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 				ORDER BY s.created DESC, s.id DESC
 				LIMIT 1
 			) latest
-		`, campaignRecID, c.Type, c.Type); err != nil {
+		`
+		cursorQuery += tagClause
+		cursorArgs := []any{campaignRecID, c.Type, c.Type}
+		cursorArgs = append(cursorArgs, tagArgs...)
+		if err := s.db.Get(&cursor, cursorQuery, cursorArgs...); err != nil {
 			return nil, err
 		}
 		currentAttribs := sqliteCampaignBatchCursor(nil)
@@ -554,6 +566,60 @@ func placeholders(n int) string {
 	}
 
 	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func normalizeCampaignFilterTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(tags))
+	for _, raw := range tags {
+		tag := strings.ToLower(strings.TrimSpace(raw))
+		if tag == "" {
+			continue
+		}
+		if _, ok := seen[tag]; ok {
+			continue
+		}
+		seen[tag] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
+}
+
+func sqliteSubscriberTagFilterClause(includeTags, excludeTags []string, subscriberAlias string) (string, []any) {
+	if subscriberAlias == "" {
+		subscriberAlias = "s"
+	}
+	args := []any{}
+	var b strings.Builder
+
+	if len(includeTags) > 0 {
+		b.WriteString(`
+			  AND EXISTS (
+			    SELECT 1
+			    FROM json_each(COALESCE(json_extract(` + subscriberAlias + `.attribs, '$.tags'), '[]')) jt
+			    WHERE lower(trim(CAST(jt.value AS TEXT))) IN (` + placeholders(len(includeTags)) + `)
+			  )`)
+		for _, tag := range includeTags {
+			args = append(args, tag)
+		}
+	}
+
+	if len(excludeTags) > 0 {
+		b.WriteString(`
+			  AND NOT EXISTS (
+			    SELECT 1
+			    FROM json_each(COALESCE(json_extract(` + subscriberAlias + `.attribs, '$.tags'), '[]')) jt
+			    WHERE lower(trim(CAST(jt.value AS TEXT))) IN (` + placeholders(len(excludeTags)) + `)
+			  )`)
+		for _, tag := range excludeTags {
+			args = append(args, tag)
+		}
+	}
+
+	return b.String(), args
 }
 
 // GetAttachment fetches a media attachment blob.

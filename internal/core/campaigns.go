@@ -105,6 +105,8 @@ type sqliteCampaignRow struct {
 	Status            string         `db:"status"`
 	ContentType       string         `db:"content_type"`
 	Tags              []byte         `db:"tags"`
+	IncludeTags       []byte         `db:"include_tags"`
+	ExcludeTags       []byte         `db:"exclude_tags"`
 	Headers           []byte         `db:"headers"`
 	Attribs           []byte         `db:"attribs"`
 	TemplateID        sql.NullString `db:"template_id"`
@@ -146,6 +148,14 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 	tags := pq.StringArray{}
 	if len(row.Tags) > 0 && string(row.Tags) != "null" {
 		_ = json.Unmarshal(row.Tags, &tags)
+	}
+	includeTags := pq.StringArray{}
+	if len(row.IncludeTags) > 0 && string(row.IncludeTags) != "null" {
+		_ = json.Unmarshal(row.IncludeTags, &includeTags)
+	}
+	excludeTags := pq.StringArray{}
+	if len(row.ExcludeTags) > 0 && string(row.ExcludeTags) != "null" {
+		_ = json.Unmarshal(row.ExcludeTags, &excludeTags)
 	}
 
 	headers := models.Headers{}
@@ -219,6 +229,8 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 		Status:            row.Status,
 		ContentType:       row.ContentType,
 		Tags:              tags,
+		IncludeTags:       includeTags,
+		ExcludeTags:       excludeTags,
 		Headers:           headers,
 		Attribs:           attribs,
 		TemplateID:        templateID,
@@ -632,7 +644,7 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 	query := `
 	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-		c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+		c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		'' AS template_body,
 		COUNT(*) OVER() AS total,
@@ -732,7 +744,7 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 	q := `
 	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-		c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+		c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 		COALESCE((
@@ -791,7 +803,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 	if err := c.db.Get(&row, `
 		SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-			c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+			c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 			COALESCE(t.body, '') AS template_body,
 			COALESCE((
@@ -830,7 +842,7 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 	if err := c.db.Select(&rows, `
 		SELECT COUNT(*) OVER() AS total, c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
-			c.tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
+			c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
 			'[]' AS lists,
@@ -876,6 +888,11 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 		Type       string         `db:"type"`
 		Body       string         `db:"body"`
 		BodySource sql.NullString `db:"body_source"`
+	}
+
+	campaignType := o.Type
+	if campaignType == "" {
+		campaignType = models.CampaignTypeRegular
 	}
 
 	var tpl tplInfo
@@ -949,10 +966,6 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 		}
 
 		campaignRec := pbcore.NewRecord(campaignsCol)
-		campaignType := o.Type
-		if campaignType == "" {
-			campaignType = models.CampaignTypeRegular
-		}
 		messenger := o.Messenger
 		if messenger == "" {
 			messenger = "email"
@@ -976,6 +989,8 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 		campaignRec.Set("attribs", o.Attribs)
 		campaignRec.Set("status", status)
 		campaignRec.Set("tags", normalizeTags(o.Tags))
+		campaignRec.Set("include_tags", normalizeTags(o.IncludeTags))
+		campaignRec.Set("exclude_tags", normalizeTags(o.ExcludeTags))
 		campaignRec.Set("messenger", messenger)
 		campaignRec.Set("template_id", templateRecordID)
 		campaignRec.Set("to_send", 0)
@@ -1029,6 +1044,14 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	}
 	c.log.Printf("create campaign sqlite: committed name=%q uuid=%q", o.Name, uu.String())
 
+	out, err := c.GetCampaign("", uu.String(), "")
+	if err != nil {
+		return models.Campaign{}, err
+	}
+	if err := c.sqliteUpdateCampaignToSendEstimate(out.RecordID, campaignType); err != nil {
+		return models.Campaign{}, err
+	}
+
 	return c.GetCampaign("", uu.String(), "")
 }
 
@@ -1073,6 +1096,8 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 		rec.Set("headers", o.Headers)
 		rec.Set("attribs", o.Attribs)
 		rec.Set("tags", normalizeTags(o.Tags))
+		rec.Set("include_tags", normalizeTags(o.IncludeTags))
+		rec.Set("exclude_tags", normalizeTags(o.ExcludeTags))
 		rec.Set("messenger", o.Messenger)
 		rec.Set("template_id", templateRecordID)
 		rec.Set("archive", o.Archive)
@@ -1126,7 +1151,82 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
 	}
+	if err := c.sqliteUpdateCampaignToSendEstimate(recordID, o.Type); err != nil {
+		return models.Campaign{}, err
+	}
 	return c.GetCampaign(recordID, "", "")
+}
+
+func (c *Core) sqliteUpdateCampaignToSendEstimate(recordID, campaignType string) error {
+	if strings.TrimSpace(recordID) == "" {
+		return nil
+	}
+	if strings.TrimSpace(campaignType) == "" {
+		campaignType = models.CampaignTypeRegular
+	}
+
+	var toSend int
+	if err := c.db.Get(&toSend, `
+		SELECT
+			COUNT(DISTINCT s.rowid) AS to_send
+		FROM campaigns c
+		JOIN campaign_lists cl ON cl.campaign_id = c.id
+		JOIN lists l ON l.id = cl.list_id
+		JOIN subscriber_lists sl ON sl.list_id = cl.list_id
+		JOIN subscribers s ON s.id = sl.subscriber_id
+		WHERE c.id = ?
+		  AND s.status != 'blocklisted'
+		  AND (
+		    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
+		    (? != 'optin' AND (
+		      (l.optin = 'double' AND sl.status = 'confirmed') OR
+		      (l.optin != 'double' AND sl.status != 'unsubscribed')
+		    ))
+		  )
+		  AND (
+		    COALESCE(json_array_length(c.include_tags), 0) = 0 OR
+		    EXISTS (
+		      SELECT 1
+		      FROM json_each(COALESCE(json_extract(s.attribs, '$.tags'), '[]')) jt
+		      JOIN json_each(COALESCE(c.include_tags, '[]')) it
+		        ON lower(trim(CAST(jt.value AS TEXT))) = lower(trim(CAST(it.value AS TEXT)))
+		    )
+		  )
+		  AND NOT EXISTS (
+		    SELECT 1
+		    FROM json_each(COALESCE(json_extract(s.attribs, '$.tags'), '[]')) jt
+		    JOIN json_each(COALESCE(c.exclude_tags, '[]')) et
+		      ON lower(trim(CAST(jt.value AS TEXT))) = lower(trim(CAST(et.value AS TEXT)))
+		  )
+	`, recordID, campaignType, campaignType); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such column: c.include_tags") {
+			if err2 := c.db.Get(&toSend, `
+				SELECT
+					COUNT(DISTINCT s.rowid) AS to_send
+				FROM campaigns c
+				JOIN campaign_lists cl ON cl.campaign_id = c.id
+				JOIN lists l ON l.id = cl.list_id
+				JOIN subscriber_lists sl ON sl.list_id = cl.list_id
+				JOIN subscribers s ON s.id = sl.subscriber_id
+				WHERE c.id = ?
+				  AND s.status != 'blocklisted'
+				  AND (
+				    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
+				    (? != 'optin' AND (
+				      (l.optin = 'double' AND sl.status = 'confirmed') OR
+				      (l.optin != 'double' AND sl.status != 'unsubscribed')
+				    ))
+				  )
+			`, recordID, campaignType, campaignType); err2 != nil {
+				return err2
+			}
+		} else {
+			return err
+		}
+	}
+
+	_, err := c.db.Exec(`UPDATE campaigns SET to_send = ?, updated=(strftime('%Y-%m-%d %H:%M:%fZ')) WHERE id = ?`, toSend, recordID)
+	return err
 }
 
 func (c *Core) isSQLite() bool {

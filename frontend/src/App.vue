@@ -395,10 +395,28 @@ export default {
 
 .app-main {
   background: linear-gradient(180deg, #f6f7fb 0%, #eef2f9 100%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app-main > .app-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .app-shell {
   padding: 24px;
+}
+
+/* Workflow builder root is <main>; let it fill the shell so inner grid gets height. */
+.app-shell > main.workflow-route {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 960px) {

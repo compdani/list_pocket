@@ -8,6 +8,7 @@ const props = defineProps({
   selectedRunDetail: { type: Object, default: null },
   selectedRunId: { type: String, default: "" },
   selectedRunLoading: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(["cancelRun", "selectRun"]);
@@ -29,8 +30,8 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
 </script>
 
 <template>
-  <v-card class="panel panel-dark" flat>
-    <v-card-title class="panel-header">
+  <v-card class="panel panel-dark" :class="{ 'run-history-card--compact': compact }" flat>
+    <v-card-title v-if="!compact" class="panel-header">
       <div>
         <h2>Run History</h2>
         <p>Open an execution to inspect each node run, payload transition, and log line.</p>
@@ -117,3 +118,9 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.run-history-card--compact :deep(.v-card-text) {
+  padding-top: 8px;
+}
+</style>
