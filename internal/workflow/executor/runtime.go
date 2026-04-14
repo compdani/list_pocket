@@ -462,10 +462,7 @@ func (e TransactionalEmailExecutor) Execute(ctx context.Context, executionCtx Ex
 	if templateID == "" {
 		templateID = strings.TrimSpace(asString(executionCtx.Node.Config["templateId"], ""))
 	}
-	if templateID == "" {
-		return NodeResult{}, errors.New("transactional email node requires config.templateId or config.templateIdPath")
-	}
-	if reLegacyNumericID.MatchString(templateID) {
+	if templateID != "" && reLegacyNumericID.MatchString(templateID) {
 		return NodeResult{}, errors.New("transactional email node requires a template record id, not a legacy numeric id")
 	}
 
