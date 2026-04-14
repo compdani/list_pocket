@@ -32,6 +32,7 @@ const { fitView, setCenter, setViewport, viewport, zoomIn, zoomOut } = useVueFlo
 const committedSignature = ref("");
 const initializedWorkflowId = ref("");
 const isDirty = ref(false);
+const nodeInspectorRef = ref(null);
 const nodeTypes = { workflow: markRaw(WorkflowNodeCard) };
 const restoredViewport = ref({ x: 0, y: 0, zoom: 1 });
 const hasRestoredViewport = ref(false);
@@ -125,6 +126,7 @@ watch(currentSignature, (signature) => {
   if (!props.workflow) {
     return;
   }
+
   isDirty.value = signature !== committedSignature.value;
 });
 
@@ -144,10 +146,15 @@ onMounted(() => {
   window.addEventListener("keydown", onWindowKeydown);
 });
 
-function commitNodeChanges(payload) {
+function saveNodeConfig(key, value) {
   if (selectedNode.value) {
-    builder.updateNodeLabel(selectedNode.value.id, payload?.label ?? selectedNode.value.data?.label ?? "");
-    applyNodeConfigValues(selectedNode.value.id, payload?.config ?? {});
+    builder.updateNodeConfig(selectedNode.value.id, key, value);
+  }
+}
+
+function saveNodeLabel(value) {
+  if (selectedNode.value) {
+    builder.updateNodeLabel(selectedNode.value.id, value);
   }
 }
 
@@ -308,17 +315,15 @@ function onWindowKeydown(event) {
 
 function onNodeDragStop({ node }) {
   builder.updateNodePosition(node.id, node.position.x, node.position.y);
-  void saveWorkflow("auto");
-}
-
-function onConnectNodes(connection) {
-  builder.connectNodes(connection);
-  void saveWorkflow("auto");
 }
 
 async function saveWorkflow(mode = "manual") {
   if (!props.workflow) {
     return;
+  }
+
+  if (mode === "manual") {
+    await nodeInspectorRef.value?.flushPendingChanges?.();
   }
 
   const graph = builder.exportWorkflowGraph();
@@ -380,6 +385,7 @@ defineExpose({
             @input="emit('updateWorkflowName', $event.target.value)"
           />
           <span class="save-indicator" :data-state="(isDirty && saveState !== 'saving' ? 'dirty' : saveState) ?? 'idle'">
+            <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-hidden="true" />
             {{ saveMessage || (isDirty ? "Unsaved changes" : "Up to date") }}
           </span>
         </div>
@@ -395,6 +401,7 @@ defineExpose({
           New workflow
         </button>
         <button class="ghost-button" :disabled="saveState === 'saving'" @click="saveWorkflow('manual')">
+          <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-label="Unsaved changes" />
           {{ saveState === 'saving' ? "Saving..." : "Save" }}
         </button>
         <button class="ghost-button" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</button>
@@ -434,7 +441,7 @@ defineExpose({
           :zoom-on-scroll="true"
           :selection-on-drag="false"
           class="workflow-canvas"
-          @connect="onConnectNodes"
+          @connect="builder.connectNodes"
           @edge-click="({ edge }) => builder.selectEdge(edge.id)"
           @node-click="({ node }) => builder.selectNode(node.id)"
           @node-drag-stop="onNodeDragStop"
@@ -545,9 +552,11 @@ defineExpose({
       </template>
 
       <NodeInspector
+        ref="nodeInspectorRef"
         :contacts="contacts"
         :node="selectedNode"
-        @commit="commitNodeChanges"
+        @save="saveNodeConfig"
+        @save-label="saveNodeLabel"
       />
     </AppRightSidebar>
   </section>
@@ -578,6 +587,16 @@ defineExpose({
 
 .workflow-title-input:disabled {
   opacity: 0.6;
+}
+
+.save-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #f97316;
+  margin-right: 8px;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
 }
 
 .canvas-frame {

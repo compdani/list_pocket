@@ -35,9 +35,7 @@ const props = defineProps({
   node: { type: Object, default: null },
 });
 
-const emit = defineEmits(["commit"]);
-const draftLabel = ref("");
-const draftConfig = ref({});
+const emit = defineEmits(["save", "saveLabel"]);
 
 const triggerMode = computed(() => String(configValue("mode") ?? "manual"));
 const httpBodyMode = computed(() => String(configValue("bodyMode") ?? "source_path"));
@@ -52,6 +50,7 @@ const subscriberTagOptions = ref([]);
 const pendingCatalogTag = ref(null);
 const tagCatalogConfirmLoading = ref(false);
 const localMapDrafts = ref({});
+const localRichtextDrafts = ref({});
 let demoContactSearchTimer;
 let tagCatalogCheckTimer;
 
@@ -145,7 +144,7 @@ function isEventStartFallbackField(field) {
 
 function saveFallbackAtPicker(value) {
   if (value === null || value === undefined || String(value).trim() === "") {
-    setDraftConfigValue("fallbackAt", "");
+    emit("save", "fallbackAt", "");
     return;
   }
   const tz = eventStartTimezone.value;
@@ -153,11 +152,11 @@ function saveFallbackAtPicker(value) {
   if (!parsed.isValid()) {
     return;
   }
-  setDraftConfigValue("fallbackAt", parsed.utc().format("YYYY-MM-DDTHH:mm:ss[Z]"));
+  emit("save", "fallbackAt", parsed.utc().format("YYYY-MM-DDTHH:mm:ss[Z]"));
 }
 
 function saveValue(key, event) {
-  setDraftConfigValue(key, event.target?.value ?? "");
+  emit("save", key, event.target?.value ?? "");
 }
 
 function normalizeTagInput(value) {
@@ -189,7 +188,7 @@ function queueTagCatalogCreateCheck() {
 
 function saveTagName(value) {
   const normalized = normalizeTagInput(value);
-  setDraftConfigValue("tagName", normalized);
+  emit("save", "tagName", normalized);
   window.clearTimeout(tagCatalogCheckTimer);
   pendingCatalogTag.value = null;
   if (!normalized) {
@@ -223,7 +222,7 @@ function dismissPendingCatalogTag() {
 }
 
 function saveLabel(event) {
-  draftLabel.value = event.target?.value ?? "";
+  emit("saveLabel", event.target?.value ?? "");
 }
 
 function normalizeContactOption(contact) {
@@ -342,20 +341,20 @@ function queueDemoContactSearch(value) {
 }
 
 function saveDemoContact(value) {
-  setDraftConfigValue("demoContactId", value ? String(value) : "");
+  emit("save", "demoContactId", value ? String(value) : "");
 }
 
 function saveTemplateSelection(value) {
   if (value && typeof value === "object") {
     const objectID = String(value.id ?? value.value ?? "").trim();
-    setDraftConfigValue("templateId", objectID);
+    emit("save", "templateId", objectID);
     return;
   }
   if (typeof value === "string") {
-    setDraftConfigValue("templateId", value.trim());
+    emit("save", "templateId", value.trim());
     return;
   }
-  setDraftConfigValue("templateId", value ? String(value) : "");
+  emit("save", "templateId", value ? String(value) : "");
 }
 
 function openTemplatesWindow(query = "") {
@@ -378,21 +377,7 @@ function browseTransactionalTemplates() {
 }
 
 function configValue(key) {
-  return draftConfig.value?.[key];
-}
-
-function setDraftConfigValue(key, value) {
-  draftConfig.value = {
-    ...draftConfig.value,
-    [key]: value,
-  };
-}
-
-function commitNodeChanges() {
-  emit("commit", {
-    label: draftLabel.value,
-    config: { ...draftConfig.value },
-  });
+  return props.node?.data?.config?.[key];
 }
 
 function configMapEntries(key) {
@@ -408,11 +393,23 @@ function configMapEntries(key) {
 }
 
 function richtextValue(key) {
+  if (Object.prototype.hasOwnProperty.call(localRichtextDrafts.value, key)) {
+    return localRichtextDrafts.value[key];
+  }
   return String(configValue(key) ?? "");
 }
 
 function queueRichtextSave(key, value) {
-  setDraftConfigValue(key, value);
+  localRichtextDrafts.value = {
+    ...localRichtextDrafts.value,
+    [key]: value,
+  };
+}
+
+async function flushPendingChanges() {
+  Object.entries(localRichtextDrafts.value).forEach(([key, value]) => {
+    emit("save", key, value);
+  });
 }
 
 function mapEntries(key) {
@@ -461,7 +458,7 @@ function emitMap(configKey, entries) {
     return accumulator;
   }, {});
 
-  setDraftConfigValue(configKey, nextValue);
+  emit("save", configKey, nextValue);
 }
 
 function describeContextTokens(type, mode) {
@@ -514,9 +511,8 @@ watch(isTransactionalEmailNode, (visible) => {
 watch(
   () => props.node?.id,
   () => {
-    draftLabel.value = String(props.node?.data?.label ?? "");
-    draftConfig.value = { ...(props.node?.data?.config ?? {}) };
     localMapDrafts.value = {};
+    localRichtextDrafts.value = {};
   },
   { immediate: true }
 );
@@ -558,6 +554,10 @@ onBeforeUnmount(() => {
   window.clearTimeout(demoContactSearchTimer);
   window.clearTimeout(tagCatalogCheckTimer);
 });
+
+defineExpose({
+  flushPendingChanges,
+});
 </script>
 
 <template>
@@ -570,7 +570,7 @@ onBeforeUnmount(() => {
         </div>
         <input
           id="node-field-label"
-          :value="draftLabel"
+          :value="node.data?.label ?? ''"
           placeholder="Set Event Start"
           @input="saveLabel($event)"
         />
@@ -757,10 +757,6 @@ onBeforeUnmount(() => {
         <div class="context-token-list">
           <span v-for="token in contextTokens" :key="token" class="context-token">{{ token }}</span>
         </div>
-      </div>
-
-      <div class="form-field-card form-field-card-wide">
-        <button type="button" class="primary-button" @click="commitNodeChanges">Save Node Changes</button>
       </div>
     </div>
 
