@@ -29,7 +29,6 @@ const emit = defineEmits(["captureSchema", "createWorkflow", "deleteWorkflow", "
 
 const builder = useBuilderState(computed(() => props.workflow));
 const { fitView, setCenter, setViewport, viewport, zoomIn, zoomOut } = useVueFlow();
-const autosaveTimer = ref(undefined);
 const committedSignature = ref("");
 const initializedWorkflowId = ref("");
 const isDirty = ref(false);
@@ -80,11 +79,6 @@ const filteredNodeLibrary = computed(() => {
 watch(
   () => props.workflow,
   async () => {
-    if (autosaveTimer.value) {
-      window.clearTimeout(autosaveTimer.value);
-      autosaveTimer.value = undefined;
-    }
-
     await nextTick();
 
     if (!props.workflow) {
@@ -131,19 +125,7 @@ watch(currentSignature, (signature) => {
   if (!props.workflow) {
     return;
   }
-
   isDirty.value = signature !== committedSignature.value;
-  if (!isDirty.value) {
-    return;
-  }
-
-  if (autosaveTimer.value) {
-    window.clearTimeout(autosaveTimer.value);
-  }
-
-  autosaveTimer.value = window.setTimeout(() => {
-    saveWorkflow("auto");
-  }, 800);
 });
 
 watch(
@@ -155,9 +137,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  if (autosaveTimer.value) {
-    window.clearTimeout(autosaveTimer.value);
-  }
   window.removeEventListener("keydown", onWindowKeydown);
 });
 
@@ -165,15 +144,10 @@ onMounted(() => {
   window.addEventListener("keydown", onWindowKeydown);
 });
 
-function saveNodeConfig(key, value) {
+function commitNodeChanges(payload) {
   if (selectedNode.value) {
-    builder.updateNodeConfig(selectedNode.value.id, key, value);
-  }
-}
-
-function saveNodeLabel(value) {
-  if (selectedNode.value) {
-    builder.updateNodeLabel(selectedNode.value.id, value);
+    builder.updateNodeLabel(selectedNode.value.id, payload?.label ?? selectedNode.value.data?.label ?? "");
+    applyNodeConfigValues(selectedNode.value.id, payload?.config ?? {});
   }
 }
 
@@ -334,16 +308,17 @@ function onWindowKeydown(event) {
 
 function onNodeDragStop({ node }) {
   builder.updateNodePosition(node.id, node.position.x, node.position.y);
+  void saveWorkflow("auto");
+}
+
+function onConnectNodes(connection) {
+  builder.connectNodes(connection);
+  void saveWorkflow("auto");
 }
 
 async function saveWorkflow(mode = "manual") {
   if (!props.workflow) {
     return;
-  }
-
-  if (autosaveTimer.value) {
-    window.clearTimeout(autosaveTimer.value);
-    autosaveTimer.value = undefined;
   }
 
   const graph = builder.exportWorkflowGraph();
@@ -459,7 +434,7 @@ defineExpose({
           :zoom-on-scroll="true"
           :selection-on-drag="false"
           class="workflow-canvas"
-          @connect="builder.connectNodes"
+          @connect="onConnectNodes"
           @edge-click="({ edge }) => builder.selectEdge(edge.id)"
           @node-click="({ node }) => builder.selectNode(node.id)"
           @node-drag-stop="onNodeDragStop"
@@ -572,8 +547,7 @@ defineExpose({
       <NodeInspector
         :contacts="contacts"
         :node="selectedNode"
-        @save="saveNodeConfig"
-        @save-label="saveNodeLabel"
+        @commit="commitNodeChanges"
       />
     </AppRightSidebar>
   </section>
