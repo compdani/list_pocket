@@ -54,6 +54,7 @@
             class="query-submit"
             color="primary"
             icon="mdi-magnify"
+            variant="flat"
             data-cy="btn-query"
           />
         </form>
@@ -62,7 +63,7 @@
 
     <div class="actions mb-4" v-if="bulk.checked.length > 0">
       <a class="a" href="#" @click.prevent="deleteLists" data-cy="btn-delete-lists">
-        <b-icon icon="trash-can-outline" size="is-small" /> {{ $t('globals.buttons.delete') }}
+        <v-icon icon="mdi-trash-can-outline" size="16" /> {{ $t('globals.buttons.delete') }}
       </a>
       <span class="a">
         {{ $tc('globals.messages.numSelected', numSelectedLists, { num: numSelectedLists }) }}
@@ -98,20 +99,20 @@
           <div>
             <button type="button" class="link-button" @click.stop.prevent="showEditForm(item)">{{ item.name }}</button>
             <div class="tag-list">
-              <b-tag class="is-small" v-for="t in item.tags" :key="t">{{ t }}</b-tag>
+              <v-chip v-for="t in item.tags" :key="t" class="list-tag-chip" size="small" variant="tonal">{{ t }}</v-chip>
             </div>
           </div>
         </template>
 
         <template #[`item.type`]="{ item }">
           <div class="tags">
-            <b-tag :class="item.type" :data-cy="`type-${item.type}`">{{ $t(`lists.types.${item.type}`) }}</b-tag>
-            <b-tag :class="item.optin" :data-cy="`optin-${item.optin}`">
-              <b-icon :icon="item.optin === 'double' ? 'account-check-outline' : 'account-off-outline'" size="is-small" />
+            <v-chip :class="['list-type-chip', item.type]" size="small" variant="tonal" :data-cy="`type-${item.type}`">{{ $t(`lists.types.${item.type}`) }}</v-chip>
+            <v-chip :class="['list-optin-chip', item.optin]" size="small" variant="tonal" :data-cy="`optin-${item.optin}`">
+              <v-icon :icon="item.optin === 'double' ? 'mdi-account-check-outline' : 'mdi-account-off-outline'" size="16" />
               {{ $t(`lists.optins.${item.optin}`) }}
-            </b-tag>
+            </v-chip>
             <a v-if="item.optin === 'double'" class="text-caption send-optin" href="#" @click.prevent="$utils.confirm(null, () => createOptinCampaign(item))" data-cy="btn-send-optin-campaign">
-              <b-icon icon="rocket-launch-outline" size="is-small" />
+              <v-icon icon="mdi-rocket-launch-outline" size="16" />
               {{ $t('lists.sendOptinCampaign') }}
             </a>
           </div>
@@ -157,7 +158,7 @@
               data-cy="btn-campaign"
               :aria-label="$t('campaigns.new')"
             >
-              <b-icon icon="rocket-launch-outline" size="is-small" />
+              <v-icon icon="mdi-rocket-launch-outline" size="18" />
             </router-link>
             <button
               v-if="$can('lists:manage') || $canList(item.id, 'list:manage')"
@@ -167,7 +168,7 @@
               data-cy="btn-edit"
               :aria-label="$t('globals.buttons.edit')"
             >
-              <b-icon icon="pencil-outline" size="is-small" />
+              <v-icon icon="mdi-pencil-outline" size="18" />
             </button>
             <router-link
               v-if="$can('subscribers:import')"
@@ -176,7 +177,7 @@
               data-cy="btn-import"
               :aria-label="$t('globals.buttons.import')"
             >
-              <b-icon icon="file-upload-outline" size="is-small" />
+              <v-icon icon="mdi-file-upload-outline" size="18" />
             </router-link>
             <a
               v-if="$can('lists:manage') || $canList(item.id, 'list:manage')"
@@ -186,7 +187,7 @@
               data-cy="btn-delete"
               :aria-label="$t('globals.buttons.delete')"
             >
-              <b-icon icon="trash-can-outline" size="is-small" />
+              <v-icon icon="mdi-trash-can-outline" size="18" />
             </a>
           </div>
         </template>
@@ -551,13 +552,14 @@ export default {
 }
 
 .page-header {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .query-card {
   background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
   border: 1px solid var(--lists-border);
   border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(15, 76, 129, 0.05);
 }
 
 .query-card-body {
@@ -584,6 +586,12 @@ export default {
   min-width: 44px;
 }
 
+.actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+}
+
 .lists-table {
   background: #fff;
   border: 1px solid var(--lists-border);
@@ -599,8 +607,8 @@ export default {
 }
 
 .lists-table :deep(tbody td) {
-  padding-bottom: 14px !important;
-  padding-top: 14px !important;
+  padding-bottom: 16px !important;
+  padding-top: 16px !important;
   vertical-align: top;
 }
 
@@ -631,7 +639,7 @@ export default {
 .action-group {
   align-items: center;
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -642,11 +650,11 @@ export default {
   border-radius: 10px;
   color: #0f5bd8;
   display: inline-flex;
-  height: 34px;
+  height: 36px;
   justify-content: center;
   text-decoration: none;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  width: 34px;
+  width: 36px;
 }
 
 .action-button:hover {
@@ -668,6 +676,10 @@ export default {
   background: #fff0ee;
   border-color: #f4c4bc;
   color: #a92a1f;
+}
+
+.action-button :deep(.v-icon) {
+  font-size: 18px;
 }
 
 .sort-button {
@@ -715,6 +727,44 @@ export default {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.list-tag-chip {
+  background: #edf3ff;
+  color: #36527a;
+}
+
+.list-type-chip.public {
+  background: #e8f7ee;
+  color: #21693f;
+}
+
+.list-type-chip.private {
+  background: #eef2f8;
+  color: #475569;
+}
+
+.list-optin-chip.single {
+  background: #eef4ff;
+  color: #284f97;
+}
+
+.list-optin-chip.double {
+  background: #fff5e8;
+  color: #8a4b00;
+}
+
+.send-optin {
+  align-items: center;
+  color: #0f5bd8;
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  text-decoration: none;
+}
+
+.send-optin:hover {
+  text-decoration: underline;
 }
 
 .link-button,

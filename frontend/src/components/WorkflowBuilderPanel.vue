@@ -105,7 +105,7 @@ watch(
       }
     }
   },
-  { immediate: true, deep: true }
+  { immediate: true }
 );
 
 watch(
@@ -168,6 +168,13 @@ function removeSelectedNode() {
   builder.removeSelectedNode();
 }
 
+async function saveSelectedNode() {
+  if (!selectedNode.value || !workflow?.value) {
+    return;
+  }
+  await saveWorkflow("manual");
+}
+
 function closeNodeModal() {
   builder.clearSelection();
 }
@@ -177,7 +184,8 @@ function removeSelectedEdge() {
 }
 
 function updateSelectedEdgeField(field, event) {
-  builder.updateSelectedEdgeField(field, event.target?.value ?? "");
+  const value = typeof event === "string" ? event : event?.target?.value ?? "";
+  builder.updateSelectedEdgeField(field, value);
 }
 
 function focusFinding(finding) {
@@ -373,178 +381,107 @@ defineExpose({
 
 <template>
   <section class="builder-shell">
-    <div class="builder-toolbar">
+    <v-sheet class="builder-toolbar" color="transparent">
       <div class="builder-heading">
         <div class="builder-editor-bar">
-          <input
-            class="workflow-title-input"
-            type="text"
-            :value="workflow?.workflow.name ?? ''"
-            placeholder="Untitled workflow"
-            :disabled="!workflow"
-            @input="emit('updateWorkflowName', $event.target.value)"
-          />
-          <span class="save-indicator" :data-state="(isDirty && saveState !== 'saving' ? 'dirty' : saveState) ?? 'idle'">
+          <v-text-field class="workflow-title-input" :model-value="workflow?.workflow.name ?? ''" placeholder="Untitled workflow" :disabled="!workflow" hide-details @update:model-value="emit('updateWorkflowName', $event || '')" />
+          <v-chip class="save-indicator" :data-state="(isDirty && saveState !== 'saving' ? 'dirty' : saveState) ?? 'idle'">
             <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-hidden="true" />
             {{ saveMessage || (isDirty ? "Unsaved changes" : "Up to date") }}
-          </span>
+          </v-chip>
         </div>
         <div class="builder-meta">
-          <span class="builder-meta-chip">{{ workflow?.workflow.status ?? "draft" }}</span>
-          <span class="builder-meta-chip">v{{ workflow?.workflow.version ?? 1 }}</span>
-          <span class="builder-meta-chip">{{ workflow?.workflow.triggerType ?? "manual" }} trigger</span>
-          <span v-if="webhookEndpoint" class="builder-meta-chip builder-meta-chip-wide">{{ webhookEndpoint }}</span>
+          <v-chip class="builder-meta-chip">{{ workflow?.workflow.status ?? "draft" }}</v-chip>
+          <v-chip class="builder-meta-chip">v{{ workflow?.workflow.version ?? 1 }}</v-chip>
+          <v-chip class="builder-meta-chip">{{ workflow?.workflow.triggerType ?? "manual" }} trigger</v-chip>
+          <v-chip v-if="webhookEndpoint" class="builder-meta-chip builder-meta-chip-wide">{{ webhookEndpoint }}</v-chip>
         </div>
       </div>
       <div class="toolbar-actions toolbar-actions-compact toolbar-actions-primary">
-        <button class="ghost-button" :disabled="saveState === 'saving'" @click="saveWorkflow('manual')">
+        <v-btn variant="outlined" :disabled="saveState === 'saving'" @click="saveWorkflow('manual')">
           <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-label="Unsaved changes" />
           {{ saveState === 'saving' ? "Saving..." : "Save" }}
-        </button>
-        <button class="primary-button" :disabled="!workflow" @click="workflow && emit('run', workflow.workflow.id)">Run Test</button>
+        </v-btn>
+        <v-btn color="primary" variant="flat" :disabled="!workflow" @click="workflow && emit('run', workflow.workflow.id)">Run Test</v-btn>
       </div>
       <div class="toolbar-actions toolbar-actions-compact toolbar-actions-secondary">
-        <button class="ghost-button" type="button" :disabled="!workflow" @click="emit('createWorkflow')">
-          New workflow
-        </button>
-        <button class="ghost-button" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</button>
-        <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('validate', workflow.workflow.id)">Validate</button>
-        <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('publish', workflow.workflow.id)">Publish</button>
-        <button class="danger-button" :disabled="!workflow || saveState === 'saving'" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)">
-          Delete
-        </button>
+        <v-btn variant="outlined" type="button" :disabled="!workflow" @click="emit('createWorkflow')">New workflow</v-btn>
+        <v-btn variant="outlined" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</v-btn>
+        <v-btn variant="outlined" :disabled="!workflow" @click="workflow && emit('validate', workflow.workflow.id)">Validate</v-btn>
+        <v-btn variant="outlined" :disabled="!workflow" @click="workflow && emit('publish', workflow.workflow.id)">Publish</v-btn>
+        <v-btn color="error" variant="outlined" :disabled="!workflow || saveState === 'saving'" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)">Delete</v-btn>
       </div>
-      <details class="toolbar-actions-mobile-more">
-        <summary>More actions</summary>
-        <div class="toolbar-actions-mobile-menu">
-          <button class="ghost-button" type="button" :disabled="!workflow" @click="emit('createWorkflow')">
-            New workflow
-          </button>
-          <button class="ghost-button" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</button>
-          <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('validate', workflow.workflow.id)">Validate</button>
-          <button class="ghost-button" :disabled="!workflow" @click="workflow && emit('publish', workflow.workflow.id)">Publish</button>
-          <button class="danger-button" :disabled="!workflow || saveState === 'saving'" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)">
-            Delete
-          </button>
-        </div>
-      </details>
-    </div>
+    </v-sheet>
 
     <div v-if="workflow" class="builder-body builder-body-single">
-      <div class="canvas-frame">
-        <div class="canvas-action-dock" role="toolbar" aria-label="Canvas actions">
-          <button type="button" class="canvas-action-btn canvas-action-btn-wide" title="Add node (A)" @click="openNodeCommand">
-            + Add node
-          </button>
-          <button type="button" class="canvas-action-btn canvas-action-btn-wide" title="Center selected node" @click="centerOnSelection">
-            Center
-          </button>
-          <button type="button" class="canvas-action-btn canvas-action-btn-wide" title="Reset saved view" @click="clearSavedViewport">
-            Reset
-          </button>
-        </div>
-        <VueFlow
-          :node-types="nodeTypes"
-          :nodes="decoratedNodes"
-          :edges="decoratedEdges"
-          :default-viewport="restoredViewport"
-          :fit-view-on-init="!hasRestoredViewport"
-          :min-zoom="0.2"
-          :max-zoom="1.2"
-          :pan-on-scroll="true"
-          :pan-on-drag="true"
-          :zoom-on-double-click="false"
-          :zoom-on-scroll="true"
-          :selection-on-drag="false"
-          class="workflow-canvas"
-          @connect="builder.connectNodes"
-          @edge-click="({ edge }) => builder.selectEdge(edge.id)"
-          @node-click="({ node }) => builder.selectNode(node.id)"
-          @node-drag-stop="onNodeDragStop"
-        >
+      <v-sheet class="canvas-frame" border>
+        <v-sheet class="canvas-action-dock" role="toolbar" aria-label="Canvas actions" elevation="0">
+          <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Add node (A)" @click="openNodeCommand">+ Add node</v-btn>
+          <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Center selected node" @click="centerOnSelection">Center</v-btn>
+          <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Reset saved view" @click="clearSavedViewport">Reset</v-btn>
+        </v-sheet>
+        <VueFlow :node-types="nodeTypes" :nodes="decoratedNodes" :edges="decoratedEdges" :default-viewport="restoredViewport" :fit-view-on-init="!hasRestoredViewport" :min-zoom="0.2" :max-zoom="1.2" :pan-on-scroll="true" :pan-on-drag="true" :zoom-on-double-click="false" :zoom-on-scroll="true" :selection-on-drag="false" class="workflow-canvas" @connect="builder.connectNodes" @edge-click="({ edge }) => builder.selectEdge(edge.id)" @node-click="({ node }) => builder.selectNode(node.id)" @node-drag-stop="onNodeDragStop">
           <MiniMap position="bottom-right" :pannable="true" />
           <Controls position="bottom-left" />
           <Background :gap="22" :size="1.2" :pattern-color="'#d9dee7'" />
         </VueFlow>
 
-        <div v-if="showNodeCommand" class="node-command-overlay" @click.self="closeNodeCommand">
-          <div class="node-command-card">
+        <v-dialog v-model="showNodeCommand" width="560">
+          <v-card class="node-command-card">
             <div class="node-command-header">
               <strong>Add node</strong>
-              <button type="button" class="canvas-action-btn" @click="closeNodeCommand">x</button>
+              <v-btn type="button" size="small" icon="mdi-close" variant="text" @click="closeNodeCommand" />
             </div>
-            <input
-              v-model="commandSearch"
-              class="node-command-input"
-              placeholder="Search nodes (A)"
-              autofocus
-            />
-            <div class="node-command-list">
-              <button
-                v-for="node in filteredNodeLibrary"
-                :key="node.type"
-                type="button"
-                class="node-command-item"
-                @click="addNodeFromCommand(node.type)"
-              >
-                <span>{{ node.label }}</span>
-                <small>{{ node.type }}</small>
-              </button>
+            <v-text-field v-model="commandSearch" class="node-command-input" placeholder="Search nodes (A)" autofocus hide-details />
+            <v-list class="node-command-list">
+              <v-list-item v-for="node in filteredNodeLibrary" :key="node.type" class="node-command-item" @click="addNodeFromCommand(node.type)">
+                <v-list-item-title>{{ node.label }}</v-list-item-title>
+                <v-list-item-subtitle>{{ node.type }}</v-list-item-subtitle>
+              </v-list-item>
               <p v-if="!filteredNodeLibrary.length" class="node-command-empty">No matching node types.</p>
-            </div>
-          </div>
-        </div>
-      </div>
+            </v-list>
+          </v-card>
+        </v-dialog>
+      </v-sheet>
     </div>
 
     <div v-if="workflow && (validationErrors?.length || selectedEdge)" class="builder-secondary-panels">
-      <aside v-if="validationErrors?.length" class="panel validation-panel detail-panel">
+      <v-card v-if="validationErrors?.length" class="panel validation-panel detail-panel" variant="outlined">
         <div class="panel-header">
           <h2>Validation</h2>
           <p>Resolve these findings before publish.</p>
         </div>
-        <button
-          v-for="finding in validationFindings"
-          :key="`${finding.code}:${finding.targetId}:${finding.message}`"
-          class="validation-item"
-          type="button"
-          @click="focusFinding(finding)"
-        >
+        <v-btn v-for="finding in validationFindings" :key="`${finding.code}:${finding.targetId}:${finding.message}`" class="validation-item" variant="text" @click="focusFinding(finding)">
           <span class="validation-severity" :data-severity="finding.severity">{{ finding.severity }}</span>
           {{ finding.message }}
-        </button>
-      </aside>
+        </v-btn>
+      </v-card>
 
-      <aside v-if="selectedEdge" class="panel edge-panel detail-panel">
+      <v-card v-if="selectedEdge" class="panel edge-panel detail-panel" variant="outlined">
         <div class="panel-header">
           <h2>Transition</h2>
           <p>{{ selectedEdge.source }} -> {{ selectedEdge.target }}</p>
         </div>
         <label class="form-field">
           <span>Branch Label</span>
-          <input :value="String(selectedEdge.label ?? '')" @input="updateSelectedEdgeField('branch', $event)" />
+          <v-text-field :model-value="String(selectedEdge.label ?? '')" hide-details @update:model-value="updateSelectedEdgeField('branch', $event || '')" />
         </label>
         <label class="form-field">
           <span>Condition</span>
-          <textarea rows="4" :value="selectedEdgeExpression" @input="updateSelectedEdgeField('expression', $event)" />
+          <v-textarea rows="4" :model-value="selectedEdgeExpression" hide-details @update:model-value="updateSelectedEdgeField('expression', $event || '')" />
         </label>
-        <button type="button" class="danger-button" @click="removeSelectedEdge">Delete Edge</button>
-      </aside>
+        <v-btn type="button" color="error" variant="outlined" @click="removeSelectedEdge">Delete Edge</v-btn>
+      </v-card>
     </div>
 
-    <section v-if="!workflow" class="panel detail-panel builder-empty-state">
+    <v-card v-if="!workflow" class="panel detail-panel builder-empty-state" variant="outlined">
       <div class="panel-header">
         <h2>No workflow selected</h2>
         <p>Create or select a workflow to start editing the graph.</p>
       </div>
-    </section>
+    </v-card>
 
-    <AppRightSidebar
-      :model-value="showNodeModal"
-      :width="700"
-      @update:model-value="(next) => !next && closeNodeModal()"
-      @close="closeNodeModal"
-    >
+    <AppRightSidebar :model-value="showNodeModal" :width="700" @update:model-value="(next) => !next && closeNodeModal()" @close="closeNodeModal">
       <template #header>
         <div class="modal-header mt-2 px-2">
           <div>
@@ -553,27 +490,14 @@ defineExpose({
             <p v-if="selectedNodeDescription" class="field-help">{{ selectedNodeDescription }}</p>
           </div>
           <div class="node-modal-actions">
-            <button
-              v-if="canCaptureSelectedNodeSchema"
-              type="button"
-              class="ghost-button"
-              @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)"
-            >
-              Infer Schema
-            </button>
-            <button type="button" class="danger-button" @click="removeSelectedNode">Delete Node</button>
-            <button type="button" class="ghost-button" @click="closeNodeModal">Close</button>
+            <v-btn type="button" icon="mdi-content-save-outline" variant="text" color="primary" :disabled="saveState === 'saving'" :loading="saveState === 'saving'" aria-label="Save node" title="Save node" @click="saveSelectedNode" />
+            <v-btn v-if="canCaptureSelectedNodeSchema" type="button" variant="outlined" size="small" @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)">Infer Schema</v-btn>
+            <v-btn type="button" icon="mdi-delete-outline" variant="text" color="error" aria-label="Delete node" title="Delete node" @click="removeSelectedNode" />
+            <v-btn type="button" icon="mdi-close" variant="text" aria-label="Close node settings" title="Close" @click="closeNodeModal" />
           </div>
         </div>
       </template>
-
-      <NodeInspector
-        ref="nodeInspectorRef"
-        :contacts="contacts"
-        :node="selectedNode"
-        @save="saveNodeConfig"
-        @save-label="saveNodeLabel"
-      />
+      <NodeInspector ref="nodeInspectorRef" :contacts="contacts" :node="selectedNode" @save="saveNodeConfig" @save-label="saveNodeLabel" />
     </AppRightSidebar>
   </section>
 </template>
@@ -728,16 +652,6 @@ defineExpose({
   grid-template-columns: repeat(2, max-content);
 }
 
-.builder-toolbar .toolbar-actions-mobile-more {
-  display: none;
-}
-
-.builder-toolbar .toolbar-actions-mobile-menu {
-  display: grid;
-  gap: 8px;
-  padding-top: 8px;
-}
-
 @media (max-width: 760px) {
   .builder-toolbar .toolbar-actions-primary {
     width: 100%;
@@ -745,37 +659,8 @@ defineExpose({
     gap: 8px;
   }
 
-  .builder-toolbar .toolbar-actions-primary .ghost-button,
-  .builder-toolbar .toolbar-actions-primary .primary-button {
+  .builder-toolbar .toolbar-actions-primary :deep(.v-btn) {
     width: 100%;
-  }
-
-  .builder-toolbar .toolbar-actions-secondary {
-    display: none !important;
-  }
-
-  .builder-toolbar .toolbar-actions-mobile-more {
-    display: block;
-    width: 100%;
-    border: 1px solid #dde5ef;
-    border-radius: 10px;
-    background: #f8fafc;
-    padding: 6px 8px;
-  }
-
-  .builder-toolbar .toolbar-actions-mobile-more > summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: #334155;
-    list-style: none;
-  }
-
-  .builder-toolbar .toolbar-actions-mobile-more[open] {
-    padding-bottom: 8px;
-  }
-
-  .builder-toolbar .toolbar-actions-mobile-more > summary::-webkit-details-marker {
-    display: none;
   }
 }
 </style>

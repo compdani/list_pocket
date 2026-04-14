@@ -8,7 +8,6 @@ import * as api from './api';
 import Utils from './utils';
 import { docsUrl } from './utils/docs';
 import vuetify from './plugins/vuetify';
-import { installLegacyUIStyles, registerLegacyUI } from './legacy-ui';
 
 function createEventBus() {
   const listeners = new Map();
@@ -459,8 +458,6 @@ app.use(router);
 app.use(store);
 app.use(i18n);
 app.use(vuetify);
-registerLegacyUI(app);
-installLegacyUIStyles();
 
 app.config.globalProperties.$api = api;
 app.config.globalProperties.$utils = sharedUtils;

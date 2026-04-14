@@ -55,15 +55,24 @@
                 class="query-submit"
                 color="primary"
                 icon="mdi-magnify"
+                variant="flat"
                 :disabled="isSearchAdvanced"
                 data-cy="btn-search"
               />
             </div>
 
             <div v-if="isSearchAdvanced" class="advanced-query mt-2">
-              <b-input v-model="queryParams.queryExp" @keydown.enter="onAdvancedQueryEnter" type="textarea"
-                ref="queryExp" placeholder="subscribers.name LIKE '%user%' or subscribers.status='blocklisted'"
-                data-cy="query" />
+              <v-textarea
+                v-model="queryParams.queryExp"
+                @keydown.enter="onAdvancedQueryEnter"
+                ref="queryExp"
+                placeholder="subscribers.name LIKE '%user%' or subscribers.status='blocklisted'"
+                auto-grow
+                rows="3"
+                density="comfortable"
+                hide-details
+                data-cy="query"
+              />
               <span class="text-body-2 text-medium-emphasis">
                 {{ $t('subscribers.advancedQueryHelp') }}.{{ ' ' }}
                 <a :href="$docsUrl('querying-and-segmentation/')" target="_blank"
@@ -72,19 +81,19 @@
                 </a>
               </span>
               <div class="buttons">
-                <b-button native-type="submit" type="is-primary" icon-left="magnify" data-cy="btn-query">
+                <v-btn type="submit" color="primary" prepend-icon="mdi-magnify" data-cy="btn-query">
                   {{
                     $t('subscribers.query') }}
-                </b-button>
-                <b-button @click.prevent="toggleAdvancedSearch" icon-left="cancel" data-cy="btn-query-reset">
+                </v-btn>
+                <v-btn @click.prevent="toggleAdvancedSearch" prepend-icon="mdi-cancel" data-cy="btn-query-reset">
                   {{ $t('subscribers.reset') }}
-                </b-button>
+                </v-btn>
               </div>
             </div>
           </form>
           <div v-if="!isSearchAdvanced" class="toggle-advanced">
             <a href="#" @click.prevent="toggleAdvancedSearch" data-cy="btn-advanced-search">
-              <b-icon icon="cog-outline" size="is-small" />
+              <v-icon icon="mdi-cog-outline" size="16" />
               {{ $t('subscribers.advancedQuery') }}
             </a>
           </div>
@@ -93,18 +102,18 @@
     </section>
     <div class="actions mb-4">
       <a class="a" href="#" @click.prevent="exportSubscribers" data-cy="btn-export-subscribers">
-        <b-icon icon="cloud-download-outline" size="is-small" />
+        <v-icon icon="mdi-cloud-download-outline" size="16" />
         {{ $t('subscribers.export') }}
       </a>
       <template v-if="bulk.checked.length > 0">
         <a class="a" href="#" @click.prevent="showBulkListForm" data-cy="btn-manage-lists">
-          <b-icon icon="format-list-bulleted-square" size="is-small" /> Manage lists
+          <v-icon icon="mdi-format-list-bulleted-square" size="16" /> Manage lists
         </a>
         <a class="a" href="#" @click.prevent="deleteSubscribers" data-cy="btn-delete-subscribers">
-          <b-icon icon="trash-can-outline" size="is-small" /> Delete
+          <v-icon icon="mdi-trash-can-outline" size="16" /> Delete
         </a>
         <a class="a" href="#" @click.prevent="blocklistSubscribers" data-cy="btn-manage-blocklist">
-          <b-icon icon="account-off-outline" size="is-small" /> Blocklist
+          <v-icon icon="mdi-account-off-outline" size="16" /> Blocklist
         </a>
         <span class="a">
           {{ $t('globals.messages.numSelected', { num: numSelectedSubscribers }) }}
@@ -143,20 +152,20 @@
               {{ item.email }}
             </button>
             <copy-text :text="`${item.email}`" hide-text />
-            <b-tag v-if="item.status !== 'enabled'" :class="item.status" data-cy="blocklisted">
+            <v-chip v-if="item.status !== 'enabled'" :class="['subscriber-status-chip', item.status]" size="small" variant="tonal" data-cy="blocklisted">
               {{ $t(`subscribers.status.${item.status}`) }}
-            </b-tag>
+            </v-chip>
             <div v-if="item.phone" class="subtle-row">
               {{ item.phone }}
             </div>
             <div class="tag-list">
               <router-link v-for="l in item.lists" :key="l.id" :to="`/subscribers/lists/${l.id}`">
-                <b-tag :class="l.subscriptionStatus" size="is-small">
+                <v-chip :class="['subscriber-list-chip', l.subscriptionStatus]" size="small" variant="tonal">
                   {{ l.name }}
                   <sup v-if="l.optin === 'double' || l.subscriptionStatus === 'unsubscribed'">
                     {{ $t(`subscribers.status.${l.subscriptionStatus}`) }}
                   </sup>
-                </b-tag>
+                </v-chip>
               </router-link>
             </div>
           </div>
@@ -192,7 +201,7 @@
               :aria-label="$t('subscribers.downloadData')"
               @click.stop.prevent="downloadSubscriber(item)"
             >
-              <b-icon icon="cloud-download-outline" size="is-small" />
+              <v-icon icon="mdi-cloud-download-outline" size="18" />
             </button>
             <button
               v-if="$can('subscribers:manage')"
@@ -202,7 +211,7 @@
               data-cy="btn-edit"
               :aria-label="$t('globals.buttons.edit')"
             >
-              <b-icon icon="pencil-outline" size="is-small" />
+              <v-icon icon="mdi-pencil-outline" size="18" />
             </button>
             <a
               v-if="$can('subscribers:manage')"
@@ -212,7 +221,7 @@
               data-cy="btn-delete"
               :aria-label="$t('globals.buttons.delete')"
             >
-              <b-icon icon="trash-can-outline" size="is-small" />
+              <v-icon icon="mdi-trash-can-outline" size="18" />
             </a>
           </div>
         </template>
@@ -827,6 +836,7 @@ export default {
   background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
   border: 1px solid var(--subscribers-border);
   border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(15, 76, 129, 0.05);
 }
 
 .query-card-body {
@@ -876,8 +886,8 @@ export default {
 }
 
 .subscribers-table :deep(tbody td) {
-  padding-bottom: 14px !important;
-  padding-top: 14px !important;
+  padding-bottom: 16px !important;
+  padding-top: 16px !important;
   vertical-align: top;
 }
 
@@ -908,7 +918,7 @@ export default {
 .action-group {
   align-items: center;
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -919,11 +929,11 @@ export default {
   border-radius: 10px;
   color: #0f5bd8;
   display: inline-flex;
-  height: 34px;
+  height: 36px;
   justify-content: center;
   text-decoration: none;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  width: 34px;
+  width: 36px;
 }
 
 .action-button:hover {
@@ -945,6 +955,10 @@ export default {
   background: #fff0ee;
   border-color: #f4c4bc;
   color: #a92a1f;
+}
+
+.action-button :deep(.v-icon) {
+  font-size: 18px;
 }
 
 .link-button,
@@ -1005,6 +1019,37 @@ export default {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.subscriber-status-chip.blocklisted {
+  background: #fff0ee;
+  color: #a92a1f;
+}
+
+.subscriber-status-chip.bounced {
+  background: #fff5e8;
+  color: #8a4b00;
+}
+
+.subscriber-status-chip.unsubscribed {
+  background: #eef2f8;
+  color: #475569;
+}
+
+.subscriber-list-chip.unconfirmed {
+  background: #fff5e8;
+  color: #8a4b00;
+}
+
+.subscriber-list-chip.confirmed,
+.subscriber-list-chip.enabled {
+  background: #e8f7ee;
+  color: #21693f;
+}
+
+.subscriber-list-chip.unsubscribed {
+  background: #eef2f8;
+  color: #475569;
 }
 
 @media (max-width: 960px) {

@@ -1,6 +1,6 @@
 <template>
   <section class="workflow-hub">
-    <header class="workflow-hero">
+    <v-card class="workflow-hero" variant="outlined">
       <div class="workflow-hero-copy">
         <span class="workflow-eyebrow">Automation Workspace</span>
         <h1 class="title is-3">Workflows in the Admin</h1>
@@ -11,48 +11,44 @@
       </div>
 
       <div class="workflow-hero-actions">
-        <button type="button" class="workflow-primary-button" @click="openBuilder()">
-          Open Builder
-        </button>
+        <v-btn type="button" color="primary" variant="flat" @click="openBuilder()">Open Builder</v-btn>
       </div>
-    </header>
+    </v-card>
 
     <div class="workflow-stats">
-      <article class="workflow-stat-card">
+      <v-card class="workflow-stat-card" variant="outlined">
         <span class="workflow-stat-label">Workflows</span>
         <strong>{{ stats.totalWorkflows }}</strong>
         <p>{{ stats.publishedWorkflows }} published</p>
-      </article>
+      </v-card>
 
-      <article class="workflow-stat-card">
+      <v-card class="workflow-stat-card" variant="outlined">
         <span class="workflow-stat-label">Runs</span>
         <strong>{{ stats.totalRuns }}</strong>
         <p>{{ stats.runningRuns }} active right now</p>
-      </article>
+      </v-card>
 
-      <article class="workflow-stat-card">
+      <v-card class="workflow-stat-card" variant="outlined">
         <span class="workflow-stat-label">Subscribers in Scope</span>
         <strong>{{ stats.totalContacts }}</strong>
         <p>{{ stats.webhookWorkflows }} webhook-driven workflows</p>
-      </article>
+      </v-card>
 
-      <article class="workflow-stat-card">
+      <v-card class="workflow-stat-card" variant="outlined">
         <span class="workflow-stat-label">Active Draft</span>
         <strong>{{ activeWorkflowName }}</strong>
         <p>{{ activeWorkflowTrigger }}</p>
-      </article>
+      </v-card>
     </div>
 
     <div class="workflow-grid">
-      <section class="workflow-panel">
+      <v-card class="workflow-panel" variant="outlined">
         <div class="workflow-panel-header">
           <div>
             <span class="workflow-eyebrow">Library</span>
             <h2>Workflow Catalog</h2>
           </div>
-          <button type="button" class="workflow-text-button" @click="refreshDashboard">
-            Refresh
-          </button>
+          <v-btn type="button" variant="outlined" @click="refreshDashboard">Refresh</v-btn>
         </div>
 
         <div v-if="loading" class="workflow-empty-state">
@@ -64,13 +60,17 @@
         </div>
 
         <div v-else class="workflow-card-list">
-          <button
+          <v-card
             v-for="workflow in dashboard.workflows"
             :key="workflow.id"
-            type="button"
             class="workflow-record-card"
             :class="{ 'workflow-record-card-active': workflow.id === selectedWorkflowId }"
+            variant="outlined"
+            role="button"
+            tabindex="0"
             @click="selectWorkflow(workflow.id)"
+            @keydown.enter.prevent="selectWorkflow(workflow.id)"
+            @keydown.space.prevent="selectWorkflow(workflow.id)"
           >
             <div class="workflow-record-topline">
               <strong>{{ workflow.name }}</strong>
@@ -79,19 +79,17 @@
               </span>
             </div>
             <p>{{ workflow.triggerType }} trigger · v{{ workflow.version }}</p>
-          </button>
+          </v-card>
         </div>
-      </section>
+      </v-card>
 
-      <section class="workflow-panel">
+      <v-card class="workflow-panel" variant="outlined">
         <div class="workflow-panel-header">
           <div>
             <span class="workflow-eyebrow">Recent Activity</span>
             <h2>Workflow Runs</h2>
           </div>
-          <button type="button" class="workflow-text-button" @click="openBuilder()">
-            Open Builder
-          </button>
+          <v-btn type="button" variant="outlined" @click="openBuilder()">Open Builder</v-btn>
         </div>
 
         <div v-if="dashboard.runLogs.length === 0" class="workflow-empty-state">
@@ -99,7 +97,7 @@
         </div>
 
         <div v-else class="workflow-run-list">
-          <article v-for="run in recentRuns" :key="run.id" class="workflow-run-card">
+          <v-card v-for="run in recentRuns" :key="run.id" class="workflow-run-card" variant="outlined">
             <div class="workflow-run-topline">
               <strong>{{ run.workflowName }}</strong>
               <span class="workflow-run-status" :class="`workflow-run-${run.status}`">
@@ -111,42 +109,38 @@
               <span>{{ run.contactName || 'Subscriber context unavailable' }}</span>
               <span>{{ $utils.niceDate(run.startedAt) }}</span>
             </div>
-          </article>
+          </v-card>
         </div>
-      </section>
+      </v-card>
     </div>
 
-    <section class="workflow-panel workflow-focus-panel">
+    <v-card class="workflow-panel workflow-focus-panel" variant="outlined">
       <div class="workflow-panel-header">
         <div>
           <span class="workflow-eyebrow">Focus</span>
           <h2>{{ activeWorkflowName }}</h2>
         </div>
         <div class="workflow-focus-actions">
-          <button type="button" class="workflow-text-button workflow-danger-button" :disabled="!selectedWorkflowId" @click="confirmDeleteWorkflow()">
-            Delete Workflow
-          </button>
-          <button type="button" class="workflow-primary-button workflow-primary-button-small" @click="openBuilder()">
-            Edit in Builder
-          </button>
+          <v-btn type="button" color="error" variant="outlined" :disabled="!selectedWorkflowId" @click="confirmDeleteWorkflow()">Delete Workflow</v-btn>
+          <v-btn type="button" color="primary" variant="flat" @click="openBuilder()">Edit in Builder</v-btn>
         </div>
       </div>
 
       <div class="workflow-focus-grid">
-        <article class="workflow-focus-card">
+        <v-card class="workflow-focus-card" variant="outlined">
           <span class="workflow-focus-label">Trigger</span>
           <strong>{{ activeWorkflowTrigger }}</strong>
-        </article>
-        <article class="workflow-focus-card">
+        </v-card>
+        <v-card class="workflow-focus-card" variant="outlined">
           <span class="workflow-focus-label">Nodes</span>
           <strong>{{ activeNodeCount }}</strong>
-        </article>
-        <article class="workflow-focus-card">
+        </v-card>
+        <v-card class="workflow-focus-card" variant="outlined">
           <span class="workflow-focus-label">Edges</span>
           <strong>{{ activeEdgeCount }}</strong>
-        </article>
+        </v-card>
       </div>
-    </section>
+    </v-card>
   </section>
 </template>
 
@@ -345,63 +339,6 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-}
-
-.workflow-primary-button,
-.workflow-secondary-button,
-.workflow-text-button {
-  align-items: center;
-  border-radius: 12px;
-  cursor: pointer;
-  display: inline-flex;
-  font-weight: 600;
-  justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
-  text-decoration: none;
-  transition: all 0.16s ease;
-}
-
-.workflow-primary-button {
-  background: #0f5bd8;
-  border: 1px solid #0f5bd8;
-  color: #fff;
-}
-
-.workflow-primary-button:hover {
-  background: #0b4ebc;
-}
-
-.workflow-primary-button-small {
-  min-height: 38px;
-}
-
-.workflow-secondary-button,
-.workflow-text-button {
-  background: #f5f7fb;
-  border: 1px solid #dbe2ef;
-  color: #0f172a;
-}
-
-.workflow-danger-button {
-  background: #fff5f5;
-  border-color: #fecaca;
-  color: #b42318;
-}
-
-.workflow-secondary-button:hover,
-.workflow-text-button:hover {
-  background: #eef3fb;
-}
-
-.workflow-danger-button:hover {
-  background: #feeaea;
-}
-
-.workflow-text-button:disabled,
-.workflow-primary-button:disabled {
-  cursor: default;
-  opacity: 0.55;
 }
 
 .workflow-stats {
