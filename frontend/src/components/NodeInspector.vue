@@ -1,6 +1,6 @@
 <script setup>
 /* eslint-disable */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useStore } from "vuex";
 import dayjs from "dayjs";
 import dayjsTimezone from "dayjs/plugin/timezone";
@@ -50,6 +50,8 @@ const demoContactSearch = ref("");
 const templateItems = ref([]);
 const templateLoading = ref(false);
 const lastAutoFromEmail = ref("");
+const isHydratingTransactionalNode = ref(false);
+const hasPrimedMessengerWatcher = ref(false);
 const subscriberTagOptions = ref([]);
 const pendingCatalogTag = ref(null);
 const tagCatalogConfirmLoading = ref(false);
@@ -421,6 +423,28 @@ function hydrateFromEmailForNode() {
   }
 }
 
+function beginTransactionalHydration() {
+  hasPrimedMessengerWatcher.value = false;
+  isHydratingTransactionalNode.value = true;
+}
+
+function endTransactionalHydration() {
+  void nextTick(() => {
+    isHydratingTransactionalNode.value = false;
+    hasPrimedMessengerWatcher.value = true;
+  });
+}
+
+function initializeTransactionalNodeState() {
+  if (!isTransactionalEmailNode.value) {
+    return;
+  }
+  beginTransactionalHydration();
+  hydrateFromEmailForNode();
+  applyDefaultTemplateSelection();
+  endTransactionalHydration();
+}
+
 function openTemplatesWindow(query = "") {
   window.open(`/admin/campaigns/templates${query}`, "_blank", "noopener");
 }
@@ -670,7 +694,11 @@ watch(selectedTemplateId, () => {
 });
 
 watch(selectedMessenger, (nextMessenger, previousMessenger) => {
-  if (!isTransactionalEmailNode.value || nextMessenger === previousMessenger) {
+  if (!isTransactionalEmailNode.value || nextMessenger === previousMessenger || isHydratingTransactionalNode.value) {
+    return;
+  }
+  if (!hasPrimedMessengerWatcher.value) {
+    hasPrimedMessengerWatcher.value = true;
     return;
   }
   applyDefaultFromEmailForMessenger(true);
@@ -679,11 +707,7 @@ watch(selectedMessenger, (nextMessenger, previousMessenger) => {
 watch(
   () => props.node?.id,
   () => {
-    if (!isTransactionalEmailNode.value) {
-      return;
-    }
-    hydrateFromEmailForNode();
-    applyDefaultTemplateSelection();
+    initializeTransactionalNodeState();
   },
 );
 
@@ -707,11 +731,14 @@ onMounted(() => {
     void loadDemoContactOptions("");
   }
   if (isTransactionalEmailNode.value) {
+    beginTransactionalHydration();
     if (!selectedMessenger.value) {
       emit("save", "messenger", "email");
     }
     hydrateFromEmailForNode();
+    applyDefaultTemplateSelection();
     void loadTransactionalTemplates();
+    endTransactionalHydration();
   }
   void loadSubscriberTagOptions();
 });
