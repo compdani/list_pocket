@@ -55,9 +55,11 @@ const pendingCatalogTag = ref(null);
 const tagCatalogConfirmLoading = ref(false);
 const localMapDrafts = ref({});
 const localRichtextDrafts = ref({});
+const lastSavedRichtextDrafts = ref({});
 const activeRichtextDraftNodeId = ref("");
 let demoContactSearchTimer;
 let tagCatalogCheckTimer;
+let richtextAutosaveTimer;
 
 const sortedContacts = computed(() => [...props.contacts].sort((left, right) => String(left.fullName || left.email || "").localeCompare(String(right.fullName || right.email || ""))));
 const selectedDemoContactId = computed(() => String(configValue("demoContactId") ?? "").trim());
@@ -461,12 +463,14 @@ function syncRichtextDraftsForNode(node, forceReset = false) {
 
   if (!nodeId) {
     localRichtextDrafts.value = {};
+    lastSavedRichtextDrafts.value = {};
     activeRichtextDraftNodeId.value = "";
     return;
   }
 
   if (forceReset || activeRichtextDraftNodeId.value !== nodeId) {
     localRichtextDrafts.value = nextDrafts;
+    lastSavedRichtextDrafts.value = { ...nextDrafts };
     activeRichtextDraftNodeId.value = nodeId;
     return;
   }
@@ -496,10 +500,26 @@ function syncRichtextDraftsForNode(node, forceReset = false) {
   }
 }
 
-async function flushPendingChanges() {
+function flushDirtyRichtextDrafts(force = false) {
   Object.entries(localRichtextDrafts.value).forEach(([key, value]) => {
+    if (!force && lastSavedRichtextDrafts.value[key] === value) {
+      return;
+    }
     emit("save", key, value);
   });
+  lastSavedRichtextDrafts.value = { ...localRichtextDrafts.value };
+}
+
+function queueRichtextAutosave() {
+  window.clearTimeout(richtextAutosaveTimer);
+  richtextAutosaveTimer = window.setTimeout(() => {
+    flushDirtyRichtextDrafts(false);
+  }, 350);
+}
+
+async function flushPendingChanges() {
+  window.clearTimeout(richtextAutosaveTimer);
+  flushDirtyRichtextDrafts(true);
 }
 
 function mapEntries(key) {
@@ -602,6 +622,7 @@ watch(isTransactionalEmailNode, (visible) => {
 watch(
   () => props.node?.id,
   (nextNodeId, previousNodeId) => {
+    window.clearTimeout(richtextAutosaveTimer);
     localMapDrafts.value = {};
     syncRichtextDraftsForNode(props.node, nextNodeId !== previousNodeId);
   },
@@ -616,6 +637,17 @@ watch(
     }
     syncRichtextDraftsForNode(props.node, false);
   }
+);
+
+watch(
+  localRichtextDrafts,
+  () => {
+    if (!activeRichtextDraftNodeId.value) {
+      return;
+    }
+    queueRichtextAutosave();
+  },
+  { deep: true }
 );
 
 watch(selectedDemoContactId, () => {
@@ -676,6 +708,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.clearTimeout(demoContactSearchTimer);
   window.clearTimeout(tagCatalogCheckTimer);
+  window.clearTimeout(richtextAutosaveTimer);
 });
 
 defineExpose({

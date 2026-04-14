@@ -168,13 +168,6 @@ function removeSelectedNode() {
   builder.removeSelectedNode();
 }
 
-async function saveSelectedNode() {
-  if (!selectedNode.value || !workflow?.value) {
-    return;
-  }
-  await saveWorkflow("manual");
-}
-
 function closeNodeModal() {
   builder.clearSelection();
 }
@@ -490,7 +483,6 @@ defineExpose({
             <p v-if="selectedNodeDescription" class="field-help">{{ selectedNodeDescription }}</p>
           </div>
           <div class="node-modal-actions">
-            <v-btn type="button" icon="mdi-content-save-outline" variant="text" color="primary" :disabled="saveState === 'saving'" :loading="saveState === 'saving'" aria-label="Save node" title="Save node" @click="saveSelectedNode" />
             <v-btn v-if="canCaptureSelectedNodeSchema" type="button" variant="outlined" size="small" @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)">Infer Schema</v-btn>
             <v-btn type="button" icon="mdi-delete-outline" variant="text" color="error" aria-label="Delete node" title="Delete node" @click="removeSelectedNode" />
             <v-btn type="button" icon="mdi-close" variant="text" aria-label="Close node settings" title="Close" @click="closeNodeModal" />
