@@ -35,7 +35,9 @@ const props = defineProps({
   node: { type: Object, default: null },
 });
 
-const emit = defineEmits(["save", "saveLabel"]);
+const emit = defineEmits(["commit"]);
+const draftLabel = ref("");
+const draftConfig = ref({});
 
 const triggerMode = computed(() => String(configValue("mode") ?? "manual"));
 const httpBodyMode = computed(() => String(configValue("bodyMode") ?? "source_path"));
@@ -145,7 +147,7 @@ function isEventStartFallbackField(field) {
 
 function saveFallbackAtPicker(value) {
   if (value === null || value === undefined || String(value).trim() === "") {
-    emit("save", "fallbackAt", "");
+    setDraftConfigValue("fallbackAt", "");
     return;
   }
   const tz = eventStartTimezone.value;
@@ -153,11 +155,11 @@ function saveFallbackAtPicker(value) {
   if (!parsed.isValid()) {
     return;
   }
-  emit("save", "fallbackAt", parsed.utc().format("YYYY-MM-DDTHH:mm:ss[Z]"));
+  setDraftConfigValue("fallbackAt", parsed.utc().format("YYYY-MM-DDTHH:mm:ss[Z]"));
 }
 
 function saveValue(key, event) {
-  emit("save", key, event.target?.value ?? "");
+  setDraftConfigValue(key, event.target?.value ?? "");
 }
 
 function normalizeTagInput(value) {
@@ -189,7 +191,7 @@ function queueTagCatalogCreateCheck() {
 
 function saveTagName(value) {
   const normalized = normalizeTagInput(value);
-  emit("save", "tagName", normalized);
+  setDraftConfigValue("tagName", normalized);
   window.clearTimeout(tagCatalogCheckTimer);
   pendingCatalogTag.value = null;
   if (!normalized) {
@@ -223,7 +225,7 @@ function dismissPendingCatalogTag() {
 }
 
 function saveLabel(event) {
-  emit("saveLabel", event.target?.value ?? "");
+  draftLabel.value = event.target?.value ?? "";
 }
 
 function normalizeContactOption(contact) {
@@ -342,20 +344,20 @@ function queueDemoContactSearch(value) {
 }
 
 function saveDemoContact(value) {
-  emit("save", "demoContactId", value ? String(value) : "");
+  setDraftConfigValue("demoContactId", value ? String(value) : "");
 }
 
 function saveTemplateSelection(value) {
   if (value && typeof value === "object") {
     const objectID = String(value.id ?? value.value ?? "").trim();
-    emit("save", "templateId", objectID);
+    setDraftConfigValue("templateId", objectID);
     return;
   }
   if (typeof value === "string") {
-    emit("save", "templateId", value.trim());
+    setDraftConfigValue("templateId", value.trim());
     return;
   }
-  emit("save", "templateId", value ? String(value) : "");
+  setDraftConfigValue("templateId", value ? String(value) : "");
 }
 
 function openTemplatesWindow(query = "") {
@@ -378,7 +380,21 @@ function browseTransactionalTemplates() {
 }
 
 function configValue(key) {
-  return props.node?.data?.config?.[key];
+  return draftConfig.value?.[key];
+}
+
+function setDraftConfigValue(key, value) {
+  draftConfig.value = {
+    ...draftConfig.value,
+    [key]: value,
+  };
+}
+
+function commitNodeChanges() {
+  emit("commit", {
+    label: draftLabel.value,
+    config: { ...draftConfig.value },
+  });
 }
 
 function configMapEntries(key) {
@@ -408,7 +424,7 @@ function queueRichtextSave(key, value) {
 
   window.clearTimeout(richtextSaveTimers[key]);
   richtextSaveTimers[key] = window.setTimeout(() => {
-    emit("save", key, value);
+    setDraftConfigValue(key, value);
   }, 250);
 }
 
@@ -458,7 +474,7 @@ function emitMap(configKey, entries) {
     return accumulator;
   }, {});
 
-  emit("save", configKey, nextValue);
+  setDraftConfigValue(configKey, nextValue);
 }
 
 function describeContextTokens(type, mode) {
@@ -511,6 +527,8 @@ watch(isTransactionalEmailNode, (visible) => {
 watch(
   () => props.node?.id,
   () => {
+    draftLabel.value = String(props.node?.data?.label ?? "");
+    draftConfig.value = { ...(props.node?.data?.config ?? {}) };
     localMapDrafts.value = {};
     localRichtextDrafts.value = {};
   },
@@ -568,7 +586,7 @@ onBeforeUnmount(() => {
         </div>
         <input
           id="node-field-label"
-          :value="node.data?.label ?? ''"
+          :value="draftLabel"
           placeholder="Set Event Start"
           @input="saveLabel($event)"
         />
@@ -755,6 +773,10 @@ onBeforeUnmount(() => {
         <div class="context-token-list">
           <span v-for="token in contextTokens" :key="token" class="context-token">{{ token }}</span>
         </div>
+      </div>
+
+      <div class="form-field-card form-field-card-wide">
+        <button type="button" class="primary-button" @click="commitNodeChanges">Save Node Changes</button>
       </div>
     </div>
 
