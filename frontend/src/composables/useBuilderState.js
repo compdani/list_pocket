@@ -189,8 +189,8 @@ function buildNodeTemplate(type, index) {
           schema: [
             { ...schema("eventKey", "Event Name", "text"), description: "Stable key used by later wait nodes.", placeholder: "campaignStart" },
             { ...schema("sourcePath", "Source Path", "text"), description: "Where to read the event date from the run context.", placeholder: "run.triggerPayload.startAt" },
-            { ...schema("fallbackAt", "Fallback Date", "text"), description: "Used if the source path is empty.", placeholder: "2026-03-20T09:00:00Z" },
-            { ...schema("timezone", "Timezone", "text"), description: "Timezone used to interpret calculated wait times.", placeholder: "America/Chicago" },
+            { ...schema("timezone", "Timezone", "text"), description: "IANA timezone (e.g. America/Chicago). The fallback date is entered as local time in this zone, then saved as UTC for the backend.", placeholder: "America/Chicago" },
+            { ...schema("fallbackAt", "Fallback Date", "text"), description: "Used if the source path is empty. Pick the local date and time in the timezone above; it is stored as UTC (Z).", placeholder: "" },
           ],
           contactMode: "event-anchor",
         },
