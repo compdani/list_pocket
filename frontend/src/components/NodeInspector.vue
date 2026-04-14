@@ -1,6 +1,7 @@
 <script setup>
 /* eslint-disable */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useStore } from "vuex";
 import dayjs from "dayjs";
 import dayjsTimezone from "dayjs/plugin/timezone";
 import dayjsUtc from "dayjs/plugin/utc";
@@ -12,6 +13,7 @@ import {
   getTemplates,
   searchSubscribers,
 } from "../api";
+import { useSenderLookup } from "../composables/useSenderLookup";
 import RichtextEditor from "./RichtextEditor.vue";
 
 dayjs.extend(dayjsUtc);
@@ -36,6 +38,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["save", "saveLabel"]);
+const store = useStore();
 
 const triggerMode = computed(() => String(configValue("mode") ?? "manual"));
 const httpBodyMode = computed(() => String(configValue("bodyMode") ?? "source_path"));
@@ -46,11 +49,13 @@ const demoContactLoading = ref(false);
 const demoContactSearch = ref("");
 const templateItems = ref([]);
 const templateLoading = ref(false);
+const lastAutoFromEmail = ref("");
 const subscriberTagOptions = ref([]);
 const pendingCatalogTag = ref(null);
 const tagCatalogConfirmLoading = ref(false);
 const localMapDrafts = ref({});
 const localRichtextDrafts = ref({});
+const activeRichtextDraftNodeId = ref("");
 let demoContactSearchTimer;
 let tagCatalogCheckTimer;
 
@@ -66,6 +71,10 @@ const demoContactOptions = computed(() => {
   return options;
 });
 const selectedTemplateId = computed(() => String(configValue("templateId") ?? "").trim());
+const selectedMessenger = computed(() => String(configValue("messenger") ?? "").trim() || "email");
+const selectedFromEmail = computed(() => String(configValue("fromEmail") ?? "").trim());
+const serverConfig = computed(() => store.state.serverConfig || {});
+const { availableMessengers, availableFromAddresses, defaultFromEmail } = useSenderLookup(serverConfig, selectedMessenger);
 const selectedTemplateLabel = computed(() => {
   const match = templateItems.value.find((item) => item.id === selectedTemplateId.value);
   return match?.title ?? "";
@@ -83,7 +92,7 @@ const fields = computed(() => {
   }
 
   if (props.node?.data?.type === "send_transactional_email") {
-    const hidden = new Set(["templateId"]);
+    const hidden = new Set(["templateId", "messenger", "fromEmail"]);
     return schema.filter((field) => !hidden.has(field.key));
   }
 
@@ -156,7 +165,8 @@ function saveFallbackAtPicker(value) {
 }
 
 function saveValue(key, event) {
-  emit("save", key, event.target?.value ?? "");
+  const value = typeof event === "string" ? event : event?.target?.value ?? "";
+  emit("save", key, value);
 }
 
 function normalizeTagInput(value) {
@@ -222,7 +232,8 @@ function dismissPendingCatalogTag() {
 }
 
 function saveLabel(event) {
-  emit("saveLabel", event.target?.value ?? "");
+  const value = typeof event === "string" ? event : event?.target?.value ?? "";
+  emit("saveLabel", value);
 }
 
 function normalizeContactOption(contact) {
@@ -250,6 +261,7 @@ function normalizeTemplateOption(template) {
     id: String(template.id ?? ""),
     title: String(template.name ?? "").trim() || String(template.id ?? ""),
     subtitle: subject,
+    isDefault: template.isDefault === true,
   };
 }
 
@@ -290,9 +302,20 @@ async function loadTransactionalTemplates() {
     templateItems.value = Array.isArray(response)
       ? response.filter((item) => item.type === "tx").map(normalizeTemplateOption)
       : [];
+    applyDefaultTemplateSelection();
     await ensureSelectedTemplateLoaded();
   } finally {
     templateLoading.value = false;
+  }
+}
+
+function applyDefaultTemplateSelection() {
+  if (!isTransactionalEmailNode.value || selectedTemplateId.value) {
+    return;
+  }
+  const defaultTemplate = templateItems.value.find((item) => item.isDefault) || templateItems.value[0];
+  if (defaultTemplate?.id) {
+    emit("save", "templateId", defaultTemplate.id);
   }
 }
 
@@ -357,6 +380,34 @@ function saveTemplateSelection(value) {
   emit("save", "templateId", value ? String(value) : "");
 }
 
+function saveMessengerSelection(value) {
+  const nextMessenger = String(value || "").trim() || "email";
+  emit("save", "messenger", nextMessenger);
+}
+
+function saveFromEmailSelection(value) {
+  if (value && typeof value === "object") {
+    const fromEmail = String(value.id ?? value.value ?? value.title ?? "").trim();
+    emit("save", "fromEmail", fromEmail);
+    return;
+  }
+  emit("save", "fromEmail", String(value || "").trim());
+}
+
+function applyDefaultFromEmailForMessenger(force = false) {
+  if (!isTransactionalEmailNode.value) {
+    return;
+  }
+  const current = selectedFromEmail.value;
+  const nextDefault = defaultFromEmail.value || "";
+  const shouldReplace = force || !current || current === lastAutoFromEmail.value;
+  if (!shouldReplace) {
+    return;
+  }
+  emit("save", "fromEmail", nextDefault);
+  lastAutoFromEmail.value = nextDefault;
+}
+
 function openTemplatesWindow(query = "") {
   window.open(`/admin/campaigns/templates${query}`, "_blank", "noopener");
 }
@@ -404,6 +455,32 @@ function buildRichtextDraftsForNode(node) {
   return Object.fromEntries(draftEntries);
 }
 
+function syncRichtextDraftsForNode(node, forceReset = false) {
+  const nodeId = String(node?.id ?? "");
+  const nextDrafts = buildRichtextDraftsForNode(node);
+
+  if (!nodeId) {
+    localRichtextDrafts.value = {};
+    activeRichtextDraftNodeId.value = "";
+    return;
+  }
+
+  if (forceReset || activeRichtextDraftNodeId.value !== nodeId) {
+    localRichtextDrafts.value = nextDrafts;
+    activeRichtextDraftNodeId.value = nodeId;
+    return;
+  }
+
+  // Keep in-progress editor text stable for existing keys, only seed new keys.
+  const mergedDrafts = {};
+  Object.entries(nextDrafts).forEach(([key, value]) => {
+    mergedDrafts[key] = Object.prototype.hasOwnProperty.call(localRichtextDrafts.value, key)
+      ? localRichtextDrafts.value[key]
+      : value;
+  });
+  localRichtextDrafts.value = mergedDrafts;
+}
+
 async function flushPendingChanges() {
   Object.entries(localRichtextDrafts.value).forEach(([key, value]) => {
     emit("save", key, value);
@@ -426,8 +503,9 @@ function setMapEntries(configKey, entries) {
 
 function updateMapEntry(configKey, index, field, event) {
   const entries = mapEntries(configKey);
+  const value = typeof event === "string" ? event : event?.target?.value ?? "";
   const nextEntries = entries.map((entry, entryIndex) => (
-    entryIndex === index ? { ...entry, [field]: event.target?.value ?? "" } : entry
+    entryIndex === index ? { ...entry, [field]: value } : entry
   ));
   setMapEntries(configKey, nextEntries);
   emitMap(configKey, nextEntries);
@@ -508,11 +586,21 @@ watch(isTransactionalEmailNode, (visible) => {
 
 watch(
   () => props.node?.id,
-  () => {
+  (nextNodeId, previousNodeId) => {
     localMapDrafts.value = {};
-    localRichtextDrafts.value = buildRichtextDraftsForNode(props.node);
+    syncRichtextDraftsForNode(props.node, nextNodeId !== previousNodeId);
   },
   { immediate: true }
+);
+
+watch(
+  () => props.node?.data?.schema,
+  () => {
+    if (!props.node?.id) {
+      return;
+    }
+    syncRichtextDraftsForNode(props.node, false);
+  }
 );
 
 watch(selectedDemoContactId, () => {
@@ -522,6 +610,24 @@ watch(selectedDemoContactId, () => {
 watch(selectedTemplateId, () => {
   void ensureSelectedTemplateLoaded();
 });
+
+watch(selectedMessenger, (nextMessenger, previousMessenger) => {
+  if (!isTransactionalEmailNode.value || nextMessenger === previousMessenger) {
+    return;
+  }
+  applyDefaultFromEmailForMessenger(true);
+});
+
+watch(
+  () => props.node?.id,
+  () => {
+    if (!isTransactionalEmailNode.value) {
+      return;
+    }
+    lastAutoFromEmail.value = selectedFromEmail.value;
+    applyDefaultTemplateSelection();
+  },
+);
 
 watch(triggerMode, (mode) => {
   if (mode !== "tag_added" && mode !== "tag_removed") {
@@ -543,6 +649,10 @@ onMounted(() => {
     void loadDemoContactOptions("");
   }
   if (isTransactionalEmailNode.value) {
+    if (!selectedMessenger.value) {
+      emit("save", "messenger", "email");
+    }
+    applyDefaultFromEmailForMessenger(true);
     void loadTransactionalTemplates();
   }
   void loadSubscriberTagOptions();
@@ -566,11 +676,12 @@ defineExpose({
           <label class="form-field-label" for="node-field-label">Nickname</label>
           <p class="field-help">This is the display name shown on the canvas and in run logs.</p>
         </div>
-        <input
+        <v-text-field
           id="node-field-label"
-          :value="node.data?.label ?? ''"
+          :model-value="node.data?.label ?? ''"
           placeholder="Set Event Start"
-          @input="saveLabel($event)"
+          hide-details
+          @update:model-value="saveLabel($event || '')"
         />
       </div>
 
@@ -596,17 +707,59 @@ defineExpose({
           @update:model-value="saveTemplateSelection"
         >
           <template #item="{ props: itemProps, item }">
-            <v-list-item v-bind="itemProps" :title="item.raw.title" :subtitle="item.raw.subtitle || item.raw.id" />
+            <v-list-item
+              v-bind="itemProps"
+              :title="item.raw.title"
+              :subtitle="item.raw.subtitle || item.raw.id"
+            >
+              <template v-if="item.raw.isDefault" #append>
+                <v-chip size="x-small" color="primary" label>Default</v-chip>
+              </template>
+            </v-list-item>
           </template>
           <template #selection="{ item }">
             <span class="demo-contact-selection">{{ item.raw?.title || item.title || selectedTemplateLabel }}</span>
           </template>
         </v-combobox>
         <div class="template-picker-actions">
-          <button type="button" class="ghost-button" @click="browseTransactionalTemplates">Browse Templates</button>
-          <button type="button" class="ghost-button" @click="createTransactionalTemplate">New Template</button>
-          <button type="button" class="ghost-button" :disabled="!selectedTemplateId" @click="editTransactionalTemplate">Edit Selected</button>
+          <v-btn type="button" color="primary" variant="tonal" size="small" @click="browseTransactionalTemplates">Browse Templates</v-btn>
+          <v-btn type="button" color="primary" variant="tonal" size="small" @click="createTransactionalTemplate">New Template</v-btn>
+          <v-btn type="button" color="primary" variant="tonal" size="small" :disabled="!selectedTemplateId" @click="editTransactionalTemplate">Edit Selected</v-btn>
         </div>
+      </div>
+
+      <div v-if="isTransactionalEmailNode" class="form-field-card">
+        <div class="form-field-header">
+          <label class="form-field-label" for="node-field-messenger">Messenger</label>
+          <p class="field-help">Select the configured messenger backend for this send.</p>
+        </div>
+        <v-select
+          id="node-field-messenger"
+          :model-value="selectedMessenger"
+          :items="availableMessengers"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          @update:model-value="saveMessengerSelection"
+        />
+      </div>
+
+      <div v-if="isTransactionalEmailNode" class="form-field-card form-field-card-wide">
+        <div class="form-field-header">
+          <label class="form-field-label" for="node-field-fromEmail">From Email Override</label>
+          <p class="field-help">Defaults to the selected messenger sender. You can pick or paste a value.</p>
+        </div>
+        <v-combobox
+          id="node-field-fromEmail"
+          :model-value="selectedFromEmail || null"
+          :items="availableFromAddresses"
+          :menu-props="{ maxHeight: 280 }"
+          variant="outlined"
+          density="comfortable"
+          clearable
+          hide-details
+          @update:model-value="saveFromEmailSelection"
+        />
       </div>
 
       <div
@@ -620,16 +773,18 @@ defineExpose({
           <p v-if="field.description" class="field-help">{{ field.description }}</p>
         </div>
 
-        <textarea
+        <v-textarea
           v-if="field.kind === 'textarea'"
           :id="`node-field-${field.key}`"
-          :value="configValue(field.key) ?? ''"
+          :model-value="configValue(field.key) ?? ''"
           rows="6"
           :placeholder="field.placeholder"
-          @input="saveValue(field.key, $event)"
+          hide-details
+          @update:model-value="saveValue(field.key, $event || '')"
         />
         <div v-else-if="field.kind === 'richtext'" class="richtext-field-wrap">
           <RichtextEditor
+            :key="`richtext:${props.node?.id ?? 'none'}:${field.key}`"
             v-model="localRichtextDrafts[field.key]"
             :preserve-go-template="true"
           />
@@ -637,14 +792,12 @@ defineExpose({
         <div v-else-if="field.kind === 'kv_map'" class="map-field-editor">
           <div v-if="mapEntries(field.key).length" class="map-field-list">
             <div v-for="(entry, index) in mapEntries(field.key)" :key="`${field.key}:${index}`" class="map-field-row">
-              <input :value="entry.key" placeholder="fieldName" @input="updateMapEntry(field.key, index, 'key', $event)" />
-              <input :value="entry.value" :placeholder="field.placeholder ?? 'previous.someField'" @input="updateMapEntry(field.key, index, 'value', $event)" />
-              <button type="button" class="ghost-button map-remove-button" @click="removeMapEntry(field.key, index)">
-                Remove
-              </button>
+              <v-text-field :model-value="entry.key" placeholder="fieldName" hide-details @update:model-value="updateMapEntry(field.key, index, 'key', $event || '')" />
+              <v-text-field :model-value="entry.value" :placeholder="field.placeholder ?? 'previous.someField'" hide-details @update:model-value="updateMapEntry(field.key, index, 'value', $event || '')" />
+              <v-btn type="button" color="primary" variant="outlined" density="comfortable" class="map-remove-button map-action-btn" @click="removeMapEntry(field.key, index)">Remove</v-btn>
             </div>
           </div>
-          <button type="button" class="ghost-button" @click="addMapEntry(field.key)">Add Field</button>
+          <v-btn type="button" color="primary" variant="tonal" density="comfortable" class="map-action-btn" @click="addMapEntry(field.key)">Add field</v-btn>
         </div>
         <v-text-field
           v-else-if="isEventStartFallbackField(field)"
@@ -692,20 +845,23 @@ defineExpose({
             </div>
           </template>
         </v-combobox>
-        <select
+        <v-select
           v-else-if="field.kind === 'select'"
           :id="`node-field-${field.key}`"
-          :value="configValue(field.key) ?? ''"
-          @change="saveValue(field.key, $event)"
+          :model-value="configValue(field.key) ?? ''"
+          :items="field.options || []"
+          hide-details
+          @update:model-value="saveValue(field.key, $event || '')"
         >
-          <option v-for="option in field.options" :key="option" :value="option">{{ option }}</option>
-        </select>
-        <input
+        </v-select>
+        <v-text-field
           v-else
           :id="`node-field-${field.key}`"
-          :value="configValue(field.key) ?? ''"
+          :model-value="configValue(field.key) ?? ''"
           :placeholder="field.placeholder"
-          @input="saveValue(field.key, $event)"
+          type="text"
+          hide-details
+          @update:model-value="saveValue(field.key, $event || '')"
         />
       </div>
 
@@ -765,5 +921,30 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   margin-inline-end: 2px;
+}
+
+.node-inspector :deep(.v-input) {
+  width: 100%;
+}
+
+.inspector-fields {
+  align-items: start;
+}
+
+.node-inspector :deep(.form-field-card) {
+  align-content: start;
+}
+
+/* Keep label/help copy height consistent so controls align. */
+.node-inspector :deep(.form-field-header) {
+  min-height: 72px;
+}
+
+.map-action-btn {
+  align-self: start;
+}
+
+.template-picker-actions :deep(.v-btn__content) {
+  text-decoration: none;
 }
 </style>

@@ -40,13 +40,13 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
 
     <v-card-text>
       <div class="run-history-layout">
-        <div class="run-list">
-          <button
+        <v-list class="run-list">
+          <v-btn
             v-for="run in visibleRuns"
             :key="run.id"
             class="run-card run-card-button"
             :class="{ 'run-card-active': run.id === selectedRunId }"
-            type="button"
+            variant="text"
             @click="emit('selectRun', run.id)"
           >
             <div class="run-row">
@@ -58,8 +58,8 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
               <span>{{ run.startedAt }}</span>
             </div>
             <p>{{ run.summary }}</p>
-          </button>
-        </div>
+          </v-btn>
+        </v-list>
 
         <div class="run-trace-panel">
           <div v-if="selectedRunLoading" class="run-trace-empty">Loading execution trace...</div>
@@ -79,10 +79,14 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
                 </v-btn>
               </div>
 
-              <details class="trace-json-block">
-                <summary>Trigger Payload</summary>
-                <pre>{{ formatJson(selectedRunDetail.triggerPayload) }}</pre>
-              </details>
+              <v-expansion-panels variant="accordion">
+                <v-expansion-panel class="trace-json-block">
+                  <v-expansion-panel-title>Trigger Payload</v-expansion-panel-title>
+                  <v-expansion-panel-text>
+                    <pre>{{ formatJson(selectedRunDetail.triggerPayload) }}</pre>
+                  </v-expansion-panel-text>
+                </v-expansion-panel>
+              </v-expansion-panels>
 
               <div class="trace-step-list">
                 <v-card v-for="nodeRun in selectedRunDetail.nodeRuns" :key="nodeRun.id" class="trace-step-card mb-3">
@@ -96,14 +100,20 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
                       <span>{{ nodeRun.startedAt }}<template v-if="nodeRun.endedAt"> -> {{ nodeRun.endedAt }}</template></span>
                     </div>
                     <p v-if="nodeRun.error" class="trace-error">{{ nodeRun.error }}</p>
-                    <details class="trace-json-block">
-                      <summary>Input</summary>
-                      <pre>{{ formatJson(nodeRun.input) }}</pre>
-                    </details>
-                    <details class="trace-json-block">
-                      <summary>Output</summary>
-                      <pre>{{ formatJson(nodeRun.output) }}</pre>
-                    </details>
+                    <v-expansion-panels variant="accordion">
+                      <v-expansion-panel class="trace-json-block">
+                        <v-expansion-panel-title>Input</v-expansion-panel-title>
+                        <v-expansion-panel-text>
+                          <pre>{{ formatJson(nodeRun.input) }}</pre>
+                        </v-expansion-panel-text>
+                      </v-expansion-panel>
+                      <v-expansion-panel class="trace-json-block">
+                        <v-expansion-panel-title>Output</v-expansion-panel-title>
+                        <v-expansion-panel-text>
+                          <pre>{{ formatJson(nodeRun.output) }}</pre>
+                        </v-expansion-panel-text>
+                      </v-expansion-panel>
+                    </v-expansion-panels>
                     <div v-if="nodeRun.logs.length" class="trace-logs">
                       <strong>Logs</strong>
                       <span v-for="log in nodeRun.logs" :key="log">{{ log }}</span>

@@ -21,43 +21,39 @@ const nodeLibrary = [
 </script>
 
 <template>
-  <aside class="workspace-rail">
-    <div class="workspace-section">
-      <button class="primary-button sidebar-primary-button" type="button" @click="emit('createWorkflow')">
-        New Workflow
-      </button>
+  <v-navigation-drawer permanent width="300" class="workspace-rail">
+    <div class="workspace-section pa-3">
+      <v-btn block color="primary" variant="flat" type="button" @click="emit('createWorkflow')">New Workflow</v-btn>
     </div>
 
     <div class="workspace-section">
-      <div class="workflow-nav-list">
-        <button
+      <v-list class="workflow-nav-list">
+        <v-list-item
           v-for="workflow in props.workflows"
           :key="workflow.id"
           class="workflow-nav-item"
           :class="{ 'workflow-nav-item-active': workflow.id === props.activeWorkflowId }"
-          type="button"
           @click="emit('selectWorkflow', workflow.id)"
         >
           <strong>{{ workflow.name }}</strong>
           <span>{{ workflow.triggerType }} · v{{ workflow.version }}</span>
-        </button>
-      </div>
+        </v-list-item>
+      </v-list>
     </div>
 
     <div class="workspace-section">
       <span class="workspace-section-label">Quick Add</span>
-      <div class="library-list">
-        <button
+      <v-list class="library-list">
+        <v-list-item
           v-for="node in nodeLibrary"
           :key="node.label"
           class="library-card library-button"
-          type="button"
           @click="emit('add', node.type)"
         >
           <strong>{{ node.label }}</strong>
           <span>{{ node.description }}</span>
-        </button>
-      </div>
+        </v-list-item>
+      </v-list>
     </div>
-  </aside>
+  </v-navigation-drawer>
 </template>

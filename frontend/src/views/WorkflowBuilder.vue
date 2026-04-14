@@ -98,6 +98,14 @@ function toggleRunHistory() {
   }
 }
 
+function setRunHistoryExpanded(expanded) {
+  const nextCollapsed = !expanded;
+  if (runHistoryCollapsed.value === nextCollapsed) {
+    return;
+  }
+  toggleRunHistory();
+}
+
 watch(
   workflows,
   (nextWorkflows) => {
@@ -583,49 +591,42 @@ onBeforeUnmount(() => {
         @validate="validateWorkflow"
       />
 
-      <div
+      <v-expansion-panels
         class="workflow-run-history-dock"
-        :class="{ 'workflow-run-history-dock--collapsed': runHistoryCollapsed }"
+        :model-value="runHistoryCollapsed ? [] : [0]"
+        variant="accordion"
+        @update:model-value="setRunHistoryExpanded(Boolean($event?.length))"
       >
-        <button
-          type="button"
-          class="workflow-run-history-toggle"
-          :aria-expanded="!runHistoryCollapsed"
-          aria-controls="workflow-run-history-panel"
-          @click="toggleRunHistory"
-        >
-          <span class="workflow-run-history-toggle-label">Run history</span>
-          <span v-if="runHistoryCount" class="workflow-run-history-toggle-count">{{ runHistoryCount }}</span>
-          <span class="workflow-run-history-toggle-chevron" aria-hidden="true">{{ runHistoryCollapsed ? "▼" : "▲" }}</span>
-        </button>
-        <div
-          v-show="!runHistoryCollapsed"
-          id="workflow-run-history-panel"
-          class="workflow-run-history-body"
-        >
-          <RunHistory
-            :active-workflow-id="activeWorkflow?.workflow.id"
-            :runs="runLogs"
-            :selected-run-detail="selectedRunDetail"
-            :selected-run-id="selectedRunId"
-            :selected-run-loading="selectedRunLoading"
-            compact
-            @cancel-run="cancelRun"
-            @select-run="selectRun"
-          />
-        </div>
-      </div>
+        <v-expansion-panel>
+          <v-expansion-panel-title>
+            <span class="workflow-run-history-toggle-label">Run history</span>
+            <v-chip v-if="runHistoryCount" class="workflow-run-history-toggle-count" size="small">{{ runHistoryCount }}</v-chip>
+          </v-expansion-panel-title>
+          <v-expansion-panel-text class="workflow-run-history-body">
+            <RunHistory
+              :active-workflow-id="activeWorkflow?.workflow.id"
+              :runs="runLogs"
+              :selected-run-detail="selectedRunDetail"
+              :selected-run-id="selectedRunId"
+              :selected-run-loading="selectedRunLoading"
+              compact
+              @cancel-run="cancelRun"
+              @select-run="selectRun"
+            />
+          </v-expansion-panel-text>
+        </v-expansion-panel>
+      </v-expansion-panels>
     </section>
   </main>
 
   <main v-else class="c-shell workflow-route">
-    <section class="login-card">
+    <v-card class="login-card" variant="outlined">
       <div class="panel-header">
         <span class="eyebrow">Workflow Control Plane</span>
         <h1>Admin session required.</h1>
         <p>Sign in to the admin first, then reopen the builder.</p>
       </div>
-    </section>
+    </v-card>
   </main>
 </template>
 
@@ -776,13 +777,6 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
-.workflow-route .workflow-editor-shell .primary-button,
-.workflow-route .workflow-editor-shell .ghost-button,
-.workflow-route .workflow-editor-shell .danger-button {
-  min-height: 36px;
-  padding: 6px 12px;
-}
-
 .workflow-route .workflow-editor-shell .save-indicator {
   padding: 6px 10px;
   font-size: 0.78rem;
@@ -865,11 +859,6 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: #e2e8f0;
   color: #475569;
-}
-
-.workflow-route .workflow-run-history-toggle-chevron {
-  color: #64748b;
-  font-size: 0.7rem;
 }
 
 .workflow-route .workflow-run-history-body {
@@ -998,8 +987,7 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .workflow-chip:hover,
-.workflow-route .quick-add-chip:hover,
-.workflow-route .ghost-button:hover {
+.workflow-route .quick-add-chip:hover {
   background: #f3f6f9;
 }
 
@@ -1114,39 +1102,6 @@ onBeforeUnmount(() => {
 .workflow-route .save-indicator[data-state="dirty"] {
   background: #fef0c7;
   color: #a16207;
-}
-
-.workflow-route .primary-button,
-.workflow-route .ghost-button,
-.workflow-route .danger-button {
-  border-radius: 999px;
-  padding: 10px 15px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  min-height: 44px;
-  font-weight: 600;
-}
-
-.workflow-route .primary-button {
-  color: #fff;
-  background: #111827;
-}
-
-.workflow-route .ghost-button {
-  color: #1f2937;
-  background: #f8fafc;
-  border-color: var(--wf-border);
-}
-
-.workflow-route .danger-button {
-  color: #b42318;
-  background: #fff1f2;
-  border-color: #fecdd3;
-}
-
-.workflow-route button:disabled {
-  opacity: 0.55;
-  cursor: default;
 }
 
 .workflow-route .builder-body,
@@ -1497,13 +1452,10 @@ onBeforeUnmount(() => {
   font-size: 0.82rem;
 }
 
-.workflow-route .form-field input,
-.workflow-route .form-field select,
-.workflow-route .form-field textarea,
-.workflow-route .map-field-row input,
-.workflow-route .form-field-card input,
-.workflow-route .form-field-card select,
-.workflow-route .form-field-card textarea {
+.workflow-route .form-field > input,
+.workflow-route .form-field > select,
+.workflow-route .form-field > textarea,
+.workflow-route .map-field-row > input {
   background: #fff;
   border: 1px solid #ccd5e2;
   border-radius: 12px;
@@ -1512,7 +1464,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
 }
 
-.workflow-route .form-field-card textarea {
+.workflow-route .form-field > textarea {
   min-height: 160px;
   resize: vertical;
 }
