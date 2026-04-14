@@ -410,6 +410,17 @@ function applyDefaultFromEmailForMessenger(force = false) {
   lastAutoFromEmail.value = nextDefault;
 }
 
+function hydrateFromEmailForNode() {
+  if (!isTransactionalEmailNode.value) {
+    return;
+  }
+  const current = selectedFromEmail.value;
+  lastAutoFromEmail.value = current;
+  if (!current) {
+    applyDefaultFromEmailForMessenger(false);
+  }
+}
+
 function openTemplatesWindow(query = "") {
   window.open(`/admin/campaigns/templates${query}`, "_blank", "noopener");
 }
@@ -671,7 +682,7 @@ watch(
     if (!isTransactionalEmailNode.value) {
       return;
     }
-    lastAutoFromEmail.value = selectedFromEmail.value;
+    hydrateFromEmailForNode();
     applyDefaultTemplateSelection();
   },
 );
@@ -699,7 +710,7 @@ onMounted(() => {
     if (!selectedMessenger.value) {
       emit("save", "messenger", "email");
     }
-    applyDefaultFromEmailForMessenger(true);
+    hydrateFromEmailForNode();
     void loadTransactionalTemplates();
   }
   void loadSubscriberTagOptions();
