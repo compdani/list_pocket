@@ -192,6 +192,10 @@ export default {
         this.lastEmittedModelValue = null;
         return;
       }
+      const decodedInternalValue = this.decodeEditorValue(this.internalEditorValue || '');
+      if (decodedInternalValue === incomingModelValue) {
+        return;
+      }
       const encodedValue = this.encodeEditorValue(this.modelValue || '');
       if (encodedValue === this.internalEditorValue) {
         return;
