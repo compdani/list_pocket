@@ -43,6 +43,15 @@ func (m *Manager) newPipe(c *models.Campaign) (*pipe, error) {
 		return nil, err
 	}
 
+	// Reset any stranded 'inflight' ledger rows for this campaign back to 'pending'
+	// before dispatch so a previous run's dropped/aborted messages get retried
+	// instead of being permanently stuck and counted as unsent.
+	if n, err := m.store.ResetCampaignLedgerInflight(c.ID); err != nil {
+		m.log.Printf("error resetting stranded inflight ledger rows (%s): %v", c.Name, err)
+	} else if n > 0 {
+		m.log.Printf("reset %d stranded inflight ledger rows back to pending (%s)", n, c.Name)
+	}
+
 	// Add the campaign to the active map.
 	p := &pipe{
 		camp: c,
@@ -124,6 +133,13 @@ func (p *pipe) NextSubscribers() (bool, error) {
 		msg, err := p.newMessage(s)
 		if err != nil {
 			p.m.log.Printf("error rendering message (%s) (%s): %v", p.camp.Name, s.Email, err)
+			// The ledger row for this subscriber was just transitioned to 'inflight'
+			// when the batch was claimed. Since we're not going to dispatch this
+			// message, roll it back so the subscriber is retried on the next batch
+			// instead of being stranded as 'inflight'.
+			if rbErr := p.m.store.RollbackCampaignLedgerInflight(p.camp.ID, s.RecordID); rbErr != nil {
+				p.m.log.Printf("error rolling back campaign ledger inflight after render error (%s): %v", p.camp.Name, rbErr)
+			}
 			continue
 		}
 
@@ -246,6 +262,17 @@ func (p *pipe) cleanup() {
 	// Update campaign's 'sent count.
 	if err := p.m.store.UpdateCampaignCounts(p.camp.ID, 0, int(p.sent.Load()), int(p.lastID.Load())); err != nil {
 		p.m.log.Printf("error updating campaign counts (%s): %v", p.camp.Name, err)
+	}
+
+	// Defensive: roll back any ledger rows that are still 'inflight' at cleanup time.
+	// A correctly behaving worker converts every inflight row to 'sent' or 'pending'
+	// before calling wg.Done, so this should be a no-op, but if a MarkSent/Rollback
+	// call silently failed upstream (only logged) or a path was missed, we don't want
+	// subscribers stranded in 'inflight' forever after the pipe exits.
+	if n, err := p.m.store.ResetCampaignLedgerInflight(p.camp.ID); err != nil {
+		p.m.log.Printf("error resetting residual inflight ledger rows on cleanup (%s): %v", p.camp.Name, err)
+	} else if n > 0 {
+		p.m.log.Printf("reset %d residual inflight ledger rows on cleanup (%s)", n, p.camp.Name)
 	}
 
 	if err := p.m.store.FinalizeCampaignLedgerStats(p.camp.ID); err != nil {

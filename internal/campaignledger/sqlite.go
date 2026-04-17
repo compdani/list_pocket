@@ -221,6 +221,40 @@ WHERE campaign_id = ? AND subscriber_id = ? AND status = 'inflight'`, campaignRe
 	return err
 }
 
+// ResetInflight rolls every inflight row for a campaign back to pending. Called when a
+// pipe starts so rows stranded by a previous paused/cancelled/crashed run get picked up
+// again, and when a pipe's cleanup routine reaches a naturally finished campaign so no
+// subscriber is left permanently claimed as inflight. Returns the number of rows reset.
+func ResetInflight(db sqlx.ExecerContext, campaignRecID string) (int64, error) {
+	ctx := context.Background()
+	res, err := db.ExecContext(ctx, `
+UPDATE `+tableName+`
+SET status = 'pending', updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
+WHERE campaign_id = ? AND status = 'inflight'`, campaignRecID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// MarkInflightSent flips every inflight row for a campaign to sent. Used by the admin
+// "resolve stranded inflight" flow when the operator is confident the messages did go
+// out (e.g. Quo accepted them) but MarkSent never ran to close the ledger loop.
+// Returns the number of rows updated.
+func MarkInflightSent(db sqlx.ExecerContext, campaignRecID string) (int64, error) {
+	ctx := context.Background()
+	res, err := db.ExecContext(ctx, `
+UPDATE `+tableName+`
+SET status = 'sent', updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
+WHERE campaign_id = ? AND status = 'inflight'`, campaignRecID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // MarkSent sets the ledger row to sent for this campaign + subscriber pair.
 // Only rows in status inflight are updated, so a row already marked sent is never changed again.
 func MarkSent(db sqlx.ExecerContext, campaignRecID, subscriberRecID string) error {

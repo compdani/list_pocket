@@ -297,6 +297,22 @@ func (s *store) RollbackCampaignLedgerInflight(campaignID int, subscriberRecordI
 	return campaignledger.RollbackInflight(s.db, campaignRecID, subscriberRecordID)
 }
 
+// ResetCampaignLedgerInflight rolls every inflight ledger row for the campaign back to
+// pending. Called when a pipe starts or finishes so stranded rows from a previous run
+// (paused/cancelled/crashed or dropped queue) are picked up again instead of being
+// permanently claimed as inflight. Returns the number of rows reset.
+func (s *store) ResetCampaignLedgerInflight(campaignID int) (int64, error) {
+	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := campaignledger.ResetInflight(s.db, campaignRecID)
+	if err == nil && n > 0 {
+		s.publishCampaignStatsEvent("ledger-reset-inflight", campaignID)
+	}
+	return n, err
+}
+
 // MarkSMSUnsendable opts the subscriber (matched by normalized phone) out of
 // every list's SMS status, without touching email status. Used by the manager
 // when Quo (or another SMS provider) returns a permanent per-recipient error
