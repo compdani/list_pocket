@@ -226,12 +226,13 @@ func (c *Core) sqliteSyncSubscriberLists(subscriberPBID string, listPBIDs []stri
 
 	for _, listPBID := range listPBIDs {
 		if _, err := c.db.Exec(`
-			INSERT INTO subscriber_lists (subscriber_id, list_id, status)
-			VALUES (?, ?, ?)
+			INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status)
+			VALUES (?, ?, ?, ?)
 			ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
 				updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
-				status=excluded.status`,
-			subscriberPBID, listPBID, status); err != nil {
+				status=excluded.status,
+				sms_status=excluded.sms_status`,
+			subscriberPBID, listPBID, status, status); err != nil {
 			return err
 		}
 	}
@@ -252,6 +253,12 @@ func (c *Core) HasSubscriberLists(subIDs []int, listIDs []int) (map[int]bool, er
 // GetSubscribersByEmail fetches a subscriber by one of the given params.
 func (c *Core) GetSubscribersByEmail(emails []string) (models.Subscribers, error) {
 	return c.getSubscribersByEmailSQLite(emails)
+}
+
+// GetSubscribersByNormalizedPhones loads subscribers whose phone matches any of the given
+// digit-only strings (same normalization as SMS opt-out).
+func (c *Core) GetSubscribersByNormalizedPhones(digits []string) (models.Subscribers, error) {
+	return c.getSubscribersByNormalizedPhonesSQLite(digits)
 }
 
 // QuerySubscribers queries and returns paginated subscrribers based on the given params including the total count.
@@ -460,20 +467,20 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 	return out, hasOptin, nil
 }
 
-// BlocklistSubscribers blocklists the given list of subscribers.
-func (c *Core) BlocklistSubscribers(subIDs []int) error {
-	if len(subIDs) == 0 {
+// BlocklistSubscribers blocklists subscribers by PocketBase record id (subscribers.id TEXT).
+func (c *Core) BlocklistSubscribers(recordIDs []string) error {
+	if len(recordIDs) == 0 {
 		return nil
 	}
 
-	args := make([]any, 0, len(subIDs))
-	for _, id := range subIDs {
+	args := make([]any, 0, len(recordIDs))
+	for _, id := range recordIDs {
 		args = append(args, id)
 	}
 
 	q := `UPDATE subscribers
 		SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-		WHERE id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
+		WHERE id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
 	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -482,7 +489,7 @@ func (c *Core) BlocklistSubscribers(subIDs []int) error {
 
 	q = `UPDATE subscriber_lists
 		SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-		WHERE subscriber_id IN (` + sqlitePlaceholders(len(subIDs)) + `)`
+		WHERE subscriber_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
 	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -506,38 +513,42 @@ func (c *Core) BlocklistSubscribersByQuery(searchStr, queryExp string, listIDs [
 		if end > len(ids) {
 			end = len(ids)
 		}
-		if err := c.BlocklistSubscribers(ids[i:end]); err != nil {
+		recIDs, err := c.ResolveSubscriberRecordIDs(ids[i:end])
+		if err != nil {
+			return err
+		}
+		if err := c.BlocklistSubscribers(recIDs); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// DeleteSubscribers deletes the given list of subscribers.
-func (c *Core) DeleteSubscribers(subIDs []int, subUUIDs []string) error {
-	if subIDs == nil {
-		subIDs = []int{}
+// DeleteSubscribers deletes subscribers by PocketBase record id (subscribers.id) and/or by uuid (public flows).
+func (c *Core) DeleteSubscribers(recordIDs []string, uuids []string) error {
+	if recordIDs == nil {
+		recordIDs = []string{}
 	}
-	if subUUIDs == nil {
-		subUUIDs = []string{}
+	if uuids == nil {
+		uuids = []string{}
 	}
 
-	if len(subIDs) == 0 && len(subUUIDs) == 0 {
+	if len(recordIDs) == 0 && len(uuids) == 0 {
 		return nil
 	}
 
 	clauses := make([]string, 0, 2)
-	args := make([]any, 0, len(subIDs)+len(subUUIDs))
+	args := make([]any, 0, len(recordIDs)+len(uuids))
 
-	if len(subIDs) > 0 {
-		clauses = append(clauses, `id IN (`+sqlitePlaceholders(len(subIDs))+`)`)
-		for _, id := range subIDs {
+	if len(recordIDs) > 0 {
+		clauses = append(clauses, `id IN (`+sqlitePlaceholders(len(recordIDs))+`)`)
+		for _, id := range recordIDs {
 			args = append(args, id)
 		}
 	}
-	if len(subUUIDs) > 0 {
-		clauses = append(clauses, `uuid IN (`+sqlitePlaceholders(len(subUUIDs))+`)`)
-		for _, u := range subUUIDs {
+	if len(uuids) > 0 {
+		clauses = append(clauses, `uuid IN (`+sqlitePlaceholders(len(uuids))+`)`)
+		for _, u := range uuids {
 			args = append(args, u)
 		}
 	}
@@ -566,7 +577,11 @@ func (c *Core) DeleteSubscribersByQuery(searchStr, queryExp string, listIDs []in
 		if end > len(ids) {
 			end = len(ids)
 		}
-		if err := c.DeleteSubscribers(ids[i:end], nil); err != nil {
+		recIDs, err := c.ResolveSubscriberRecordIDs(ids[i:end])
+		if err != nil {
+			return err
+		}
+		if err := c.DeleteSubscribers(recIDs, nil); err != nil {
 			return err
 		}
 	}
@@ -592,6 +607,14 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
+	var messenger string
+	if err := c.db.Get(&messenger, `SELECT COALESCE(messenger, '') FROM campaigns WHERE id = ?`, campRecID); err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+	smsChannel := models.IsTextMessenger(messenger)
+
 	tx, err := c.db.Beginx()
 	if err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
@@ -601,6 +624,10 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 	defer tx.Rollback()
 
 	var hasCampaignSubscriptions bool
+	membershipActive := `sl.status != 'unsubscribed'`
+	if smsChannel {
+		membershipActive = `COALESCE(sl.sms_status, sl.status) != 'unsubscribed'`
+	}
 	if err := tx.Get(&hasCampaignSubscriptions, `
 		SELECT EXISTS(
 			SELECT 1
@@ -608,7 +635,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			INNER JOIN campaign_lists cl ON cl.list_id = sl.list_id
 			WHERE sl.subscriber_id = ?
 			  AND cl.campaign_id = ?
-			  AND sl.status != 'unsubscribed'
+			  AND `+membershipActive+`
 		)`, subRecID, campRecID); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -625,11 +652,21 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
-		if _, err := tx.Exec(`UPDATE subscriber_lists
+		var listUpd string
+		if smsChannel {
+			listUpd = `UPDATE subscriber_lists
+			SET sms_status = 'unsubscribed',
+			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE subscriber_id = ?
+			  AND COALESCE(sms_status, status) != 'unsubscribed'`
+		} else {
+			listUpd = `UPDATE subscriber_lists
 			SET status = 'unsubscribed',
 			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE subscriber_id = ?
-			  AND status != 'unsubscribed'`, subRecID); err != nil {
+			  AND status != 'unsubscribed'`
+		}
+		if _, err := tx.Exec(listUpd, subRecID); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
 			return echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -652,7 +689,20 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		return nil
 	}
 
-	res, err := tx.Exec(`UPDATE subscriber_lists
+	var res sql.Result
+	if smsChannel {
+		res, err = tx.Exec(`UPDATE subscriber_lists
+		SET sms_status = 'unsubscribed',
+		    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE subscriber_id = ?
+		  AND COALESCE(sms_status, status) != 'unsubscribed'
+		  AND list_id IN (
+		    SELECT list_id
+		    FROM campaign_lists
+		    WHERE campaign_id = ?
+		  )`, subRecID, campRecID)
+	} else {
+		res, err = tx.Exec(`UPDATE subscriber_lists
 		SET status = 'unsubscribed',
 		    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 		WHERE subscriber_id = ?
@@ -662,6 +712,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		    FROM campaign_lists
 		    WHERE campaign_id = ?
 		  )`, subRecID, campRecID)
+	}
 	if err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -727,22 +778,22 @@ func (c *Core) ConfirmOptionSubscription(subUUID string, listUUIDs []string, met
 
 // DeleteSubscriberBounces deletes the given list of subscribers.
 func (c *Core) DeleteSubscriberBounces(id int, uuid string) error {
-	var subID int
+	var subRecID string
 	var err error
 	if uuid != "" {
-		err = c.db.Get(&subID, `SELECT id FROM subscribers WHERE uuid = ?`, uuid)
+		err = c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE uuid = ?`, uuid)
 	} else {
-		subID = id
+		err = c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE rowid = ?`, id)
 	}
 	if err != nil && err != sql.ErrNoRows {
 		c.log.Printf("error deleting bounces: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
 	}
-	if subID == 0 {
+	if subRecID == "" {
 		return nil
 	}
-	if _, err := c.db.Exec(`DELETE FROM bounces WHERE subscriber_id = ?`, subID); err != nil {
+	if _, err := c.db.Exec(`DELETE FROM bounces WHERE subscriber_id = ?`, subRecID); err != nil {
 		c.log.Printf("error deleting bounces: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
@@ -1076,6 +1127,40 @@ func (c *Core) getSubscribersByEmailSQLite(emails []string) (models.Subscribers,
 	return out, nil
 }
 
+func (c *Core) getSubscribersByNormalizedPhonesSQLite(digits []string) (models.Subscribers, error) {
+	if len(digits) == 0 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+	}
+	phoneExpr := `replace(replace(replace(replace(replace(replace(COALESCE(phone, ''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')`
+	args := make([]any, 0, len(digits))
+	for _, d := range digits {
+		if strings.TrimSpace(d) == "" {
+			continue
+		}
+		args = append(args, d)
+	}
+	if len(args) == 0 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+	}
+	var rows []sqliteSubscriberRow
+	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE ` + phoneExpr + ` IN (` + sqlitePlaceholders(len(args)) + `) ORDER BY rowid`
+	if err := c.db.Select(&rows, q, args...); err != nil {
+		c.log.Printf("error fetching subscriber: %v", err)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+	}
+	if len(rows) == 0 {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+	}
+	out := sqliteSubscriberRowsToModels(rows)
+	if err := c.loadSubscriberListsSQLite(out); err != nil {
+		c.log.Printf("error loading subscriber lists: %v", err)
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+	}
+	return out, nil
+}
+
 func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int, subStatus string, order, orderBy string, offset, limit int) (models.Subscribers, int, error) {
 	if order != SortAsc && order != SortDesc {
 		order = SortDesc
@@ -1087,10 +1172,11 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int,
 		"name":       "subscribers.name",
 		"created_at": "subscribers.created",
 		"updated_at": "subscribers.updated",
+		"id":         "subscribers.id",
 	}
 	sortCol, ok := orderMap[orderBy]
 	if !ok {
-		sortCol = "subscribers.rowid"
+		sortCol = "subscribers.updated"
 	}
 
 	whereSQL, args := c.subscriberFilterSQLite(searchStr, queryExp, listIDs, subStatus)

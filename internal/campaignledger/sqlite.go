@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/pocketbase/pocketbase/tools/security"
 )
@@ -35,6 +36,7 @@ type SubscriberRow struct {
 	UpdatedAt string `db:"updated_at"`
 	UUID      string `db:"uuid"`
 	Email     string `db:"email"`
+	Phone     string `db:"phone"`
 	FirstName string `db:"first_name"`
 	LastName  string `db:"last_name"`
 	Name      string `db:"name"`
@@ -42,9 +44,31 @@ type SubscriberRow struct {
 	Status    string `db:"status"`
 }
 
+// RecipientMembershipSQL filters list membership using email list status or SMS-specific
+// sms_status (COALESCE with email status for rows before sms_status exists).
+func RecipientMembershipSQL() string {
+	return ` AND (
+    (trim(COALESCE(c.messenger, '')) = '` + models.CampaignMessengerQuo + `' AND (
+      (c.type = 'optin' AND COALESCE(sl.sms_status, sl.status) = 'unconfirmed' AND l.optin = 'double') OR
+      ((c.type != 'optin' OR c.type IS NULL OR c.type = '') AND (
+        (l.optin = 'double' AND COALESCE(sl.sms_status, sl.status) = 'confirmed') OR
+        (l.optin != 'double' AND COALESCE(sl.sms_status, sl.status) != 'unsubscribed')
+      ))
+    ) AND trim(COALESCE(s.phone, '')) != '')
+    OR
+    (trim(COALESCE(c.messenger, '')) != '` + models.CampaignMessengerQuo + `' AND (
+      (c.type = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
+      ((c.type != 'optin' OR c.type IS NULL OR c.type = '') AND (
+        (l.optin = 'double' AND sl.status = 'confirmed') OR
+        (l.optin != 'double' AND sl.status != 'unsubscribed')
+      ))
+    ))
+  )`
+}
+
 // BackfillIfEmpty inserts one ledger row per eligible (campaign, subscriber) pair when the
 // ledger has no rows yet for this campaign. Returns true if a backfill ran.
-func BackfillIfEmpty(db sqlx.ExtContext, campaignRowID int, campaignRecID, campaignType string) (bool, error) {
+func BackfillIfEmpty(db sqlx.ExtContext, campaignRowID int, campaignRecID string) (bool, error) {
 	ctx := context.Background()
 	var n int
 	if err := sqlx.GetContext(ctx, db, &n, `SELECT COUNT(1) FROM `+tableName+` WHERE campaign_id = ?`, campaignRecID); err != nil {
@@ -57,18 +81,13 @@ func BackfillIfEmpty(db sqlx.ExtContext, campaignRowID int, campaignRecID, campa
 	q := `
 SELECT DISTINCT s.id
 FROM campaign_lists cl
+JOIN campaigns c ON c.id = cl.campaign_id
 JOIN lists l ON l.id = cl.list_id
 JOIN subscriber_lists sl ON sl.list_id = cl.list_id
 JOIN subscribers s ON s.id = sl.subscriber_id
 WHERE cl.campaign_id = ?
-  AND s.status != 'blocklisted'
-  AND (
-    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-    (? != 'optin' AND (
-      (l.optin = 'double' AND sl.status = 'confirmed') OR
-      (l.optin != 'double' AND sl.status != 'unsubscribed')
-    ))
-  )`
+  AND s.status != 'blocklisted'`
+	q += RecipientMembershipSQL()
 
 	includeTags, excludeTags, err := campaignTagFilters(db, campaignRecID)
 	if err != nil {
@@ -78,7 +97,7 @@ WHERE cl.campaign_id = ?
 	q += tagClause
 
 	var subIDs []string
-	args := []any{campaignRecID, campaignType, campaignType}
+	args := []any{campaignRecID}
 	args = append(args, tagArgs...)
 	if err := sqlx.SelectContext(ctx, db, &subIDs, q, args...); err != nil {
 		return false, err
@@ -160,6 +179,7 @@ SELECT s.rowid AS id,
        s.updated AS updated_at,
        s.uuid,
        s.email,
+       COALESCE(s.phone, '') AS phone,
        s.first_name,
        s.last_name,
        s.name,
@@ -311,14 +331,8 @@ JOIN lists l ON l.id = cl.list_id
 JOIN subscriber_lists sl ON sl.list_id = cl.list_id AND sl.subscriber_id = ?
 JOIN subscribers s ON s.id = sl.subscriber_id
 WHERE c.status IN ('scheduled', 'running', 'paused')
-  AND s.status != 'blocklisted'
-  AND (
-    (c.type = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-    (c.type != 'optin' AND (
-      (l.optin = 'double' AND sl.status = 'confirmed') OR
-      (l.optin != 'double' AND sl.status != 'unsubscribed')
-    ))
-  )`
+  AND s.status != 'blocklisted'`
+	q += RecipientMembershipSQL()
 
 	var campaignIDs []string
 	if err := sqlx.SelectContext(ctx, db, &campaignIDs, q, listRecordID, subscriberRecordID); err != nil {

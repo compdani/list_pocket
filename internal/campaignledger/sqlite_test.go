@@ -259,14 +259,14 @@ func TestBackfillIfEmpty(t *testing.T) {
 	subRec := "sub_rec_1"
 	var campRowID int
 
-	mustExec(t, db, `INSERT INTO campaigns (id, type, status, to_send, sent) VALUES (?, 'broadcast', 'scheduled', 0, 0)`, campRec)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger, to_send, sent) VALUES (?, 'broadcast', 'scheduled', 'email', 0, 0)`, campRec)
 	mustGet(t, db, &campRowID, `SELECT rowid FROM campaigns WHERE id = ?`, campRec)
 	mustExec(t, db, `INSERT INTO lists (id, optin) VALUES (?, 'single')`, listRec)
 	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u1', 'a@b.c', 'enabled')`, subRec)
 	mustExec(t, db, `INSERT INTO campaign_lists (campaign_id, list_id) VALUES (?, ?)`, campRec, listRec)
 	mustExec(t, db, `INSERT INTO subscriber_lists (subscriber_id, list_id, status) VALUES (?, ?, 'confirmed')`, subRec, listRec)
 
-	ran, err := BackfillIfEmpty(db, campRowID, campRec, "broadcast")
+	ran, err := BackfillIfEmpty(db, campRowID, campRec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func TestBackfillIfEmpty(t *testing.T) {
 		t.Fatalf("to_send = %d", n)
 	}
 
-	ran2, err := BackfillIfEmpty(db, campRowID, campRec, "broadcast")
+	ran2, err := BackfillIfEmpty(db, campRowID, campRec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,6 +453,7 @@ CREATE TABLE campaigns (
   id TEXT NOT NULL PRIMARY KEY,
   type TEXT,
   status TEXT,
+  messenger TEXT DEFAULT 'email',
   to_send INTEGER DEFAULT 0,
   sent INTEGER DEFAULT 0,
   updated TEXT
@@ -465,6 +466,7 @@ CREATE TABLE subscribers (
   id TEXT NOT NULL PRIMARY KEY,
   uuid TEXT,
   email TEXT,
+  phone TEXT,
   first_name TEXT,
   last_name TEXT,
   name TEXT,
@@ -480,7 +482,8 @@ CREATE TABLE campaign_lists (
 CREATE TABLE subscriber_lists (
   subscriber_id TEXT NOT NULL,
   list_id TEXT NOT NULL,
-  status TEXT
+  status TEXT,
+  sms_status TEXT
 );
 CREATE TABLE campaign_send_ledger (
   id TEXT NOT NULL UNIQUE,

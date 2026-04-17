@@ -69,6 +69,9 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.PUT("/settings/ai-builder", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UpdateAIBuilderSettings, "settings:manage")))
 	api.PUT("/settings/{key}", wrapEcho(a, tpl, cfg, urlCfg, []string{"key"}, pm(a.UpdateSettingsByKey, "settings:manage")))
 	api.POST("/settings/smtp/test", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.TestSMTPSettings, "settings:manage")))
+	api.GET("/settings/text-messaging", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetTextMessagingSettings, "settings:get")))
+	api.PUT("/settings/text-messaging", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UpdateTextMessagingSettings, "settings:manage")))
+	api.POST("/settings/text-messaging/test", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.TestTextMessagingSettings, "settings:manage")))
 	api.POST("/admin/reload", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ReloadApp, "settings:manage")))
 	api.GET("/logs", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetLogs, "settings:get")))
 	api.GET("/about", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetAboutInfo))
@@ -211,6 +214,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	if a.cfg.BounceWebhooksEnabled {
 		public.POST("/webhooks/service/{service}", wrapEcho(a, tpl, cfg, urlCfg, []string{"service"}, a.BounceWebhook))
 	}
+	public.POST("/webhooks/quo/:token", wrapEcho(a, tpl, cfg, urlCfg, []string{"token"}, a.QuoMessageWebhook))
 
 	public.GET("/", wrapEcho(a, tpl, cfg, urlCfg, nil, func(c echo.Context) error {
 		return c.Render(http.StatusOK, "home", publicTpl{Title: "listpocket"})

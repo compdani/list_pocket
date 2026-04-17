@@ -959,6 +959,23 @@ export const updateAIBuilderSettings = async (data) => http.put(
   { loading: models.settings },
 );
 
+export const getTextMessagingSettings = async () => http.get(
+  '/api/settings/text-messaging',
+  { disableToast: true },
+);
+
+export const updateTextMessagingSettings = async (data) => http.put(
+  '/api/settings/text-messaging',
+  data,
+  { disableToast: true },
+);
+
+export const testTextMessagingSettings = async (data) => http.post(
+  '/api/settings/text-messaging/test',
+  data,
+  { disableToast: true },
+);
+
 export const getLogs = async () => http.get(
   '/api/logs',
   { loading: models.logs, camelCase: false },

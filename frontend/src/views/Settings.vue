@@ -68,6 +68,9 @@
             <v-window-item value="smtp">
               <smtp-settings :form="form" :key="key" />
             </v-window-item>
+            <v-window-item value="textMessaging">
+              <text-messaging-settings />
+            </v-window-item>
             <v-window-item value="bounces">
               <bounce-settings :form="form" :key="key" />
             </v-window-item>
@@ -94,6 +97,7 @@ import PerformanceSettings from './settings/performance.vue';
 import PrivacySettings from './settings/privacy.vue';
 import SecuritySettings from './settings/security.vue';
 import SmtpSettings from './settings/smtp.vue';
+import TextMessagingSettings from './settings/text-messaging.vue';
 
 const SETTINGS_TAB_KEYS = [
   'general',
@@ -101,6 +105,7 @@ const SETTINGS_TAB_KEYS = [
   'privacy',
   'security',
   'smtp',
+  'textMessaging',
   'bounces',
   'messengers',
   'appearance',
@@ -113,6 +118,7 @@ export default {
     PrivacySettings,
     SecuritySettings,
     SmtpSettings,
+    TextMessagingSettings,
     BounceSettings,
     MessengerSettings,
     AppearanceSettings,
@@ -358,6 +364,7 @@ export default {
         { key: 'privacy', label: this.$t('settings.privacy.name') },
         { key: 'security', label: this.$t('settings.security.name') },
         { key: 'smtp', label: this.$t('settings.smtp.name') },
+        { key: 'textMessaging', label: this.$t('settings.textMessaging.name') },
         { key: 'bounces', label: this.$t('settings.bounces.name') },
         { key: 'messengers', label: this.$t('settings.messengers.name') },
         { key: 'appearance', label: this.$t('settings.appearance.name') },

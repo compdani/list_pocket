@@ -52,6 +52,24 @@ func makeMsgTpl(pageTitle, heading, msg string) msgTpl {
 	return err
 }
 
+// uniqueNonEmptyStrings returns trimmed, non-empty strings from in, deduplicated in order.
+func uniqueNonEmptyStrings(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
+}
+
 // parseStringIDs takes a slice of numeric string IDs and
 // parses each number into an int64 and returns a slice of the
 // resultant values.

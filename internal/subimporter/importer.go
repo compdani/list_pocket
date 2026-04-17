@@ -49,10 +49,11 @@ ON CONFLICT(email) DO UPDATE SET
 `
 
 	sqliteUpsertSubscriberLists = `
-INSERT INTO subscriber_lists (subscriber_id, list_id, status, updated)
+INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status, updated)
 SELECT
 	s.id,
 	j.value,
+	CASE WHEN s.status = 'blocklisted' THEN 'unsubscribed' ELSE ? END,
 	CASE WHEN s.status = 'blocklisted' THEN 'unsubscribed' ELSE ? END,
 	(strftime('%Y-%m-%d %H:%M:%fZ'))
 FROM subscribers s
@@ -60,7 +61,8 @@ JOIN json_each(?) AS j
 WHERE s.email = ?
 ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
 	updated = (strftime('%Y-%m-%d %H:%M:%fZ')),
-	status = CASE WHEN ? THEN excluded.status ELSE subscriber_lists.status END;
+	status = CASE WHEN ? THEN excluded.status ELSE subscriber_lists.status END,
+	sms_status = CASE WHEN ? THEN excluded.sms_status ELSE subscriber_lists.sms_status END;
 `
 
 	sqliteUpsertBlocklistedSubscriber = `
@@ -374,7 +376,7 @@ func (s *Session) Start() {
 		if s.opt.Mode == ModeSubscribe {
 			if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
 				s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
-				_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus)
+				_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus, s.opt.OverwriteSubStatus)
 			}
 		} else if s.opt.Mode == ModeBlocklist {
 			if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs); err == nil {

@@ -97,6 +97,12 @@ type Manager struct {
 	slidingCount int
 	slidingStart time.Time
 
+	// SMS (Quo) sliding window and live send_limits from typed settings.
+	smsLimitsFn     func() models.TextMessagingSendLimits
+	smsLimitsMu     sync.RWMutex
+	smsSlidingCount int
+	smsSlidingStart time.Time
+
 	tplFuncs template.FuncMap
 }
 
@@ -182,11 +188,29 @@ func New(cfg Config, store Store, i *i18n.I18n, l *log.Logger) *Manager {
 		nextPipes:    make(chan *pipe, 1000),
 		campMsgQ:     make(chan CampaignMessage, cfg.Concurrency*cfg.MessageRate*2),
 		msgQ:         make(chan models.Message, cfg.Concurrency*cfg.MessageRate*2),
-		slidingStart: time.Now(),
+		slidingStart:    time.Now(),
+		smsSlidingStart: time.Now(),
 	}
 	m.tplFuncs = m.makeGnericFuncMap()
 
 	return m
+}
+
+// SetSMSRateLimits supplies live SMS send_limits (e.g. from listpocket_settings text_messaging).
+func (m *Manager) SetSMSRateLimits(fn func() models.TextMessagingSendLimits) {
+	m.smsLimitsMu.Lock()
+	m.smsLimitsFn = fn
+	m.smsLimitsMu.Unlock()
+}
+
+func (m *Manager) smsSendLimits() models.TextMessagingSendLimits {
+	m.smsLimitsMu.RLock()
+	fn := m.smsLimitsFn
+	m.smsLimitsMu.RUnlock()
+	if fn == nil {
+		return models.DefaultTextMessagingSettings().SendLimits
+	}
+	return fn()
 }
 
 // AddMessenger adds a Messenger messaging backend to the manager.
@@ -512,8 +536,18 @@ func (m *Manager) worker() {
 				continue
 			}
 
-			// Pause on hitting the message rate.
-			if numMsg >= m.cfg.MessageRate {
+			// Pause on hitting the message rate (SMS uses typed send_limits).
+			rateCap := m.cfg.MessageRate
+			if models.IsTextMessenger(msg.Campaign.Messenger) {
+				lim := m.smsSendLimits()
+				if lim.MaxMessagesPerSecond > 0 {
+					rateCap = lim.MaxMessagesPerSecond
+				}
+			}
+			if rateCap < 1 {
+				rateCap = 1
+			}
+			if numMsg >= rateCap {
 				time.Sleep(time.Second)
 				numMsg = 0
 			}
@@ -530,28 +564,28 @@ func (m *Manager) worker() {
 				Subscriber:  msg.Subscriber,
 				Campaign:    msg.Campaign,
 				Attachments: msg.Campaign.Attachments,
+				Messenger:   msg.Campaign.Messenger,
 			}
 
 			h := textproto.MIMEHeader{}
-			h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.UUID)
-			h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.UUID)
+			if !models.IsTextMessenger(msg.Campaign.Messenger) {
+				h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.UUID)
+				h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.UUID)
 
-			// Attach List-Unsubscribe headers?
-			if m.cfg.UnsubHeader {
-				h.Set("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
-				h.Set("List-Unsubscribe", `<`+msg.unsubURL+`>`)
-			}
+				if m.cfg.UnsubHeader {
+					h.Set("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
+					h.Set("List-Unsubscribe", `<`+msg.unsubURL+`>`)
+				}
 
-			// Attach any custom headers.
-			if len(msg.Campaign.Headers) > 0 {
-				for _, set := range msg.Campaign.Headers {
-					for hdr, val := range set {
-						h.Add(hdr, val)
+				if len(msg.Campaign.Headers) > 0 {
+					for _, set := range msg.Campaign.Headers {
+						for hdr, val := range set {
+							h.Add(hdr, val)
+						}
 					}
 				}
 			}
 
-			// Set the headers.
 			out.Headers = h
 
 			// Push the message to the messenger.

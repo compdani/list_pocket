@@ -1,5 +1,8 @@
 package main
 
+// Subscriber HTTP routes and subscriber_record_id query/body fields use PocketBase
+// record ids (SQLite subscribers.id), never numeric rowids.
+
 import (
 	"encoding/csv"
 	"encoding/json"
@@ -7,7 +10,6 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
@@ -33,7 +35,6 @@ type subQueryReq struct {
 	ListRecordIDs       []string `json:"list_record_ids"`
 	TargetListIDs       []int    `json:"target_list_ids"`
 	TargetListRecordIDs []string `json:"target_list_record_ids"`
-	SubscriberIDs       []int    `json:"ids"`
 	SubscriberRecordIDs []string `json:"subscriber_record_ids"`
 	Action              string   `json:"action"`
 	Status              string   `json:"status"`
@@ -66,10 +67,6 @@ func (a *App) resolveSubscriberRouteID(c echo.Context) (int, error) {
 	rawID := strings.TrimSpace(c.Param("id"))
 	if rawID == "" {
 		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
-	}
-
-	if id, err := strconv.Atoi(rawID); err == nil && id > 0 {
-		return id, nil
 	}
 
 	ids, err := a.core.ResolveSubscriberIDs(nil, []string{rawID})
@@ -189,13 +186,11 @@ func (a *App) ExportSubscribers(c echo.Context) error {
 		return err
 	}
 
-	// Export only specific subscriber IDs?
-	subIDs, err := getQueryInts("id", c.QueryParams())
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-	}
+	// Export only specific subscribers (PocketBase record ids).
+	var subIDs []int
 	if recordIDs := c.QueryParams()["subscriber_record_id"]; len(recordIDs) > 0 {
-		subIDs, err = a.core.ResolveSubscriberIDs(subIDs, recordIDs)
+		var err error
+		subIDs, err = a.core.ResolveSubscriberIDs(nil, recordIDs)
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest,
 				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
@@ -299,7 +294,7 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 		a.log.Printf("create subscriber: insert failed email=%q error=%v", req.Email, err)
 		return err
 	}
-	a.log.Printf("create subscriber: success email=%q subscriber_id=%d uuid=%q", sub.Email, sub.ID, sub.UUID)
+	a.log.Printf("create subscriber: success email=%q subscriber_record_id=%q uuid=%q", sub.Email, sub.RecordID, sub.UUID)
 
 	return c.JSON(http.StatusOK, okResp{sub})
 }
@@ -390,12 +385,16 @@ func (a *App) SubscriberSendOptin(c echo.Context) error {
 
 // BlocklistSubscriber handles the blocklisting of a given subscriber.
 func (a *App) BlocklistSubscriber(c echo.Context) error {
-	// Update the subscribers in the DB.
+	user := auth.GetUser(c)
 	id, err := a.resolveSubscriberRouteID(c)
 	if err != nil {
 		return err
 	}
-	if err := a.core.BlocklistSubscribers([]int{id}); err != nil {
+	if err := a.hasSubPerm(user, []int{id}); err != nil {
+		return err
+	}
+	recordID := strings.TrimSpace(c.Param("id"))
+	if err := a.core.BlocklistSubscribers([]string{recordID}); err != nil {
 		return err
 	}
 
@@ -409,18 +408,14 @@ func (a *App) BlocklistSubscribers(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	subIDs, err := a.core.ResolveSubscriberIDs(req.SubscriberIDs, req.SubscriberRecordIDs)
-	if err != nil {
+	recordIDs := uniqueNonEmptyStrings(req.SubscriberRecordIDs)
+	if len(recordIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
-	if len(subIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "ids"))
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_ids"))
 	}
 
 	// Update the subscribers in the DB.
-	if err := a.core.BlocklistSubscribers(subIDs); err != nil {
+	if err := a.core.BlocklistSubscribers(recordIDs); err != nil {
 		return err
 	}
 
@@ -429,39 +424,28 @@ func (a *App) BlocklistSubscribers(c echo.Context) error {
 
 // ManageSubscriberLists handles bulk addition or removal of subscribers
 // from or to one or more target lists.
-// It takes either an ID in the URI, or a list of IDs in the request body.
+// It takes either a PocketBase record id in the URI, or subscriber_record_ids in the request body.
 func (a *App) ManageSubscriberLists(c echo.Context) error {
 	// Get the authenticated user.
 	user := auth.GetUser(c)
-
-	// Is it an /:id call?
-	var (
-		pID    = c.Param("id")
-		subIDs []int
-	)
-	if pID != "" {
-		id, _ := strconv.Atoi(pID)
-		if id < 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
-		}
-		subIDs = append(subIDs, id)
-	}
 
 	var req subQueryReq
 	if err := c.Bind(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	resolvedReqIDs, err := a.core.ResolveSubscriberIDs(req.SubscriberIDs, req.SubscriberRecordIDs)
+
+	recordIDs := uniqueNonEmptyStrings(req.SubscriberRecordIDs)
+	if pID := strings.TrimSpace(c.Param("id")); pID != "" {
+		recordIDs = uniqueNonEmptyStrings(append([]string{pID}, recordIDs...))
+	}
+	subIDs, err := a.core.ResolveSubscriberIDs(nil, recordIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
-	if len(resolvedReqIDs) == 0 && len(subIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoIDs"))
-	}
 	if len(subIDs) == 0 {
-		subIDs = resolvedReqIDs
+		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoIDs"))
 	}
 	targetListIDs, err := a.core.ResolveListIDs(req.TargetListIDs, req.TargetListRecordIDs)
 	if err != nil {
@@ -507,12 +491,16 @@ func (a *App) ManageSubscriberLists(c echo.Context) error {
 
 // DeleteSubscriber handles deletion of a single subscriber.
 func (a *App) DeleteSubscriber(c echo.Context) error {
-	// Delete the subscribers from the DB.
+	user := auth.GetUser(c)
 	id, err := a.resolveSubscriberRouteID(c)
 	if err != nil {
 		return err
 	}
-	if err := a.core.DeleteSubscribers([]int{id}, nil); err != nil {
+	if err := a.hasSubPerm(user, []int{id}); err != nil {
+		return err
+	}
+	recordID := strings.TrimSpace(c.Param("id"))
+	if err := a.core.DeleteSubscribers([]string{recordID}, nil); err != nil {
 		return err
 	}
 
@@ -521,24 +509,13 @@ func (a *App) DeleteSubscriber(c echo.Context) error {
 
 // DeleteSubscribers handles bulk deletion of one or more subscribers.
 func (a *App) DeleteSubscribers(c echo.Context) error {
-	// Multiple IDs.
-	ids, err := parseStringIDs(c.Request().URL.Query()["id"])
-	if err != nil {
+	recordIDs := uniqueNonEmptyStrings(c.Request().URL.Query()["subscriber_record_id"])
+	if len(recordIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
-	ids, err = a.core.ResolveSubscriberIDs(ids, c.Request().URL.Query()["subscriber_record_id"])
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
-	if len(ids) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "ids"))
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_id"))
 	}
 
-	// Delete the subscribers from the DB.
-	if err := a.core.DeleteSubscribers(ids, nil); err != nil {
+	if err := a.core.DeleteSubscribers(recordIDs, nil); err != nil {
 		return err
 	}
 
@@ -738,8 +715,8 @@ func (a *App) ExportSubscriberData(c echo.Context) error {
 
 // exportSubscriberData collates the data of a subscriber including profile,
 // subscriptions, campaign_views, link_clicks (if they're enabled in the config)
-// and returns a formatted, indented JSON payload. Either takes a numeric id
-// and an empty subUUID or takes 0 and a string subUUID.
+// and returns a formatted, indented JSON payload. id is the internal rowid
+// resolved from the route; subUUID is used when exporting by uuid instead.
 func (a *App) exportSubscriberData(id int, subUUID string, exportables map[string]bool) (models.SubscriberExportProfile, []byte, error) {
 	data, err := a.core.GetSubscriberProfileForExport(id, subUUID)
 	if err != nil {
@@ -790,13 +767,24 @@ func (a *App) hasSubPerm(u auth.User, subIDs []int) error {
 		return err
 	}
 
+	var denied []int
 	for id, has := range res {
 		if !has {
-			return echo.NewHTTPError(http.StatusForbidden, a.i18n.Ts("globals.messages.permissionDenied", "name", fmt.Sprintf("subscriber: %d", id)))
+			denied = append(denied, id)
 		}
 	}
-
-	return nil
+	if len(denied) == 0 {
+		return nil
+	}
+	recIDs, err := a.core.ResolveSubscriberRecordIDs(denied)
+	if err != nil {
+		return err
+	}
+	name := "{globals.terms.subscriber}"
+	if len(recIDs) > 0 {
+		name = fmt.Sprintf("subscriber: %s", strings.Join(recIDs, ", "))
+	}
+	return echo.NewHTTPError(http.StatusForbidden, a.i18n.Ts("globals.messages.permissionDenied", "name", name))
 }
 
 // filterListQueryByPerm filters the list IDs in the query params and returns the list IDs to which the user has access.

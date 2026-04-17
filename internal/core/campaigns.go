@@ -3,11 +3,13 @@ package core
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx/types"
@@ -30,6 +32,19 @@ func sqliteCampaignStringValue(v null.String) string {
 		return v.String
 	}
 	return ""
+}
+
+func validateQuoCampaign(messenger, campType, contentType string) error {
+	if !models.IsTextMessenger(messenger) {
+		return nil
+	}
+	if campType == models.CampaignTypeOptin {
+		return errors.New("text messaging campaigns cannot use opt-in type")
+	}
+	if contentType != models.CampaignContentTypePlain {
+		return errors.New("text messaging campaigns require plain content type")
+	}
+	return nil
 }
 
 func sqliteCampaignTimeValue(v null.Time) string {
@@ -894,24 +909,30 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	if campaignType == "" {
 		campaignType = models.CampaignTypeRegular
 	}
+	messenger := strings.TrimSpace(o.Messenger)
+	if messenger == "" {
+		messenger = "email"
+	}
 
 	var tpl tplInfo
 	if o.TemplateID.Valid && strings.TrimSpace(o.TemplateID.String) != "" {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE id = ? LIMIT 1`, o.TemplateID.String)
-	} else if o.ContentType != models.CampaignContentTypeVisual {
+	} else if !models.IsTextMessenger(messenger) && o.ContentType != models.CampaignContentTypeVisual {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 LIMIT 1`)
 	}
 	c.log.Printf("create campaign sqlite: template resolved name=%q tpl_type=%q tpl_id_valid=%v", o.Name, tpl.Type, tpl.ID.Valid)
 
 	contentType := o.ContentType
-	if contentType == "" {
+	if models.IsTextMessenger(messenger) {
+		contentType = models.CampaignContentTypePlain
+	} else if contentType == "" {
 		contentType = models.CampaignContentTypeRichtext
 	}
 	body := o.Body
 	bodySource := o.BodySource
 	templateID := o.TemplateID
 
-	if tpl.Type == models.TemplateTypeCampaignVisual {
+	if tpl.Type == models.TemplateTypeCampaignVisual && !models.IsTextMessenger(messenger) {
 		contentType = models.CampaignContentTypeVisual
 		templateID.Valid = false
 		templateID.String = ""
@@ -953,6 +974,10 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	}
 	c.log.Printf("create campaign sqlite: resolved %d list records and %d media records for name=%q", len(listRows), len(mediaRows), o.Name)
 
+	if err := validateQuoCampaign(messenger, campaignType, contentType); err != nil {
+		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
@@ -966,10 +991,6 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 		}
 
 		campaignRec := pbcore.NewRecord(campaignsCol)
-		messenger := o.Messenger
-		if messenger == "" {
-			messenger = "email"
-		}
 		status := o.Status
 		if status == "" {
 			status = models.CampaignStatusDraft
@@ -1074,6 +1095,30 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 	if err != nil {
 		return models.Campaign{}, err
 	}
+
+	recPreview, err := c.db.PocketBase().FindRecordById("campaigns", campaignRecID)
+	if err != nil {
+		return models.Campaign{}, err
+	}
+	campType := recPreview.GetString("type")
+	if strings.TrimSpace(o.Type) != "" {
+		campType = o.Type
+	}
+	msgr := strings.TrimSpace(o.Messenger)
+	if msgr == "" {
+		msgr = recPreview.GetString("messenger")
+	}
+	if msgr == "" {
+		msgr = "email"
+	}
+	contentType := o.ContentType
+	if models.IsTextMessenger(msgr) {
+		contentType = models.CampaignContentTypePlain
+	}
+	if err := validateQuoCampaign(msgr, campType, contentType); err != nil {
+		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return models.Campaign{}, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1091,14 +1136,14 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 		rec.Set("from_email", o.FromEmail)
 		rec.Set("body", o.Body)
 		rec.Set("altbody", sqliteCampaignAltBodyValue(o.AltBody))
-		rec.Set("content_type", o.ContentType)
+		rec.Set("content_type", contentType)
 		rec.Set("send_at", sqliteCampaignTimeValue(o.SendAt))
 		rec.Set("headers", o.Headers)
 		rec.Set("attribs", o.Attribs)
 		rec.Set("tags", normalizeTags(o.Tags))
 		rec.Set("include_tags", normalizeTags(o.IncludeTags))
 		rec.Set("exclude_tags", normalizeTags(o.ExcludeTags))
-		rec.Set("messenger", o.Messenger)
+		rec.Set("messenger", msgr)
 		rec.Set("template_id", templateRecordID)
 		rec.Set("archive", o.Archive)
 		rec.Set("archive_slug", sqliteCampaignStringValue(o.ArchiveSlug))
@@ -1176,13 +1221,7 @@ func (c *Core) sqliteUpdateCampaignToSendEstimate(recordID, campaignType string)
 		JOIN subscribers s ON s.id = sl.subscriber_id
 		WHERE c.id = ?
 		  AND s.status != 'blocklisted'
-		  AND (
-		    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-		    (? != 'optin' AND (
-		      (l.optin = 'double' AND sl.status = 'confirmed') OR
-		      (l.optin != 'double' AND sl.status != 'unsubscribed')
-		    ))
-		  )
+		  `+campaignledger.RecipientMembershipSQL()+`
 		  AND (
 		    COALESCE(json_array_length(c.include_tags), 0) = 0 OR
 		    EXISTS (
@@ -1198,7 +1237,7 @@ func (c *Core) sqliteUpdateCampaignToSendEstimate(recordID, campaignType string)
 		    JOIN json_each(COALESCE(c.exclude_tags, '[]')) et
 		      ON lower(trim(CAST(jt.value AS TEXT))) = lower(trim(CAST(et.value AS TEXT)))
 		  )
-	`, recordID, campaignType, campaignType); err != nil {
+	`, recordID); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "no such column: c.include_tags") {
 			if err2 := c.db.Get(&toSend, `
 				SELECT
@@ -1210,14 +1249,8 @@ func (c *Core) sqliteUpdateCampaignToSendEstimate(recordID, campaignType string)
 				JOIN subscribers s ON s.id = sl.subscriber_id
 				WHERE c.id = ?
 				  AND s.status != 'blocklisted'
-				  AND (
-				    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-				    (? != 'optin' AND (
-				      (l.optin = 'double' AND sl.status = 'confirmed') OR
-				      (l.optin != 'double' AND sl.status != 'unsubscribed')
-				    ))
-				  )
-			`, recordID, campaignType, campaignType); err2 != nil {
+				  `+campaignledger.RecipientMembershipSQL()+`
+			`, recordID); err2 != nil {
 				return err2
 			}
 		} else {
