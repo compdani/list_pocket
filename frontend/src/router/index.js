@@ -1,20 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import store from '../store';
-import { models } from '../constants';
-
-function isCurrentUserSuperAdmin() {
-  const profile = store.getters[models.profile];
-  if (!profile || Array.isArray(profile)) {
-    return false;
-  }
-  if (profile.userRole && Number(profile.userRole.id) === 1) {
-    return true;
-  }
-  if (Number(profile.userRoleId) === 1) {
-    return true;
-  }
-  return false;
-}
+import { isCurrentUserSuperAdmin } from '../utils/auth';
 
 const routes = [
   {
