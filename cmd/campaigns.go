@@ -16,6 +16,7 @@ import (
 
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/notifs"
+	"github.com/compdani/list_pocket/internal/phoneutil"
 	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
@@ -740,13 +741,22 @@ func (a *App) TestCampaign(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.noSubsToTest"))
 	}
 
-	// Sanitize subscriber e-mails.
-	for i := range req.SubscriberEmails {
-		req.SubscriberEmails[i] = strings.ToLower(strings.TrimSpace(req.SubscriberEmails[i]))
+	var subs models.Subscribers
+	if models.IsTextMessenger(req.Messenger) {
+		digits := make([]string, 0, len(req.SubscriberEmails))
+		for _, raw := range req.SubscriberEmails {
+			d := phoneutil.NormalizeDigits(string(raw))
+			if d != "" {
+				digits = append(digits, d)
+			}
+		}
+		subs, err = a.core.GetSubscribersByNormalizedPhones(digits)
+	} else {
+		for i := range req.SubscriberEmails {
+			req.SubscriberEmails[i] = strings.ToLower(strings.TrimSpace(req.SubscriberEmails[i]))
+		}
+		subs, err = a.core.GetSubscribersByEmail(req.SubscriberEmails)
 	}
-
-	// Get the subscribers from the DB by their e-mails.
-	subs, err := a.core.GetSubscribersByEmail(req.SubscriberEmails)
 	if err != nil {
 		return err
 	}
@@ -1015,7 +1025,9 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 }
 
 func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
-	if c.FromEmail == "" {
+	if models.IsTextMessenger(c.Messenger) {
+		c.FromEmail = strings.TrimSpace(c.FromEmail)
+	} else if c.FromEmail == "" {
 		c.FromEmail = a.defaultCampaignFromEmail(c.Messenger)
 	} else {
 		sanitized, err := a.sanitizeFromAddress(c.FromEmail)

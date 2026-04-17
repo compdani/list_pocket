@@ -297,32 +297,33 @@ describe('Domain blocklist', () => {
       body: {
         email: 'test1@noban.net', name: 'test', lists: [1], status: 'enabled',
       },
-    }).should((response) => {
-      expect(response.status).to.equal(200);
-    });
+    }).then((createResp) => {
+      expect(createResp.status).to.equal(200);
+      const subscriberId = createResp.body.data.id;
 
-    // Add banned domain.
-    cy.request({
-      method: 'POST',
-      url: `${apiUrl}/mailapi/subscribers`,
-      failOnStatusCode: false,
-      body: {
-        email: 'test1@ban.com', name: 'test', lists: [1], status: 'enabled',
-      },
-    }).should((response) => {
-      expect(response.status).to.equal(400);
-    });
+      // Add banned domain.
+      cy.request({
+        method: 'POST',
+        url: `${apiUrl}/mailapi/subscribers`,
+        failOnStatusCode: false,
+        body: {
+          email: 'test1@ban.com', name: 'test', lists: [1], status: 'enabled',
+        },
+      }).should((response) => {
+        expect(response.status).to.equal(400);
+      });
 
-    // Modify an existinb subscriber to a banned domain.
-    cy.request({
-      method: 'PUT',
-      url: `${apiUrl}/mailapi/subscribers/1`,
-      failOnStatusCode: false,
-      body: {
-        email: 'test3@ban.org', name: 'test', lists: [1], status: 'enabled',
-      },
-    }).should((response) => {
-      expect(response.status).to.equal(400);
+      // Modify an existing subscriber to a banned domain.
+      cy.request({
+        method: 'PUT',
+        url: `${apiUrl}/mailapi/subscribers/${subscriberId}`,
+        failOnStatusCode: false,
+        body: {
+          email: 'test3@ban.org', name: 'test', lists: [1], status: 'enabled',
+        },
+      }).should((response) => {
+        expect(response.status).to.equal(400);
+      });
     });
   });
 
@@ -361,20 +362,21 @@ describe('Domain blocklist', () => {
       body: {
         email: 'test4@BAN.com', name: 'test', lists: [1], status: 'enabled',
       },
-    }).should((response) => {
-      expect(response.status).to.equal(200);
-    });
+    }).then((createResp) => {
+      expect(createResp.status).to.equal(200);
+      const subscriberId = createResp.body.data.id;
 
-    // Modify an existinb subscriber to a banned domain.
-    cy.request({
-      method: 'PUT',
-      url: `${apiUrl}/mailapi/subscribers/1`,
-      failOnStatusCode: true,
-      body: {
-        email: 'test4@BAN.org', name: 'test', lists: [1], status: 'enabled',
-      },
-    }).should((response) => {
-      expect(response.status).to.equal(200);
+      // Modify an existing subscriber (still allowed while domain not on blocklist).
+      cy.request({
+        method: 'PUT',
+        url: `${apiUrl}/mailapi/subscribers/${subscriberId}`,
+        failOnStatusCode: true,
+        body: {
+          email: 'test4@BAN.org', name: 'test', lists: [1], status: 'enabled',
+        },
+      }).should((response) => {
+        expect(response.status).to.equal(200);
+      });
     });
   });
 });

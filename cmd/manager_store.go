@@ -394,21 +394,16 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			SELECT
 				COUNT(DISTINCT s.rowid) AS to_send
 			FROM campaign_lists cl
+			JOIN campaigns c ON c.id = cl.campaign_id
 			JOIN lists l ON l.id = cl.list_id
 			JOIN subscriber_lists sl ON sl.list_id = cl.list_id
 			JOIN subscribers s ON s.id = sl.subscriber_id
 			WHERE cl.campaign_id = ?
 			  AND s.status != 'blocklisted'
-			  AND (
-			    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-			    (? != 'optin' AND (
-			      (l.optin = 'double' AND sl.status = 'confirmed') OR
-			      (l.optin != 'double' AND sl.status != 'unsubscribed')
-			    ))
-			  )
 		`
+		metaQuery += campaignledger.RecipientMembershipSQL()
 		metaQuery += tagClause
-		metaArgs := []any{campaignRecID, c.Type, c.Type}
+		metaArgs := []any{campaignRecID}
 		metaArgs = append(metaArgs, tagArgs...)
 		if err := s.db.Get(&meta, metaQuery, metaArgs...); err != nil {
 			return nil, err
@@ -421,25 +416,20 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 			FROM (
 				SELECT s.created, s.id
 				FROM campaign_lists cl
+				JOIN campaigns c ON c.id = cl.campaign_id
 				JOIN lists l ON l.id = cl.list_id
 				JOIN subscriber_lists sl ON sl.list_id = cl.list_id
 				JOIN subscribers s ON s.id = sl.subscriber_id
 				WHERE cl.campaign_id = ?
 				  AND s.status != 'blocklisted'
-				  AND (
-				    (? = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
-				    (? != 'optin' AND (
-				      (l.optin = 'double' AND sl.status = 'confirmed') OR
-				      (l.optin != 'double' AND sl.status != 'unsubscribed')
-				    ))
-				  )
+				` + campaignledger.RecipientMembershipSQL() + `
 				GROUP BY s.id
 				ORDER BY s.created DESC, s.id DESC
 				LIMIT 1
 			) latest
 		`
 		cursorQuery += tagClause
-		cursorArgs := []any{campaignRecID, c.Type, c.Type}
+		cursorArgs := []any{campaignRecID}
 		cursorArgs = append(cursorArgs, tagArgs...)
 		if err := s.db.Get(&cursor, cursorQuery, cursorArgs...); err != nil {
 			return nil, err
@@ -502,12 +492,7 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		return nil, false, err
 	}
 
-	var campType string
-	if err := s.db.Get(&campType, `SELECT type FROM campaigns WHERE rowid = ?`, campID); err != nil {
-		return nil, false, err
-	}
-
-	if _, err := campaignledger.BackfillIfEmpty(s.db, campID, campaignRecID, campType); err != nil {
+	if _, err := campaignledger.BackfillIfEmpty(s.db, campID, campaignRecID); err != nil {
 		return nil, false, err
 	}
 	if err := campaignledger.SyncToSendFromLedger(s.db, campID, campaignRecID); err != nil {
@@ -548,6 +533,7 @@ func sqliteLedgerRowsToModels(rows []campaignledger.SubscriberRow) []models.Subs
 			},
 			UUID:      row.UUID,
 			Email:     row.Email,
+			Phone:     row.Phone,
 			FirstName: row.FirstName,
 			LastName:  row.LastName,
 			Name:      row.Name,

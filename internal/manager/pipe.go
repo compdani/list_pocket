@@ -95,10 +95,29 @@ func (p *pipe) NextSubscribers() (bool, error) {
 	}
 	p.batchHasMore = batching.Enabled && hasMore
 
-	// Is there a sliding window limit configured?
-	hasSliding := p.m.cfg.SlidingWindow &&
-		p.m.cfg.SlidingWindowRate > 0 &&
-		p.m.cfg.SlidingWindowDuration.Seconds() > 1
+	// Sliding window: email uses app settings; SMS (Quo) uses typed send_limits.
+	var (
+		hasSliding       bool
+		slidingDur       time.Duration
+		slidingMax       int
+		useSMSWindow     = models.IsTextMessenger(p.camp.Messenger)
+	)
+	if useSMSWindow {
+		lim := p.m.smsSendLimits()
+		hasSliding = lim.SlidingEnabled && lim.SlidingMaxMessages > 0 && lim.SlidingWindowSeconds > 1
+		if hasSliding {
+			slidingDur = time.Duration(lim.SlidingWindowSeconds) * time.Second
+			slidingMax = lim.SlidingMaxMessages
+		}
+	} else {
+		hasSliding = p.m.cfg.SlidingWindow &&
+			p.m.cfg.SlidingWindowRate > 0 &&
+			p.m.cfg.SlidingWindowDuration.Seconds() > 1
+		if hasSliding {
+			slidingDur = p.m.cfg.SlidingWindowDuration
+			slidingMax = p.m.cfg.SlidingWindowRate
+		}
+	}
 
 	// Push messages.
 	for _, s := range subs {
@@ -114,27 +133,40 @@ func (p *pipe) NextSubscribers() (bool, error) {
 
 		// Check if the sliding window is active.
 		if hasSliding {
-			diff := time.Since(p.m.slidingStart)
-
-			// Window has expired. Reset the clock.
-			if diff >= p.m.cfg.SlidingWindowDuration {
-				p.m.slidingStart = time.Now()
-				p.m.slidingCount = 0
-			}
-
-			// Have the messages exceeded the limit?
-			p.m.slidingCount++
-			if p.m.slidingCount >= p.m.cfg.SlidingWindowRate {
-				wait := p.m.cfg.SlidingWindowDuration - diff
-
-				p.m.log.Printf("messages exceeded (%d) for the window (%v since %s). Sleeping for %s.",
-					p.m.slidingCount,
-					p.m.cfg.SlidingWindowDuration,
-					p.m.slidingStart.Format(time.RFC822Z),
-					wait.Round(time.Second)*1)
-
-				p.m.slidingCount = 0
-				time.Sleep(wait)
+			if useSMSWindow {
+				diff := time.Since(p.m.smsSlidingStart)
+				if diff >= slidingDur {
+					p.m.smsSlidingStart = time.Now()
+					p.m.smsSlidingCount = 0
+				}
+				p.m.smsSlidingCount++
+				if p.m.smsSlidingCount >= slidingMax {
+					wait := slidingDur - diff
+					p.m.log.Printf("sms messages exceeded (%d) for the window (%v since %s). Sleeping for %s.",
+						p.m.smsSlidingCount,
+						slidingDur,
+						p.m.smsSlidingStart.Format(time.RFC822Z),
+						wait.Round(time.Second)*1)
+					p.m.smsSlidingCount = 0
+					time.Sleep(wait)
+				}
+			} else {
+				diff := time.Since(p.m.slidingStart)
+				if diff >= slidingDur {
+					p.m.slidingStart = time.Now()
+					p.m.slidingCount = 0
+				}
+				p.m.slidingCount++
+				if p.m.slidingCount >= slidingMax {
+					wait := slidingDur - diff
+					p.m.log.Printf("messages exceeded (%d) for the window (%v since %s). Sleeping for %s.",
+						p.m.slidingCount,
+						slidingDur,
+						p.m.slidingStart.Format(time.RFC822Z),
+						wait.Round(time.Second)*1)
+					p.m.slidingCount = 0
+					time.Sleep(wait)
+				}
 			}
 		}
 	}
@@ -149,18 +181,25 @@ func (p *pipe) NextSubscribers() (bool, error) {
 // OnError keeps track of the number of errors that occur while sending messages
 // and pauses the campaign if the error threshold is met.
 func (p *pipe) OnError() {
-	if p.m.cfg.MaxSendErrors < 1 {
+	maxErr := p.m.cfg.MaxSendErrors
+	if models.IsTextMessenger(p.camp.Messenger) {
+		lim := p.m.smsSendLimits()
+		if lim.MaxSendErrors > 0 {
+			maxErr = lim.MaxSendErrors
+		}
+	}
+	if maxErr < 1 {
 		return
 	}
 
 	// If the error threshold is met, pause the campaign.
 	count := p.errors.Add(1)
-	if int(count) < p.m.cfg.MaxSendErrors {
+	if int(count) < maxErr {
 		return
 	}
 
 	p.Stop(true)
-	p.m.log.Printf("error count exceeded %d. pausing campaign %s", p.m.cfg.MaxSendErrors, p.camp.Name)
+	p.m.log.Printf("error count exceeded %d. pausing campaign %s", maxErr, p.camp.Name)
 }
 
 // Stop "marks" a campaign as stopped. It doesn't actually stop the processing

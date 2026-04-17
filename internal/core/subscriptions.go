@@ -202,8 +202,9 @@ func (c *Core) addSubscriptionsSQLite(subIDs, listIDs []int, status string) (int
 		chunk := subIDs[i:end]
 
 		q := `
-			INSERT INTO subscriber_lists (subscriber_id, list_id, status, updated_at)
+			INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status, updated)
 			SELECT s.id, l.id,
+			       (CASE WHEN ? != '' THEN ? ELSE 'unconfirmed' END),
 			       (CASE WHEN ? != '' THEN ? ELSE 'unconfirmed' END),
 			       (strftime('%Y-%m-%d %H:%M:%fZ'))
 			FROM subscribers s
@@ -213,8 +214,8 @@ func (c *Core) addSubscriptionsSQLite(subIDs, listIDs []int, status string) (int
 			ON CONFLICT (subscriber_id, list_id) DO NOTHING
 		`
 
-		args := make([]any, 0, 2+len(chunk)+len(listIDs))
-		args = append(args, status, status)
+		args := make([]any, 0, 4+len(chunk)+len(listIDs))
+		args = append(args, status, status, status, status)
 		for _, id := range chunk {
 			args = append(args, id)
 		}

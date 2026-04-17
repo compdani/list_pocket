@@ -25,6 +25,7 @@ import (
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/internal/media"
 	"github.com/compdani/list_pocket/internal/messenger/email"
+	"github.com/compdani/list_pocket/internal/messenger/quo"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/internal/workflow"
@@ -224,6 +225,21 @@ func main() {
 
 		chReload = make(chan os.Signal, 1)
 	)
+
+	mgr.SetSMSRateLimits(func() models.TextMessagingSendLimits {
+		return loadTextMessagingSettingsFromPB(pb).SendLimits
+	})
+	tm := loadTextMessagingSettingsFromPB(pb)
+	if p := tm.QuoProvider(); p != nil && p.Enabled && strings.TrimSpace(p.APIKey) != "" {
+		qm := quo.NewMessenger(func() models.TextMessagingSettings {
+			return loadTextMessagingSettingsFromPB(pb)
+		})
+		if err := mgr.AddMessenger(qm); err != nil {
+			lo.Printf("register quo messenger: %v", err)
+		} else {
+			msgrs = append(msgrs, qm)
+		}
+	}
 
 	// Initialize the bounce manager that processes bounces from webhooks and
 	// POP3 mailbox scanning.

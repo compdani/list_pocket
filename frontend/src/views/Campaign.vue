@@ -110,7 +110,7 @@
       <v-tab value="attribs" prepend-icon="mdi-code-tags" :disabled="isNew">
         {{ $t('globals.terms.attribs') }}
       </v-tab>
-      <v-tab value="archive" prepend-icon="mdi-newspaper-variant-outline" :disabled="isNew">
+      <v-tab value="archive" prepend-icon="mdi-newspaper-variant-outline" :disabled="isNew || isSmsChannel">
         {{ $t('campaigns.archive') }}
       </v-tab>
     </v-tabs>
@@ -148,7 +148,32 @@
               class="mb-4"
             />
 
+            <div v-if="showChannelPicker" class="mb-4">
+              <div class="text-subtitle-2 mb-2">
+                {{ $t('campaigns.channel') }}
+              </div>
+              <v-btn-toggle
+                v-model="campaignChannel"
+                mandatory
+                divided
+                variant="outlined"
+                density="comfortable"
+                :disabled="!canEdit"
+              >
+                <v-btn value="email">
+                  {{ $t('campaigns.channelEmail') }}
+                </v-btn>
+                <v-btn value="sms">
+                  {{ $t('campaigns.channelSms') }}
+                </v-btn>
+              </v-btn-toggle>
+              <p v-if="campaignChannel === 'sms'" class="form-help mt-2">
+                {{ $t('campaigns.channelSmsHelp') }}
+              </p>
+            </div>
+
             <v-text-field
+              v-if="!isSmsChannel"
               v-model="form.preheader"
               label="Preheader"
               maxlength="200"
@@ -162,6 +187,7 @@
             />
 
             <v-combobox
+              v-if="!isSmsChannel"
               v-model="form.fromEmail"
               :items="availableFromAddresses"
               :label="$t('campaigns.fromAddress')"
@@ -197,14 +223,14 @@
               <span class="text-caption">(updates when you save)</span>
             </p>
 
-            <v-row>
+            <v-row v-if="!showChannelPicker">
               <v-col cols="12" md="6">
                 <v-select
                   v-model="form.messenger"
                   :items="availableMessengers"
                   :label="$tc('globals.terms.messenger')"
                   name="messenger"
-                  :disabled="!canEdit"
+                  :disabled="!canEdit || isMessengerFieldLocked"
                   required
                   variant="outlined"
                   class="mb-4"
@@ -217,7 +243,7 @@
                   :label="$t('campaigns.format')"
                   item-title="title"
                   item-value="value"
-                  :disabled="!canEdit || isEditing"
+                  :disabled="!canEdit || isEditing || isSmsChannel"
                   name="format"
                   variant="outlined"
                   class="mb-4"
@@ -390,7 +416,7 @@
               </v-card-text>
             </v-card>
 
-            <div class="d-flex justify-end">
+            <div v-if="!isSmsChannel" class="d-flex justify-end">
               <v-btn
                 variant="text"
                 prepend-icon="mdi-plus"
@@ -401,7 +427,7 @@
               </v-btn>
             </div>
 
-            <div v-if="form.headersStr !== '[]' || isHeadersVisible">
+            <div v-if="!isSmsChannel && (form.headersStr !== '[]' || isHeadersVisible)">
               <v-textarea
                 v-model="form.headersStr"
                 name="headers"
@@ -440,12 +466,14 @@
                 v-model="testEmailsInput"
                 :aria-label="$t('campaigns.testEmails')"
                 :disabled="isNew"
-                :placeholder="$t('campaigns.testEmails')"
+                :placeholder="isSmsChannel ? $t('campaigns.testPhonesHelp') : $t('campaigns.testEmails')"
                 rows="3"
                 auto-grow
                 variant="outlined"
               />
-              <p class="form-help">{{ $t('campaigns.sendTestHelp') }}</p>
+              <p class="form-help">
+                {{ isSmsChannel ? $t('campaigns.testPhonesHelp') : $t('campaigns.sendTestHelp') }}
+              </p>
               <v-btn
                 type="button"
                 color="primary"
@@ -454,7 +482,7 @@
                 class="mt-4"
                 @click="onSubmit('test')"
               >
-                <v-icon start icon="mdi-email-outline" />
+                <v-icon start :icon="isSmsChannel ? 'mdi-message-text-outline' : 'mdi-email-outline'" />
                 <span>{{ $t('campaigns.send') }}</span>
               </v-btn>
             </v-card-text>
@@ -475,11 +503,11 @@
         :title="data.name"
         :disabled="!canEdit"
         :templates="templates"
-        :content-types="contentTypes"
+        :content-types="editorContentTypes"
         @ai-generated="onEditorAIGenerated"
       />
 
-      <v-row class="mt-4">
+      <v-row v-if="!isSmsChannel" class="mt-4">
         <v-col cols="12" md="6">
           <v-btn
             v-if="!isAttachFieldVisible"
@@ -802,6 +830,8 @@ export default {
       isHydratingCampaignForm: false,
       subscriberTagOptions: [],
       campaignTagOptions: [],
+
+      campaignChannel: 'email',
     };
   },
 
@@ -1167,10 +1197,15 @@ export default {
         this.lastAutoFromEmail = nextForm.fromEmail || '';
         this.isAttachFieldVisible = this.form.media.length > 0;
         this.data = data;
+        this.syncCampaignChannelFromMessenger();
         this.$nextTick(() => {
           this.isHydratingCampaignForm = false;
         });
       });
+    },
+
+    syncCampaignChannelFromMessenger() {
+      this.campaignChannel = this.form.messenger === 'quo' ? 'sms' : 'email';
     },
 
     sendTest() {
@@ -1417,6 +1452,36 @@ export default {
       return messengers.length > 0 ? messengers : ['email'];
     },
 
+    hasQuoMessenger() {
+      return Array.isArray(this.serverConfig?.messengers)
+        && this.serverConfig.messengers.includes('quo');
+    },
+
+    isSmsChannel() {
+      return this.form.messenger === 'quo';
+    },
+
+    showChannelPicker() {
+      if (!this.hasQuoMessenger) {
+        return false;
+      }
+      if (this.isNew) {
+        return true;
+      }
+      return this.isEditing && this.data && this.data.status === 'draft';
+    },
+
+    isMessengerFieldLocked() {
+      return this.isEditing && this.data && this.data.status !== 'draft';
+    },
+
+    editorContentTypes() {
+      if (this.isSmsChannel) {
+        return { plain: this.contentTypes.plain };
+      }
+      return this.contentTypes;
+    },
+
     batchRepeatUnits() {
       return [
         { title: this.$t('campaigns.batchRepeatQuarterHours'), value: 'quarter_hours' },
@@ -1546,6 +1611,25 @@ export default {
         return;
       }
       this.applyDefaultFromEmailForMessenger(true);
+      if (this.showChannelPicker) {
+        this.campaignChannel = nextMessenger === 'quo' ? 'sms' : 'email';
+      }
+    },
+
+    // eslint-disable-next-line func-names
+    campaignChannel(val, prev) {
+      if (this.isHydratingCampaignForm || val === prev) {
+        return;
+      }
+      if (val === 'sms') {
+        this.form.messenger = 'quo';
+        this.form.content.contentType = 'plain';
+      } else {
+        this.form.messenger = 'email';
+        if (this.form.content.contentType === 'plain' && this.isNew) {
+          this.form.content.contentType = 'richtext';
+        }
+      }
     },
 
     // eslint-disable-next-line func-names
@@ -1611,6 +1695,15 @@ export default {
     }
 
     this.$nextTick(() => {
+      if (this.isNew && this.hasQuoMessenger && this.$route.query.channel === 'sms') {
+        this.isHydratingCampaignForm = true;
+        this.campaignChannel = 'sms';
+        this.form.messenger = 'quo';
+        this.form.content.contentType = 'plain';
+        this.$nextTick(() => {
+          this.isHydratingCampaignForm = false;
+        });
+      }
       if (this.$refs.focus && typeof this.$refs.focus.focus === 'function') {
         this.$refs.focus.focus();
       }

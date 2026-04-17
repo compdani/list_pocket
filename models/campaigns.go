@@ -30,7 +30,14 @@ const (
 	CampaignContentTypePlain    = "plain"
 	CampaignContentTypeVisual   = "visual"
 	CampaignContentTypeGrapes   = "grapes_mjml"
+
+	CampaignMessengerQuo = "quo"
 )
+
+// IsTextMessenger reports whether the campaign messenger uses SMS/text pipeline (ledger + consent + throttling).
+func IsTextMessenger(messenger string) bool {
+	return strings.TrimSpace(messenger) == CampaignMessengerQuo
+}
 
 // Campaigns represents a slice of Campaigns.
 type Campaigns []Campaign
@@ -67,6 +74,7 @@ type Campaign struct {
 	TemplateBody        string             `db:"template_body" json:"-"`
 	ArchiveTemplateBody string             `db:"archive_template_body" json:"-"`
 	Tpl                 *template.Template `json:"-"`
+	TextTpl             *txttpl.Template   `json:"-"` // SMS / plain text campaigns (Quo)
 	SubjectTpl          *txttpl.Template   `json:"-"`
 	AltBodyTpl          *template.Template `json:"-"`
 
@@ -141,6 +149,9 @@ func (camps Campaigns) LoadStats(stmt *pbdb.Query) error {
 // CompileTemplate compiles a campaign body template into its base
 // template and sets the resultant template to Campaign.Tpl.
 func (c *Campaign) CompileTemplate(f template.FuncMap) error {
+	if IsTextMessenger(c.Messenger) {
+		return c.compileTextTemplate(f)
+	}
 	// If the subject line has a template string, compile it.
 	if strings.Contains(c.Subject, "{{") {
 		subj := c.Subject
@@ -211,6 +222,51 @@ func (c *Campaign) CompileTemplate(f template.FuncMap) error {
 		c.AltBodyTpl = bTpl
 	}
 
+	return nil
+}
+
+func (c *Campaign) compileTextTemplate(f template.FuncMap) error {
+	txtFuncs := txttpl.FuncMap{}
+	for k, v := range f {
+		txtFuncs[k] = v
+	}
+	if strings.Contains(c.Subject, "{{") {
+		subj := c.Subject
+		for _, r := range regTplFuncs {
+			subj = r.regExp.ReplaceAllString(subj, r.replace)
+		}
+		subjTpl, err := txttpl.New(ContentTpl).Funcs(txtFuncs).Parse(subj)
+		if err != nil {
+			return fmt.Errorf("error compiling subject: %v", err)
+		}
+		c.SubjectTpl = subjTpl
+	}
+	body := c.TemplateBody
+	if body == "" {
+		body = `{{ template "content" . }}`
+	}
+	for _, r := range regTplFuncs {
+		body = r.regExp.ReplaceAllString(body, r.replace)
+	}
+	baseTPL, err := txttpl.New(BaseTpl).Funcs(txtFuncs).Parse(body)
+	if err != nil {
+		return fmt.Errorf("error compiling base template: %v", err)
+	}
+	msgBody := c.Body
+	for _, r := range regTplFuncs {
+		msgBody = r.regExp.ReplaceAllString(msgBody, r.replace)
+	}
+	msgTpl, err := txttpl.New(ContentTpl).Funcs(txtFuncs).Parse(msgBody)
+	if err != nil {
+		return fmt.Errorf("error compiling message: %v", err)
+	}
+	out, err := baseTPL.AddParseTree(ContentTpl, msgTpl.Tree)
+	if err != nil {
+		return fmt.Errorf("error inserting child template: %v", err)
+	}
+	c.TextTpl = out
+	c.Tpl = nil
+	c.AltBodyTpl = nil
 	return nil
 }
 

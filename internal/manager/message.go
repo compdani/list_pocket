@@ -3,6 +3,7 @@ package manager
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/compdani/list_pocket/models"
 )
@@ -19,6 +20,10 @@ func (m *Manager) NewCampaignMessage(c *models.Campaign, s models.Subscriber) (C
 		from:     c.FromEmail,
 		to:       s.Email,
 		unsubURL: fmt.Sprintf(m.cfg.UnsubURL, c.UUID, s.UUID),
+	}
+	if models.IsTextMessenger(c.Messenger) {
+		msg.to = strings.TrimSpace(s.Phone)
+		msg.from = ""
 	}
 
 	if err := msg.render(); err != nil {
@@ -43,8 +48,16 @@ func (m *CampaignMessage) render() error {
 	}
 
 	// Compile the main template.
-	if err := m.Campaign.Tpl.ExecuteTemplate(&out, models.BaseTpl, m); err != nil {
-		return err
+	if m.Campaign.TextTpl != nil {
+		if err := m.Campaign.TextTpl.ExecuteTemplate(&out, models.BaseTpl, m); err != nil {
+			return err
+		}
+	} else if m.Campaign.Tpl != nil {
+		if err := m.Campaign.Tpl.ExecuteTemplate(&out, models.BaseTpl, m); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("campaign has no compiled template")
 	}
 	m.body = models.ApplyPreheaderToHTML(out.Bytes(), m.Campaign.ContentType, m.Campaign.Preheader())
 
