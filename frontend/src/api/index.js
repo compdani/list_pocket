@@ -191,6 +191,52 @@ export const getAuthToken = () => pb.authStore.token;
 export const clearAuthToken = () => pb.authStore.clear();
 export const getAuthRecord = () => pb.authStore.record;
 
+// sendRawRequest dispatches an arbitrary HTTP request to the backend without
+// running the usual response transform / store hooks. It's used by the super
+// admin "API console" UI so operators can hit internal endpoints directly and
+// see the raw response + any error, instead of triggering global toasts or
+// normalizing the payload. `body` is sent as-is (already-parsed JS value).
+export const sendRawRequest = async ({ method, url, body }) => {
+  const verb = (method || 'GET').toUpperCase();
+  const baseRequestURL = url.startsWith('/api/')
+    ? `/mailapi/${url.slice('/api/'.length)}`
+    : url;
+
+  const startedAt = (typeof performance !== 'undefined' && performance.now)
+    ? performance.now()
+    : Date.now();
+
+  try {
+    const requestConfig = { method: verb };
+    if (body !== undefined) {
+      requestConfig.body = body;
+    }
+    const response = await pb.send(baseRequestURL, requestConfig);
+    const endedAt = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now()
+      : Date.now();
+    return {
+      ok: true,
+      status: 200,
+      data: response,
+      durationMs: Math.round(endedAt - startedAt),
+    };
+  } catch (err) {
+    const endedAt = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now()
+      : Date.now();
+    const status = err && typeof err.status === 'number' ? err.status : 0;
+    const response = err && err.response !== undefined ? err.response : null;
+    return {
+      ok: false,
+      status,
+      data: response,
+      error: getErrorMessage(err),
+      durationMs: Math.round(endedAt - startedAt),
+    };
+  }
+};
+
 function normalizeAuthProfile(profile) {
   if (!profile) {
     return profile;

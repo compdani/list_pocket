@@ -332,6 +332,7 @@ async function initConfig(rootProxy) {
   proxy.$events = eventBus;
   proxy.$t = i18n.global.t;
   proxy.$tc = i18n.global.tc;
+  proxy.$isSuperAdmin = () => isSuperAdmin(profile);
   proxy.$can = (...perms) => {
     if (isSuperAdmin(profile)) {
       return true;
@@ -374,6 +375,7 @@ async function initConfig(rootProxy) {
     vueApp.config.globalProperties.$tc = i18n.global.tc;
     vueApp.config.globalProperties.$can = proxy.$can;
     vueApp.config.globalProperties.$canList = proxy.$canList;
+    vueApp.config.globalProperties.$isSuperAdmin = proxy.$isSuperAdmin;
     vueApp.config.globalProperties.$docsUrl = docsUrl;
   }
 

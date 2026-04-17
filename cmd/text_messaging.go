@@ -193,28 +193,83 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 	}
 	from := strings.TrimSpace(obj.From)
 	if from == "" {
+		a.log.Printf("quo webhook: message.received with empty from; id=%q text=%q", obj.ID, quoTrimForLog(obj.Text))
 		return c.NoContent(http.StatusOK)
 	}
 	if !quoIsStopKeyword(obj.Text) {
+		// Log every inbound so operators can audit why STOPs sometimes don't opt
+		// people out (e.g. the reply was "stop texting me please" but our keyword
+		// matcher didn't recognize it for some reason).
+		a.log.Printf("quo webhook: inbound message (no stop keyword) from=%q id=%q text=%q", from, obj.ID, quoTrimForLog(obj.Text))
 		return c.NoContent(http.StatusOK)
 	}
 	n, err := a.core.SMSOptOutSubscriberByPhone(from)
 	if err != nil {
-		a.log.Printf("quo webhook STOP: %v", err)
+		a.log.Printf("quo webhook STOP: from=%q err=%v", from, err)
 		return c.NoContent(http.StatusOK)
 	}
 	if n > 0 {
-		a.log.Printf("quo webhook: SMS opt-out for phone %q (%d rows)", from, n)
+		a.log.Printf("quo webhook: SMS opt-out for phone %q (%d rows) text=%q", from, n, quoTrimForLog(obj.Text))
+	} else {
+		// Keyword matched but we couldn't find a subscriber with that phone. This
+		// is almost always a phone-format mismatch — the subscriber was imported
+		// with a local-format number and Quo sent E.164 (or vice-versa).
+		a.log.Printf("quo webhook: STOP from %q matched keyword %q but no subscriber rows updated; check phone format in subscribers table", from, quoTrimForLog(obj.Text))
 	}
 	return c.NoContent(http.StatusOK)
 }
 
+// quoStopKeywords is the canonical set of inbound STOP keywords we honor.
+// These are the CTIA / carrier-recommended opt-out keywords (case-insensitive).
+var quoStopKeywords = map[string]struct{}{
+	"STOP":        {},
+	"STOPALL":     {},
+	"UNSUBSCRIBE": {},
+	"CANCEL":      {},
+	"END":         {},
+	"QUIT":        {},
+	"OPTOUT":      {},
+	"OPT-OUT":     {},
+	"REVOKE":      {},
+}
+
+// quoIsStopKeyword reports whether an inbound SMS body should be treated as an
+// opt-out. We match the carrier-standard STOP keywords case-insensitively and
+// tolerate common real-world noise: surrounding whitespace, punctuation (e.g.
+// "STOP."), and trailing polite text (e.g. "Stop please", "STOP texting me").
+// Specifically, if any whitespace-separated token in the body (after stripping
+// surrounding punctuation) equals a stop keyword, we treat it as opt-out.
+//
+// This is intentionally permissive to honor user opt-out intent and stay on
+// the right side of TCPA/10DLC compliance — it's far worse to keep texting
+// someone who said "stop" than to occasionally opt out a word like "endgame"
+// if a subscriber actually writes that (they won't).
 func quoIsStopKeyword(text string) bool {
-	t := strings.TrimSpace(strings.ToUpper(text))
-	switch t {
-	case "STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT":
-		return true
-	default:
+	upper := strings.ToUpper(strings.TrimSpace(text))
+	if upper == "" {
 		return false
 	}
+	for _, raw := range strings.Fields(upper) {
+		token := strings.Trim(raw, ".,!?;:\"'`()[]{}<>*~")
+		if token == "" {
+			continue
+		}
+		if _, ok := quoStopKeywords[token]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// quoTrimForLog returns a single-line, length-capped version of a user-supplied
+// SMS body suitable for log output. It flattens newlines so multi-line replies
+// don't break log parsing.
+func quoTrimForLog(s string) string {
+	s = strings.ReplaceAll(s, "\r", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.TrimSpace(s)
+	if len(s) > 140 {
+		return s[:140] + "…"
+	}
+	return s
 }

@@ -73,7 +73,8 @@ const router = useRouter();
 const { proxy } = getCurrentInstance();
 
 const navItems = computed(() => {
-  const { $can, $t } = proxy;
+  const { $can, $t, $isSuperAdmin } = proxy;
+  const isSuper = typeof $isSuperAdmin === 'function' && $isSuperAdmin();
 
   const items = [
     {
@@ -255,6 +256,12 @@ const navItems = computed(() => {
       label: $t('menu.logs'),
       icon: 'mdi-format-list-bulleted',
       route: { name: 'logs' },
+    } : null,
+    isSuper ? {
+      key: 'adminConsole',
+      label: 'Admin Console',
+      icon: 'mdi-console',
+      route: { name: 'adminConsole' },
     } : null,
   ].filter(Boolean);
 
