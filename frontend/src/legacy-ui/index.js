@@ -862,21 +862,6 @@ export function installLegacyUIStyles() {
       .legacy-modal-content { position:relative; z-index:1; }
       .legacy-upload input { display:none; }
       .legacy-upload-content { cursor:pointer; }
-      .legacy-programmatic-toast {
-        background:#1d2939;
-        border-radius:10px;
-        bottom:24px;
-        color:#fff;
-        opacity:0;
-        padding:12px 16px;
-        position:fixed;
-        right:24px;
-        transform:translateY(8px);
-        transition:opacity .2s ease, transform .2s ease;
-        z-index:2600;
-      }
-      .legacy-programmatic-toast.is-visible { opacity:1; transform:translateY(0); }
-      .legacy-programmatic-toast.is-danger { background:#b42318; }
       .legacy-autocomplete { position:relative; }
       .legacy-autocomplete-menu {
         background:#fff;
