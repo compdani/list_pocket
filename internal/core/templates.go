@@ -138,9 +138,16 @@ func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte
 	return c.sqliteTemplateFromRecord(rec), nil
 }
 
-// SetDefaultTemplate sets a template as default.
+// SetDefaultTemplate sets a template as default. Defaults are scoped per
+// template type so that each channel (e.g. `campaign` for email HTML and
+// `campaign_sms` for SMS) can have its own default independently.
 func (c *Core) SetDefaultTemplate(recordID string) error {
-	if _, err := c.db.Exec(`UPDATE templates SET is_default = 0`); err != nil {
+	var tplType string
+	if err := c.db.Get(&tplType, `SELECT type FROM templates WHERE id = ? LIMIT 1`, recordID); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
+	}
+	if _, err := c.db.Exec(`UPDATE templates SET is_default = 0 WHERE type = ?`, tplType); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
 	}

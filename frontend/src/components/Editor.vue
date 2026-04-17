@@ -113,6 +113,9 @@ export default {
     templates: { type: Array, default: null },
     preheader: { type: String, default: '' },
     subject: { type: String, default: '' },
+    // `messenger` signals the campaign channel (e.g. 'email' or 'quo') so the
+    // template picker can show only templates compatible with that channel.
+    messenger: { type: String, default: 'email' },
 
     // modelValue is provided by the parent component.
     // Throughout the editor, `this.self` references that reactive object.
@@ -468,6 +471,11 @@ export default {
       const templates = Array.isArray(this.templates) ? this.templates : [];
       const hasContentPlaceholder = (body = '') => /\{\{(\s+)?template\s+?"content"(\s+)?\.(\s+)?}}/.test(String(body || ''));
 
+      // SMS campaigns only accept plain-text templates (`campaign_sms`).
+      if (this.messenger === 'quo') {
+        return templates.filter((t) => t.type === 'campaign_sms' && hasContentPlaceholder(t.body));
+      }
+
       if (this.self.contentType === 'visual') {
         return templates.filter((t) => t.type === 'campaign_visual');
       }
@@ -478,6 +486,8 @@ export default {
 
       // For text editors, allow any campaign template type
       // as long as it exposes the {{ template "content" . }} insertion point.
+      // SMS templates are intentionally excluded from email campaigns since
+      // they lack the HTML wrappers expected by the email pipeline.
       if (this.self.contentType === 'richtext'
         || this.self.contentType === 'html'
         || this.self.contentType === 'markdown'
