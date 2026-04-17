@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/models"
 	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -237,11 +238,21 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	public.POST("/subscription/optin/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.OptinPage), "subUUID")))
 	public.POST("/subscription/export/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.SelfExportSubscriberData), "subUUID")))
 	public.POST("/subscription/wipe/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subUUID"}, a.hasUUID(a.hasSub(a.WipeSubscriberData), "subUUID")))
+
+	public.GET("/s/{campID}/{subID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campID", "subID"}, noIndex(a.hasRecordID(a.hasSub(a.SubscriptionPage), "campID", "subID"))))
+	public.POST("/s/{campID}/{subID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campID", "subID"}, a.hasRecordID(a.hasSub(a.SubscriptionPrefs), "campID", "subID")))
+	public.GET("/o/{subID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subID"}, noIndex(a.hasRecordID(a.hasSub(a.OptinPage), "subID"))))
+	public.POST("/o/{subID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"subID"}, a.hasRecordID(a.hasSub(a.OptinPage), "subID")))
+
 	public.GET("/link/{linkUUID}/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"linkUUID", "campUUID", "subUUID"}, noIndex(a.hasUUID(a.LinkRedirect, "linkUUID", "campUUID", "subUUID"))))
+	public.GET("/l/{linkID}/{campID}/{subID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"linkID", "campID", "subID"}, noIndex(a.hasRecordID(a.LinkRedirect, "linkID", "campID", "subID"))))
 	public.GET("/tx/link/{linkUUID}/{msgUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"linkUUID", "msgUUID"}, noIndex(a.hasUUID(a.TxLinkRedirect, "linkUUID", "msgUUID"))))
 	public.GET("/tx/{msgUUID}/px.png", wrapEcho(a, tpl, cfg, urlCfg, []string{"msgUUID"}, noIndex(a.hasUUID(a.RegisterTxMessageView, "msgUUID"))))
 	public.GET("/campaign/{campUUID}/{subUUID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.ViewCampaignMessage, "campUUID", "subUUID"))))
 	public.GET("/campaign/{campUUID}/{subUUID}/px.png", wrapEcho(a, tpl, cfg, urlCfg, []string{"campUUID", "subUUID"}, noIndex(a.hasUUID(a.RegisterCampaignView, "campUUID", "subUUID"))))
+
+	public.GET("/m/{campID}/{subID}", wrapEcho(a, tpl, cfg, urlCfg, []string{"campID", "subID"}, noIndex(a.hasRecordID(a.ViewCampaignMessage, "campID", "subID"))))
+	public.GET("/v/{campID}/{subID}/px.png", wrapEcho(a, tpl, cfg, urlCfg, []string{"campID", "subID"}, noIndex(a.hasRecordID(a.RegisterCampaignView, "campID", "subID"))))
 
 	if a.cfg.EnablePublicArchive {
 		public.GET("/archive", wrapEcho(a, tpl, cfg, urlCfg, nil, a.CampaignArchivesPage))
@@ -371,6 +382,19 @@ func serveCustomAppearance(name string) echo.HandlerFunc {
 	}
 }
 
+// hasRecordID validates public tracking URL segments (PocketBase record ids or known sentinels).
+func (a *App) hasRecordID(next echo.HandlerFunc, params ...string) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		for _, p := range params {
+			if !models.IsPublicTrackingPathID(c.Param(p)) {
+				return c.Render(http.StatusBadRequest, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "",
+					a.i18n.T("globals.messages.invalidUUID")))
+			}
+		}
+		return next(c)
+	}
+}
+
 // hasUUID middleware validates the UUID string format for a given set of params.
 func (a *App) hasUUID(next echo.HandlerFunc, params ...string) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -401,7 +425,10 @@ func hasID(next echo.HandlerFunc) echo.HandlerFunc {
 // param in a request.
 func (a *App) hasSub(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		subUUID := c.Param("subUUID")
+		subUUID := strings.TrimSpace(c.Param("subUUID"))
+		if subUUID == "" {
+			subUUID = strings.TrimSpace(c.Param("subID"))
+		}
 
 		if _, err := a.core.GetSubscriber(0, subUUID, ""); err != nil {
 			if er, ok := err.(*echo.HTTPError); ok && er.Code == http.StatusBadRequest {

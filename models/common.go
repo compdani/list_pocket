@@ -20,6 +20,38 @@ const (
 	EmailHeaderSubscriberUUID = "X-Listpocket-Subscriber"
 	EmailHeaderCampaignUUID   = "X-Listpocket-Campaign"
 
+	// DummyUUID is used as a placeholder in URLs and previews where no real entity exists.
+	DummyUUID = "00000000-0000-0000-0000-000000000000"
+
+	// TrackingURLNoSubscriberSegment is the subscriber segment in generated tracking URLs
+	// when individual subscriber tracking is disabled; the HTTP handler clears it before DB writes.
+	TrackingURLNoSubscriberSegment = "_______________"
+
+	// PreviewTrackingRecordID is used in template previews so tracking URLs never resolve to a real campaign/subscriber.
+	PreviewTrackingRecordID = "_______________"
+)
+
+var (
+	reRFC4122UUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	// RePublicTrackingID matches PocketBase-style record ids and fixed tracking sentinels (underscore-only).
+	rePublicTrackingID = regexp.MustCompile(`^([a-z0-9]{5,30}|_{5,30})$`)
+)
+
+// IsRFC4122UUID reports whether s is a lowercase or uppercase RFC 4122 UUID string.
+func IsRFC4122UUID(s string) bool {
+	return reRFC4122UUID.MatchString(s)
+}
+
+// IsPublicTrackingPathID reports whether s is safe to use as a public tracking URL segment
+// (PocketBase record id or a known sentinel).
+func IsPublicTrackingPathID(s string) bool {
+	if s == TrackingURLNoSubscriberSegment || s == PreviewTrackingRecordID {
+		return true
+	}
+	return rePublicTrackingID.MatchString(s)
+}
+
+const (
 	// Standard e-mail headers.
 	EmailHeaderDate        = "Date"
 	EmailHeaderFrom        = "From"

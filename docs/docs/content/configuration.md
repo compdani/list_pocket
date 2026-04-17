@@ -49,9 +49,13 @@ When configuring auth proxies and web application firewalls, use this table.
 
 | Methods     | Route                 | Description                                   |
 | ----------- | --------------------- | --------------------------------------------- |
-| `GET, POST` | `/subscription/*`     | HTML subscription pages                       |
-| `GET, `     | `/link/*`             | Tracked link redirection                      |
-| `GET`       | `/campaign/*`         | Pixel tracking image                          |
+| `GET, POST` | `/subscription/*`     | HTML subscription pages (legacy UUID paths)   |
+| `GET, POST` | `/s/*`, `/o/*`        | Short subscription / opt-in URLs (record ids) |
+| `GET, `     | `/l/*`                | Tracked link redirection (record ids)         |
+| `GET`       | `/link/*`             | Tracked link redirection (legacy UUID paths)   |
+| `GET`       | `/v/*`                | Open tracking pixel (record ids)              |
+| `GET`       | `/campaign/*`         | Open tracking pixel (legacy UUID paths)       |
+| `GET`       | `/m/*`                | Hosted campaign message view (record ids)    |
 | `GET`       | `/public/*`           | Static files for HTML subscription pages      |
 | `POST`      | `/webhooks/service/*` | Bounce webhook endpoints for AWS and Sendgrid |
 | `GET`       | `/uploads/*`          | The file upload path configured in media settings |

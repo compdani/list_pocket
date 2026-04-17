@@ -24,7 +24,7 @@ func (testStore) RollbackCampaignLedgerInflight(int, string) error            { 
 func (testStore) ResetCampaignLedgerInflight(int) (int64, error)              { return 0, nil }
 func (testStore) FinalizeCampaignLedgerStats(int) error                       { return nil }
 func (testStore) MarkSMSUnsendable(string) (int64, error)                     { return 0, nil }
-func (testStore) CreateLink(url string) (string, error)                       { return "link-uuid", nil }
+func (testStore) CreateLink(url string) (string, error)                       { return "linkrid01234501", nil }
 func (testStore) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
 	return msg, nil
 }
@@ -48,13 +48,14 @@ func TestGenericTemplateFuncsAllowCampaignPlaceholdersInTransactionalTemplates(t
 
 func TestTemplateFuncsPreferCampaignOverrides(t *testing.T) {
 	m := New(Config{
-		UnsubURL:           "https://example.com/sub/%s/%s",
-		LinkTrackURL:       "https://example.com/link/%s/%s/%s",
-		ViewTrackURL:       "https://example.com/view/%s/%s/px.png",
+		UnsubURL:           "https://example.com/s/%s/%s",
+		LinkTrackURL:       "https://example.com/l/%s/%s/%s",
+		ViewTrackURL:       "https://example.com/v/%s/%s/px.png",
 		IndividualTracking: true,
 	}, testStore{}, nil, log.New(io.Discard, "", 0))
 
 	camp := models.Campaign{
+		Base:        models.Base{RecordID: "camprid01234501"},
 		UUID:        "camp-uuid",
 		Subject:     "Test",
 		FromEmail:   "team@example.com",
@@ -67,6 +68,7 @@ func TestTemplateFuncsPreferCampaignOverrides(t *testing.T) {
 	}
 
 	msg, err := m.NewCampaignMessage(&camp, models.Subscriber{
+		Base:  models.Base{RecordID: "subrid012345678"},
 		UUID:  "sub-uuid",
 		Email: "person@example.com",
 	})
@@ -75,13 +77,13 @@ func TestTemplateFuncsPreferCampaignOverrides(t *testing.T) {
 	}
 
 	body := string(msg.Body())
-	if !strings.Contains(body, "https://example.com/sub/camp-uuid/sub-uuid") {
+	if !strings.Contains(body, "https://example.com/s/camprid01234501/subrid012345678") {
 		t.Fatalf("expected unsubscribe URL in body, got %q", body)
 	}
-	if !strings.Contains(body, "https://example.com/view/camp-uuid/sub-uuid/px.png") {
+	if !strings.Contains(body, "https://example.com/v/camprid01234501/subrid012345678/px.png") {
 		t.Fatalf("expected tracking pixel in body, got %q", body)
 	}
-	if !strings.Contains(body, "https://example.com/link/link-uuid/camp-uuid/sub-uuid") {
+	if !strings.Contains(body, "https://example.com/l/linkrid01234501/camprid01234501/subrid012345678") {
 		t.Fatalf("expected tracked link in body, got %q", body)
 	}
 }

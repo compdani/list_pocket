@@ -19,7 +19,7 @@ func (m *Manager) NewCampaignMessage(c *models.Campaign, s models.Subscriber) (C
 		subject:  c.Subject,
 		from:     c.FromEmail,
 		to:       s.Email,
-		unsubURL: fmt.Sprintf(m.cfg.UnsubURL, c.UUID, s.UUID),
+		unsubURL: fmt.Sprintf(m.cfg.UnsubURL, c.RecordID, s.RecordID),
 	}
 	if models.IsTextMessenger(c.Messenger) {
 		msg.to = strings.TrimSpace(s.Phone)

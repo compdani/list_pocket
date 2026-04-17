@@ -299,9 +299,9 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 		}
 	}
 
-	// Use a dummy campaign ID to prevent views and clicks from {{ TrackView }}
-	// and {{ TrackLink }} being registered on preview.
+	// Use dummy identifiers so {{ TrackView }} / {{ TrackLink }} in previews never resolve to real analytics.
 	camp.UUID = dummySubscriber.UUID
+	camp.RecordID = models.PreviewTrackingRecordID
 	if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
 		a.log.Printf("error compiling template: %v", err)
 		return echo.NewHTTPError(http.StatusBadRequest,

@@ -1468,14 +1468,16 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 			COALESCE(c.send_at, '') AS send_at,
 			COALESCE(csl.updated, '') AS ledger_sent_at
 		FROM campaigns c
-		LEFT JOIN subscribers s ON s.uuid = ?
+		LEFT JOIN subscribers s ON (
+			length(trim(?)) > 0 AND (s.uuid = ? OR s.id = ?)
+		)
 		LEFT JOIN campaign_send_ledger csl
 			ON csl.campaign_id = c.id
 			AND csl.subscriber_id = s.id
 			AND csl.status = 'sent'
-		WHERE c.uuid = ?
+		WHERE (c.uuid = ? OR c.id = ?)
 		LIMIT 1
-	`, subUUID, campUUID); err != nil {
+	`, subUUID, subUUID, subUUID, campUUID, campUUID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil
 		}
@@ -1515,10 +1517,10 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 	return nil
 }
 
-// GetLinkURL returns the original URL for a link UUID without recording a click.
-func (c *Core) GetLinkURL(linkUUID string) (string, error) {
+// GetLinkURL returns the original URL for a link record id or legacy link UUID without recording a click.
+func (c *Core) GetLinkURL(linkKey string) (string, error) {
 	var url string
-	if err := c.db.Get(&url, `SELECT url FROM links WHERE uuid = ?`, linkUUID); err != nil {
+	if err := c.db.Get(&url, `SELECT url FROM links WHERE id = ? OR uuid = ?`, linkKey, linkKey); err != nil {
 		c.log.Printf("error getting link URL: %s", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}
@@ -1526,13 +1528,15 @@ func (c *Core) GetLinkURL(linkUUID string) (string, error) {
 }
 
 // RegisterCampaignLinkClick registers a subscriber's link click on a campaign.
-func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (string, error) {
+// linkKey is links.id (record id) or links.uuid (legacy). campKey and subKey are campaign/subscriber
+// record ids or legacy UUIDs; subKey may be empty when individual tracking is disabled.
+func (c *Core) RegisterCampaignLinkClick(linkKey, campKey, subKey string) (string, error) {
 	var out struct {
 		ID  string `db:"id"`
 		URL string `db:"url"`
 	}
 
-	if err := c.db.Get(&out, `SELECT id, url FROM links WHERE uuid = ?`, linkUUID); err != nil {
+	if err := c.db.Get(&out, `SELECT id, url FROM links WHERE id = ? OR uuid = ?`, linkKey, linkKey); err != nil {
 		if err == sql.ErrNoRows {
 			return "", echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("public.invalidLink"))
 		}
@@ -1544,10 +1548,12 @@ func (c *Core) RegisterCampaignLinkClick(linkUUID, campUUID, subUUID string) (st
 		INSERT INTO link_clicks (campaign_id, subscriber_id, link_id, created)
 		SELECT c.id, s.id, ?, (strftime('%Y-%m-%d %H:%M:%fZ'))
 		FROM campaigns c
-		LEFT JOIN subscribers s ON s.uuid = ?
-		WHERE c.uuid = ?
+		LEFT JOIN subscribers s ON (
+			length(trim(?)) > 0 AND (s.uuid = ? OR s.id = ?)
+		)
+		WHERE (c.uuid = ? OR c.id = ?)
 		LIMIT 1
-	`, out.ID, subUUID, campUUID); err != nil {
+	`, out.ID, subKey, subKey, subKey, campKey, campKey); err != nil {
 		c.log.Printf("error registering link click: %s", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
 	}

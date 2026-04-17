@@ -13,15 +13,15 @@ template variable referencing `.Subscriber`), such data must be supplied
 as 'Campaign metadata', which is a JSON object that will be used in place
 of `.Subscriber` when rendering the archive template and content.
 
-When individual subscriber tracking is enabled, TrackLink requires that a UUID
-of an existing user is provided as part of the campaign metadata. Any clicks on
-a TrackLink from the archived campaign will be counted towards that subscriber.
+When individual subscriber tracking is enabled, TrackLink requires metadata for
+an existing subscriber (including the PocketBase **record id** in the `id` field).
+Any clicks on a TrackLink from the archived campaign will be counted towards that subscriber.
 
 As an example:
 
 ```json
 {
-  "UUID": "5a837423-a186-5623-9a87-82691cbe3631",
+  "id": "pbc_subscriber_record_id_here",
   "email": "example@example.com",
   "name": "Reader",
   "attribs": {}
