@@ -33,6 +33,30 @@ func (a *App) loadTextMessagingSettings() models.TextMessagingSettings {
 	return loadTextMessagingSettingsFromPB(a.pb)
 }
 
+// ensureQuoMessengerRegistered registers the Quo messenger at runtime when settings are saved enabled,
+// so campaigns can send without a full process restart.
+func (a *App) ensureQuoMessengerRegistered() {
+	if a == nil || a.manager == nil || a.pb == nil {
+		return
+	}
+	s := loadTextMessagingSettingsFromPB(a.pb)
+	p := s.QuoProvider()
+	if p == nil || !p.Enabled || strings.TrimSpace(p.APIKey) == "" {
+		return
+	}
+	if a.manager.HasMessenger(models.CampaignMessengerQuo) {
+		return
+	}
+	qm := quo.NewMessenger(func() models.TextMessagingSettings {
+		return loadTextMessagingSettingsFromPB(a.pb)
+	})
+	if err := a.manager.AddMessenger(qm); err != nil {
+		a.log.Printf("register quo messenger: %v", err)
+		return
+	}
+	a.messengers = append(a.messengers, qm)
+}
+
 func (a *App) GetTextMessagingSettings(c echo.Context) error {
 	s := a.loadTextMessagingSettings()
 	root := strings.TrimSpace(a.urlCfg.RootURL)
@@ -59,6 +83,7 @@ func (a *App) UpdateTextMessagingSettings(c echo.Context) error {
 	if err := a.upsertTypedSettingsRecord(models.ListPocketSettingsTypeTextMessaging, string(b)); err != nil {
 		return err
 	}
+	a.ensureQuoMessengerRegistered()
 	root := strings.TrimSpace(a.urlCfg.RootURL)
 	return c.JSON(http.StatusOK, okResp{merged.ToResponse(root)})
 }

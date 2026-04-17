@@ -891,7 +891,8 @@ func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, db *pbdb.DB, i *i18n.I1
 					l.tags,
 					l.description,
 					s.rowid AS subscriber_id,
-					sl.status AS subscription_status
+					sl.status AS subscription_status,
+					COALESCE(NULLIF(TRIM(sl.sms_status), ''), sl.status) AS subscription_sms_status
 				FROM lists l
 				LEFT JOIN subscriber_lists sl ON l.id = sl.list_id
 				LEFT JOIN subscribers s ON s.id = sl.subscriber_id

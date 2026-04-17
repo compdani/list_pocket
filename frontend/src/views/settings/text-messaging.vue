@@ -357,6 +357,7 @@ export default {
         const out = await this.$api.updateTextMessagingSettings(this.buildPayload());
         this.$utils.toast(this.$t('globals.messages.saved'));
         this.applyFromApi(out);
+        await this.$api.getServerConfig();
         if (this.$root.awaitRestart) {
           await this.$root.awaitRestart(out);
         }

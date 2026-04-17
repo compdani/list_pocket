@@ -31,6 +31,8 @@ type List struct {
 
 	// This is only relevant when querying the lists of a subscriber.
 	SubscriptionStatus    string    `db:"subscription_status" json:"subscription_status,omitempty"`
+	// SMS marketing consent for this list membership (mirrors subscription_status when sms_status is unset).
+	SubscriptionSmsStatus string    `db:"subscription_sms_status" json:"subscription_sms_status,omitempty"`
 	SubscriptionCreatedAt null.Time `db:"subscription_created_at" json:"subscription_created_at,omitempty"`
 	SubscriptionUpdatedAt null.Time `db:"subscription_updated_at" json:"subscription_updated_at,omitempty"`
 

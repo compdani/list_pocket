@@ -163,11 +163,18 @@
                 <v-btn value="email">
                   {{ $t('campaigns.channelEmail') }}
                 </v-btn>
-                <v-btn value="sms">
+                <v-btn
+                  value="sms"
+                  :disabled="!smsChannelSelectable"
+                  :title="smsChannelDisabledHint"
+                >
                   {{ $t('campaigns.channelSms') }}
                 </v-btn>
               </v-btn-toggle>
-              <p v-if="campaignChannel === 'sms'" class="form-help mt-2">
+              <p v-if="!smsChannelSelectable" class="form-help mt-2 text-medium-emphasis">
+                {{ $t('campaigns.channelSmsConfigureHint') }}
+              </p>
+              <p v-else-if="campaignChannel === 'sms'" class="form-help mt-2">
                 {{ $t('campaigns.channelSmsHelp') }}
               </p>
             </div>
@@ -1457,14 +1464,19 @@ export default {
         && this.serverConfig.messengers.includes('quo');
     },
 
+    smsChannelSelectable() {
+      return this.hasQuoMessenger;
+    },
+
+    smsChannelDisabledHint() {
+      return this.smsChannelSelectable ? '' : this.$t('campaigns.channelSmsConfigureHint');
+    },
+
     isSmsChannel() {
       return this.form.messenger === 'quo';
     },
 
     showChannelPicker() {
-      if (!this.hasQuoMessenger) {
-        return false;
-      }
       if (this.isNew) {
         return true;
       }
