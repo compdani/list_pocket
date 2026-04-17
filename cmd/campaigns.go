@@ -550,6 +550,45 @@ func (a *App) UpdateCampaignStatus(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{out})
 }
 
+// ResolveCampaignLedgerInflight handles admin cleanup of `campaign_send_ledger` rows that
+// got stuck in status='inflight'. Requires campaigns:manage permission.
+//
+// Body: {"action":"mark_sent"} or {"action":"reset_pending"}
+//   - mark_sent:     flip inflight → sent (counter reconciled from ledger).
+//   - reset_pending: flip inflight → pending (pair with a resume to retry the sends).
+//
+// Rejects while the campaign is scheduled or running since the manager pipe owns the
+// ledger lifecycle in those states.
+func (a *App) ResolveCampaignLedgerInflight(c echo.Context) error {
+	recordID, err := a.resolveCampaignRouteID(c)
+	if err != nil {
+		return err
+	}
+
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+		return err
+	}
+
+	req := struct {
+		Action string `json:"action"`
+	}{}
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+	req.Action = strings.TrimSpace(req.Action)
+
+	a.log.Printf("resolve campaign ledger inflight: request record_id=%q action=%q", recordID, req.Action)
+	out, err := a.core.ResolveCampaignLedgerInflight(recordID, req.Action)
+	if err != nil {
+		a.log.Printf("resolve campaign ledger inflight: failed record_id=%q action=%q error=%v", recordID, req.Action, err)
+		return err
+	}
+	a.log.Printf("resolve campaign ledger inflight: success record_id=%q action=%q affected=%d to_send=%d sent=%d",
+		recordID, out.Action, out.Affected, out.ToSend, out.Sent)
+
+	return c.JSON(http.StatusOK, okResp{out})
+}
+
 // UpdateCampaignArchive handles campaign status modification.
 func (a *App) UpdateCampaignArchive(c echo.Context) error {
 	recordID, err := a.resolveCampaignRouteID(c)

@@ -399,6 +399,101 @@ func TestNoSecondDeliveryAfterSent(t *testing.T) {
 	}
 }
 
+func TestResetInflight(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	otherCamp := "camp_rec_2"
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'running')`, campRec)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'running')`, otherCamp)
+	for i, sid := range []string{"s1", "s2", "s3", "s4"} {
+		mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, ?, ?, 'enabled')`, sid, sid, sid+"@t.c")
+		statuses := []string{"inflight", "inflight", "sent", "pending"}
+		mustExec(t, db,
+			`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES (?, ?, ?, ?, '2026-01-01', '2026-01-01')`,
+			"l"+sid, campRec, sid, statuses[i])
+	}
+	mustExec(t, db,
+		`INSERT INTO subscribers (id, uuid, email, status) VALUES ('s5', 's5', 's5@t.c', 'enabled')`)
+	mustExec(t, db,
+		`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l5', ?, 's5', 'inflight', '2026-01-01', '2026-01-01')`, otherCamp)
+
+	n, err := ResetInflight(db, campRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("ResetInflight rows reset = %d, want 2", n)
+	}
+
+	var inflight, pending, sent int
+	mustGet(t, db, &inflight, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'inflight'`, campRec)
+	mustGet(t, db, &pending, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'pending'`, campRec)
+	mustGet(t, db, &sent, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'sent'`, campRec)
+	if inflight != 0 {
+		t.Fatalf("inflight count after reset = %d, want 0", inflight)
+	}
+	if pending != 3 {
+		t.Fatalf("pending count after reset = %d, want 3", pending)
+	}
+	if sent != 1 {
+		t.Fatalf("sent count after reset = %d, want 1 (sent rows must not be downgraded)", sent)
+	}
+
+	// Other campaign's inflight row must not be touched.
+	var otherInflight int
+	mustGet(t, db, &otherInflight, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'inflight'`, otherCamp)
+	if otherInflight != 1 {
+		t.Fatalf("other campaign inflight count = %d, want 1 (reset must be scoped to the target campaign)", otherInflight)
+	}
+}
+
+func TestMarkInflightSent(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	otherCamp := "camp_rec_2"
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'finished')`, campRec)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'finished')`, otherCamp)
+	for i, sid := range []string{"s1", "s2", "s3", "s4"} {
+		mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, ?, ?, 'enabled')`, sid, sid, sid+"@t.c")
+		statuses := []string{"inflight", "inflight", "pending", "sent"}
+		mustExec(t, db,
+			`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES (?, ?, ?, ?, '2026-01-01', '2026-01-01')`,
+			"l"+sid, campRec, sid, statuses[i])
+	}
+	mustExec(t, db,
+		`INSERT INTO subscribers (id, uuid, email, status) VALUES ('s5', 's5', 's5@t.c', 'enabled')`)
+	mustExec(t, db,
+		`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l5', ?, 's5', 'inflight', '2026-01-01', '2026-01-01')`, otherCamp)
+
+	n, err := MarkInflightSent(db, campRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("MarkInflightSent rows updated = %d, want 2", n)
+	}
+
+	var inflight, pending, sent int
+	mustGet(t, db, &inflight, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'inflight'`, campRec)
+	mustGet(t, db, &pending, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'pending'`, campRec)
+	mustGet(t, db, &sent, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'sent'`, campRec)
+	if inflight != 0 {
+		t.Fatalf("inflight count after MarkInflightSent = %d, want 0", inflight)
+	}
+	if pending != 1 {
+		t.Fatalf("pending count after MarkInflightSent = %d, want 1 (pending must not be promoted to sent)", pending)
+	}
+	if sent != 3 {
+		t.Fatalf("sent count after MarkInflightSent = %d, want 3 (both inflight rows + original sent row)", sent)
+	}
+
+	var otherInflight int
+	mustGet(t, db, &otherInflight, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ? AND status = 'inflight'`, otherCamp)
+	if otherInflight != 1 {
+		t.Fatalf("other campaign inflight count = %d, want 1 (MarkInflightSent must be scoped)", otherInflight)
+	}
+}
+
 func TestRollbackInflightDoesNotDowngradeSent(t *testing.T) {
 	db := newTestLedgerDB(t)
 	campRec := "camp_rec_1"

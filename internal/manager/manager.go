@@ -42,6 +42,7 @@ type Store interface {
 	UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID int) error
 	MarkCampaignLedgerSent(campaignID int, subscriberRecordID string) error
 	RollbackCampaignLedgerInflight(campaignID int, subscriberRecordID string) error
+	ResetCampaignLedgerInflight(campaignID int) (int64, error)
 	FinalizeCampaignLedgerStats(campaignID int) error
 	// MarkSMSUnsendable opts the subscriber (matched by normalized phone) out
 	// of all SMS list memberships. Used for permanent provider rejections like
@@ -536,6 +537,12 @@ func (m *Manager) worker() {
 
 			// If the campaign has ended or stopped, ignore the message.
 			if msg.pipe != nil && msg.pipe.stopped.Load() {
+				// Roll the ledger row back to 'pending' so a future run of this
+				// campaign (e.g. after resume) can retry this subscriber instead
+				// of leaving them permanently stranded as 'inflight'.
+				if rbErr := m.store.RollbackCampaignLedgerInflight(msg.Campaign.ID, msg.Subscriber.RecordID); rbErr != nil {
+					m.log.Printf("error rolling back campaign ledger inflight on stopped pipe (campaign %d): %v", msg.Campaign.ID, rbErr)
+				}
 				// Reduce the message counter on the pipe.
 				msg.pipe.wg.Done()
 				continue

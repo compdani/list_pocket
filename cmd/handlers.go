@@ -153,6 +153,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.POST("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateCampaign, "campaigns:manage_all", "campaigns:manage")))
 	api.PUT("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaign, "campaigns:manage_all", "campaigns:manage")))
 	api.PUT("/campaigns/{id}/status", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaignStatus, "campaigns:manage_all", "campaigns:manage")))
+	api.POST("/campaigns/{id}/ledger/resolve-inflight", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.ResolveCampaignLedgerInflight, "campaigns:manage_all", "campaigns:manage")))
 	api.PUT("/campaigns/{id}/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaignArchive, "campaigns:manage_all", "campaigns:manage")))
 	api.DELETE("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteCampaigns, "campaigns:manage", "campaigns:manage_all")))
 	api.DELETE("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteCampaign, "campaigns:manage_all", "campaigns:manage")))

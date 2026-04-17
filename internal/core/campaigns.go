@@ -528,6 +528,85 @@ func (c *Core) UpdateCampaignStatus(recordID string, status string) (models.Camp
 	return cm, nil
 }
 
+// CampaignLedgerInflightResult describes the outcome of a ResolveCampaignLedgerInflight
+// call: how many ledger rows were transitioned and what the campaign counters look like
+// after the operation.
+type CampaignLedgerInflightResult struct {
+	Action   string `json:"action"`
+	Affected int64  `json:"affected"`
+	ToSend   int    `json:"to_send"`
+	Sent     int    `json:"sent"`
+}
+
+// Valid actions for ResolveCampaignLedgerInflight.
+const (
+	CampaignLedgerInflightActionMarkSent     = "mark_sent"
+	CampaignLedgerInflightActionResetPending = "reset_pending"
+)
+
+// ResolveCampaignLedgerInflight cleans up `campaign_send_ledger` rows that got stranded
+// in status='inflight' (for example, because the pipe was paused/cancelled mid-batch
+// before the row could be transitioned back to 'pending' or forward to 'sent').
+//
+// It refuses to run while the campaign is actively scheduled or running - those states
+// are owned by the manager pipe, which already resets stranded rows at pipe start and
+// cleanup. The admin endpoint is only useful for campaigns that have already exited the
+// pipe (finished, cancelled, paused, draft).
+//
+// action:
+//   - "mark_sent":     inflight → sent, then recompute campaign counters from the ledger.
+//     Use when the messages were in fact delivered upstream (e.g. Quo accepted them) but
+//     MarkSent never ran to close the ledger loop.
+//   - "reset_pending": inflight → pending.
+//     Use when you want the rows to be retried; pair with a resume/re-run of the campaign.
+func (c *Core) ResolveCampaignLedgerInflight(recordID, action string) (CampaignLedgerInflightResult, error) {
+	res := CampaignLedgerInflightResult{Action: action}
+
+	cm, err := c.GetCampaign(recordID, "", "")
+	if err != nil {
+		return res, err
+	}
+
+	if cm.Status == models.CampaignStatusRunning || cm.Status == models.CampaignStatusScheduled {
+		return res, echo.NewHTTPError(http.StatusBadRequest,
+			"cannot resolve stranded inflight rows while the campaign is scheduled or running; pause or cancel it first")
+	}
+
+	var n int64
+	switch action {
+	case CampaignLedgerInflightActionMarkSent:
+		n, err = campaignledger.MarkInflightSent(c.db, recordID)
+		if err != nil {
+			c.log.Printf("error marking campaign ledger inflight as sent (%s): %v", recordID, err)
+			return res, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		}
+		if err := campaignledger.FinalizeCampaignStats(c.db, cm.ID, recordID); err != nil {
+			c.log.Printf("error finalizing campaign stats after mark-sent (%s): %v", recordID, err)
+			return res, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		}
+	case CampaignLedgerInflightActionResetPending:
+		n, err = campaignledger.ResetInflight(c.db, recordID)
+		if err != nil {
+			c.log.Printf("error resetting campaign ledger inflight (%s): %v", recordID, err)
+			return res, echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		}
+	default:
+		return res, echo.NewHTTPError(http.StatusBadRequest,
+			"invalid action; expected 'mark_sent' or 'reset_pending'")
+	}
+	res.Affected = n
+
+	updated, err := c.GetCampaign(recordID, "", "")
+	if err == nil {
+		res.ToSend = updated.ToSend
+		res.Sent = updated.Sent
+	}
+	return res, nil
+}
+
 // UpdateCampaignArchive updates a campaign's archive properties.
 func (c *Core) UpdateCampaignArchive(recordID string, enabled bool, tplID string, meta models.JSON, archiveSlug string) error {
 	metaJSON, _ := json.Marshal(meta)
