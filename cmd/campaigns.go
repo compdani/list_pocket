@@ -935,8 +935,11 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidName"))
 	}
 
-	// Larger char limit for subject as it can contain {{ go templating }} logic.
-	if !strHasLen(c.Subject, 1, 5000) {
+	// SMS campaigns don't use a subject line; clear it and skip the length check.
+	if models.IsTextMessenger(c.Messenger) {
+		c.Subject = ""
+	} else if !strHasLen(c.Subject, 1, 5000) {
+		// Larger char limit for subject as it can contain {{ go templating }} logic.
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidSubject"))
 	}
 
@@ -1041,7 +1044,9 @@ func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidName"))
 	}
 
-	if !strHasLen(c.Subject, 1, 5000) {
+	if models.IsTextMessenger(c.Messenger) {
+		c.Subject = ""
+	} else if !strHasLen(c.Subject, 1, 5000) {
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidSubject"))
 	}
 
