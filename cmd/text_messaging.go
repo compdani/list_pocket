@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -141,6 +142,56 @@ func (a *App) TestTextMessagingSettings(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{Data: map[string]bool{"sent": true}})
 }
 
+// quoWebhookMessagePayload is data.object for message webhooks. Quo v3 uses "body"; v4 docs use "text".
+type quoWebhookMessagePayload struct {
+	ID        string          `json:"id"`
+	Direction string          `json:"direction"`
+	Text      string          `json:"text"`
+	Body      string          `json:"body"`
+	Status    string          `json:"status"`
+	From      string          `json:"from"`
+	To        json.RawMessage `json:"to"`
+}
+
+func (m quoWebhookMessagePayload) mergedText() string {
+	if s := strings.TrimSpace(m.Body); s != "" {
+		return s
+	}
+	return strings.TrimSpace(m.Text)
+}
+
+type quoWebhookEventData struct {
+	Object quoWebhookMessagePayload `json:"object"`
+}
+
+// quoParseMessageWebhookEvent returns the event type and inner message from Quo webhook JSON.
+// Supports v4-style flat envelopes (type + data at root) and v3-style wraps where the event
+// is nested under top-level "object" (object.type, object.data.object).
+func quoParseMessageWebhookEvent(body []byte) (eventType string, msg quoWebhookMessagePayload, err error) {
+	var root struct {
+		Type   string              `json:"type"`
+		Data   quoWebhookEventData `json:"data"`
+		Object json.RawMessage     `json:"object"`
+	}
+	if err := json.Unmarshal(body, &root); err != nil {
+		return "", quoWebhookMessagePayload{}, err
+	}
+	data := root.Data
+	eventType = strings.TrimSpace(root.Type)
+	// v3 sends the event as a JSON object under "object"; v4 sends `"object":"event"` (string).
+	if len(root.Object) > 0 && root.Object[0] == '{' {
+		var inner struct {
+			Type string              `json:"type"`
+			Data quoWebhookEventData `json:"data"`
+		}
+		if err := json.Unmarshal(root.Object, &inner); err == nil && strings.TrimSpace(inner.Type) != "" {
+			eventType = strings.TrimSpace(inner.Type)
+			data = inner.Data
+		}
+	}
+	return eventType, data.Object, nil
+}
+
 // QuoMessageWebhook handles POST /webhooks/quo/:token for inbound message events (STOP, etc.).
 func (a *App) QuoMessageWebhook(c echo.Context) error {
 	token := strings.TrimSpace(c.Param("token"))
@@ -168,53 +219,52 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 		}
 	}
 
-	var envelope struct {
-		Type string `json:"type"`
-		Data struct {
-			Object struct {
-				Direction string          `json:"direction"`
-				Text      string          `json:"text"`
-				From      string          `json:"from"`
-				To        json.RawMessage `json:"to"` // Quo sends string for incoming, []string for outgoing.
-				ID        string          `json:"id"`
-			} `json:"object"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(body, &envelope); err != nil {
+	eventType, obj, err := quoParseMessageWebhookEvent(body)
+	if err != nil {
 		a.log.Printf("quo webhook: invalid json: %v", err)
 		return c.NoContent(http.StatusOK)
 	}
-	if envelope.Type != "message.received" {
+	if eventType != "message.received" {
 		return c.NoContent(http.StatusOK)
 	}
-	obj := envelope.Data.Object
 	if strings.ToLower(strings.TrimSpace(obj.Direction)) != "incoming" {
 		return c.NoContent(http.StatusOK)
 	}
+	textBody := obj.mergedText()
+	if strings.TrimSpace(textBody) == "" && strings.TrimSpace(obj.ID) != "" {
+		if cl, err := quo.NewClientFromSettings(s); err == nil {
+			ctx, cancel := context.WithTimeout(c.Request().Context(), 8*time.Second)
+			t, err := cl.GetMessageText(ctx, obj.ID)
+			cancel()
+			if err == nil {
+				textBody = t
+			}
+		}
+	}
 	from := strings.TrimSpace(obj.From)
 	if from == "" {
-		a.log.Printf("quo webhook: message.received with empty from; id=%q text=%q", obj.ID, quoTrimForLog(obj.Text))
+		a.log.Printf("quo webhook: message.received with empty from; id=%q status=%q text=%q", obj.ID, obj.Status, quoTrimForLog(textBody))
 		return c.NoContent(http.StatusOK)
 	}
-	if !quoIsStopKeyword(obj.Text) {
+	if !quoIsStopKeyword(textBody) {
 		// Log every inbound so operators can audit why STOPs sometimes don't opt
 		// people out (e.g. the reply was "stop texting me please" but our keyword
 		// matcher didn't recognize it for some reason).
-		a.log.Printf("quo webhook: inbound message (no stop keyword) from=%q id=%q text=%q", from, obj.ID, quoTrimForLog(obj.Text))
+		a.log.Printf("quo webhook: inbound message (no stop keyword) from=%q id=%q status=%q text=%q", from, obj.ID, obj.Status, quoTrimForLog(textBody))
 		return c.NoContent(http.StatusOK)
 	}
 	n, err := a.core.SMSOptOutSubscriberByPhone(from)
 	if err != nil {
-		a.log.Printf("quo webhook STOP: from=%q err=%v", from, err)
+		a.log.Printf("quo webhook STOP: from=%q status=%q err=%v", from, obj.Status, err)
 		return c.NoContent(http.StatusOK)
 	}
 	if n > 0 {
-		a.log.Printf("quo webhook: SMS opt-out for phone %q (%d rows) text=%q", from, n, quoTrimForLog(obj.Text))
+		a.log.Printf("quo webhook: SMS opt-out for phone %q (%d rows) status=%q text=%q", from, n, obj.Status, quoTrimForLog(textBody))
 	} else {
 		// Keyword matched but we couldn't find a subscriber with that phone. This
 		// is almost always a phone-format mismatch — the subscriber was imported
 		// with a local-format number and Quo sent E.164 (or vice-versa).
-		a.log.Printf("quo webhook: STOP from %q matched keyword %q but no subscriber rows updated; check phone format in subscribers table", from, quoTrimForLog(obj.Text))
+		a.log.Printf("quo webhook: STOP from %q matched keyword %q but no subscriber rows updated; status=%q check phone format in subscribers table", from, quoTrimForLog(textBody), obj.Status)
 	}
 	return c.NoContent(http.StatusOK)
 }
