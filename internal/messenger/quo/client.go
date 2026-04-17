@@ -37,6 +37,7 @@ type quoErrorResponse struct {
 func isUnsendableDestinationCode(code string) bool {
 	switch strings.TrimSpace(code) {
 	case
+		"0203400", // Unreachable `to` phone number (not SMS-reachable per provider).
 		"0203403", // International Messaging Not Allowed.
 		"0203404", // Phone number is not messageable (landline/VoIP).
 		"0203405": // Destination carrier blocks our number (A2P filtering).
