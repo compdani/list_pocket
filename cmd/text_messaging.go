@@ -172,11 +172,11 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 		Type string `json:"type"`
 		Data struct {
 			Object struct {
-				Direction string   `json:"direction"`
-				Text      string   `json:"text"`
-				From      string   `json:"from"`
-				To        []string `json:"to"`
-				ID        string   `json:"id"`
+				Direction string          `json:"direction"`
+				Text      string          `json:"text"`
+				From      string          `json:"from"`
+				To        json.RawMessage `json:"to"` // Quo sends string for incoming, []string for outgoing.
+				ID        string          `json:"id"`
 			} `json:"object"`
 		} `json:"data"`
 	}
