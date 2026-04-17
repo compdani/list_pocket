@@ -7,7 +7,7 @@
           <span v-if="!isNaN(campaigns.total)">({{ campaigns.total }})</span>
         </h1>
       </div>
-      <div class="header-actions">
+      <div class="header-actions d-flex flex-wrap ga-2">
         <v-btn
           v-if="$can('campaigns:manage')"
           :to="{ name: 'campaign', params: { id: 'new' } }"
@@ -16,6 +16,16 @@
           data-cy="btn-new"
         >
           {{ $t('globals.buttons.new') }}
+        </v-btn>
+        <v-btn
+          v-if="$can('campaigns:manage') && hasQuoMessenger"
+          :to="{ name: 'campaign', params: { id: 'new' }, query: { channel: 'sms' } }"
+          variant="tonal"
+          color="primary"
+          prepend-icon="mdi-message-text-outline"
+          data-cy="btn-new-sms"
+        >
+          {{ $t('campaigns.newSmsCampaign') }}
         </v-btn>
       </div>
     </header>
@@ -772,7 +782,12 @@ export default {
   },
 
   computed: {
-    ...mapState(['campaigns', 'loading']),
+    ...mapState(['campaigns', 'loading', 'serverConfig']),
+
+    hasQuoMessenger() {
+      return Array.isArray(this.serverConfig?.messengers)
+        && this.serverConfig.messengers.includes('quo');
+    },
 
     tableHeaders() {
       return [

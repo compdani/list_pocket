@@ -836,6 +836,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 	if err := c.db.Select(&subs, `
 		SELECT
 			sl.status AS subscription_status,
+			COALESCE(NULLIF(TRIM(sl.sms_status), ''), sl.status) AS subscription_sms_status,
 			(CASE WHEN l.type = 'private' THEN 'Private list' ELSE l.name END) AS name,
 			l.type,
 			sl.created AS created_at
@@ -1244,7 +1245,8 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 		SELECT
 			l.rowid AS id, l.id AS record_id, l.uuid, l.name, l.type, l.optin, l.status, l.tags, l.description,
 			s.rowid AS subscriber_id,
-			sl.status AS subscription_status
+			sl.status AS subscription_status,
+			COALESCE(NULLIF(TRIM(sl.sms_status), ''), sl.status) AS subscription_sms_status
 		FROM lists l
 		LEFT JOIN subscriber_lists sl ON l.id = sl.list_id
 		LEFT JOIN subscribers s ON s.id = sl.subscriber_id
@@ -1274,17 +1276,18 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 	q += ` ORDER BY l.id`
 
 	rows := []struct {
-		ID                 int    `db:"id"`
-		RecordID           string `db:"record_id"`
-		UUID               string `db:"uuid"`
-		Name               string `db:"name"`
-		Type               string `db:"type"`
-		Optin              string `db:"optin"`
-		Status             string `db:"status"`
-		Tags               string `db:"tags"`
-		Description        string `db:"description"`
-		SubscriberID       int    `db:"subscriber_id"`
-		SubscriptionStatus string `db:"subscription_status"`
+		ID                    int    `db:"id"`
+		RecordID              string `db:"record_id"`
+		UUID                  string `db:"uuid"`
+		Name                  string `db:"name"`
+		Type                  string `db:"type"`
+		Optin                 string `db:"optin"`
+		Status                string `db:"status"`
+		Tags                  string `db:"tags"`
+		Description           string `db:"description"`
+		SubscriberID          int    `db:"subscriber_id"`
+		SubscriptionStatus    string `db:"subscription_status"`
+		SubscriptionSmsStatus string `db:"subscription_sms_status"`
 	}{}
 
 	if err := c.db.Select(&rows, q, args...); err != nil {
@@ -1303,16 +1306,17 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 		}
 
 		out = append(out, models.List{
-			Base:               models.Base{ID: r.ID, RecordID: r.RecordID},
-			UUID:               r.UUID,
-			Name:               r.Name,
-			Type:               r.Type,
-			Optin:              r.Optin,
-			Status:             r.Status,
-			Tags:               tags,
-			Description:        r.Description,
-			SubscriberID:       r.SubscriberID,
-			SubscriptionStatus: r.SubscriptionStatus,
+			Base:                  models.Base{ID: r.ID, RecordID: r.RecordID},
+			UUID:                  r.UUID,
+			Name:                  r.Name,
+			Type:                  r.Type,
+			Optin:                 r.Optin,
+			Status:                r.Status,
+			Tags:                  tags,
+			Description:           r.Description,
+			SubscriberID:          r.SubscriberID,
+			SubscriptionStatus:    r.SubscriptionStatus,
+			SubscriptionSmsStatus: r.SubscriptionSmsStatus,
 		})
 	}
 

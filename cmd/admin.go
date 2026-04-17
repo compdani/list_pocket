@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"syscall"
 	"time"
 
@@ -116,6 +117,20 @@ func (a *App) GetServerConfig(c echo.Context) error {
 	out.Messengers = make([]string, 0, len(a.messengers))
 	for _, m := range a.messengers {
 		out.Messengers = append(out.Messengers, m.Name())
+	}
+	// Quo is registered at startup when configured; also expose it here when typed settings
+	// enable SMS so the admin UI can offer SMS campaigns after saving without relying on a stale boot slice.
+	if s := a.loadTextMessagingSettings(); s.QuoProvider() != nil && s.QuoProvider().Enabled && strings.TrimSpace(s.QuoProvider().APIKey) != "" {
+		hasQuo := false
+		for _, name := range out.Messengers {
+			if name == models.CampaignMessengerQuo {
+				hasQuo = true
+				break
+			}
+		}
+		if !hasQuo {
+			out.Messengers = append(out.Messengers, models.CampaignMessengerQuo)
+		}
 	}
 
 	a.Lock()

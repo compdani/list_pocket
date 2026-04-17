@@ -168,7 +168,8 @@
                   <thead>
                     <tr>
                       <th>{{ $tc('globals.terms.list', 1) }}</th>
-                      <th>{{ $t('globals.fields.status') }}</th>
+                      <th>{{ $t('subscribers.emailStatus') }}</th>
+                      <th>{{ $t('subscribers.smsStatus') }}</th>
                       <th>{{ $t('globals.fields.createdAt') }}</th>
                       <th>{{ $t('globals.fields.updatedAt') }}</th>
                     </tr>
@@ -192,6 +193,11 @@
                         <div v-if="item.optin === 'double' && item.subscriptionMeta.optinIp" class="subtle-row">
                           {{ item.subscriptionMeta.optinIp }}
                         </div>
+                      </td>
+                      <td>
+                        <span class="status-pill neutral">
+                          {{ $t(`subscribers.status.${item.subscriptionSmsStatus || item.subscriptionStatus}`) }}
+                        </span>
                       </td>
                       <td>{{ $utils.niceDate(item.subscriptionCreatedAt, true) }}</td>
                       <td>{{ $utils.niceDate(item.subscriptionCreatedAt, true) }}</td>
