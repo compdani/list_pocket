@@ -269,6 +269,12 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 	return c.NoContent(http.StatusOK)
 }
 
+// quoStopKeywordLeadWordLimit is how many leading whitespace-separated tokens we
+// scan for opt-out keywords. Quo can send reactions / quoted replies where the
+// body appends the full original message (which may contain words like STOP or
+// END); only the subscriber's own lead words should trigger an opt-out.
+const quoStopKeywordLeadWordLimit = 4
+
 // quoStopKeywords is the canonical set of inbound STOP keywords we honor.
 // These are the CTIA / carrier-recommended opt-out keywords (case-insensitive).
 var quoStopKeywords = map[string]struct{}{
@@ -287,19 +293,20 @@ var quoStopKeywords = map[string]struct{}{
 // opt-out. We match the carrier-standard STOP keywords case-insensitively and
 // tolerate common real-world noise: surrounding whitespace, punctuation (e.g.
 // "STOP."), and trailing polite text (e.g. "Stop please", "STOP texting me").
-// Specifically, if any whitespace-separated token in the body (after stripping
-// surrounding punctuation) equals a stop keyword, we treat it as opt-out.
 //
-// This is intentionally permissive to honor user opt-out intent and stay on
-// the right side of TCPA/10DLC compliance — it's far worse to keep texting
-// someone who said "stop" than to occasionally opt out a word like "endgame"
-// if a subscriber actually writes that (they won't).
+// Only the first quoStopKeywordLeadWordLimit whitespace-separated tokens are
+// considered, so quoted thread bodies (reactions, forwarded meeting text, etc.)
+// cannot trigger an opt-out from a keyword buried later in the payload.
 func quoIsStopKeyword(text string) bool {
 	upper := strings.ToUpper(strings.TrimSpace(text))
 	if upper == "" {
 		return false
 	}
-	for _, raw := range strings.Fields(upper) {
+	fields := strings.Fields(upper)
+	if len(fields) > quoStopKeywordLeadWordLimit {
+		fields = fields[:quoStopKeywordLeadWordLimit]
+	}
+	for _, raw := range fields {
 		token := strings.Trim(raw, ".,!?;:\"'`()[]{}<>*~")
 		if token == "" {
 			continue
