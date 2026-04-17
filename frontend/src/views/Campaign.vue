@@ -135,6 +135,7 @@
             />
 
             <v-text-field
+              v-if="!isSmsChannel"
               v-model="form.subject"
               :label="$t('campaigns.subject')"
               maxlength="5000"
