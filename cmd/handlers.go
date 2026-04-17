@@ -85,6 +85,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.POST("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateSubscriber, "subscribers:manage")))
 	api.PUT("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateSubscriber, "subscribers:manage")))
 	api.POST("/subscribers/{id}/optin", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.SubscriberSendOptin, "subscribers:manage")))
+	api.POST("/subscribers/{id}/sms-opt-out", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.SubscriberSMSOptOut, "subscribers:manage")))
 	api.PUT("/subscribers/blocklist", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BlocklistSubscribers, "subscribers:manage")))
 	api.PUT("/subscribers/{first}/{second}", wrapEcho(a, tpl, cfg, urlCfg, []string{"first", "second"}, func(c echo.Context) error {
 		switch {

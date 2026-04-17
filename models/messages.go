@@ -2,6 +2,7 @@ package models
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/textproto"
@@ -10,6 +11,12 @@ import (
 
 	null "gopkg.in/volatiletech/null.v6"
 )
+
+// ErrUnsendableDestination signals that a messenger refused the recipient
+// permanently (e.g. Quo "International Messaging Not Allowed"). Callers
+// should treat it as a provider-level STOP for that phone/email and take
+// the subscriber out of rotation rather than retry.
+var ErrUnsendableDestination = errors.New("destination not sendable")
 
 // Message is the message pushed to a Messenger.
 type Message struct {

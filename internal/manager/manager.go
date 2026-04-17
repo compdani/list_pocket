@@ -43,6 +43,11 @@ type Store interface {
 	MarkCampaignLedgerSent(campaignID int, subscriberRecordID string) error
 	RollbackCampaignLedgerInflight(campaignID int, subscriberRecordID string) error
 	FinalizeCampaignLedgerStats(campaignID int) error
+	// MarkSMSUnsendable opts the subscriber (matched by normalized phone) out
+	// of all SMS list memberships. Used for permanent provider rejections like
+	// "international messaging not allowed". Phone-only matching keeps this
+	// callable without the subscriber record id.
+	MarkSMSUnsendable(phone string) (int64, error)
 	CreateLink(url string) (string, error)
 	CreateTransactionalMessage(models.TransactionalMessage) (models.TransactionalMessage, error)
 	UpdateTransactionalMessageStatus(recordID, status, errorMessage string, sent bool) error
@@ -595,6 +600,22 @@ func (m *Manager) worker() {
 				if msg.pipe != nil {
 					if rbErr := m.store.RollbackCampaignLedgerInflight(msg.Campaign.ID, msg.Subscriber.RecordID); rbErr != nil {
 						m.log.Printf("error rolling back campaign ledger inflight (campaign %d): %v", msg.Campaign.ID, rbErr)
+					}
+				}
+
+				// Provider rejected this specific recipient permanently
+				// (e.g. Quo "International Messaging Not Allowed").
+				// Mark the subscriber as SMS-unsubscribed across all of
+				// their lists so future campaigns skip them and the
+				// campaign doesn't keep burning errors on them.
+				if errors.Is(err, models.ErrUnsendableDestination) &&
+					models.IsTextMessenger(msg.Campaign.Messenger) &&
+					strings.TrimSpace(msg.Subscriber.Phone) != "" {
+					if n, mErr := m.store.MarkSMSUnsendable(msg.Subscriber.Phone); mErr != nil {
+						m.log.Printf("error marking subscriber %d sms-unsendable: %v", msg.Subscriber.ID, mErr)
+					} else if n > 0 {
+						m.log.Printf("subscriber %d (%s): auto opted-out of SMS after provider rejection (%d list memberships)",
+							msg.Subscriber.ID, msg.Subscriber.Phone, n)
 					}
 				}
 			}

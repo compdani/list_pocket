@@ -48,6 +48,19 @@
               variant="outlined"
               density="comfortable"
             />
+            <div v-if="isEditing && form.phone" class="phone-actions">
+              <v-btn
+                v-if="$can('subscribers:manage')"
+                type="button"
+                size="small"
+                variant="text"
+                color="error"
+                prepend-icon="mdi-message-off-outline"
+                @click.prevent="optOutFromSMS"
+              >
+                {{ $t('subscribers.smsOptOut') }}
+              </v-btn>
+            </div>
           </v-col>
 
           <v-col cols="12" md="4">
@@ -588,6 +601,33 @@ function sendOptinConfirmation() {
   });
 }
 
+function optOutFromSMS() {
+  proxy.$utils.confirm(
+    proxy.$t('subscribers.smsOptOutConfirm'),
+    () => {
+      proxy.$api.smsOptOutSubscriber(form.value.id).then((res) => {
+        const n = (res && res.updated) || 0;
+        proxy.$utils.toast(
+          proxy.$t('subscribers.smsOptOutDone', { n }),
+        );
+
+        if (Array.isArray(form.value.lists)) {
+          form.value.lists = form.value.lists.map((l) => ({
+            ...l,
+            subscriptionSmsStatus: 'unsubscribed',
+          }));
+        }
+        if (data.value && Array.isArray(data.value.lists)) {
+          data.value.lists.forEach((l) => {
+            l.subscriptionSmsStatus = 'unsubscribed';
+          });
+        }
+        emit('finished');
+      });
+    },
+  );
+}
+
 function validateAttribs(str) {
   // Parse and validate attributes JSON.
   let attribs = {};
@@ -686,6 +726,12 @@ onMounted(() => {
   color: #667085;
   font-size: 0.9rem;
   margin-top: 4px;
+}
+
+.phone-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: -6px;
 }
 
 .tab-panel {
