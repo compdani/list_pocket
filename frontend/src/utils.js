@@ -4,6 +4,8 @@ import dayDuration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import updateLocale from 'dayjs/plugin/updateLocale';
 
+import { pushToast } from './utils/toast';
+
 dayjs.extend(updateLocale);
 dayjs.extend(relativeTime);
 dayjs.extend(dayDuration);
@@ -177,20 +179,7 @@ export default class Utils {
   };
 
   toast = (msg, typ, duration) => {
-    const type = !typ ? 'is-success' : typ;
-    const toast = document.createElement('div');
-    toast.className = `legacy-programmatic-toast ${type}`;
-    toast.textContent = msg;
-    document.body.appendChild(toast);
-    window.setTimeout(() => {
-      toast.classList.add('is-visible');
-    }, 0);
-    window.setTimeout(() => {
-      toast.classList.remove('is-visible');
-      window.setTimeout(() => {
-        toast.remove();
-      }, 200);
-    }, duration || 3000);
+    pushToast(msg, typ, duration);
   };
 
   // Takes a props.row from a Buefy b-column <td> template and

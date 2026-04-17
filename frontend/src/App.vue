@@ -145,6 +145,13 @@
         <v-progress-circular indeterminate size="56" width="5" color="primary" />
       </v-overlay>
     </v-main>
+
+    <v-snackbar-queue
+      v-model="toastQueue"
+      location="bottom right"
+      closable
+      variant="elevated"
+    />
   </v-app>
 </template>
 
@@ -153,6 +160,7 @@ import { mapState } from 'vuex';
 import { uris } from './constants';
 import { pb } from './api';
 import Navigation from './components/Navigation.vue';
+import { toastQueue } from './utils/toast';
 
 export default {
   name: 'App',
@@ -171,6 +179,7 @@ export default {
       railBeforeAI: undefined,
       eventsTopic: 'events/error',
       windowWidth: window.innerWidth,
+      toastQueue,
     };
   },
 
