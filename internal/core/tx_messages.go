@@ -242,7 +242,7 @@ func (c *Core) RegisterTransactionalLinkClick(linkUUID, msgUUID string) (string,
 		URL string `db:"url"`
 	}
 
-	if err := c.db.Get(&out, `SELECT id, url FROM links WHERE uuid = ?`, linkUUID); err != nil {
+	if err := c.db.Get(&out, `SELECT id, url FROM links WHERE id = ? OR uuid = ?`, linkUUID, linkUUID); err != nil {
 		if err == sql.ErrNoRows {
 			return "", echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("public.invalidLink"))
 		}

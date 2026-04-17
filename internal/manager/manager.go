@@ -27,7 +27,6 @@ const (
 	// ContentTpl is the name of the compiled message.
 	ContentTpl = "content"
 
-	dummyUUID = "00000000-0000-0000-0000-000000000000"
 )
 
 // Store represents a data backend, such as a database,
@@ -412,25 +411,25 @@ func (m *Manager) TemplateFuncs(c *models.Campaign) template.FuncMap {
 				return url
 			}
 
-			subUUID := msg.Subscriber.UUID
+			subSeg := msg.Subscriber.RecordID
 			if !m.cfg.IndividualTracking {
-				subUUID = dummyUUID
+				subSeg = models.TrackingURLNoSubscriberSegment
 			}
 
-			return m.trackLink(url, msg.Campaign.UUID, subUUID)
+			return m.trackLink(url, msg.Campaign.RecordID, subSeg)
 		},
 		"TrackView": func(msg *CampaignMessage) template.HTML {
 			if m.cfg.DisableTracking {
 				return template.HTML("")
 			}
 
-			subUUID := msg.Subscriber.UUID
+			subSeg := msg.Subscriber.RecordID
 			if !m.cfg.IndividualTracking {
-				subUUID = dummyUUID
+				subSeg = models.TrackingURLNoSubscriberSegment
 			}
 
 			return template.HTML(fmt.Sprintf(`<img src="%s" alt="" />`,
-				fmt.Sprintf(m.cfg.ViewTrackURL, msg.Campaign.UUID, subUUID)))
+				fmt.Sprintf(m.cfg.ViewTrackURL, msg.Campaign.RecordID, subSeg)))
 		},
 		"UnsubscribeURL": func(msg *CampaignMessage) string {
 			return msg.unsubURL
@@ -441,10 +440,10 @@ func (m *Manager) TemplateFuncs(c *models.Campaign) template.FuncMap {
 		"OptinURL": func(msg *CampaignMessage) string {
 			// Add list IDs.
 			// TODO: Show private lists list on optin e-mail
-			return fmt.Sprintf(m.cfg.OptinURL, msg.Subscriber.UUID, "")
+			return fmt.Sprintf(m.cfg.OptinURL, msg.Subscriber.RecordID, "")
 		},
 		"MessageURL": func(msg *CampaignMessage) string {
-			return fmt.Sprintf(m.cfg.MessageURL, c.UUID, msg.Subscriber.UUID)
+			return fmt.Sprintf(m.cfg.MessageURL, c.RecordID, msg.Subscriber.RecordID)
 		},
 		"ArchiveURL": func() string {
 			return m.cfg.ArchiveURL
@@ -581,8 +580,8 @@ func (m *Manager) worker() {
 
 			h := textproto.MIMEHeader{}
 			if !models.IsTextMessenger(msg.Campaign.Messenger) {
-				h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.UUID)
-				h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.UUID)
+				h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.RecordID)
+				h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.RecordID)
 
 				if m.cfg.UnsubHeader {
 					h.Set("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")

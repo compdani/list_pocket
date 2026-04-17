@@ -682,27 +682,22 @@ func initUrlConfig(ko *koanf.Koanf) *UrlConfig {
 		FaviconURL: ko.String("app.favicon_url"),
 		LoginURL:   path.Join(uriAdmin, "/login"),
 
-		// Static URLS.
-		// url.com/subscription/{campaign_uuid}/{subscriber_uuid}
-		UnsubURL: fmt.Sprintf("%s/subscription/%%s/%%s", root),
+		// Static URLS (record ids: campaigns.id, subscribers.id, links.id).
+		UnsubURL: fmt.Sprintf("%s/s/%%s/%%s", root),
 
-		// url.com/subscription/optin/{subscriber_uuid}
-		OptinURL: fmt.Sprintf("%s/subscription/optin/%%s?%%s", root),
+		OptinURL: fmt.Sprintf("%s/o/%%s?%%s", root),
 
-		// url.com/link/{campaign_uuid}/{subscriber_uuid}/{link_uuid}
-		LinkTrackURL: fmt.Sprintf("%s/link/%%s/%%s/%%s", root),
+		LinkTrackURL: fmt.Sprintf("%s/l/%%s/%%s/%%s", root),
 
 		// url.com/tx/link/{link_uuid}/{message_uuid}
 		TxLinkTrackURL: fmt.Sprintf("%s/tx/link/%%s/%%s", root),
 
-		// url.com/link/{campaign_uuid}/{subscriber_uuid}
-		MessageURL: fmt.Sprintf("%s/campaign/%%s/%%s", root),
+		MessageURL: fmt.Sprintf("%s/m/%%s/%%s", root),
 
 		// url.com/archive
 		ArchiveURL: root + "/archive",
 
-		// url.com/campaign/{campaign_uuid}/{subscriber_uuid}/px.png
-		ViewTrackURL: fmt.Sprintf("%s/campaign/%%s/%%s/px.png", root),
+		ViewTrackURL: fmt.Sprintf("%s/v/%%s/%%s/px.png", root),
 
 		// url.com/tx/{message_uuid}/px.png
 		TxViewTrackURL: fmt.Sprintf("%s/tx/%%s/px.png", root),

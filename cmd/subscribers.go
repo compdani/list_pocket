@@ -22,9 +22,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-const (
-	dummyUUID = "00000000-0000-0000-0000-000000000000"
-)
+const dummyUUID = models.DummyUUID
 
 // subQueryReq is a "catch all" struct for reading various
 // subscriber related requests.
@@ -53,6 +51,7 @@ type subOptin struct {
 
 var (
 	dummySubscriber = models.Subscriber{
+		Base:      models.Base{RecordID: models.PreviewTrackingRecordID},
 		Email:     "demo@listpocket.app",
 		Phone:     "+15555550123",
 		FirstName: "Demo",
@@ -957,16 +956,16 @@ func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, db *pbdb.DB, i *i18n.I1
 		for _, l := range out.Lists {
 			qListIDs.Add("l", l.UUID)
 		}
-		out.OptinURL = fmt.Sprintf(u.OptinURL, sub.UUID, qListIDs.Encode())
-		out.UnsubURL = fmt.Sprintf(u.UnsubURL, dummyUUID, sub.UUID)
+		out.OptinURL = fmt.Sprintf(u.OptinURL, sub.RecordID, qListIDs.Encode())
+		out.UnsubURL = fmt.Sprintf(u.UnsubURL, models.PreviewTrackingRecordID, sub.RecordID)
 
 		// Unsub headers.
 		hdr := textproto.MIMEHeader{}
-		hdr.Set(models.EmailHeaderSubscriberUUID, sub.UUID)
+		hdr.Set(models.EmailHeaderSubscriberUUID, sub.RecordID)
 
 		// Attach List-Unsubscribe headers?
 		if unsubHeader {
-			unsubURL := fmt.Sprintf(u.UnsubURL, dummyUUID, sub.UUID)
+			unsubURL := fmt.Sprintf(u.UnsubURL, models.PreviewTrackingRecordID, sub.RecordID)
 			hdr.Set("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")
 			hdr.Set("List-Unsubscribe", `<`+unsubURL+`>`)
 		}

@@ -588,6 +588,109 @@ func (c *Core) DeleteSubscribersByQuery(searchStr, queryExp string, listIDs []in
 	return nil
 }
 
+func isPlaceholderCampaignURL(camp string) bool {
+	return strings.EqualFold(strings.TrimSpace(camp), models.DummyUUID) || strings.TrimSpace(camp) == models.PreviewTrackingRecordID
+}
+
+// unsubscribeSubscriberAllPublicLists unsubscribes a subscriber from every public list
+// (used when the unsubscribe URL has no real campaign id, e.g. opt-in notifications).
+func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bool) error {
+	var messenger string
+	if err := c.db.Get(&messenger, `
+		SELECT COALESCE(c.messenger, '') FROM campaigns c
+		INNER JOIN campaign_lists cl ON cl.campaign_id = c.id
+		INNER JOIN subscriber_lists sl ON sl.list_id = cl.list_id AND sl.subscriber_id = ?
+		LIMIT 1`, subRecID); err != nil {
+		if err != sql.ErrNoRows {
+			c.log.Printf("error unsubscribing: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		}
+		messenger = ""
+	}
+	smsChannel := models.IsTextMessenger(messenger)
+
+	tx, err := c.db.Beginx()
+	if err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+	defer tx.Rollback()
+
+	if blocklist {
+		if _, err := tx.Exec(`UPDATE subscribers
+			SET status = 'blocklisted',
+			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE id = ?`, subRecID); err != nil {
+			c.log.Printf("error unsubscribing: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		}
+
+		var listUpd string
+		if smsChannel {
+			listUpd = `UPDATE subscriber_lists
+			SET sms_status = 'unsubscribed',
+			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE subscriber_id = ?
+			  AND list_id IN (SELECT id FROM lists WHERE type = ?)
+			  AND COALESCE(sms_status, status) != 'unsubscribed'`
+		} else {
+			listUpd = `UPDATE subscriber_lists
+			SET status = 'unsubscribed',
+			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+			WHERE subscriber_id = ?
+			  AND list_id IN (SELECT id FROM lists WHERE type = ?)
+			  AND status != 'unsubscribed'`
+		}
+		if _, err := tx.Exec(listUpd, subRecID, models.ListTypePublic); err != nil {
+			c.log.Printf("error unsubscribing: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		}
+
+		if err := tx.Commit(); err != nil {
+			c.log.Printf("error unsubscribing: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		}
+		return nil
+	}
+
+	var res sql.Result
+	if smsChannel {
+		res, err = tx.Exec(`UPDATE subscriber_lists
+		SET sms_status = 'unsubscribed',
+		    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE subscriber_id = ?
+		  AND COALESCE(sms_status, status) != 'unsubscribed'
+		  AND list_id IN (SELECT id FROM lists WHERE type = ?)`, subRecID, models.ListTypePublic)
+	} else {
+		res, err = tx.Exec(`UPDATE subscriber_lists
+		SET status = 'unsubscribed',
+		    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+		WHERE subscriber_id = ?
+		  AND status != 'unsubscribed'
+		  AND list_id IN (SELECT id FROM lists WHERE type = ?)`, subRecID, models.ListTypePublic)
+	}
+	if err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+
+	_ = res
+
+	if err := tx.Commit(); err != nil {
+		c.log.Printf("error unsubscribing: %v", err)
+		return echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+	}
+
+	return nil
+}
+
 // UnsubscribeByCampaign unsubscribes a given subscriber from lists in a given campaign.
 func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) error {
 	var (
@@ -595,13 +698,16 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		campRecID string
 	)
 
-	if err := c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE uuid = ?`, subUUID); err != nil {
+	if err := c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE uuid = ? OR id = ?`, subUUID, subUUID); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
-	if err := c.db.Get(&campRecID, `SELECT id FROM campaigns WHERE uuid = ?`, campUUID); err != nil {
+	if err := c.db.Get(&campRecID, `SELECT id FROM campaigns WHERE uuid = ? OR id = ?`, campUUID, campUUID); err != nil {
+		if err == sql.ErrNoRows && isPlaceholderCampaignURL(campUUID) {
+			return c.unsubscribeSubscriberAllPublicLists(subRecID, blocklist)
+		}
 		c.log.Printf("error unsubscribing: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -750,10 +856,10 @@ func (c *Core) ConfirmOptionSubscription(subUUID string, listUUIDs []string, met
 	}
 
 	metaJSON, _ := json.Marshal(meta)
-	args := make([]any, 0, len(listUUIDs)+2)
-	args = append(args, string(metaJSON), subUUID)
+	metaStr := string(metaJSON)
+	execArgs := []any{metaStr, metaStr, subUUID, subUUID}
 	for _, listUUID := range listUUIDs {
-		args = append(args, listUUID)
+		execArgs = append(execArgs, listUUID)
 	}
 
 	if _, err := c.db.Exec(`UPDATE subscriber_lists
@@ -764,10 +870,10 @@ func (c *Core) ConfirmOptionSubscription(subUUID string, listUUIDs []string, met
 		        ELSE COALESCE(meta, '{}')
 		    END),
 		    updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
-		WHERE subscriber_id = (SELECT id FROM subscribers WHERE uuid = ?)
+		WHERE subscriber_id = (SELECT id FROM subscribers WHERE uuid = ? OR id = ?)
 		  AND list_id IN (
 		      SELECT id FROM lists WHERE uuid IN (`+sqlitePlaceholders(len(listUUIDs))+`)
-		  )`, append([]any{string(metaJSON), string(metaJSON), subUUID}, args[2:]...)...); err != nil {
+		  )`, execArgs...); err != nil {
 		c.log.Printf("error confirming subscription: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
@@ -808,9 +914,15 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 	if id > 0 {
 		query += `rowid = ?`
 		args = append(args, id)
-	} else {
+	} else if uuid != "" && models.IsRFC4122UUID(uuid) {
 		query += `uuid = ?`
 		args = append(args, uuid)
+	} else if uuid != "" {
+		query += `id = ?`
+		args = append(args, uuid)
+	} else {
+		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusBadRequest,
+			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
 	}
 	query += ` LIMIT 1`
 
@@ -1011,7 +1123,11 @@ func (c *Core) getSubscriberSQLite(id int, uuid, email string) (models.Subscribe
 		q += `rowid = ?`
 		args = append(args, id)
 	case uuid != "":
-		q += `uuid = ?`
+		if models.IsRFC4122UUID(uuid) {
+			q += `uuid = ?`
+		} else {
+			q += `id = ?`
+		}
 		args = append(args, uuid)
 	case email != "":
 		q += `email = ?`
@@ -1229,7 +1345,11 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 
 	sid := subID
 	if sid == 0 && uuid != "" {
-		if err := c.db.Get(&sid, `SELECT rowid FROM subscribers WHERE uuid = ?`, uuid); err != nil {
+		sel := `SELECT rowid FROM subscribers WHERE uuid = ?`
+		if !models.IsRFC4122UUID(uuid) {
+			sel = `SELECT rowid FROM subscribers WHERE id = ?`
+		}
+		if err := c.db.Get(&sid, sel, uuid); err != nil {
 			if err == sql.ErrNoRows {
 				return []models.List{}, nil
 			}

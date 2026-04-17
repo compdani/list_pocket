@@ -654,10 +654,8 @@ func (s *store) GetAttachment(mediaID int) (models.Attachment, error) {
 	}, nil
 }
 
-// CreateLink registers a URL with a UUID for tracking clicks and returns the UUID.
+// CreateLink registers a URL for tracking clicks and returns the link's PocketBase record id (links.id).
 func (s *store) CreateLink(url string) (string, error) {
-	// Create a new UUID for the URL. If the URL already exists in the DB
-	// the UUID in the database is returned.
 	uu, err := uuid.NewV4()
 	if err != nil {
 		return "", err
@@ -668,7 +666,7 @@ func (s *store) CreateLink(url string) (string, error) {
 			INSERT INTO links (uuid, url)
 			VALUES (?, ?)
 			ON CONFLICT(url) DO UPDATE SET url=excluded.url
-			RETURNING uuid`,
+			RETURNING id`,
 		uu, url); err != nil {
 		return "", err
 	}
