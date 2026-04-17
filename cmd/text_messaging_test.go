@@ -86,3 +86,26 @@ func TestQuoParseMessageWebhookEvent_bodyWinsOverText(t *testing.T) {
 		t.Fatalf("got %q", msg.mergedText())
 	}
 }
+
+func TestQuoIsStopKeyword_leadWordsOnly(t *testing.T) {
+	t.Parallel()
+	if !quoIsStopKeyword("STOP") {
+		t.Fatal("expected STOP alone to match")
+	}
+	if !quoIsStopKeyword("please STOP now") {
+		t.Fatal("expected STOP in first four words to match")
+	}
+	if !quoIsStopKeyword("PLEASE STOP TEXTING ME") {
+		t.Fatal("expected STOP within lead words to match")
+	}
+	long := "👍 to “What does it mean to control real estate but not own it? That’s the topic of DREIA's Main Meeting on 22nd of April at … STOP"
+	if quoIsStopKeyword(long) {
+		t.Fatal("did not expect STOP buried after many words to match")
+	}
+	if quoIsStopKeyword("one two three four STOP") {
+		t.Fatal("STOP is the 5th word; should not match with limit 4")
+	}
+	if !quoIsStopKeyword("one two STOP four five six") {
+		t.Fatal("STOP is 3rd word; should match")
+	}
+}
