@@ -47,6 +47,22 @@ func validateQuoCampaign(messenger, campType, contentType string) error {
 	return nil
 }
 
+// validateCampaignTemplateType ensures a campaign is paired with a template of
+// a compatible type: SMS campaigns must use `campaign_sms` templates, and email
+// campaigns must not use `campaign_sms` templates.
+func validateCampaignTemplateType(messenger, tplType string) error {
+	if strings.TrimSpace(tplType) == "" {
+		return nil
+	}
+	if models.IsTextMessenger(messenger) && tplType != models.TemplateTypeCampaignSMS {
+		return errors.New("text messaging campaigns require a campaign_sms template")
+	}
+	if !models.IsTextMessenger(messenger) && tplType == models.TemplateTypeCampaignSMS {
+		return errors.New("email campaigns cannot use campaign_sms templates")
+	}
+	return nil
+}
+
 func sqliteCampaignTimeValue(v null.Time) string {
 	if v.Valid {
 		return v.Time.Format("2006-01-02 15:04:05.000Z")
@@ -134,6 +150,7 @@ type sqliteCampaignRow struct {
 	ToSend            int            `db:"to_send"`
 	Sent              int            `db:"sent"`
 	TemplateBody      string         `db:"template_body"`
+	TemplateType      string         `db:"template_type"`
 	Lists             []byte         `db:"lists"`
 	Media             []byte         `db:"media"`
 	Views             int            `db:"views"`
@@ -255,6 +272,7 @@ func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 		ArchiveTemplateID: archiveTemplateID,
 		ArchiveMeta:       archiveMeta,
 		TemplateBody:      row.TemplateBody,
+		TemplateType:      row.TemplateType,
 		Total:             row.Total,
 	}
 }
@@ -662,6 +680,7 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 		c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		'' AS template_body,
+		'' AS template_type,
 		COUNT(*) OVER() AS total,
 		COALESCE((
 			SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
@@ -761,7 +780,22 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 		c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
-		COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
+		COALESCE(
+			t.body,
+			CASE
+				WHEN c.messenger = 'quo' THEN (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+				ELSE (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
+			END,
+			''
+		) AS template_body,
+		COALESCE(
+			t.type,
+			CASE
+				WHEN c.messenger = 'quo' THEN (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+				ELSE (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
+			END,
+			''
+		) AS template_type,
 		COALESCE((
 			SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
 			FROM campaign_lists cl
@@ -821,6 +855,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 			c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 			COALESCE(t.body, '') AS template_body,
+			COALESCE(t.type, '') AS template_type,
 			COALESCE((
 				SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
 				FROM campaign_lists cl
@@ -859,7 +894,22 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 			c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
-			COALESCE(t.body, (SELECT body FROM templates WHERE is_default = 1 LIMIT 1), '') AS template_body,
+			COALESCE(
+				t.body,
+				CASE
+					WHEN c.messenger = 'quo' THEN (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+					ELSE (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
+				END,
+				''
+			) AS template_body,
+			COALESCE(
+				t.type,
+				CASE
+					WHEN c.messenger = 'quo' THEN (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+					ELSE (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
+				END,
+				''
+			) AS template_type,
 			'[]' AS lists,
 			'[]' AS media,
 			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
@@ -917,8 +967,10 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	var tpl tplInfo
 	if o.TemplateID.Valid && strings.TrimSpace(o.TemplateID.String) != "" {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE id = ? LIMIT 1`, o.TemplateID.String)
-	} else if !models.IsTextMessenger(messenger) && o.ContentType != models.CampaignContentTypeVisual {
-		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 LIMIT 1`)
+	} else if models.IsTextMessenger(messenger) {
+		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 AND type = ? LIMIT 1`, models.TemplateTypeCampaignSMS)
+	} else if o.ContentType != models.CampaignContentTypeVisual {
+		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 AND type = ? LIMIT 1`, models.TemplateTypeCampaign)
 	}
 	c.log.Printf("create campaign sqlite: template resolved name=%q tpl_type=%q tpl_id_valid=%v", o.Name, tpl.Type, tpl.ID.Valid)
 
@@ -975,6 +1027,9 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaIDs [
 	c.log.Printf("create campaign sqlite: resolved %d list records and %d media records for name=%q", len(listRows), len(mediaRows), o.Name)
 
 	if err := validateQuoCampaign(messenger, campaignType, contentType); err != nil {
+		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if err := validateCampaignTemplateType(messenger, tpl.Type); err != nil {
 		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
@@ -1117,6 +1172,13 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 	}
 	if err := validateQuoCampaign(msgr, campType, contentType); err != nil {
 		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+	if o.TemplateID.Valid && strings.TrimSpace(o.TemplateID.String) != "" {
+		var tplType string
+		_ = c.db.Get(&tplType, `SELECT type FROM templates WHERE id = ? LIMIT 1`, o.TemplateID.String)
+		if err := validateCampaignTemplateType(msgr, tplType); err != nil {
+			return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
 	}
 
 	pb := c.db.PocketBase()

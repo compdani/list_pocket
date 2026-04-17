@@ -106,7 +106,7 @@
             </v-tooltip>
 
             <v-tooltip
-              v-if="!item.isDefault && item.type === 'campaign'"
+              v-if="!item.isDefault && (item.type === 'campaign' || item.type === 'campaign_sms')"
               :text="$t('templates.makeDefault')"
               location="top"
             >
@@ -266,6 +266,9 @@ export default {
       }
       if (type === 'campaign_grapes_mjml') {
         return 'GrapesJS (MJML)';
+      }
+      if (type === 'campaign_sms') {
+        return this.$tc('templates.typeCampaignSMS');
       }
 
       return this.$tc('templates.typeTransactional');
@@ -430,6 +433,10 @@ export default {
 
 .template-type-chip.campaign_grapes_mjml {
   background: rgba(var(--v-theme-info), 0.14);
+}
+
+.template-type-chip.campaign_sms {
+  background: rgba(var(--v-theme-secondary), 0.18);
 }
 
 .template-type-chip.tx {

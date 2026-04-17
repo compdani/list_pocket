@@ -145,7 +145,7 @@ func (a *App) PreviewTemplateBody(c echo.Context) error {
 		tpl.Type = models.TemplateTypeCampaign
 	}
 
-	if tpl.Type == models.TemplateTypeCampaign && !regexpTplTag.MatchString(tpl.Body) {
+	if (tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignSMS) && !regexpTplTag.MatchString(tpl.Body) {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("templates.placeholderHelp", "placeholder", tplTag))
 	}
@@ -172,7 +172,7 @@ func (a *App) CreateTemplate(c echo.Context) error {
 	// Subject is only relevant for fixed tx templates. For campaigns,
 	// the subject changes per campaign and is on models.Campaign.
 	var funcs template.FuncMap
-	if o.Type == models.TemplateTypeCampaign || o.Type == models.TemplateTypeCampaignVisual || o.Type == models.TemplateTypeCampaignGrapes {
+	if o.Type == models.TemplateTypeCampaign || o.Type == models.TemplateTypeCampaignVisual || o.Type == models.TemplateTypeCampaignGrapes || o.Type == models.TemplateTypeCampaignSMS {
 		o.Subject = ""
 		funcs = a.manager.TemplateFuncs(nil)
 	} else {
@@ -213,7 +213,7 @@ func (a *App) UpdateTemplate(c echo.Context) error {
 	// Subject is only relevant for fixed tx templates. For campaigns,
 	// the subject changes per campaign and is on models.Campaign.
 	var funcs template.FuncMap
-	if o.Type == models.TemplateTypeCampaign || o.Type == models.TemplateTypeCampaignVisual || o.Type == models.TemplateTypeCampaignGrapes {
+	if o.Type == models.TemplateTypeCampaign || o.Type == models.TemplateTypeCampaignVisual || o.Type == models.TemplateTypeCampaignGrapes || o.Type == models.TemplateTypeCampaignSMS {
 		o.Subject = ""
 		funcs = a.manager.TemplateFuncs(nil)
 	} else {
@@ -286,7 +286,7 @@ func (a *App) validateTemplate(o models.Template) error {
 		return errors.New(a.i18n.T("campaigns.fieldInvalidName"))
 	}
 
-	if o.Type == models.TemplateTypeCampaign && !regexpTplTag.MatchString(o.Body) {
+	if (o.Type == models.TemplateTypeCampaign || o.Type == models.TemplateTypeCampaignSMS) && !regexpTplTag.MatchString(o.Body) {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("templates.placeholderHelp", "placeholder", tplTag))
 	}
@@ -302,7 +302,30 @@ func (a *App) validateTemplate(o models.Template) error {
 // previewTemplate renders the HTML preview of a template.
 func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 	var out []byte
-	if tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignVisual || tpl.Type == models.TemplateTypeCampaignGrapes {
+	if tpl.Type == models.TemplateTypeCampaignSMS {
+		camp := models.Campaign{
+			UUID:         dummyUUID,
+			Name:         a.i18n.T("templates.dummyName"),
+			Subject:      a.i18n.T("templates.dummySubject"),
+			Messenger:    models.CampaignMessengerQuo,
+			ContentType:  models.CampaignContentTypePlain,
+			TemplateBody: tpl.Body,
+			TemplateType: models.TemplateTypeCampaignSMS,
+			Body:         "Hi {{ .Subscriber.FirstName }}, this is a preview of your SMS template.\nReply STOP to opt out.",
+		}
+
+		if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+		}
+
+		msg, err := a.manager.NewCampaignMessage(&camp, dummySubscriber)
+		if err != nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+		}
+		out = msg.Body()
+	} else if tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignVisual || tpl.Type == models.TemplateTypeCampaignGrapes {
 		camp := models.Campaign{
 			UUID:         dummyUUID,
 			Name:         a.i18n.T("templates.dummyName"),

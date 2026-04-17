@@ -510,6 +510,7 @@
         :title="data.name"
         :disabled="!canEdit"
         :templates="templates"
+        :messenger="form.messenger"
         :content-types="editorContentTypes"
         @ai-generated="onEditorAIGenerated"
       />
@@ -1626,6 +1627,25 @@ export default {
       if (this.showChannelPicker) {
         this.campaignChannel = nextMessenger === 'quo' ? 'sms' : 'email';
       }
+
+      // Swap the template to one matching the new channel so a stale
+      // HTML-email template isn't carried over into an SMS campaign (or
+      // vice-versa).
+      const isSms = nextMessenger === 'quo';
+      const desiredType = isSms ? 'campaign_sms' : 'campaign';
+      const templates = Array.isArray(this.templates) ? this.templates : [];
+      const current = templates.find((t) => t.id === this.form.content.templateId);
+      if (current && current.type !== desiredType) {
+        const next = templates.find((t) => t.isDefault === true && t.type === desiredType)
+          || templates.find((t) => t.type === desiredType)
+          || null;
+        this.form.content.templateId = next ? next.id : null;
+      } else if (!current && this.isNew) {
+        const next = templates.find((t) => t.isDefault === true && t.type === desiredType);
+        if (next) {
+          this.form.content.templateId = next.id;
+        }
+      }
     },
 
     // eslint-disable-next-line func-names
@@ -1683,15 +1703,19 @@ export default {
       this.isEditing = true;
     }
 
-    // Get templates list.
+    // Get templates list and pick the appropriate default per channel.
     this.$api.getTemplates().then((data) => {
-      if (data.length > 0) {
-        if (!this.form.content.templateId) {
-          const tpl = data.find((i) => i.isDefault === true);
-          if (tpl) {
-            this.form.content.templateId = tpl.id;
-          }
-        }
+      if (!Array.isArray(data) || data.length === 0) {
+        return;
+      }
+      if (this.form.content.templateId) {
+        return;
+      }
+      const isSms = this.form.messenger === 'quo';
+      const desiredType = isSms ? 'campaign_sms' : 'campaign';
+      const tpl = data.find((i) => i.isDefault === true && i.type === desiredType);
+      if (tpl) {
+        this.form.content.templateId = tpl.id;
       }
     });
 

@@ -153,15 +153,18 @@
             <code-editor
               v-else
               v-model="form.body"
-              lang="html"
+              :lang="isSmsTemplate ? 'text' : 'html'"
               name="body"
             />
           </div>
         </div>
 
         <p class="form-help mt-3">
-          <template v-if="form.type === 'campaign'">
+          <template v-if="form.type === 'campaign' || isSmsTemplate">
             {{ $t('templates.placeholderHelp', { placeholder: egPlaceholder }) }}
+          </template>
+          <template v-if="isSmsTemplate">
+            {{ $t('templates.smsPlaceholderHelp') }}
           </template>
           <a target="_blank" rel="noopener noreferrer" :href="$docsUrl('templating/')">
             {{ $t('globals.buttons.learnMore') }}
@@ -268,8 +271,13 @@ export default {
         { title: this.$tc('templates.typeCampaignHTML'), value: 'campaign' },
         { title: this.$tc('templates.typeCampaignVisual'), value: 'campaign_visual' },
         { title: 'GrapesJS (MJML)', value: 'campaign_grapes_mjml' },
+        { title: this.$tc('templates.typeCampaignSMS'), value: 'campaign_sms' },
         { title: this.$tc('templates.typeTransactional'), value: 'tx' },
       ];
+    },
+
+    isSmsTemplate() {
+      return this.form.type === 'campaign_sms';
     },
 
     editorModeOptions() {
@@ -282,18 +290,24 @@ export default {
     },
 
     useVisualEditor() {
+      if (this.isSmsTemplate) return false;
       return this.form.type === 'campaign_visual' || (this.form.type === 'tx' && this.editorMode === 'visual');
     },
 
     useGrapesEditor() {
+      if (this.isSmsTemplate) return false;
       return this.form.type === 'campaign_grapes_mjml' || (this.form.type === 'tx' && this.editorMode === 'grapes_mjml');
     },
 
     useRichtextEditor() {
+      if (this.isSmsTemplate) return false;
       return this.form.type === 'tx' && this.editorMode === 'richtext';
     },
 
     currentEditorLabel() {
+      if (this.isSmsTemplate) {
+        return this.$t('templates.typeCampaignSMS');
+      }
       if (this.useVisualEditor) {
         return this.$t('templates.typeCampaignVisual');
       }
@@ -360,9 +374,11 @@ export default {
         ? 'grapes_mjml'
         : data.type === 'campaign_visual'
           ? 'visual'
-          : (data.type === 'tx' && hasBodySource)
-            ? 'visual'
-            : 'html';
+          : data.type === 'campaign_sms'
+            ? 'text'
+            : (data.type === 'tx' && hasBodySource)
+              ? 'visual'
+              : 'html';
       return {
         ...baseForm(),
         ...data,
@@ -540,6 +556,9 @@ export default {
         this.editorMode = 'grapes_mjml';
       } else if (nextType === 'tx') {
         this.editorMode = this.form.bodySource ? 'visual' : 'html';
+      } else if (nextType === 'campaign_sms') {
+        this.editorMode = 'text';
+        this.form.bodySource = '';
       } else {
         this.editorMode = 'html';
       }

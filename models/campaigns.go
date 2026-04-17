@@ -72,6 +72,7 @@ type Campaign struct {
 
 	// TemplateBody is joined in from templates by the next-campaigns query.
 	TemplateBody        string             `db:"template_body" json:"-"`
+	TemplateType        string             `db:"template_type" json:"-"`
 	ArchiveTemplateBody string             `db:"archive_template_body" json:"-"`
 	Tpl                 *template.Template `json:"-"`
 	TextTpl             *txttpl.Template   `json:"-"` // SMS / plain text campaigns (Quo)
@@ -241,12 +242,16 @@ func (c *Campaign) compileTextTemplate(f template.FuncMap) error {
 		}
 		c.SubjectTpl = subjTpl
 	}
-	body := c.TemplateBody
-	if body == "" {
-		body = `{{ template "content" . }}`
-	}
-	for _, r := range regTplFuncs {
-		body = r.regExp.ReplaceAllString(body, r.replace)
+	// SMS only honors TemplateBody when it's an explicit campaign_sms template
+	// (plain-text wrapper). Any other template type (e.g. HTML email templates
+	// accidentally joined via the default-template fallback) is ignored to keep
+	// HTML markup from leaking into the outbound SMS payload.
+	body := `{{ template "content" . }}`
+	if c.TemplateType == TemplateTypeCampaignSMS && strings.Contains(c.TemplateBody, `template "content"`) {
+		body = c.TemplateBody
+		for _, r := range regTplFuncs {
+			body = r.regExp.ReplaceAllString(body, r.replace)
+		}
 	}
 	baseTPL, err := txttpl.New(BaseTpl).Funcs(txtFuncs).Parse(body)
 	if err != nil {
