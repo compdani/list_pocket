@@ -423,12 +423,12 @@ func (s *store) nextCampaignsSQLite(currentIDs []int64, sentCounts []int64) ([]*
 				WHERE cl.campaign_id = ?
 				  AND s.status != 'blocklisted'
 				` + campaignledger.RecipientMembershipSQL() + `
+				` + tagClause + `
 				GROUP BY s.id
 				ORDER BY s.created DESC, s.id DESC
 				LIMIT 1
 			) latest
 		`
-		cursorQuery += tagClause
 		cursorArgs := []any{campaignRecID}
 		cursorArgs = append(cursorArgs, tagArgs...)
 		if err := s.db.Get(&cursor, cursorQuery, cursorArgs...); err != nil {

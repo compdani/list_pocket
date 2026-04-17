@@ -214,7 +214,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	if a.cfg.BounceWebhooksEnabled {
 		public.POST("/webhooks/service/{service}", wrapEcho(a, tpl, cfg, urlCfg, []string{"service"}, a.BounceWebhook))
 	}
-	public.POST("/webhooks/quo/:token", wrapEcho(a, tpl, cfg, urlCfg, []string{"token"}, a.QuoMessageWebhook))
+	public.POST("/webhooks/quo/{token}", wrapEcho(a, tpl, cfg, urlCfg, []string{"token"}, a.QuoMessageWebhook))
 
 	public.GET("/", wrapEcho(a, tpl, cfg, urlCfg, nil, func(c echo.Context) error {
 		return c.Render(http.StatusOK, "home", publicTpl{Title: "listpocket"})
