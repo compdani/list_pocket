@@ -7,6 +7,7 @@ import store from './store';
 import * as api from './api';
 import Utils from './utils';
 import { docsUrl } from './utils/docs';
+import { isSuperAdmin } from './utils/auth';
 import vuetify from './plugins/vuetify';
 
 function createEventBus() {
@@ -285,31 +286,6 @@ i18n.global.tc = withI18nFallback('tc');
 
 const sharedUtils = new Utils(i18n.global);
 let vueApp = null;
-
-function getRoleId(profile) {
-  if (!profile) {
-    return 0;
-  }
-
-  if (profile.userRole && Number(profile.userRole.id) > 0) {
-    return Number(profile.userRole.id);
-  }
-
-  if (Number(profile.userRoleId) > 0) {
-    return Number(profile.userRoleId);
-  }
-
-  const authRecord = api.getAuthRecord();
-  if (authRecord && Number(authRecord.role) > 0) {
-    return Number(authRecord.role);
-  }
-
-  return 0;
-}
-
-function isSuperAdmin(profile) {
-  return getRoleId(profile) === 1;
-}
 
 async function initConfig(rootProxy) {
   const proxy = rootProxy;
