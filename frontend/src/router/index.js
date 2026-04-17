@@ -1,4 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import store from '../store';
+import { models } from '../constants';
+
+function isCurrentUserSuperAdmin() {
+  const profile = store.getters[models.profile];
+  if (!profile || Array.isArray(profile)) {
+    return false;
+  }
+  if (profile.userRole && Number(profile.userRole.id) === 1) {
+    return true;
+  }
+  if (Number(profile.userRoleId) === 1) {
+    return true;
+  }
+  return false;
+}
 
 const routes = [
   {
@@ -140,6 +156,12 @@ const routes = [
     component: () => import('../views/Maintenance.vue'),
   },
   {
+    path: '/settings/admin-console',
+    name: 'adminConsole',
+    meta: { title: 'Admin Console', group: 'settings', superAdmin: true },
+    component: () => import('../views/AdminConsole.vue'),
+  },
+  {
     path: '/workflows',
     name: 'workflows',
     meta: { title: 'Workflows', group: 'workflows' },
@@ -177,6 +199,9 @@ const router = createRouter({
 router.beforeEach((to) => {
   if (to.matched.length === 0) {
     return '/404';
+  }
+  if (to.meta && to.meta.superAdmin && !isCurrentUserSuperAdmin()) {
+    return '/';
   }
   return true;
 });
