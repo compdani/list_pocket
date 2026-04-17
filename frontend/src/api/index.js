@@ -466,6 +466,12 @@ export const sendSubscriberOptin = (idOrRecordId) => http.post(
   { loading: models.subscribers },
 );
 
+export const smsOptOutSubscriber = (idOrRecordId) => http.post(
+  `/api/subscribers/${idOrRecordId}/sms-opt-out`,
+  {},
+  { loading: models.subscribers },
+);
+
 export const getTxMessages = async (params) => http.get(
   '/api/tx',
   {

@@ -17,6 +17,34 @@ import (
 
 const defaultAPIBase = "https://api.openphone.com"
 
+// ErrUnsendableDestination is re-exported for callers that only import the
+// quo package. Errors returned from SendText wrap models.ErrUnsendableDestination
+// so errors.Is works against either value.
+var ErrUnsendableDestination = models.ErrUnsendableDestination
+
+// quoErrorResponse mirrors the Quo error envelope. See
+// https://www.openphone.com/api/docs for the schema.
+type quoErrorResponse struct {
+	Code    string `json:"code"`
+	Status  int    `json:"status"`
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+// isUnsendableDestinationCode classifies provider error codes that indicate
+// the destination phone is permanently not reachable for this account.
+// Additional codes can be added here if we see them in the wild.
+func isUnsendableDestinationCode(code string) bool {
+	switch strings.TrimSpace(code) {
+	case
+		"0203403", // International Messaging Not Allowed.
+		"0203404", // Phone number is not messageable (landline/VoIP).
+		"0203405": // Destination carrier blocks our number (A2P filtering).
+		return true
+	}
+	return false
+}
+
 // Client calls Quo / OpenPhone HTTP API.
 type Client struct {
 	APIKey  string
@@ -96,6 +124,13 @@ func (c *Client) SendText(ctx context.Context, toE164 string, body []byte) error
 		return fmt.Errorf("quo rate limited: %s", strings.TrimSpace(string(rb)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusBadRequest {
+			var ee quoErrorResponse
+			if jerr := json.Unmarshal(rb, &ee); jerr == nil && isUnsendableDestinationCode(ee.Code) {
+				return fmt.Errorf("quo send failed: %d %s: %w",
+					resp.StatusCode, strings.TrimSpace(string(rb)), ErrUnsendableDestination)
+			}
+		}
 		return fmt.Errorf("quo send failed: %d %s", resp.StatusCode, strings.TrimSpace(string(rb)))
 	}
 	return nil

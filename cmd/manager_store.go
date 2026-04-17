@@ -297,6 +297,17 @@ func (s *store) RollbackCampaignLedgerInflight(campaignID int, subscriberRecordI
 	return campaignledger.RollbackInflight(s.db, campaignRecID, subscriberRecordID)
 }
 
+// MarkSMSUnsendable opts the subscriber (matched by normalized phone) out of
+// every list's SMS status, without touching email status. Used by the manager
+// when Quo (or another SMS provider) returns a permanent per-recipient error
+// such as "International Messaging Not Allowed".
+func (s *store) MarkSMSUnsendable(phone string) (int64, error) {
+	if strings.TrimSpace(phone) == "" {
+		return 0, nil
+	}
+	return s.core.SMSOptOutSubscriberByPhone(phone)
+}
+
 // FinalizeCampaignLedgerStats writes final to_send and sent from the ledger into campaigns (SQLite only).
 func (s *store) FinalizeCampaignLedgerStats(campaignID int) error {
 	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)

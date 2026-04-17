@@ -22,6 +22,7 @@ func (testStore) UpdateCampaignCounts(int, int, int, int) error               { 
 func (testStore) MarkCampaignLedgerSent(int, string) error                    { return nil }
 func (testStore) RollbackCampaignLedgerInflight(int, string) error            { return nil }
 func (testStore) FinalizeCampaignLedgerStats(int) error                       { return nil }
+func (testStore) MarkSMSUnsendable(string) (int64, error)                     { return 0, nil }
 func (testStore) CreateLink(url string) (string, error)                       { return "link-uuid", nil }
 func (testStore) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
 	return msg, nil

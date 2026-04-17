@@ -383,6 +383,35 @@ func (a *App) SubscriberSendOptin(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{true})
 }
 
+// SubscriberSMSOptOut marks a subscriber's phone as SMS-unsubscribed across
+// every list they're on. Used both from the admin UI ("this phone is not
+// SMS-reachable") and indirectly as the same action our STOP webhook takes.
+func (a *App) SubscriberSMSOptOut(c echo.Context) error {
+	id, err := a.resolveSubscriberRouteID(c)
+	if err != nil {
+		return err
+	}
+
+	sub, err := a.core.GetSubscriber(id, "", "")
+	if err != nil {
+		return err
+	}
+	phone := strings.TrimSpace(sub.Phone)
+	if phone == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "subscriber has no phone to opt out")
+	}
+
+	n, err := a.core.SMSOptOutSubscriberByPhone(phone)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(http.StatusOK, okResp{map[string]any{
+		"updated": n,
+		"phone":   phone,
+	}})
+}
+
 // BlocklistSubscriber handles the blocklisting of a given subscriber.
 func (a *App) BlocklistSubscriber(c echo.Context) error {
 	user := auth.GetUser(c)
