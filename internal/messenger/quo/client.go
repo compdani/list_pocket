@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -135,4 +136,48 @@ func (c *Client) SendText(ctx context.Context, toE164 string, body []byte) error
 		return fmt.Errorf("quo send failed: %d %s", resp.StatusCode, strings.TrimSpace(string(rb)))
 	}
 	return nil
+}
+
+type getMessageByIDResponse struct {
+	Data struct {
+		Text string `json:"text"`
+	} `json:"data"`
+}
+
+// GetMessageText returns the message body from GET /v1/messages/{id} (trimmed).
+// Used when webhooks omit `text` so STOP detection and logs can use API truth.
+func (c *Client) GetMessageText(ctx context.Context, messageID string) (string, error) {
+	if c == nil {
+		return "", errors.New("nil client")
+	}
+	id := strings.TrimSpace(messageID)
+	if id == "" {
+		return "", errors.New("empty message id")
+	}
+	base := strings.TrimRight(c.BaseURL, "/")
+	u := base + "/v1/messages/" + url.PathEscape(id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", c.APIKey)
+
+	httpClient := c.HTTP
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("quo get message failed: %d %s", resp.StatusCode, strings.TrimSpace(string(rb)))
+	}
+	var out getMessageByIDResponse
+	if err := json.Unmarshal(rb, &out); err != nil {
+		return "", fmt.Errorf("quo get message: invalid json: %w", err)
+	}
+	return strings.TrimSpace(out.Data.Text), nil
 }
