@@ -191,6 +191,16 @@ func (m *Messenger) Push(msg models.Message) error {
 		return errors.New("missing recipient phone")
 	}
 	to := strings.TrimSpace(msg.To[0])
+
+	// Optional per-campaign sender override: campaigns.from_email is reused as
+	// the sender phone for SMS. Empty falls back to the provider default (c.From).
+	from := strings.TrimSpace(msg.From)
+	if from != "" {
+		c2 := *c
+		c2.From = from
+		c = &c2
+	}
+
 	body := sanitizeSMSBody(msg.Body)
 	if body == "" {
 		return errors.New("empty message body")

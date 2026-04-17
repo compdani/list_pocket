@@ -212,6 +212,22 @@
               class="mb-4"
             />
 
+            <v-text-field
+              v-if="isSmsChannel"
+              v-model="form.fromEmail"
+              :label="$t('campaigns.fromPhone')"
+              :hint="$t('campaigns.fromPhoneHelp')"
+              persistent-hint
+              maxlength="32"
+              name="from_phone"
+              :disabled="!canEdit"
+              :placeholder="$t('campaigns.fromPhonePlaceholder')"
+              type="tel"
+              variant="outlined"
+              density="comfortable"
+              class="mb-4"
+            />
+
             <v-select
               :model-value="selectedListIds"
               :items="availableLists"
@@ -959,8 +975,14 @@ export default {
     },
 
     applyDefaultFromEmailForMessenger(force = false) {
-      const smtpMeta = this.getSMTPMetaForMessenger(this.form.messenger);
-      const nextDefault = (smtpMeta && smtpMeta.defaultFromEmail) || this.serverConfig.from_email || '';
+      // SMS reuses from_email as an optional sender-phone override. Blank means
+      // "use the Quo default", so never auto-fill with an SMTP email address
+      // when switching into the SMS channel.
+      let nextDefault = '';
+      if (this.form.messenger !== 'quo') {
+        const smtpMeta = this.getSMTPMetaForMessenger(this.form.messenger);
+        nextDefault = (smtpMeta && smtpMeta.defaultFromEmail) || this.serverConfig.from_email || '';
+      }
       const current = (this.form.fromEmail || '').trim();
       const shouldReplace = force || !current || current === this.lastAutoFromEmail;
 
