@@ -23,7 +23,14 @@ func (m *Manager) NewCampaignMessage(c *models.Campaign, s models.Subscriber) (C
 	}
 	if models.IsTextMessenger(c.Messenger) {
 		msg.to = strings.TrimSpace(s.Phone)
-		msg.from = ""
+		// For SMS, campaigns.from_email doubles as the sender phone override.
+		// Leave blank here if it doesn't look like a phone (e.g. legacy email
+		// value from converted campaigns); the messenger falls back to the
+		// provider default when msg.From is empty.
+		msg.from = strings.TrimSpace(c.FromEmail)
+		if msg.from != "" && strings.Contains(msg.from, "@") {
+			msg.from = ""
+		}
 	}
 
 	if err := msg.render(); err != nil {

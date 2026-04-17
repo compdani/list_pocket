@@ -921,7 +921,13 @@ func (a *App) defaultCampaignFromEmail(messenger string) string {
 
 // validateCampaignFields validates incoming campaign field values.
 func (a *App) validateCampaignFields(c campReq) (campReq, error) {
-	if c.FromEmail == "" {
+	if models.IsTextMessenger(c.Messenger) {
+		// SMS reuses from_email as an optional sender phone override.
+		// Accept any non-empty trimmed value (leave real E.164 formatting
+		// to the user / provider). Blank means fall back to the provider
+		// default configured on the messaging settings.
+		c.FromEmail = strings.TrimSpace(c.FromEmail)
+	} else if c.FromEmail == "" {
 		c.FromEmail = a.defaultCampaignFromEmail(c.Messenger)
 	} else {
 		sanitized, err := a.sanitizeFromAddress(c.FromEmail)
