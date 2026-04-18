@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+    <html xmlns="http://www.w3.org/1999/xhtml" lang="en-US"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" /><title>Amazon SES email receiving concepts and use cases - Amazon Simple Email Service</title><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="assets_root" content="/assets" /><meta name="target_state" content="receiving-email-concepts" /><meta name="default_state" content="receiving-email-concepts" /><link rel="icon" type="image/ico" href="/assets/images/favicon.ico" /><link rel="shortcut icon" type="image/ico" href="/assets/images/favicon.ico" /><link rel="canonical" href="https://docs.aws.amazon.com/ses/latest/dg/receiving-email-concepts.html" /><meta name="description" content="Overview of Amazon SES email receiving concepts." /><meta name="deployment_region" content="IAD" /><meta name="product" content="Amazon Simple Email Service" /><meta name="guide" content="Developer Guide" /><meta name="abstract" content="Create a highly-scalable and flexible email sending and receiving platform using Amazon SES. This Developer Guide provides information and procedures for configuring your Amazon SES account to send and receive email." /><meta name="guide-locale" content="en_us" /><meta name="tocs" content="toc-contents.json" /><link rel="canonical" href="https://docs.aws.amazon.com/ses/latest/dg/receiving-email-concepts.html" /><link rel="alternate" href="https://docs.aws.amazon.com/id_id/ses/latest/dg/receiving-email-concepts.html" hreflang="id-id" /><link rel="alternate" href="https://docs.aws.amazon.com/id_id/ses/latest/dg/receiving-email-concepts.html" hreflang="id" /><link rel="alternate" href="https://docs.aws.amazon.com/de_de/ses/latest/dg/receiving-email-concepts.html" hreflang="de-de" /><link rel="alternate" href="https://docs.aws.amazon.com/de_de/ses/latest/dg/receiving-email-concepts.html" hreflang="de" /><link rel="alternate" href="https://docs.aws.amazon.com/ses/latest/dg/receiving-email-concepts.html" hreflang="en-us" /><link rel="alternate" href="https://docs.aws.amazon.com/ses/latest/dg/receiving-email-concepts.html" hreflang="en" /><link rel="alternate" href="https://docs.aws.amazon.com/es_es/ses/latest/dg/receiving-email-concepts.html" hreflang="es-es" /><link rel="alternate" href="https://docs.aws.amazon.com/es_es/ses/latest/dg/receiving-email-concepts.html" hreflang="es" /><link rel="alternate" href="https://docs.aws.amazon.com/fr_fr/ses/latest/dg/receiving-email-concepts.html" hreflang="fr-fr" /><link rel="alternate" href="https://docs.aws.amazon.com/fr_fr/ses/latest/dg/receiving-email-concepts.html" hreflang="fr" /><link rel="alternate" href="https://docs.aws.amazon.com/it_it/ses/latest/dg/receiving-email-concepts.html" hreflang="it-it" /><link rel="alternate" href="https://docs.aws.amazon.com/it_it/ses/latest/dg/receiving-email-concepts.html" hreflang="it" /><link rel="alternate" href="https://docs.aws.amazon.com/ja_jp/ses/latest/dg/receiving-email-concepts.html" hreflang="ja-jp" /><link rel="alternate" href="https://docs.aws.amazon.com/ja_jp/ses/latest/dg/receiving-email-concepts.html" hreflang="ja" /><link rel="alternate" href="https://docs.aws.amazon.com/ko_kr/ses/latest/dg/receiving-email-concepts.html" hreflang="ko-kr" /><link rel="alternate" href="https://docs.aws.amazon.com/ko_kr/ses/latest/dg/receiving-email-concepts.html" hreflang="ko" /><link rel="alternate" href="https://docs.aws.amazon.com/pt_br/ses/latest/dg/receiving-email-concepts.html" hreflang="pt-br" /><link rel="alternate" href="https://docs.aws.amazon.com/pt_br/ses/latest/dg/receiving-email-concepts.html" hreflang="pt" /><link rel="alternate" href="https://docs.aws.amazon.com/zh_cn/ses/latest/dg/receiving-email-concepts.html" hreflang="zh-cn" /><link rel="alternate" href="https://docs.aws.amazon.com/zh_tw/ses/latest/dg/receiving-email-concepts.html" hreflang="zh-tw" /><link rel="alternate" href="https://docs.aws.amazon.com/ses/latest/dg/receiving-email-concepts.html" hreflang="x-default" /><meta name="feedback-item" content="SES" /><meta name="this_doc_product" content="Amazon Simple Email Service" /><meta name="this_doc_guide" content="Developer Guide" /><head xmlns="http://www.w3.org/1999/xhtml"> <script defer="" src="/assets/r/awsdocs-doc-page.2.0.0.js"></script><link href="/assets/r/awsdocs-doc-page.2.0.0.css" rel="stylesheet"/></head>
+<script defer="" id="awsc-panorama-bundle" type="text/javascript" src="https://prod.pa.cdn.uis.awsstatic.com/panorama-nav-init.js" data-config="{'appEntity':'aws-documentation','region':'us-east-1','service':'ses'}"></script><meta id="panorama-serviceSubSection" value="Developer Guide" /><meta id="panorama-serviceConsolePage" value="Amazon SES email receiving concepts and use cases" /></head><body class="awsdocs awsui"><div class="awsdocs-container"><p><a href="receiving-email-concepts.md">View a markdown version of this page</a></p><awsdocs-header></awsdocs-header><awsui-app-layout id="app-layout" class="awsui-util-no-gutters" ng-controller="ContentController as $ctrl" header-selector="awsdocs-header" navigation-hide="false" navigation-width="$ctrl.navWidth" navigation-open="$ctrl.navOpen" navigation-change="$ctrl.onNavChange($event)" tools-hide="$ctrl.hideTools" tools-width="$ctrl.toolsWidth" tools-open="$ctrl.toolsOpen" tools-change="$ctrl.onToolsChange($event)"><div id="guide-toc" dom-region="navigation"><awsdocs-toc></awsdocs-toc></div><div id="main-column" dom-region="content" tabindex="-1"><awsdocs-view class="awsdocs-view"><div id="awsdocs-content"><head><title>Amazon SES email receiving concepts and use cases - Amazon Simple Email Service</title><meta name="pdf" content="/pdfs/ses/latest/dg/ses-dg.pdf#receiving-email-concepts" /><meta name="forums" content="https://repost.aws/tags/TAAR3LByLsRUCXpQk5biG7FQ" /><meta name="feedback" content="https://docs.aws.amazon.com/forms/aws-doc-feedback?hidden_service_name=SES&amp;topic_url=https://docs.aws.amazon.com/en_us/ses/latest/dg/receiving-email-concepts.html" /><meta name="feedback-yes" content="feedbackyes.html?topic_url=https://docs.aws.amazon.com/en_us/ses/latest/dg/receiving-email-concepts.html" /><meta name="feedback-no" content="feedbackno.html?topic_url=https://docs.aws.amazon.com/en_us/ses/latest/dg/receiving-email-concepts.html" /><meta name="keywords" content="SES,Amazon SES,SES v2,Amazon Simple Email Service,email" /><link rel="alternate" type="text/markdown" href="receiving-email-concepts.md" title="Markdown version" /><script type="application/ld+json">
+{
+    "@context" : "https://schema.org",
+    "@type" : "BreadcrumbList",
+    "itemListElement" : [
+      {
+        "@type" : "ListItem",
+        "position" : 1,
+        "name" : "AWS",
+        "item" : "https://aws.amazon.com"
+      },
+      {
+        "@type" : "ListItem",
+        "position" : 2,
+        "name" : "Amazon Simple Email Service",
+        "item" : "https://docs.aws.amazon.com/ses/index.html"
+      },
+      {
+        "@type" : "ListItem",
+        "position" : 3,
+        "name" : "Developer Guide",
+        "item" : "https://docs.aws.amazon.com/ses/latest/dg"
+      },
+      {
+        "@type" : "ListItem",
+        "position" : 4,
+        "name" : "Email receiving with Amazon SES",
+        "item" : "https://docs.aws.amazon.com/ses/latest/dg/receiving-email.html"
+      },
+      {
+        "@type" : "ListItem",
+        "position" : 5,
+        "name" : "Amazon SES email receiving concepts and use cases",
+        "item" : "https://docs.aws.amazon.com/ses/latest/dg/receiving-email.html"
+      }
+    ]
+}
+</script></head><body><div id="main"><div style="display: none"><a href="/pdfs/ses/latest/dg/ses-dg.pdf#receiving-email-concepts" target="_blank" rel="noopener noreferrer" title="Open PDF"></a></div><div id="breadcrumbs" class="breadcrumb"><a href="/index.html">Documentation</a><a href="/ses/index.html">Amazon Simple Email Service</a><a href="Welcome.html">Developer Guide</a></div><div id="page-toc-src"><a href="#receiving-email-concepts-rules">Recipient-based control using receipt rules</a><a href="#receiving-email-concepts-ip-filters">IP-based control using IP address filters</a><a href="#receiving-email-process">Email-receiving process</a><a href="#receiving-email-consider-use-case">Use cases &amp;
+                restrictions</a><a href="#receiving-email-auth-and-scan">Email authentication and
+                malware detection</a></div><div id="main-content" class="awsui-util-container"><div id="main-col-body"><awsdocs-language-banner data-service="$ctrl.pageService"></awsdocs-language-banner><h1 class="topictitle" id="receiving-email-concepts">Amazon SES email receiving concepts and use cases</h1><div class="awsdocs-page-header-container"><awsdocs-page-header></awsdocs-page-header><awsdocs-filter-selector id="awsdocs-filter-selector"></awsdocs-filter-selector></div><p>When you use Amazon SES as your email receiver, you tell the service what to do with your mail.
+        The primary method, receipt rules, gives you fine-grained control over your email receiving
+        by utilizing <em>recipient-based control</em> to specify a set of actions to
+        take based on the recipient. The other method, IP address filters, provides a broad level of
+            <em>IP-based control</em> to block or allow mail based on the originating IP
+        address or range of addresses.</p><p>Both of these methods are described in this section along with an overview of how Amazon SES
+        processes received email, and use cases to help you consider how you want to receive,
+        filter, and process your email when setting up rules and filters.</p><div class="highlights" id="inline-topiclist"><h6>Topics in this section:</h6><ul><li><p><a href="#receiving-email-concepts-rules">Recipient-based control using receipt rules</a></p></li><li><p><a href="#receiving-email-concepts-ip-filters">IP-based control using IP address filters</a></p></li><li><p><a href="#receiving-email-process">Email-receiving process</a></p></li><li><p><a href="#receiving-email-consider-use-case">Use cases and restrictions for Amazon SES email receiving</a></p></li><li><p><a href="#receiving-email-auth-and-scan">Email-receiving authentication and malware scanning</a></p></li></ul></div>
+        <h2 id="receiving-email-concepts-rules">Recipient-based control using receipt rules</h2>
+
+        <p>The primary way to control your incoming mail is to specify how mail is handled
+            through an ordered list of actions for any of your verified identities which includes
+            domains, sub-domains, or email addresses - note that email addresses have to belong to
+            one of your verified domain identities. These actions are defined and ordered in
+                <em>receipt rules</em> that you create within a <em>rule
+                set</em>.</p>
+
+        <p>As an option, you can also add recipient conditions as a way to specify that the
+            actions only be taken if the recipient to whom the incoming mail is addressed matches a
+            recipient identity specified in the condition.
+             For example, if you own
+            <em>example.com</em>, you can specify that mail for
+                <em>user@example.com</em> should bounce, and that all other mail for
+                <em>example.com</em> and its subdomains should be delivered.</p>
+
+        <p>Otherwise, if you do not add any recipient conditions, the actions will be applied to
+            everything - all email addresses, domains, and sub-domains that belong to your verified
+            domains. The following actions are available to be applied to your receipt rules:</p>
+
+        
+
+        <div class="itemizedlist">
+             
+             
+             
+             
+             
+             
+             
+        <ul class="itemizedlist"><li class="listitem">
+                <p><span class="topcom">Add header action—</span>Adds a header to the
+                    received email. You typically use this action only in combination with other
+                    actions.</p>
+            </li><li class="listitem">
+                <p><span class="topcom">Return bounce response action—</span>blocks the
+                    email by returning a bounce response to the sender and, optionally, notifies you
+                    through Amazon SNS.</p>
+            </li><li class="listitem">
+                <p><span class="topcom">Invoke AWS Lambda function action—</span>Calls
+                    your code through a Lambda function and, optionally, notifies you through
+                    Amazon SNS.</p>
+            </li><li class="listitem">
+                <p><span class="topcom">Deliver to S3 bucket
+                    action—</span>Delivers the mail to an Amazon S3 bucket and, optionally,
+                    notifies you through Amazon SNS.</p>
+            </li><li class="listitem">
+                <p><span class="topcom">Publish to Amazon SNS topic action—</span>Publishes
+                    the complete email to an Amazon SNS topic. </p>
+                <div class="awsdocs-note"><div class="awsdocs-note-title"><awsui-icon name="status-info" variant="link"></awsui-icon><h6>Note</h6></div><div class="awsdocs-note-text"><p>The SNS action includes a complete copy of the email content in the Amazon SNS
+                        notifications. The other Amazon SNS notification options mentioned here simply
+                        notify you of email delivery; they contain information about the email, not
+                        the email content itself.</p></div></div>
+            </li><li class="listitem">
+                <p><span class="topcom">Stop rule set action—</span>Terminates the
+                    evaluation of the receipt rule set and, optionally, notifies you through
+                    Amazon SNS.</p>
+            </li><li class="listitem">
+                <p><span class="topcom">Integrate with Amazon WorkMail action—</span>Handles the
+                    mail with Amazon WorkMail. You will typically not use this action directly because Amazon WorkMail
+                    takes care of the setup.</p>
+            </li></ul></div>
+
+
+        <p>Receipt rules are grouped together into <em>rule sets</em>. If you don't
+            have an existing rule set, you'll first have to create a rule set before you start
+            creating receipt rules. You can define multiple rule sets for your AWS account, but
+            only one rule set is active at any time. The following figure shows how receipt rules,
+            rule sets, and actions relate to each other.</p>
+
+        <div class="mediaobject">
+             
+                <img src="/images/ses/latest/dg/images/inbound_overview_v2.png" class="aws-docs-img-whiteBg aws-docs-img-padding" alt="Inbound email overview" style="max-width:100%" />
+             
+             
+        </div>
+
+     
+        <h2 id="receiving-email-concepts-ip-filters">IP-based control using IP address filters</h2>
+
+        <p>You can control your mail flow by setting up <b>IP address filters</b>.
+            IP address filters are optional and enable you to specify whether to accept or block
+            mail originating from an IP address or range of IP addresses. Your IP address filters
+            can include <em>block lists</em> (IP addresses from which you want to block
+            incoming mail) and <em>allow lists</em> (IP addresses from which you want to
+            always accept mail).</p>
+
+        <p>IP address filters are useful for blocking spam. Amazon SES maintains its own block list of
+            IP addresses known to send spam including those listed in Spamhaus. However, you can
+            choose to receive mail from those IP addresses by adding them to your allow list. Since
+            there are no logs that show which IP addresses are being blocked, the sender who is
+            being blocked will need to inform you. This is also a good opportunity to help the
+            sender determine if their IP address is on a block list, such as <a href="https://www.spamhaus.org/" rel="noopener noreferrer" target="_blank"><span>Spamhaus</span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a>, and recommend they request to be
+            unlisted. Doing so will be beneficial to both you and the sender in that you won't have
+            to maintain an IP address filter for them and they will improve their email
+            deliverability.</p>
+        <div class="awsdocs-note"><div class="awsdocs-note-title"><awsui-icon name="status-info" variant="link"></awsui-icon><h6>Note</h6></div><div class="awsdocs-note-text"><div class="itemizedlist">
+                 
+                 
+            <ul class="itemizedlist"><li class="listitem">
+                    
+                    <p>Independent of your IP address filter configuration, Amazon EC2 will block
+                        outbound traffic on port 25 (mail sending) unless allowlisted. Refer to this
+                            <a href="https://repost.aws/knowledge-center/ec2-port-25-throttle" rel="noopener noreferrer" target="_blank"><span>AWS
+                            re:Post article </span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a> for more information.</p>
+                </li><li class="listitem">
+                    <p>If you only want to receive mail from a finite list of known IP addresses,
+                        then set up a block list that contains <code class="code">0.0.0.0/0</code>, and set up an
+                        allow list that contains the IP addresses that you trust. This configuration
+                        blocks all IP addresses by default, and only allows mail from the IP
+                        addresses that you explicitly specify.</p>
+                </li></ul></div></div></div>
+
+     
+        <h2 id="receiving-email-process">Email-receiving process</h2>
+
+        <p>When Amazon SES receives an email for your domain, the following events occur:</p>
+        <div class="orderedlist">
+             
+             
+             
+             
+        <ol><li>
+                <p>Amazon SES first looks at the IP address of the sender. Amazon SES allows the mail to
+                    pass this stage unless:</p>
+                <div class="itemizedlist">
+                     
+                     
+                <ul class="itemizedlist"><li class="listitem">
+                        <p>The IP address is in your block list.</p>
+                    </li><li class="listitem">
+                        <p>The IP address is in the Amazon SES block list, but not on your allow
+                            list.</p>
+                    </li></ul></div>
+            </li><li>
+                <p>Amazon SES examines your active rule set to determine whether any of your receipt
+                    rules contain a recipient condition:</p>
+                <div class="itemizedlist">
+                     
+                     
+                <ul class="itemizedlist"><li class="listitem">
+                        <p>If there's a recipient condition and it matches any of the incoming
+                            email's recipients, Amazon SES accepts the email. Otherwise, if there aren't
+                            any matches, Amazon SES blocks the email.</p>
+                    </li><li class="listitem">
+                        <p>If the receipt rule does not contain a recipient condition, Amazon SES
+                            accepts the mail - all of the rule's actions will apply to all the
+                            verified identities you own.</p>
+                    </li></ul></div>
+            </li><li>
+                <p>Amazon SES authenticates the email and scans its content for spam and
+                    malware:</p>
+                <div class="itemizedlist">
+                     
+                     
+                     
+                     
+                <ul class="itemizedlist"><li class="listitem">
+                        <p>The IP address of the remote host that delivered the email to Amazon SES is
+                            checked against the SPF policy specified under the MAIL FROM's domain
+                            used during the SMTP transaction.</p>
+                    </li><li class="listitem">
+                        <p>The DKIM signatures present in the email's header section are
+                            checked.</p>
+                    </li><li class="listitem">
+                        <p>If content scanning is enabled, the email content is scanned for spam
+                            and malware.</p>
+                    </li><li class="listitem">
+                        <p>The email authentication and content scanning results are made
+                            available to you during the receipt rules evaluation.</p>
+                    </li></ul></div>
+                <p>See <a href="#receiving-email-auth-and-scan">Email authentication and
+                malware detection</a> for more
+                    information.</p>
+            </li><li>
+                <p>For the
+                    email that Amazon SES accepts, all of the receipt rules within your active rule set
+                     are applied in the
+                    order you've defined; and within each receipt rule, the actions are executed in
+                    the order you've defined. </p>
+            </li></ol></div>
+
+
+     
+        <h2 id="receiving-email-consider-use-case">Use cases and restrictions for Amazon SES email receiving</h2>
+
+        
+
+        <p>This section goes over some general considerations and use cases for Amazon SES email
+            receiving. Presented in question and answer format, are commonly asked questions and
+            facts to help determine if it would be beneficial for using Amazon SES to receive and manage
+            email on behalf of one or more of the verified domains that you own.</p>
+
+
+
+        
+         
+            <h3 id="receiving-email-consider-use-case-regions">Regional availability</h3>
+            <p><span class="topcom">Does Amazon SES support email receiving in your
+                Region?</span></p>
+            <p>Amazon SES only supports email receiving in certain AWS Regions. For a complete list
+                of Regions where email receiving is supported, see <a href="https://docs.aws.amazon.com/general/latest/gr/ses.html">Amazon Simple Email Service endpoints and quotas</a> in the
+                AWS General Reference.</p>
+         
+
+         
+            <h3 id="receiving-email-consider-use-case-clients">POP or IMAP based email clients</h3>
+            <p><span class="topcom">Can Microsoft Outlook be used to receive incoming
+                    email?</span></p>
+            <p>Amazon SES doesn't include POP or IMAP servers for receiving incoming email. This means
+                that you can't use an email client such as Microsoft Outlook to receive incoming
+                email. If you need a solution that can both send and receive email by using an 
+  email client, consider using <a href="https://aws.amazon.com/workmail" rel="noopener noreferrer" target="_blank"><span>Amazon WorkMail</span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a>.</p>
+         
+
+         
+            <h3 id="receiving-email-consider-use-case-permissions">Using other AWS services</h3>
+            <p><span class="topcom">Have you set up the appropriate permissions?</span></p>
+            <p>If you want your mail to be delivered to an S3 bucket, published to an
+                Amazon SNS topic you don't own, trigger a Lambda function, or use a customer managed key,
+                you need to give Amazon SES permission to access those resources. To give Amazon SES access,
+                you create policies on resources from the consoles or APIs for those AWS services.
+                For more information <a href="./receiving-email-permissions.html">Giving permission</a>.</p>
+         
+
+         
+            <h3 id="receiving-email-consider-use-case-content">Email content</h3>
+            <p><span class="topcom">How do you want Amazon SES to pass you the email
+                    content?</span></p>
+            <p>Amazon SES can provide you the email content in two ways: it can store the emails in an
+                S3 bucket that you specify, or it can send you an Amazon SNS notification that
+                contains a copy of the email. Amazon SES delivers you the raw, unmodified email in
+                Multipurpose Internet Mail Extensions (MIME) format. For more information about MIME
+                format, see <a href="https://tools.ietf.org/html/rfc2045" rel="noopener noreferrer" target="_blank"><span>RFC 2045</span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a>. </p>
+            <p><span class="topcom">How large are the emails that you'll be
+                receiving?</span></p>
+            <p>If you store emails in an S3 bucket, the maximum email size (including
+                headers) is 40 MB. If you receive your emails through Amazon SNS notifications, the
+                maximum email size (including headers) is 150 KB.</p>
+            <p><span class="topcom">How do you want to trigger the processing of your
+                    mail?</span></p>
+            <p>After your mail is delivered, you will want to process it with your own code. For
+                example, your application might convert the base 64-encoded email into a displayable
+                format and then make it available to an end user through an email client. There are
+                a couple of ways you can start the process:</p>
+            <div class="itemizedlist">
+                 
+                 
+            <ul class="itemizedlist"><li class="listitem">
+                    <p>If your emails are delivered to Amazon S3, your application can listen for
+                        Amazon SNS notifications generated by S3 actions, extract the message ID
+                        of the email from the notifications, and then use the message ID to retrieve
+                        the email from Amazon S3.</p>
+                    <p>Alternatively, you can incorporate email processing into your receipt
+                        rules by writing a Lambda function. In this case, your receipt rule should
+                        first write the email to Amazon S3, and then trigger the Lambda function. Lambda
+                        actions can be executed synchronously or asynchronously from within your
+                        receipt rules, depending on whether the Lambda function needs to return a
+                        result that influences how other actions are executed. We recommend that you
+                        use asynchronous execution unless synchronous is absolutely necessary for
+                        your use case. For more information about AWS Lambda, see the <a href="https://docs.aws.amazon.com/lambda/latest/dg/welcome.html">AWS Lambda Developer Guide</a>.</p>
+                </li><li class="listitem">
+                    <p>If your emails are delivered through an Amazon SNS notification by using the
+                        SNS action, your application can listen for Amazon SNS notifications, and then
+                        extract the email messages from the notifications.</p>
+                </li></ul></div>
+            <p><span class="topcom">Do you want the emails to be encrypted?</span></p>
+            <p>Amazon SES integrates with AWS Key Management Service (AWS KMS) to optionally encrypt the mail it writes
+                to your S3 bucket. Amazon SES uses client-side encryption to encrypt your mail
+                before writing it to Amazon S3. This means that you must decrypt the content on your side
+                after retrieving the mail from Amazon S3. The <a href="https://aws.amazon.com/sdk-for-java/" rel="noopener noreferrer" target="_blank"><span>AWS SDK for Java</span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a> and <a href="https://aws.amazon.com/sdk-for-ruby/" rel="noopener noreferrer" target="_blank"><span>AWS SDK for Ruby</span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a> provide a client that can handle the decryption for you.
+                Amazon SES can encrypt the emails for you only if you choose for your emails to be
+                delivered to an S3 bucket.</p>
+         
+
+         
+            <h3 id="receiving-email-consider-use-case-unwanted">Unwanted mail</h3>
+
+            <p><b>At what point in the email-receiving process do you want to
+                    block unwanted mail?</b></p>
+            <p>When a sender tries to send an email to a recipient, the sender's email server
+                exchanges a sequence of commands with the recipient's server. This sequence is
+                called the <em>SMTP conversation</em>.</p>
+            <p>You can block incoming email at two points in the email receiving process: during
+                the SMTP conversation, and after the SMTP conversation. You use <em>IP address
+                    filters</em> to block messages during the SMTP conversation, and
+                    <em>receipt rules</em> to block emails after the SMTP
+                conversation.</p>
+            <p>You can use IP address filters to block email that originates from specific IP
+                addresses. The benefit of using IP address filters to block unwanted mail is that we
+                don't charge you for messages that are blocked during the SMTP conversation. The
+                drawback to using IP address filters is that they block email from the IP addresses
+                you specify without performing any analysis on the actual content of the messages.
+                For more information about IP address filters, see <a href="./receiving-email-ip-filtering-console-walkthrough.html">Create IP address filters console walkthrough</a>.</p>
+            <p>You can use receipt rules to send a bounce notification to the sender of an email
+                based on the address (or domain, or subdomain) that the message was sent to. The
+                benefit of using receipt rules is that you can perform additional analysis on
+                incoming messages before you send a bounce notification to the sender. For example,
+                you can use AWS Lambda to send bounce notifications only when messages fail DKIM
+                authentication or are identified as spam. The drawback to using receipt rules is
+                that, because receipt rules are processed after the SMTP conversation, we bill you
+                for each message that you receive. You might also be charged if you use Lambda to
+                analyze the content of incoming messages. For more information about receipt rules,
+                see <a href="./receiving-email-receipt-rules-console-walkthrough.html">Creating receipt rules console walkthrough</a>. For more
+                information about using Lambda to analyze incoming email, see <a href="./receiving-email-action-lambda-example-functions.html">Lambda function examples</a>. </p>
+            
+         
+
+         
+            <h3 id="receiving-email-consider-use-case-streams">Mail streams</h3>
+            <p><span class="topcom">How do you want to divide your mail stream?</span></p>
+            <p>Your domain most likely receives different classes of mail. For example, some of
+                your domain's mail, such as an email to <em>user@example.com</em>, might
+                be intended for a personal inbox. Other mail, such as an email to
+                    <em>unsubscribe@example.com</em>, might be better directed to
+                automated systems instead. You can use receipt rules to divide your incoming mail so
+                that it can be processed differently. For information about how to set up receipt
+                rules, see <a href="./receiving-email-receipt-rules-console-walkthrough.html">Creating
+            receipt rules</a>.</p>
+         
+
+     
+        <h2 id="receiving-email-auth-and-scan">Email-receiving authentication and malware scanning</h2>
+
+        <p>Amazon SES authenticates each received email and optionally scans the email’s content for
+            spam and malware. SES doesn’t take any actions on received email based on the
+            results of the email authentication or content scanning; however, the results of these
+            operations are provided to you as attributes that you can use in SES receipt rule
+            actions such as <a href="./receiving-email-notifications-examples.html#receiving-email-notifications-examples-sns-action">Amazon SNS
+                notifications</a> or as headers in a message <a href="./receiving-email-action-s3.html">delivered to Amazon S3</a>.</p>
+
+        <p><span class="topcom">Email authentication</span></p>
+        <p>Amazon SES authenticates each received email using SPF, DKIM and DMARC. The results of each
+            authentication mechanism is provided in the Amazon SNS notifications that SES
+            dispatches as part of evaluating the rules in the active <a href="./receiving-email-action-sns.html">receipt rule set</a>. In addition, if you
+            chose to receive a copy of the email in Amazon S3, the result of the email authentication is
+            captured in the <code class="code">Authentication-Results</code> header that SES adds to the
+            email’s header section:</p>
+
+        <pre class="programlisting"><div class="code-btn-container"><div class="btn-copy-code" title="Copy"><awsui-icon name="copy"></awsui-icon></div></div><!--DEBUG: cli (none)--><code class="nohighlight">Authentication-Results: example.com;
+spf=pass (spfCheck: 10.0.0.1 is permitted by domain of example.com) client-ip=10.0.0.1; envelope-from=example@example.com; helo=10.0.0.1;
+dkim=pass header.i=example.com;
+dkim=permerror header.i=some-example.com;
+dmarc=pass header.from=example@example.com;</code></pre>
+
+        <p>The <code class="code">Authentication-Results</code> header is described in <a href="https://datatracker.ietf.org/doc/html/rfc8601" rel="noopener noreferrer" target="_blank"><span>RFC 8601</span><awsui-icon class="awsdocs-link-icon" name="external"></awsui-icon></a></p>
+
+        <p><span class="topcom">Email content scanning for spam and malware
+            detection</span></p>
+        <p>Amazon SES scans received email content for malware depending of the value of the
+                <em>ScanEnabled</em> (API) or <em>Spam and virus
+                scanning</em> (console) attribute of the receipt rule that matched the email.
+            By default SES scans received email content for malware. To disable content
+            scanning for received emails that match a specific receipt rule, you would need to set
+            the receipt rule’s <em>ScanEnabled</em> flag to false if <a href="https://docs.aws.amazon.com/ses/latest/APIReference/API_ReceiptRule.html">using the API</a>, or clear the
+                <em>Spam and virus scanning</em> checkbox if <a href="./receiving-email-receipt-rules-console-walkthrough.html#receipt-rules-create-rule-settings">using the console</a>. If the
+            receipt rule that matched an email is scan enabled, the result of the content scanning
+            is provided in the Amazon SNS notifications that SES dispatches as part of evaluating
+            the rules in the active <a href="./receiving-email-action-sns.html">receipt rule
+                set</a>. In addition, if you chose to receive a copy of the email in Amazon S3, the
+            result of the content scanning is captured in the <code class="code">X-SES-Spam-Verdict</code> and
+            the <code class="code">X-SES-Virus-Verdict</code> headers that SES adds to the email’s header
+            section. </p>
+
+        <pre class="programlisting"><div class="code-btn-container"><div class="btn-copy-code" title="Copy"><awsui-icon name="copy"></awsui-icon></div></div><!--DEBUG: cli (none)--><code class="nohighlight">X-SES-Spam-Verdict: PASS
+X-SES-Virus-Verdict: FAIL</code></pre>
+
+        <p>The possible values for the headers above are listed in:</p>
+
+        <div class="itemizedlist">
+             
+             
+        <ul class="itemizedlist"><li class="listitem">
+                <p><a href="./receiving-email-notifications-contents.html#receiving-email-notifications-contents-spamverdict-object">spam</a></p>
+            </li><li class="listitem">
+                <p><a href="./receiving-email-notifications-contents.html#receiving-email-notifications-contents-virusverdict-object">virus</a></p>
+            </li></ul></div>
+
+
+    <p>Now that you have an understanding of the email receiving concepts, how it works, and it's
+        use cases, you can get started by going to <a href="./receiving-email-setting-up.html">Setting up email
+            receiving</a>.</p><awsdocs-copyright class="copyright-print"></awsdocs-copyright><awsdocs-thumb-feedback right-edge="{{$ctrl.thumbFeedbackRightEdge}}"></awsdocs-thumb-feedback></div><noscript><div><div><div><div id="js_error_message"><p><img src="https://d1ge0kk1l5kms0.cloudfront.net/images/G/01/webservices/console/warning.png" alt="Warning" /> <strong>Javascript is disabled or is unavailable in your browser.</strong></p><p>To use the Amazon Web Services Documentation, Javascript must be enabled. Please refer to your browser's Help pages for instructions.</p></div></div></div></div></noscript><div id="main-col-footer" class="awsui-util-font-size-0"><div id="doc-conventions"><a target="_top" href="/general/latest/gr/docconventions.html">Document Conventions</a></div><div class="prev-next"><div id="previous" class="prev-link" accesskey="p" href="./receiving-email.html">Email receiving</div><div id="next" class="next-link" accesskey="n" href="./receiving-email-setting-up.html">Setting up email
+            receiving</div></div></div><awsdocs-page-utilities></awsdocs-page-utilities></div><div id="quick-feedback-yes" style="display: none;"><div class="title">Did this page help you? - Yes</div><div class="content"><p>Thanks for letting us know we're doing a good job!</p><p>If you've got a moment, please tell us what we did right so we can do more of it.</p><p><awsui-button id="fblink" rel="noopener noreferrer" target="_blank" text="Feedback" click="linkClick($event)" href="https://docs.aws.amazon.com/forms/aws-doc-feedback?hidden_service_name=SES&amp;topic_url=https://docs.aws.amazon.com/en_us/ses/latest/dg/receiving-email-concepts.html"></awsui-button></p></div></div><div id="quick-feedback-no" style="display: none;"><div class="title">Did this page help you? - No</div><div class="content"><p>Thanks for letting us know this page needs work. We're sorry we let you down.</p><p>If you've got a moment, please tell us how we can make the documentation better.</p><p><awsui-button id="fblink" rel="noopener noreferrer" target="_blank" text="Feedback" click="linkClick($event)" href="https://docs.aws.amazon.com/forms/aws-doc-feedback?hidden_service_name=SES&amp;topic_url=https://docs.aws.amazon.com/en_us/ses/latest/dg/receiving-email-concepts.html"></awsui-button></p></div></div></div></body></div></awsdocs-view><div class="page-loading-indicator" id="page-loading-indicator"><awsui-spinner size="large"></awsui-spinner></div></div><div id="tools-panel" dom-region="tools"><awsdocs-tools-panel id="awsdocs-tools-panel"></awsdocs-tools-panel></div></awsui-app-layout><awsdocs-cookie-banner class="doc-cookie-banner"></awsdocs-cookie-banner></div></body></html>
