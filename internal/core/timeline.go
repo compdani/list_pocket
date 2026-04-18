@@ -175,7 +175,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			ClickCount       int            `db:"click_count"`
 			FirstOpenedAtRaw sql.NullString `db:"first_opened_at"`
 			FirstClickedRaw  sql.NullString `db:"first_clicked_at"`
-		}{ }
+		}{}
 		if err := c.db.Select(&rows, `
 			SELECT
 				l.rowid AS ledger_rowid,
@@ -267,15 +267,15 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 
 	if includeType(models.TimelineEventCampaignView) {
 		rows := []struct {
-			ViewRowID         int64          `db:"view_rowid"`
-			CampaignRowID     int            `db:"campaign_rowid"`
-			CampaignRecordID  string         `db:"campaign_record_id"`
-			CampaignUUID      sql.NullString `db:"campaign_uuid"`
-			CampaignName      sql.NullString `db:"campaign_name"`
-			CampaignSubject   sql.NullString `db:"campaign_subject"`
-			ViewCount         int            `db:"view_count"`
-			LastViewedAtRaw   sql.NullString `db:"last_viewed_at"`
-		}{ }
+			ViewRowID        int64          `db:"view_rowid"`
+			CampaignRowID    int            `db:"campaign_rowid"`
+			CampaignRecordID string         `db:"campaign_record_id"`
+			CampaignUUID     sql.NullString `db:"campaign_uuid"`
+			CampaignName     sql.NullString `db:"campaign_name"`
+			CampaignSubject  sql.NullString `db:"campaign_subject"`
+			ViewCount        int            `db:"view_count"`
+			LastViewedAtRaw  sql.NullString `db:"last_viewed_at"`
+		}{}
 		if err := c.db.Select(&rows, `
 			SELECT
 				MAX(cv.rowid) AS view_rowid,
@@ -326,16 +326,16 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 
 	if includeType(models.TimelineEventLinkClick) {
 		rows := []struct {
-			ClickRowID        int64          `db:"click_rowid"`
-			CampaignRowID     int            `db:"campaign_rowid"`
-			CampaignRecordID  sql.NullString `db:"campaign_record_id"`
-			CampaignUUID      sql.NullString `db:"campaign_uuid"`
-			CampaignName      sql.NullString `db:"campaign_name"`
-			CampaignSubject   sql.NullString `db:"campaign_subject"`
-			LinkURL           sql.NullString `db:"link_url"`
-			ClickCount        int            `db:"click_count"`
-			LastClickedAtRaw  sql.NullString `db:"last_clicked_at"`
-		}{ }
+			ClickRowID       int64          `db:"click_rowid"`
+			CampaignRowID    int            `db:"campaign_rowid"`
+			CampaignRecordID sql.NullString `db:"campaign_record_id"`
+			CampaignUUID     sql.NullString `db:"campaign_uuid"`
+			CampaignName     sql.NullString `db:"campaign_name"`
+			CampaignSubject  sql.NullString `db:"campaign_subject"`
+			LinkURL          sql.NullString `db:"link_url"`
+			ClickCount       int            `db:"click_count"`
+			LastClickedAtRaw sql.NullString `db:"last_clicked_at"`
+		}{}
 		if err := c.db.Select(&rows, `
 			SELECT
 				MAX(lc.rowid) AS click_rowid,
