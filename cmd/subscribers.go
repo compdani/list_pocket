@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
+	corepkg "github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/pbdb"
@@ -117,6 +119,60 @@ func (a *App) GetSubscriberActivity(c echo.Context) error {
 
 	// Fetch the subscriber activity from the DB.
 	out, err := a.core.GetSubscriberActivity(id)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, okResp{out})
+}
+
+// GetSubscriberTimeline returns merged outbound and inbound timeline events for a subscriber.
+func (a *App) GetSubscriberTimeline(c echo.Context) error {
+	user := auth.GetUser(c)
+
+	id, err := a.resolveSubscriberRouteID(c)
+	if err != nil {
+		return err
+	}
+	if err := a.hasSubPerm(user, []int{id}); err != nil {
+		return err
+	}
+
+	limit := 50
+	if raw := strings.TrimSpace(c.QueryParam("limit")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			limit = v
+		}
+	}
+	offset := 0
+	if raw := strings.TrimSpace(c.QueryParam("offset")); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			offset = v
+		}
+	}
+	sortOrder := strings.TrimSpace(c.QueryParam("sort"))
+
+	eventTypes := []string{}
+	for _, raw := range c.QueryParams()["event_type"] {
+		if v := strings.TrimSpace(raw); v != "" {
+			eventTypes = append(eventTypes, v)
+		}
+	}
+	if len(eventTypes) == 0 {
+		for _, raw := range strings.Split(strings.TrimSpace(c.QueryParam("event_types")), ",") {
+			if v := strings.TrimSpace(raw); v != "" {
+				eventTypes = append(eventTypes, v)
+			}
+		}
+	}
+
+	out, err := a.core.GetUnifiedContactTimeline(c.Request().Context(), corepkg.TimelineQueryParams{
+		SubscriberID: id,
+		Limit:        limit,
+		Offset:       offset,
+		SortOrder:    sortOrder,
+		EventTypes:   eventTypes,
+	})
 	if err != nil {
 		return err
 	}

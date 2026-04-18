@@ -86,7 +86,7 @@ const routes = [
     path: '/subscribers/:id',
     name: 'subscriber',
     meta: { title: 'globals.terms.subscribers', group: 'subscribers' },
-    component: () => import('../views/Subscribers.vue'),
+    component: () => import('../views/SubscriberContact.vue'),
   },
   {
     path: '/campaigns',

@@ -1,0 +1,178 @@
+package main
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestNormalizeSESInboundEmail_Base64MIME(t *testing.T) {
+	t.Parallel()
+
+	rawMIME := strings.Join([]string{
+		"From: Jane Sender <jane@example.com>",
+		"To: replies@example.net",
+		"Subject: Re: Campaign Follow-up",
+		"Message-ID: <ses-message-id@example.com>",
+		"In-Reply-To: <ledger-record-id-12345>",
+		"References: <ledger-record-id-12345> <previous-msg-id@example.com>",
+		"Date: Fri, 17 Apr 2026 12:34:56 +0000",
+		"MIME-Version: 1.0",
+		"Content-Type: multipart/mixed; boundary=\"mix-boundary\"",
+		"",
+		"--mix-boundary",
+		"Content-Type: text/plain; charset=UTF-8",
+		"",
+		"Thanks, I am interested.",
+		"",
+		"--mix-boundary",
+		"Content-Type: application/octet-stream",
+		"Content-Disposition: attachment; filename=\"proof.txt\"",
+		"Content-Transfer-Encoding: base64",
+		"",
+		base64.StdEncoding.EncodeToString([]byte("hello")),
+		"",
+		"--mix-boundary--",
+		"",
+	}, "\r\n")
+
+	sesPayload := map[string]any{
+		"notificationType": "Received",
+		"mail": map[string]any{
+			"timestamp": "2026-04-17T12:34:56Z",
+			"source":    "jane@example.com",
+			"messageId": "ses-original-message-id",
+			"headers": []map[string]any{
+				{"name": "X-SES-Test", "value": "1"},
+			},
+			"commonHeaders": map[string]any{
+				"from":      []string{"Jane Sender <jane@example.com>"},
+				"subject":   "Re: Campaign Follow-up",
+				"messageId": "ses-original-message-id",
+				"date":      "Fri, 17 Apr 2026 12:34:56 +0000",
+			},
+		},
+		"content": base64.StdEncoding.EncodeToString([]byte(rawMIME)),
+	}
+
+	payload, err := json.Marshal(sesPayload)
+	if err != nil {
+		t.Fatalf("marshal ses payload: %v", err)
+	}
+
+	normalized, ok := normalizeSESInboundEmail(payload)
+	if !ok {
+		t.Fatal("expected SES payload to be recognized")
+	}
+
+	if normalized.Provider != "ses" {
+		t.Fatalf("provider: got %q want %q", normalized.Provider, "ses")
+	}
+	if normalized.From != "jane@example.com" {
+		t.Fatalf("from: got %q", normalized.From)
+	}
+	if normalized.MessageID != "ses-message-id@example.com" {
+		t.Fatalf("message_id: got %q", normalized.MessageID)
+	}
+	if normalized.InReplyTo != "ledger-record-id-12345" {
+		t.Fatalf("in_reply_to: got %q", normalized.InReplyTo)
+	}
+	if !strings.Contains(normalized.References, "ledger-record-id-12345") {
+		t.Fatalf("references missing expected id: %q", normalized.References)
+	}
+	if normalized.Subject != "Re: Campaign Follow-up" {
+		t.Fatalf("subject: got %q", normalized.Subject)
+	}
+	if normalized.Text != "Thanks, I am interested." {
+		t.Fatalf("text body: got %q", normalized.Text)
+	}
+	if !normalized.HasAttachments {
+		t.Fatal("expected attachment detection to be true")
+	}
+	if strings.TrimSpace(normalized.BodySnippet) == "" {
+		t.Fatal("expected non-empty body snippet")
+	}
+	if _, ok := normalized.Headers["from"]; !ok {
+		t.Fatal("expected normalized headers to include from")
+	}
+	if _, ok := normalized.RawBody["raw_mime_base64"]; !ok {
+		t.Fatal("expected raw_mime_base64 in raw body")
+	}
+}
+
+func TestNormalizeSESInboundEmail_SNSWrappedPayload(t *testing.T) {
+	t.Parallel()
+
+	rawMIME := strings.Join([]string{
+		"From: Reply User <reply@example.org>",
+		"To: support@example.net",
+		"Subject: Re: Thread",
+		"Message-ID: <wrapped-message-id@example.org>",
+		"In-Reply-To: <ledger-id-99999>",
+		"Date: Fri, 17 Apr 2026 09:10:11 +0000",
+		"Content-Type: text/plain; charset=UTF-8",
+		"",
+		"wrapped reply",
+	}, "\r\n")
+
+	inner := map[string]any{
+		"notificationType": "Received",
+		"mail": map[string]any{
+			"timestamp": "2026-04-17T09:10:11Z",
+			"messageId": "fallback-message-id",
+		},
+		"content": base64.StdEncoding.EncodeToString([]byte(rawMIME)),
+	}
+	innerJSON, err := json.Marshal(inner)
+	if err != nil {
+		t.Fatalf("marshal inner payload: %v", err)
+	}
+
+	sns := map[string]any{
+		"Type":    "Notification",
+		"Message": string(innerJSON),
+	}
+	outerJSON, err := json.Marshal(sns)
+	if err != nil {
+		t.Fatalf("marshal sns payload: %v", err)
+	}
+
+	normalized, ok := normalizeSESInboundEmail(outerJSON)
+	if !ok {
+		t.Fatal("expected SNS-wrapped SES payload to be recognized")
+	}
+	if normalized.Provider != "ses" {
+		t.Fatalf("provider: got %q want ses", normalized.Provider)
+	}
+	if normalized.MessageID != "wrapped-message-id@example.org" {
+		t.Fatalf("message_id: got %q", normalized.MessageID)
+	}
+	if normalized.InReplyTo != "ledger-id-99999" {
+		t.Fatalf("in_reply_to: got %q", normalized.InReplyTo)
+	}
+	if normalized.Text != "wrapped reply" {
+		t.Fatalf("text: got %q", normalized.Text)
+	}
+}
+
+func TestNormalizeSESInboundEmail_InvalidBase64ReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	payload := map[string]any{
+		"notificationType": "Received",
+		"mail": map[string]any{
+			"timestamp": "2026-04-17T12:00:00Z",
+		},
+		"content": "%%%not-base64%%%",
+	}
+
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	if _, ok := normalizeSESInboundEmail(b); ok {
+		t.Fatal("expected invalid SES content to return ok=false")
+	}
+}

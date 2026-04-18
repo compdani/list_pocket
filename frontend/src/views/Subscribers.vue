@@ -148,7 +148,7 @@
       >
         <template #[`item.email`]="{ item }">
           <div>
-            <button type="button" class="link-button" @click.stop.prevent="showEditForm(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
+            <button type="button" class="link-button" @click.stop.prevent="openSubscriberPage(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
               {{ item.email }}
             </button>
             <copy-text :text="`${item.email}`" hide-text />
@@ -173,7 +173,7 @@
 
         <template #[`item.name`]="{ item }">
           <div>
-            <button type="button" class="link-button" @click.stop.prevent="showEditForm(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
+            <button type="button" class="link-button" @click.stop.prevent="openSubscriberPage(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
               {{ item.name }}
             </button>
             <copy-text :text="`${item.name}`" hide-text />
@@ -207,7 +207,7 @@
               v-if="$can('subscribers:manage')"
               type="button"
               class="action-button"
-              @click.stop.prevent="showEditForm(item)"
+              @click.stop.prevent="openSubscriberPage(item)"
               data-cy="btn-edit"
               :aria-label="$t('globals.buttons.edit')"
             >
@@ -268,7 +268,7 @@
           v-if="isFormVisible"
           :key="subscriberFormKey"
           :data="subscriberFormData"
-          :is-editing="isEditing"
+          :is-editing="false"
           @finished="querySubscribers"
           @close="closeForm"
         />
@@ -295,10 +295,9 @@ export default {
 
   data() {
     return {
-      // Current subscriber item being edited.
+      // Current subscriber item for create overlay.
       curItem: null,
       isSearchAdvanced: false,
-      isEditing: false,
       isFormVisible: false,
       isBulkListFormVisible: false,
 
@@ -416,40 +415,31 @@ export default {
       this.onTableCheck();
     },
 
-    // Show the edit list form.
-    showEditForm(sub) {
-      this.curItem = sub;
-      this.isFormVisible = true;
-      this.isEditing = true;
+    // Navigate to dedicated contact page.
+    openSubscriberPage(sub) {
+      const id = this.subscriberValue(sub);
+      if (!id) {
+        return;
+      }
+      this.$router.push({ name: 'subscriber', params: { id } });
     },
 
     // Show the new list form.
     showNewForm() {
       this.curItem = {};
       this.isFormVisible = true;
-      this.isEditing = false;
     },
 
     showBulkListForm() {
       this.isBulkListFormVisible = true;
     },
 
-    onFormClose() {
-      if (this.$route.params.id) {
-        this.$router.push({ name: 'subscribers' });
-      }
-    },
-
     closeForm() {
       this.isFormVisible = false;
-      this.onFormClose();
     },
 
     handleDialogModelUpdate(value) {
       this.isFormVisible = value;
-      if (!value) {
-        this.onFormClose();
-      }
     },
 
     onPageChange(p) {
@@ -770,7 +760,7 @@ export default {
         return 'subscriber-form-hidden';
       }
 
-      return `${this.isEditing ? 'edit' : 'new'}-${this.curItem?.id || 'new'}`;
+      return `new-${this.curItem?.id || 'new'}`;
     },
 
     subscriberFormData() {
@@ -809,14 +799,8 @@ export default {
       this.queryParams.subStatus = this.$route.query.subscription_status;
     }
 
-    if (this.$route.params.id) {
-      this.$api.getSubscriber(this.$route.params.id).then((data) => {
-        this.showEditForm(data);
-      });
-    } else {
-      // Get subscribers on load.
-      this.querySubscribers();
-    }
+    // Get subscribers on load.
+    this.querySubscribers();
   },
 };
 </script>

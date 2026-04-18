@@ -512,6 +512,14 @@ export const getSubscriberActivity = async (idOrRecordId) => http.get(
   { loading: models.subscribers },
 );
 
+export const getSubscriberTimeline = async (idOrRecordId, params = {}) => http.get(
+  `/api/subscribers/${idOrRecordId}/timeline`,
+  {
+    params,
+    loading: models.subscribers,
+  },
+);
+
 export const getSubscriberBounces = async (idOrRecordId) => http.get(
   `/api/subscribers/${idOrRecordId}/bounces`,
   { loading: models.bounces },
