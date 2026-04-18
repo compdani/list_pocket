@@ -176,3 +176,41 @@ func TestNormalizeSESInboundEmail_InvalidBase64ReturnsFalse(t *testing.T) {
 		t.Fatal("expected invalid SES content to return ok=false")
 	}
 }
+
+func TestParseSNSControlType(t *testing.T) {
+	t.Parallel()
+
+	sub := []byte(`{"Type":"SubscriptionConfirmation","Message":"confirm"}`)
+	typeName, ok := parseSNSControlType(sub)
+	if !ok || typeName != "SubscriptionConfirmation" {
+		t.Fatalf("expected SubscriptionConfirmation, got type=%q ok=%v", typeName, ok)
+	}
+
+	unsub := []byte(`{"Type":"UnsubscribeConfirmation","Message":"confirm"}`)
+	typeName, ok = parseSNSControlType(unsub)
+	if !ok || typeName != "UnsubscribeConfirmation" {
+		t.Fatalf("expected UnsubscribeConfirmation, got type=%q ok=%v", typeName, ok)
+	}
+
+	notif := []byte(`{"Type":"Notification","Message":"{}"}`)
+	if typeName, ok = parseSNSControlType(notif); ok {
+		t.Fatalf("expected Notification not treated as control, got type=%q", typeName)
+	}
+}
+
+func TestNormalizeSESInboundEmail_IgnoresNonNotificationSNSWrapper(t *testing.T) {
+	t.Parallel()
+
+	payload := map[string]any{
+		"Type":    "SubscriptionConfirmation",
+		"Message": `{"notificationType":"Received","content":"abc"}`,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	if _, ok := normalizeSESInboundEmail(b); ok {
+		t.Fatal("expected non-notification SNS wrapper to be ignored")
+	}
+}

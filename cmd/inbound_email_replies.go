@@ -43,6 +43,10 @@ type sesSNSNotification struct {
 	Message string `json:"Message"`
 }
 
+type snsControlMessage struct {
+	Type string `json:"Type"`
+}
+
 type sesInboundMailHeader struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
@@ -111,6 +115,11 @@ func (a *App) processInboundEmailReplyWebhook(c echo.Context) (string, error) {
 	}
 	if len(body) >= 2<<20 {
 		return "", echo.NewHTTPError(http.StatusRequestEntityTooLarge, "body too large")
+	}
+
+	if snsType, ok := parseSNSControlType(body); ok {
+		a.log.Printf("inbound email webhook: SNS control message type=%q acknowledged", snsType)
+		return "sns_control_" + strings.ToLower(snsType), nil
 	}
 
 	rawPayload := models.JSON{}
@@ -271,7 +280,7 @@ func normalizeGenericInboundEmail(req inboundEmailReplyWebhookRequest) normalize
 func normalizeSESInboundEmail(raw []byte) (normalizedInboundEmail, bool) {
 	var sns sesSNSNotification
 	msgBytes := raw
-	if err := json.Unmarshal(raw, &sns); err == nil && strings.TrimSpace(sns.Type) != "" && strings.TrimSpace(sns.Message) != "" {
+	if err := json.Unmarshal(raw, &sns); err == nil && strings.EqualFold(strings.TrimSpace(sns.Type), "Notification") && strings.TrimSpace(sns.Message) != "" {
 		msgBytes = []byte(sns.Message)
 	}
 
@@ -505,4 +514,16 @@ func stripHTMLTags(s string) string {
 		return ""
 	}
 	return htmlTagsRE.ReplaceAllString(s, " ")
+}
+
+func parseSNSControlType(raw []byte) (string, bool) {
+	var ctrl snsControlMessage
+	if err := json.Unmarshal(raw, &ctrl); err != nil {
+		return "", false
+	}
+	t := strings.TrimSpace(ctrl.Type)
+	if strings.EqualFold(t, "SubscriptionConfirmation") || strings.EqualFold(t, "UnsubscribeConfirmation") {
+		return t, true
+	}
+	return "", false
 }
