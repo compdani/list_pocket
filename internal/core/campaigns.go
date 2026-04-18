@@ -170,12 +170,6 @@ type sqliteCampaignStatsRow struct {
 	UpdatedAt string `db:"updated_at"`
 }
 
-type campaignAnalyticsSQLiteRow struct {
-	CampaignID int    `db:"campaign_id"`
-	Count      int    `db:"count"`
-	TS         string `db:"ts"`
-}
-
 func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
 	tags := pq.StringArray{}
 	if len(row.Tags) > 0 && string(row.Tags) != "null" {

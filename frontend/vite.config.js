@@ -51,7 +51,7 @@ export default defineConfig(({ _, mode }) => {
         '^/(api|mailapi|webhooks|subscription|public|health)': {
           target: apiTarget,
         },
-        '^/admin/login': {
+        '^/admin/setup': {
           target: apiTarget,
         },
         '^/(admin\/custom\.(css|js))': {

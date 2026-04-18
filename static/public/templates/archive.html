@@ -1,6 +1,7 @@
 {{ define "archive" }}
 {{ template "header" .}}
-<section>
+<section class="archive-card">
+    <span class="eyebrow">Archive</span>
     <h2>{{ L.T "public.archiveTitle" }}</h2>
 
     <ul class="archive">
@@ -23,7 +24,7 @@
     {{ end }}
 
     {{ if .EnablePublicSubPage }}
-        <div class="right">
+        <div class="archive-actions">
             <a href="{{ .RootURL }}/archive.xml">
                 <img src="{{ .RootURL }}/public/static/rss.svg" alt="RSS" class="feed"
                     width="16" height="16" />

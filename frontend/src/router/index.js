@@ -1,7 +1,33 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { isAuthenticated } from '../api';
 import { isCurrentUserSuperAdmin } from '../utils/auth';
+import { toRouterPath } from '../utils/authRoutes';
 
 const routes = [
+  {
+    path: '/login',
+    name: 'login',
+    meta: { title: 'Login', guestOnly: true, authPage: true },
+    component: () => import('../views/AuthLogin.vue'),
+  },
+  {
+    path: '/login/twofa',
+    name: 'loginTwofa',
+    meta: { title: 'Two-Factor Authentication', guestOnly: true, authPage: true },
+    component: () => import('../views/AuthTwofa.vue'),
+  },
+  {
+    path: '/forgot',
+    name: 'forgotPassword',
+    meta: { title: 'Forgot Password', guestOnly: true, authPage: true },
+    component: () => import('../views/AuthForgotPassword.vue'),
+  },
+  {
+    path: '/reset',
+    name: 'resetPassword',
+    meta: { title: 'Reset Password', guestOnly: true, authPage: true },
+    component: () => import('../views/AuthResetPassword.vue'),
+  },
   {
     path: '/404',
     name: '404_page',
@@ -184,6 +210,20 @@ const router = createRouter({
 router.beforeEach((to) => {
   if (to.matched.length === 0) {
     return '/404';
+  }
+  const authenticated = isAuthenticated();
+  if (to.meta && to.meta.guestOnly) {
+    if (authenticated) {
+      const next = typeof to.query.next === 'string' && to.query.next ? to.query.next : '/';
+      return toRouterPath(next);
+    }
+    return true;
+  }
+  if (!authenticated) {
+    return {
+      path: '/login',
+      query: to.path === '/' && !to.query && !to.hash ? {} : { next: to.fullPath },
+    };
   }
   if (to.meta && to.meta.superAdmin && !isCurrentUserSuperAdmin()) {
     return '/';

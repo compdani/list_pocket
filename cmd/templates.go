@@ -302,7 +302,8 @@ func (a *App) validateTemplate(o models.Template) error {
 // previewTemplate renders the HTML preview of a template.
 func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 	var out []byte
-	if tpl.Type == models.TemplateTypeCampaignSMS {
+	switch tpl.Type {
+	case models.TemplateTypeCampaignSMS:
 		camp := models.Campaign{
 			UUID:         dummyUUID,
 			Name:         a.i18n.T("templates.dummyName"),
@@ -325,7 +326,7 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 		}
 		out = msg.Body()
-	} else if tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignVisual || tpl.Type == models.TemplateTypeCampaignGrapes {
+	case models.TemplateTypeCampaign, models.TemplateTypeCampaignVisual, models.TemplateTypeCampaignGrapes:
 		camp := models.Campaign{
 			UUID:         dummyUUID,
 			Name:         a.i18n.T("templates.dummyName"),
@@ -347,7 +348,7 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 		}
 		out = msg.Body()
-	} else {
+	default:
 		m := models.TxMessage{
 			Subject: tpl.Subject,
 		}

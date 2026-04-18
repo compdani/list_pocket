@@ -135,35 +135,6 @@ func sqliteSetCampaignBatchCursor(raw []byte, cursor sqliteBatchCursor) []byte {
 	return out
 }
 
-func sqliteStoreSubscriberRowsToModels(rows []sqliteStoreSubscriberRow) []models.Subscriber {
-	out := make([]models.Subscriber, 0, len(rows))
-	for _, row := range rows {
-		attribs := models.JSON{}
-		if len(row.Attribs) > 0 && string(row.Attribs) != "null" {
-			_ = json.Unmarshal(row.Attribs, &attribs)
-		}
-
-		sub := models.Subscriber{
-			Base: models.Base{
-				ID:        row.ID,
-				RecordID:  row.RecordID,
-				CreatedAt: parseStoreNullTime(row.CreatedAt),
-				UpdatedAt: parseStoreNullTime(row.UpdatedAt),
-			},
-			UUID:      row.UUID,
-			Email:     row.Email,
-			FirstName: row.FirstName,
-			LastName:  row.LastName,
-			Name:      row.Name,
-			Attribs:   attribs,
-			Status:    row.Status,
-		}
-		sub.NormalizeName()
-		out = append(out, sub)
-	}
-	return out
-}
-
 func sqliteAdvanceBatchCursor(cursor sqliteBatchCursor, rows []sqliteStoreSubscriberRow, count int) sqliteBatchCursor {
 	if count < 1 || len(rows) == 0 {
 		return cursor

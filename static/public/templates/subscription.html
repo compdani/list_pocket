@@ -2,9 +2,10 @@
 {{ template "header" .}}
 <section class="section">
     {{ if not .Data.ShowManage }}
-        <h2>{{ L.T "public.unsubTitle" }}</h2>
         <form method="post" class="unsub-form">
             <div>
+                <span class="eyebrow">Preferences</span>
+                <h2>{{ L.T "public.unsubTitle" }}</h2>
                 {{ if .Data.AllowBlocklist }}
                     <p>{{ L.T "public.unsubHelp" }}</p>
                     <p>
@@ -27,21 +28,31 @@
         </form>
     {{ else }}
         <form method="post" class="manage-form">
-            <div>
+            <div class="manage-grid">
                 <input type="hidden" name="manage" value="true" />
 
-                <h2>{{ L.T "public.managePrefs" }}</h2>
-                <label for="phone">Phone</label>
-                <input id="phone" type="tel" name="phone" value="{{ .Data.Subscriber.Phone }}" maxlength="64" />
-                <label for="first_name">First name</label>
-                <input id="first_name" type="text" name="first_name" value="{{ .Data.Subscriber.FirstName }}" maxlength="256" required />
-                <label for="last_name">Last name</label>
-                <input id="last_name" type="text" name="last_name" value="{{ .Data.Subscriber.LastName }}" maxlength="256" required />
+                <div class="full">
+                    <span class="eyebrow">Preferences</span>
+                    <h2>{{ L.T "public.managePrefs" }}</h2>
+                </div>
+                <p class="full">
+                    <label for="phone">Phone</label>
+                    <input id="phone" type="tel" name="phone" value="{{ .Data.Subscriber.Phone }}" maxlength="64" />
+                </p>
+                <p>
+                    <label for="first_name">First name</label>
+                    <input id="first_name" type="text" name="first_name" value="{{ .Data.Subscriber.FirstName }}" maxlength="256" required />
+                </p>
+                <p>
+                    <label for="last_name">Last name</label>
+                    <input id="last_name" type="text" name="last_name" value="{{ .Data.Subscriber.LastName }}" maxlength="256" required />
+                </p>
 
                 {{ if .Data.Subscriptions }}
-                    <br /><br />
-                    <h3>{{ L.T "public.managePrefsUnsub" }}</h3>
-                    <ul class="lists">
+                    <div class="full">
+                        <h3>{{ L.T "public.managePrefsUnsub" }}</h3>
+                    </div>
+                    <ul class="lists full">
                         {{ range $i, $l := .Data.Subscriptions }}
                             {{ if ne $l.SubscriptionStatus.Value "unsubscribed" }}
                                 <li>
@@ -54,13 +65,13 @@
                 {{ end }}
 
                 {{ if .Data.AllowBlocklist }}
-                    <p>
+                    <p class="full">
                         <input id="privacy-blocklist" type="checkbox" name="blocklist" value="true" onchange="unsubAll(event)" />
                         <label for="privacy-blocklist">{{ L.T "public.unsubFull" }}</label>
                     </p>
                 {{ end }}
 
-                <p>
+                <p class="full">
                     <button type="submit" class="button" id="btn-unsub">{{ L.T "globals.buttons.save" }}</button>
                 </p>
             </div>

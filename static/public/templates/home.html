@@ -1,8 +1,13 @@
 {{ define "home" }}
 {{ template "header" .}}
 
-<section class="center">
-	<a href="/admin" class="button">{{ L.T "users.login" }}</a>
+<section class="home-hero">
+	<span class="eyebrow">Listpocket</span>
+	<h2>{{ .SiteName }}</h2>
+	<p>Manage admin access, subscriptions, and campaign archives from one streamlined place.</p>
+	<div class="home-actions">
+		<a href="/admin" class="button">{{ L.T "users.login" }}</a>
+	</div>
 
 	<div class="home-options">
 		{{ if .EnablePublicSubPage }}
