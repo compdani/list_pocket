@@ -123,6 +123,79 @@ input[type="radio"] {
   accent-color: var(--primary);
 }
 
+.phone-field {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 420px;
+  margin-top: -10px;
+}
+
+.phone-prefix {
+  appearance: none;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(23, 33, 38, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(247, 242, 233, 0.95);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+}
+
+.phone-prefix[disabled] {
+  opacity: 1;
+  color: var(--ink);
+}
+
+.phone-display {
+  letter-spacing: 0.01em;
+  width: 100%;
+}
+
+.manage-grid {
+  align-items: start;
+}
+
+.manage-grid p {
+  margin: 0;
+}
+
+.manage-grid .lists.full {
+  margin-top: 0;
+}
+
+.manage-grid .phone-row {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+}
+
+.manage-grid .phone-row > label {
+  margin: 0;
+}
+
+.manage-grid .phone-row .phone-field {
+  max-width: none;
+}
+
+.manage-grid .subscriptions-heading {
+  margin: 4px 0 0;
+}
+
+.manage-grid .subscriptions-heading h3 {
+  margin: 0;
+}
+
+.manage-grid .actions-row {
+  margin-top: 4px;
+}
+
 .center {
   text-align: center;
 }
@@ -294,12 +367,20 @@ body > .container.wrap:first-of-type {
   margin: 20px 0 0;
 }
 
+.manage-form .lists {
+  margin-top: 0;
+}
+
 .lists li {
   margin: 0 0 12px;
   padding: 14px 16px;
   border: 1px solid rgba(23, 33, 38, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.7);
+}
+
+.manage-form .lists li:last-child {
+  margin-bottom: 0;
 }
 
 .lists .description {
@@ -438,7 +519,7 @@ footer a:hover {
   color: var(--ink);
 }
 
-@media screen and (max-width: 760px) {
+@media screen and (max-width: 640px) {
   .wrap {
     padding: 30px 22px;
     border-radius: 22px;
@@ -452,6 +533,16 @@ footer a:hover {
   .setup-grid,
   .manage-grid {
     grid-template-columns: 1fr;
+  }
+
+  .manage-grid .phone-row {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+    align-items: start;
+  }
+
+  .phone-field {
+    grid-template-columns: 92px minmax(0, 1fr);
   }
 
   .home-hero,
