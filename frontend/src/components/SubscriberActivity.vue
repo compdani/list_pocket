@@ -5,167 +5,70 @@
     </div>
 
     <div v-else>
-      <!-- Summary Stats -->
       <v-row class="mb-6">
         <v-col cols="12" sm="4">
           <v-card class="text-center">
             <v-card-text>
-              <p class="text-uppercase text-caption font-weight-bold">
-                {{ $t('subscribers.activity.summarySent') }}
-              </p>
-              <p class="text-h4">{{ countSent }}</p>
+              <p class="text-uppercase text-caption font-weight-bold">Total</p>
+              <p class="text-h4">{{ total }}</p>
             </v-card-text>
           </v-card>
         </v-col>
         <v-col cols="12" sm="4">
           <v-card class="text-center">
             <v-card-text>
-              <p class="text-uppercase text-caption font-weight-bold">
-                {{ $t('campaigns.views') }}
-              </p>
-              <p class="text-h4">{{ totalViews }}</p>
+              <p class="text-uppercase text-caption font-weight-bold">Shown</p>
+              <p class="text-h4">{{ events.length }}</p>
             </v-card-text>
           </v-card>
         </v-col>
         <v-col cols="12" sm="4">
           <v-card class="text-center">
             <v-card-text>
-              <p class="text-uppercase text-caption font-weight-bold">
-                {{ $t('campaigns.clicks') }}
-              </p>
-              <p class="text-h4">{{ totalClicks }}</p>
+              <p class="text-uppercase text-caption font-weight-bold">Inbound</p>
+              <p class="text-h4">{{ inboundCount }}</p>
             </v-card-text>
           </v-card>
         </v-col>
       </v-row>
 
-      <!-- Campaign sends (send ledger) -->
-      <div class="mb-6">
-        <h5 class="text-h5 mb-4">
-          {{ $t('subscribers.activity.campaignSends') }}
-        </h5>
-
-        <v-data-table
-          v-if="activity.campaignSends && activity.campaignSends.length > 0"
-          :items="activity.campaignSends"
-          :headers="campaignSendsHeaders"
-          hover
-          sort-by="updated"
-          sort-order="desc"
-          :page-size="10"
-          class="campaign-sends-table"
+      <div v-if="events.length > 0" class="timeline-stack">
+        <v-card
+          v-for="(event, idx) in events"
+          :key="`${event.eventType}-${event.occurredAt}-${idx}`"
+          class="timeline-item"
+          elevation="0"
         >
-          <template #item.name="{ item }">
-            <div v-if="item.uuid">
-              <router-link :to="{ name: 'campaign', params: { id: item.id } }">
-                {{ item.name }}
-              </router-link>
-              <p class="text-caption text-grey">{{ item.subject }}</p>
+          <v-card-text>
+            <div class="timeline-item-head">
+              <div class="d-flex align-center ga-2">
+                <v-chip size="small" label :color="eventTypeColor(event.eventType)">
+                  {{ eventTypeLabel(event.eventType) }}
+                </v-chip>
+                <v-chip size="small" variant="outlined" label>
+                  {{ event.channel }}
+                </v-chip>
+              </div>
+              <span class="text-caption text-medium-emphasis">{{ formatActivityTimestamp(event.occurredAt) }}</span>
             </div>
-            <div v-else>
-              <em class="text-grey">{{ $t('subscribers.activity.campaignDeleted') }}</em>
-            </div>
-          </template>
-          <template #item.status="{ item }">
-            <v-chip label size="small" :color="sendStatusColor(item.status)">
-              {{ sendStatusLabel(item.status) }}
-            </v-chip>
-          </template>
-          <template #item.updated="{ item }">
-            <span v-if="item.updated">
-              {{ formatActivityTimestamp(item.updated) }}
-            </span>
-          </template>
-        </v-data-table>
-        <div v-else class="text-center text-grey py-12">
-          <p>{{ $t('globals.messages.emptyState') }}</p>
+
+            <p class="mb-1 font-weight-medium">{{ eventTitle(event) }}</p>
+            <p v-if="eventSubtitle(event)" class="mb-2 text-body-2 text-medium-emphasis">{{ eventSubtitle(event) }}</p>
+
+            <details>
+              <summary class="text-caption text-medium-emphasis">Details</summary>
+              <pre class="event-metadata">{{ prettyMetadata(event.metadata) }}</pre>
+            </details>
+          </v-card-text>
+        </v-card>
+
+        <div v-if="hasMore" class="d-flex justify-center py-4">
+          <v-btn :loading="isLoadingMore" variant="outlined" @click="loadMore">Load more</v-btn>
         </div>
       </div>
 
-      <!-- Campaign Views Section -->
-      <div class="mb-6">
-        <h5 class="text-h5 mb-4">
-          {{ $t('campaigns.views') }}
-        </h5>
-
-        <v-data-table
-          v-if="activity.campaignViews && activity.campaignViews.length > 0"
-          :items="activity.campaignViews"
-          :headers="campaignViewsHeaders"
-          hover
-          sort-by="lastViewedAt"
-          sort-order="desc"
-          :page-size="10"
-          class="campaign-views-table"
-        >
-          <template #item.name="{ item }">
-            <div v-if="item.uuid">
-              <router-link :to="{ name: 'campaign', params: { id: item.id } }">
-                {{ item.name }}
-              </router-link>
-              <p class="text-caption text-grey">{{ item.subject }}</p>
-            </div>
-            <div v-else>
-              <em class="text-grey">{{ $t('subscribers.activity.campaignDeleted') }}</em>
-            </div>
-          </template>
-          <template #item.viewCount="{ item }">
-            <v-chip label small>{{ item.viewCount }}</v-chip>
-          </template>
-          <template #item.lastViewedAt="{ item }">
-            <span v-if="item.lastViewedAt">
-              {{ formatActivityTimestamp(item.lastViewedAt) }}
-            </span>
-          </template>
-        </v-data-table>
-        <div v-else class="text-center text-grey py-12">
-          <p>{{ $t('globals.messages.emptyState') }}</p>
-        </div>
-      </div>
-
-      <!-- Link Clicks Section -->
-      <div class="mb-6">
-        <h5 class="text-h5 mb-4 mt-6">
-          {{ $t('campaigns.clicks') }}
-        </h5>
-
-        <v-data-table
-          v-if="activity.linkClicks && activity.linkClicks.length > 0"
-          :items="activity.linkClicks"
-          :headers="linkClicksHeaders"
-          hover
-          sort-by="lastClickedAt"
-          sort-order="desc"
-          :page-size="10"
-          class="link-clicks-table"
-        >
-          <template #item.url="{ item }">
-            <a :href="item.url" target="_blank" rel="noopener noreferrer" class="link-click-url">
-              {{ item.url }}
-            </a>
-          </template>
-          <template #item.campaignName="{ item }">
-            <div v-if="item.campaignUuid">
-              <router-link :to="{ name: 'campaign', params: { id: item.campaignId } }">
-                {{ item.campaignSubject || item.campaignName }}
-              </router-link>
-            </div>
-            <div v-else>
-              &mdash;
-            </div>
-          </template>
-          <template #item.clickCount="{ item }">
-            <v-chip label small>{{ item.clickCount }}</v-chip>
-          </template>
-          <template #item.lastClickedAt="{ item }">
-            <span v-if="item.lastClickedAt">
-              {{ formatActivityTimestamp(item.lastClickedAt) }}
-            </span>
-          </template>
-        </v-data-table>
-        <div v-else class="text-center text-grey py-12">
-          <p>{{ $t('globals.messages.emptyState') }}</p>
-        </div>
+      <div v-else class="text-center text-grey py-12">
+        <p>{{ $t('globals.messages.emptyState') }}</p>
       </div>
     </div>
   </div>
@@ -173,6 +76,7 @@
 
 <script>
 import dayjs from 'dayjs';
+import { legacyActivityToTimeline } from './subscriberActivityTransform';
 
 export default {
   props: {
@@ -185,46 +89,18 @@ export default {
   data() {
     return {
       isLoading: false,
-      activity: {
-        campaignSends: [],
-        campaignViews: [],
-        linkClicks: [],
-      },
-      campaignSendsHeaders: [
-        { key: 'name', title: this.$tc('globals.terms.campaign', 1), sortable: true },
-        { key: 'status', title: this.$t('subscribers.activity.sendStatus'), sortable: true },
-        { key: 'updated', title: this.$t('globals.fields.updatedAt'), sortable: true },
-      ],
-      campaignViewsHeaders: [
-        { key: 'name', title: this.$tc('globals.terms.campaign', 1), sortable: true },
-        { key: 'viewCount', title: this.$t('campaigns.views'), sortable: true, align: 'end' },
-        { key: 'lastViewedAt', title: this.$t('globals.fields.createdAt'), sortable: true },
-      ],
-      linkClicksHeaders: [
-        { key: 'url', title: this.$t('globals.terms.url'), sortable: true },
-        { key: 'campaignName', title: this.$tc('globals.terms.campaign', 1), sortable: true },
-        { key: 'clickCount', title: this.$t('campaigns.clicks'), sortable: true, align: 'end' },
-        { key: 'lastClickedAt', title: this.$t('globals.fields.createdAt'), sortable: true },
-      ],
+      isLoadingMore: false,
+      events: [],
+      total: 0,
+      offset: 0,
+      limit: 25,
+      hasMore: false,
     };
   },
 
   computed: {
-    countSent() {
-      if (!this.activity.campaignSends || !this.activity.campaignSends.length) {
-        return 0;
-      }
-      return this.activity.campaignSends.filter((r) => r.status === 'sent').length;
-    },
-
-    totalViews() {
-      if (!this.activity.campaignViews) return 0;
-      return this.activity.campaignViews.reduce((sum, v) => sum + (v.viewCount || 0), 0);
-    },
-
-    totalClicks() {
-      if (!this.activity.linkClicks) return 0;
-      return this.activity.linkClicks.reduce((sum, c) => sum + (c.clickCount || 0), 0);
+    inboundCount() {
+      return this.events.filter((e) => e.eventType === 'inbound_sms' || e.eventType === 'inbound_email_reply').length;
     },
   },
 
@@ -239,28 +115,104 @@ export default {
   },
 
   methods: {
-    sendStatusColor(status) {
-      switch (status) {
-        case 'sent':
+    async fetchTimelinePage(offset) {
+      try {
+        return await this.$api.getSubscriberTimeline(this.subscriberId, {
+          limit: this.limit,
+          offset,
+          sort: 'desc',
+        });
+      } catch (err) {
+        // Backward compatibility: older servers may not expose /timeline yet.
+        const status = typeof err?.status === 'number' ? err.status : 0;
+        if (status !== 404) {
+          throw err;
+        }
+        const legacy = await this.$api.getSubscriberActivity(this.subscriberId);
+        return legacyActivityToTimeline(legacy);
+      }
+    },
+
+    eventTypeColor(eventType) {
+      switch (eventType) {
+        case 'campaign_send':
+          return 'primary';
+        case 'campaign_view':
           return 'success';
-        case 'inflight':
-          return 'warning';
-        case 'pending':
-          return 'surface-variant';
-        case 'skipped':
-          return 'grey';
+        case 'link_click':
+          return 'info';
+        case 'inbound_sms':
+          return 'orange';
+        case 'inbound_email_reply':
+          return 'deep-purple';
         default:
           return 'default';
       }
     },
 
-    sendStatusLabel(status) {
-      if (!status) {
-        return '—';
+    eventTypeLabel(eventType) {
+      switch (eventType) {
+        case 'campaign_send':
+          return 'Campaign Sent';
+        case 'campaign_view':
+          return 'Campaign View';
+        case 'link_click':
+          return 'Link Click';
+        case 'inbound_sms':
+          return 'Inbound SMS';
+        case 'inbound_email_reply':
+          return 'Inbound Email';
+        default:
+          return eventType || 'Event';
       }
-      const key = `subscribers.activity.sendStatus.${status}`;
-      const translated = this.$t(key);
-      return translated === key ? status : translated;
+    },
+
+    eventTitle(event) {
+      const md = event.metadata || {};
+      if (event.eventType === 'inbound_sms') {
+        return md.messageBody || md.fromNumber || 'Inbound SMS received';
+      }
+      if (event.eventType === 'inbound_email_reply') {
+        return md.subject || md.fromAddress || 'Inbound email reply';
+      }
+      if (event.eventType === 'campaign_send') {
+        return md.subject || md.campaignName || 'Campaign send';
+      }
+      if (event.eventType === 'campaign_view') {
+        return md.subject || md.campaignName || 'Campaign view';
+      }
+      if (event.eventType === 'link_click') {
+        return md.url || md.subject || 'Link click';
+      }
+      return 'Timeline event';
+    },
+
+    eventSubtitle(event) {
+      const md = event.metadata || {};
+      if (event.eventType === 'campaign_send') {
+        return [md.campaignName, event.status].filter(Boolean).join(' · ');
+      }
+      if (event.eventType === 'campaign_view') {
+        return `Views: ${md.viewCount || 0}`;
+      }
+      if (event.eventType === 'link_click') {
+        return `Clicks: ${md.clickCount || 0}`;
+      }
+      if (event.eventType === 'inbound_sms') {
+        return md.fromNumber || '';
+      }
+      if (event.eventType === 'inbound_email_reply') {
+        return md.fromAddress || '';
+      }
+      return '';
+    },
+
+    prettyMetadata(metadata) {
+      try {
+        return JSON.stringify(metadata || {}, null, 2);
+      } catch {
+        return '{}';
+      }
     },
 
     formatActivityTimestamp(value) {
@@ -271,29 +223,73 @@ export default {
       return dayjs(value).format('MM-DD-YY hh:mm A');
     },
 
-    getActivity() {
+    async getActivity() {
       if (!this.subscriberId) {
-        this.activity = {
-          campaignSends: [],
-          campaignViews: [],
-          linkClicks: [],
-        };
+        this.events = [];
+        this.total = 0;
+        this.offset = 0;
+        this.hasMore = false;
         this.isLoading = false;
         return;
       }
 
       this.isLoading = true;
-      this.$api.getSubscriberActivity(this.subscriberId).then((data) => {
-        this.activity = {
-          campaignSends: data.campaignSends || [],
-          campaignViews: data.campaignViews || [],
-          linkClicks: data.linkClicks || [],
-        };
+      this.offset = 0;
+      try {
+        const data = await this.fetchTimelinePage(0);
+        this.events = Array.isArray(data.events) ? data.events : [];
+        this.total = data.total || 0;
+        this.offset = this.events.length;
+        this.hasMore = Boolean(data.hasMore);
+      } finally {
         this.isLoading = false;
-      }).catch(() => {
-        this.isLoading = false;
-      });
+      }
+    },
+
+    async loadMore() {
+      if (!this.hasMore || this.isLoadingMore) {
+        return;
+      }
+      this.isLoadingMore = true;
+      try {
+        const data = await this.fetchTimelinePage(this.offset);
+        const next = Array.isArray(data.events) ? data.events : [];
+        this.events = [...this.events, ...next];
+        this.offset = this.events.length;
+        this.total = data.total || this.total;
+        this.hasMore = Boolean(data.hasMore);
+      } finally {
+        this.isLoadingMore = false;
+      }
     },
   },
 };
 </script>
+
+<style scoped>
+.timeline-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.timeline-item {
+  border: 1px solid #e8edf7;
+  border-radius: 12px;
+}
+
+.timeline-item-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.event-metadata {
+  background: #f8fafc;
+  border-radius: 8px;
+  margin-top: 8px;
+  overflow-x: auto;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+</style>

@@ -1,6 +1,6 @@
 <template>
   <v-form @submit.prevent="onSubmit">
-    <div class="admin-dialog-card modal-card content">
+    <div class="admin-dialog-card modal-card content" :class="{ 'page-card': isPageMode }">
       <header class="admin-dialog-head modal-card-head">
         <div class="dialog-meta-row">
           <p v-if="isEditing" class="entity-meta has-text-grey is-size-7">
@@ -122,7 +122,7 @@
           <v-tab value="bounces" :disabled="bounces.length === 0">
             {{ `${$t('globals.terms.bounces')} (${bounces.length})` }}
           </v-tab>
-          <v-tab value="activity" :disabled="!isEditing">
+          <v-tab v-if="!hideActivityTab" value="activity" :disabled="!isEditing">
             {{ $t('subscribers.activity') }}
           </v-tab>
         </v-tabs>
@@ -270,7 +270,7 @@
             </section>
           </v-window-item>
 
-          <v-window-item value="activity">
+          <v-window-item v-if="!hideActivityTab" value="activity">
             <section v-if="isEditing && data.id" class="tab-panel activity">
               <h5 class="mb-3">{{ $t('subscribers.activity') }}</h5>
               <subscriber-activity :subscriber-id="data.id" />
@@ -309,7 +309,7 @@
 
       <footer class="admin-dialog-foot modal-card-foot">
         <v-btn type="button" variant="outlined" class="dialog-action" @click="$emit('close')">
-          {{ $t('globals.buttons.close') }}
+          {{ closeLabel || $t('globals.buttons.close') }}
         </v-btn>
         <v-btn
           v-if="$can('subscribers:manage')"
@@ -347,6 +347,22 @@ const props = defineProps({
     default: () => ({ lists: [] }),
   },
   isEditing: Boolean,
+  isPageMode: {
+    type: Boolean,
+    default: false,
+  },
+  hideActivityTab: {
+    type: Boolean,
+    default: false,
+  },
+  closeOnSave: {
+    type: Boolean,
+    default: true,
+  },
+  closeLabel: {
+    type: String,
+    default: '',
+  },
 });
 
 const emit = defineEmits(['finished', 'close']);
@@ -550,7 +566,9 @@ async function createSubscriber() {
 
   proxy.$api.createSubscriber(payload).then((response) => {
     emit('finished');
-    emit('close');
+    if (props.closeOnSave) {
+      emit('close');
+    }
     proxy.$utils.toast(proxy.$t('globals.messages.created', { name: response.name }));
   });
 }
@@ -590,7 +608,9 @@ async function updateSubscriber() {
 
   proxy.$api.updateSubscriber(payload).then((response) => {
     emit('finished');
-    emit('close');
+    if (props.closeOnSave) {
+      emit('close');
+    }
     proxy.$utils.toast(proxy.$t('globals.messages.updated', { name: response.name }));
   });
 }
@@ -681,6 +701,12 @@ onMounted(() => {
   max-height: calc(100vh - 48px);
   overflow: hidden;
   width: min(920px, calc(100vw - 32px));
+}
+
+.admin-dialog-card.page-card {
+  box-shadow: none;
+  max-height: none;
+  width: 100%;
 }
 
 .admin-dialog-head {

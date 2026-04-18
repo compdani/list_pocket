@@ -76,6 +76,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.GET("/settings/text-messaging", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetTextMessagingSettings, "settings:get")))
 	api.PUT("/settings/text-messaging", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.UpdateTextMessagingSettings, "settings:manage")))
 	api.POST("/settings/text-messaging/test", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.TestTextMessagingSettings, "settings:manage")))
+	api.POST("/webhooks/email-replies", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.InboundEmailReplyWebhook, "webhooks:post_bounce")))
 	api.POST("/admin/reload", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ReloadApp, "settings:manage")))
 	api.GET("/logs", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetLogs, "settings:get")))
 	api.GET("/about", wrapEcho(a, tpl, cfg, urlCfg, nil, a.GetAboutInfo))
@@ -83,6 +84,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.GET("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.QuerySubscribers, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriber, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}/activity", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberActivity, "subscribers:get_all", "subscribers:get")))
+	api.GET("/subscribers/{id}/timeline", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberTimeline, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}/export", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.ExportSubscriberData, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberBounces, "bounces:get")))
 	api.DELETE("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteSubscriberBounces, "bounces:manage")))
@@ -221,6 +223,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 		public.POST("/webhooks/service/{service}", wrapEcho(a, tpl, cfg, urlCfg, []string{"service"}, a.BounceWebhook))
 	}
 	public.POST("/webhooks/quo/{token}", wrapEcho(a, tpl, cfg, urlCfg, []string{"token"}, a.QuoMessageWebhook))
+	public.POST("/webhooks/email-replies", wrapEcho(a, tpl, cfg, urlCfg, nil, a.InboundEmailReplyWebhookPublic))
 
 	public.GET("/", wrapEcho(a, tpl, cfg, urlCfg, nil, func(c echo.Context) error {
 		return c.Render(http.StatusOK, "home", publicTpl{Title: "listpocket"})

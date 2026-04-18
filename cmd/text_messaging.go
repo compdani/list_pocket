@@ -144,13 +144,15 @@ func (a *App) TestTextMessagingSettings(c echo.Context) error {
 
 // quoWebhookMessagePayload is data.object for message webhooks. Quo v3 uses "body"; v4 docs use "text".
 type quoWebhookMessagePayload struct {
-	ID        string          `json:"id"`
-	Direction string          `json:"direction"`
-	Text      string          `json:"text"`
-	Body      string          `json:"body"`
-	Status    string          `json:"status"`
-	From      string          `json:"from"`
-	To        json.RawMessage `json:"to"`
+	ID              string          `json:"id"`
+	Direction       string          `json:"direction"`
+	Text            string          `json:"text"`
+	Body            string          `json:"body"`
+	Status          string          `json:"status"`
+	From            string          `json:"from"`
+	CreatedAt       string          `json:"createdAt"`
+	CreatedAtLegacy string          `json:"created_at"`
+	To              json.RawMessage `json:"to"`
 }
 
 func (m quoWebhookMessagePayload) mergedText() string {
@@ -158,6 +160,22 @@ func (m quoWebhookMessagePayload) mergedText() string {
 		return s
 	}
 	return strings.TrimSpace(m.Text)
+}
+
+func (m quoWebhookMessagePayload) receivedAt() time.Time {
+	for _, raw := range []string{m.CreatedAt, m.CreatedAtLegacy} {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			return ts.UTC()
+		}
+		if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+			return ts.UTC()
+		}
+	}
+	return time.Now().UTC()
 }
 
 type quoWebhookEventData struct {
@@ -246,7 +264,27 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 		a.log.Printf("quo webhook: message.received with empty from; id=%q status=%q text=%q", obj.ID, obj.Status, quoTrimForLog(textBody))
 		return c.NoContent(http.StatusOK)
 	}
-	if !quoIsStopKeyword(textBody) {
+
+	isStop := quoIsStopKeyword(textBody)
+	rawPayload := models.JSON{}
+	if err := json.Unmarshal(body, &rawPayload); err != nil {
+		a.log.Printf("quo webhook: raw payload decode warning: %v", err)
+	}
+	if _, err := a.core.CreateInboundSMSEvent(c.Request().Context(), &models.InboundSMSEvent{
+		PhoneNumber:   from,
+		ProviderID:    models.CampaignMessengerQuo,
+		ProviderMsgID: strings.TrimSpace(obj.ID),
+		FromNumber:    from,
+		MessageBody:   textBody,
+		ReceivedAt:    obj.receivedAt(),
+		IsStopKeyword: isStop,
+		MatchScore:    "unmatched",
+		RawPayload:    rawPayload,
+	}); err != nil {
+		a.log.Printf("quo webhook: inbound SMS persistence failed from=%q id=%q err=%v", from, obj.ID, err)
+	}
+
+	if !isStop {
 		// Log every inbound so operators can audit why STOPs sometimes don't opt
 		// people out (e.g. the reply was "stop texting me please" but our keyword
 		// matcher didn't recognize it for some reason).
