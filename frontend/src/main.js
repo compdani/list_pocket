@@ -356,7 +356,7 @@ async function initConfig(rootProxy) {
   }
 
   const to = router.currentRoute.value;
-  const title = to.meta.title && i18n.global.te(to.meta.title) ? `${i18n.global.tc(to.meta.title, 0)} /` : '';
+  const title = resolveRouteTitle(to);
   document.title = `${title} listpocket`;
 
   proxy.isLoaded = true;
@@ -370,7 +370,28 @@ function getAdminBasePath() {
   return baseURL.replace(/\/$/, '');
 }
 
+function isAuthPath(pathname = window.location.pathname) {
+  const adminBase = getAdminBasePath();
+  const normalizedPath = pathname || '/';
+
+  if (!adminBase) {
+    return normalizedPath === '/login'
+      || normalizedPath === '/login/twofa'
+      || normalizedPath === '/forgot'
+      || normalizedPath === '/reset';
+  }
+
+  return normalizedPath === `${adminBase}/login`
+    || normalizedPath === `${adminBase}/login/twofa`
+    || normalizedPath === `${adminBase}/forgot`
+    || normalizedPath === `${adminBase}/reset`;
+}
+
 function getLoginRedirectTarget() {
+  if (isAuthPath()) {
+    return '/';
+  }
+
   const adminBase = getAdminBasePath();
   const { pathname = '/', search = '', hash = '' } = window.location;
   let nextPath = pathname;
@@ -382,17 +403,37 @@ function getLoginRedirectTarget() {
   }
 
   const next = `${nextPath || '/'}${search}${hash}`;
-  return next === '/' ? '/admin' : next;
+  return next || '/';
 }
 
 function redirectToLogin() {
+  if (isAuthPath()) {
+    return;
+  }
+
   const adminBase = getAdminBasePath();
   const next = getLoginRedirectTarget();
   window.location.href = `${adminBase}/login?next=${encodeURIComponent(next)}`;
 }
 
+function resolveRouteTitle(to) {
+  if (!to || !to.meta || !to.meta.title) {
+    return '';
+  }
+
+  if (typeof to.meta.title === 'string' && i18n.global.te(to.meta.title)) {
+    return `${i18n.global.tc(to.meta.title, 0)} /`;
+  }
+
+  if (typeof to.meta.title === 'string') {
+    return `${to.meta.title} /`;
+  }
+
+  return '';
+}
+
 router.afterEach((to) => {
-  const title = to.meta.title && i18n.global.te(to.meta.title) ? `${i18n.global.tc(to.meta.title, 0)} /` : '';
+  const title = resolveRouteTitle(to);
   document.title = `${title} listpocket`;
 });
 
@@ -449,6 +490,10 @@ app.config.globalProperties.$docsUrl = docsUrl;
 const rootProxy = app.mount('#app');
 initConfig(rootProxy).catch((err) => {
   if (err && (err.status === 401 || (err.response && err.response.status === 401))) {
+    if (isAuthPath() || (router.currentRoute.value.meta && router.currentRoute.value.meta.authPage)) {
+      rootProxy.isLoaded = true;
+      return;
+    }
     redirectToLogin();
     return;
   }

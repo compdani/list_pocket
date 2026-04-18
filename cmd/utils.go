@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -70,27 +69,6 @@ func uniqueNonEmptyStrings(in []string) []string {
 	return out
 }
 
-// parseStringIDs takes a slice of numeric string IDs and
-// parses each number into an int64 and returns a slice of the
-// resultant values.
-func parseStringIDs(s []string) ([]int, error) {
-	vals := make([]int, 0, len(s))
-	for _, v := range s {
-		i, err := strconv.Atoi(v)
-		if err != nil {
-			return nil, err
-		}
-
-		if i < 1 {
-			return nil, fmt.Errorf("%d is not a valid ID", i)
-		}
-
-		vals = append(vals, i)
-	}
-
-	return vals, nil
-}
-
 // generateRandomString generates a cryptographically random, alphanumeric string of length n.
 func generateRandomString(n int) (string, error) {
 	const dictionary = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -109,26 +87,6 @@ func generateRandomString(n int) (string, error) {
 // strHasLen checks if the given string has a length within min-max.
 func strHasLen(str string, min, max int) bool {
 	return len(str) >= min && len(str) <= max
-}
-
-// getQueryInts parses the list of given query param values into ints.
-func getQueryInts(param string, qp url.Values) ([]int, error) {
-	var out []int
-	if vals, ok := qp[param]; ok {
-		for _, v := range vals {
-			if v == "" {
-				continue
-			}
-
-			listID, err := strconv.Atoi(v)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, listID)
-		}
-	}
-
-	return out, nil
 }
 
 // getQueryStrings returns the non-empty values of the given query param.

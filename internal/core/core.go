@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/i18n"
@@ -100,10 +101,6 @@ func (c *Core) RefreshMatView(name string, concurrent bool) error {
 	return nil
 }
 
-func (c *Core) refreshCache(name string, concurrent bool) error {
-	return nil
-}
-
 func pqErrMsg(err error) string {
 	if err == nil {
 		return ""
@@ -121,13 +118,7 @@ func makeSearchString(searchStr string) string {
 
 // strSliceContains checks if a string is present in the string slice.
 func strSliceContains(str string, sl []string) bool {
-	for _, s := range sl {
-		if s == str {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(sl, str)
 }
 
 // normalizeTags takes a list of string tags and normalizes them by

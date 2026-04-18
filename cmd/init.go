@@ -335,14 +335,6 @@ func initDB() *pbdb.DB {
 	return db
 }
 
-func isSQLiteDB(db *pbdb.DB) bool {
-	if db == nil || db.DB == nil {
-		return false
-	}
-
-	return strings.Contains(strings.ToLower(db.DriverName()), "sqlite")
-}
-
 func sqliteTableHasColumn(raw *sql.DB, table, column string) bool {
 	if raw == nil {
 		return false

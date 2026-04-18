@@ -1,6 +1,7 @@
 {{ define "subscription-form" }}
 {{ template "header" . }}
-<section>
+<section class="subscription-form-card">
+    <span class="eyebrow">Subscribe</span>
     <h2>{{ L.T "public.subTitle" }}</h2>
 
     <form method="post" action="" class="form">
@@ -25,7 +26,7 @@
             </p>
 
             <ul class="lists">
-                <h2>{{ L.T "globals.terms.lists" }}</h2>
+                <h3>{{ L.T "globals.terms.lists" }}</h3>
                 {{ range $i, $l := .Data.Lists }}
                     <li>
                         <input checked="true" id="l-{{ $l.UUID}}" type="checkbox" name="l" value="{{ $l.UUID }}" >
@@ -51,14 +52,14 @@
             <p>
                 <button type="submit" class="button">{{ L.T "public.sub" }}</button>
 
-                {{ if .EnablePublicArchive }}
-                    <p class="right">
-                        <a href="{{ .RootURL }}/archive">{{ L.T "public.archiveTitle" }}</a>
-                    </p>
-                {{ end }}
             </p>
         </div>
     </form>
+    {{ if .EnablePublicArchive }}
+        <div class="archive-actions">
+            <a href="{{ .RootURL }}/archive">{{ L.T "public.archiveTitle" }}</a>
+        </div>
+    {{ end }}
 </section>
 
 <script>

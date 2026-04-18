@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"html/template"
 	"net/http"
 	"path"
@@ -40,20 +39,24 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	auth.RegisterExchangeRoutes(se)
 
 	admin := se.Group("")
-	admin.GET(path.Join(uriAdmin, "/login"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginPage))
-	admin.POST(path.Join(uriAdmin, "/login"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginPage))
-	admin.GET(path.Join(uriAdmin, "/login/twofa"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.TwofaPage))
-	admin.POST(path.Join(uriAdmin, "/login/twofa"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.TwofaPage))
-	admin.GET(path.Join(uriAdmin, "/forgot"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ForgotPage))
-	admin.POST(path.Join(uriAdmin, "/forgot"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ForgotPage))
-	admin.GET(path.Join(uriAdmin, "/reset"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ResetPage))
-	admin.POST(path.Join(uriAdmin, "/reset"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.ResetPage))
-	admin.GET(path.Join(uriAdmin, ""), wrapEcho(a, tpl, cfg, urlCfg, nil, a.AdminPage))
+	admin.GET(path.Join(uriAdmin, "/setup"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginSetupPage))
+	admin.POST(path.Join(uriAdmin, "/setup"), wrapEcho(a, tpl, cfg, urlCfg, nil, a.LoginSetupPage))
 	admin.GET(path.Join(uriAdmin, "/custom.css"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_css")))
 	admin.GET(path.Join(uriAdmin, "/custom.js"), wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
 	admin.GET("/custom.css", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_css")))
 	admin.GET("/custom.js", wrapEcho(a, tpl, cfg, urlCfg, nil, serveCustomAppearance("admin.custom_js")))
-	admin.GET(path.Join(uriAdmin, "/{path...}"), wrapEcho(a, tpl, cfg, urlCfg, []string{"path"}, a.AdminPage))
+
+	// Admin SPA routing: static assets are served separately via apis.Static in init.go.
+	// All other GET requests under /admin fall back to the Vue SPA index unless
+	// initial setup is still required, in which case they redirect to /admin/setup.
+	se.GET(path.Join(uriAdmin, ""), serveAdminSPAFallback(a))
+	se.GET(path.Join(uriAdmin, "/{path...}"), serveAdminSPAFallback(a))
+
+	authAPI := se.Group("/mailapi/auth")
+	authAPI.POST("/login", wrapEcho(a, tpl, cfg, urlCfg, nil, a.AuthLogin))
+	authAPI.POST("/twofa", wrapEcho(a, tpl, cfg, urlCfg, nil, a.AuthVerifyTwoFA))
+	authAPI.POST("/forgot", wrapEcho(a, tpl, cfg, urlCfg, nil, a.AuthForgotPassword))
+	authAPI.POST("/reset", wrapEcho(a, tpl, cfg, urlCfg, nil, a.AuthResetPassword))
 
 	pm := a.auth.Perm
 	api := se.Group("/mailapi").Bind(apis.RequireAuth())
@@ -324,24 +327,14 @@ func wrapEcho(a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig, pa
 	}
 }
 
-func trimLogPrefix(v string) string {
-	v = regexp.MustCompile(`\s+`).ReplaceAllString(v, " ")
-	if len(v) > 32 {
-		return v[:32]
-	}
-	return v
-}
-
 // AdminPage is the root handler that renders the Javascript admin frontend.
-func (a *App) AdminPage(c echo.Context) error {
-	b, err := a.fs.Read(path.Join(uriAdmin, "/index.html"))
-	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+func serveAdminSPAFallback(a *App) func(e *pbcore.RequestEvent) error {
+	return func(e *pbcore.RequestEvent) error {
+		if a.isSetupRequired() {
+			return e.Redirect(http.StatusFound, path.Join(uriAdmin, "/setup"))
+		}
+		return e.FileFS(stuffbinSubFS{base: a.fs, root: "/admin"}, "index.html")
 	}
-
-	b = bytes.ReplaceAll(b, []byte("asset_version"), []byte(a.cfg.AssetVersion))
-
-	return c.HTMLBlob(http.StatusOK, b)
 }
 
 // HealthCheck is a healthcheck endpoint that returns a 200 response.

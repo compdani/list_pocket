@@ -1,150 +1,157 @@
 <template>
   <v-app>
-    <v-navigation-drawer
-      v-if="$root.isLoaded"
-      v-model="drawer"
-      :rail="!isMobile && rail"
-      :rail-width="72"
-      :expand-on-hover="!isMobile && rail"
-      :temporary="isMobile"
-      :permanent="!isMobile"
-      width="280"
-      color="surface"
-      border="end"
-      class="app-drawer"
-    >
-      <div class="app-drawer-brand">
-        <router-link :to="{ name: 'dashboard' }" class="app-brand-link">
-          <img class="full" src="@/assets/logo.svg" alt="" />
-          <img class="favicon" src="@/assets/favicon.png" alt="" />
-        </router-link>
-      </div>
-
-      <navigation
-        :active-item="activeItem"
-        :opened-groups="openedGroups"
+    <template v-if="isAuthPage">
+      <v-main class="app-main auth-main">
+        <router-view :key="$route.fullPath" />
+      </v-main>
+    </template>
+    <template v-else>
+      <v-navigation-drawer
+        v-if="$root.isLoaded"
+        v-model="drawer"
         :rail="!isMobile && rail"
-        @updateOpenedGroups="updateOpenedGroups"
-        @navigate="onNavigate"
-      />
-    </v-navigation-drawer>
-
-    <v-app-bar v-if="$root.isLoaded" flat color="surface" border="b" class="app-bar">
-      <v-app-bar-nav-icon v-if="isMobile" @click="drawer = !drawer" />
-      <v-btn v-else icon="mdi-dock-left" variant="text" @click="rail = !rail" />
-
-      <v-toolbar-title class="app-title">
-        <span>{{ pageTitle }}</span>
-      </v-toolbar-title>
-
-      <v-spacer />
-
-      <v-btn
-        icon="mdi-refresh"
-        variant="text"
-        @click="emitPageRefresh"
-      />
-
-      <div class="app-user-menu">
-        <v-menu
-          v-model="accountMenuOpen"
-          location="bottom end"
-        >
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              variant="text"
-              class="app-user-trigger"
-            >
-              <v-avatar size="32" color="primary" class="mr-2">
-                <img v-if="profile.avatar" :src="profile.avatar" alt="" />
-                <span v-else>{{ userInitial }}</span>
-              </v-avatar>
-              <span class="app-user-name">{{ profile.username }}</span>
-              <v-icon icon="mdi-chevron-down" size="18" class="ml-1" />
-            </v-btn>
-          </template>
-
-          <v-list width="240">
-            <v-list-item :title="profile.username" :subtitle="profile.name" />
-            <v-divider />
-            <v-list-item prepend-icon="mdi-account-outline" @click="goToUserProfile">
-              <v-list-item-title>{{ $t('users.profile') }}</v-list-item-title>
-            </v-list-item>
-            <v-list-item prepend-icon="mdi-logout" @click="doLogout">
-              <v-list-item-title>{{ $t('users.logout') }}</v-list-item-title>
-            </v-list-item>
-          </v-list>
-        </v-menu>
-      </div>
-    </v-app-bar>
-
-    <v-main class="app-main">
-      <div v-if="$root.isLoaded" class="app-shell">
-        <div class="global-notices" v-if="isGlobalNotices">
-          <v-alert
-            v-if="serverConfig.needs_restart"
-            type="error"
-            variant="tonal"
-            class="mb-4"
-          >
-            <div class="d-flex align-center justify-space-between ga-4 flex-wrap">
-              <span>{{ $t('settings.needsRestart') }}</span>
-              <v-btn color="error" variant="flat" size="small" @click="$utils.confirm($t('settings.confirmRestart'), reloadApp)">
-                {{ $t('settings.restart') }}
-              </v-btn>
-            </div>
-          </v-alert>
-
-          <template v-if="serverConfig.update">
-            <v-alert
-              v-if="serverConfig.update.update.is_new"
-              type="success"
-              variant="tonal"
-              class="mb-4"
-            >
-              {{ $t('settings.updateAvailable', {
-                version: `${serverConfig.update.update.release_version} (${$utils.getDate(serverConfig.update.update.release_date).format('DD MMM YY')})`,
-              }) }}
-              <a :href="serverConfig.update.update.url" target="_blank" rel="noopener noreferer">View</a>
-            </v-alert>
-
-            <v-alert
-              v-for="m in serverConfig.update.messages"
-              :key="m.title"
-              :type="m.priority === 'high' ? 'error' : 'info'"
-              variant="tonal"
-              class="mb-4"
-            >
-              <div class="font-weight-bold" v-if="m.title">{{ m.title }}</div>
-              <p v-if="m.description" class="mb-0">{{ m.description }}</p>
-              <a v-if="m.url" :href="m.url" target="_blank" rel="noopener noreferer">View</a>
-            </v-alert>
-          </template>
-
-          <v-alert
-            v-if="serverConfig.has_legacy_user"
-            type="error"
-            variant="tonal"
-            class="mb-4"
-          >
-            Remove the <code>admin_username</code> and <code>admin_password</code> fields from the TOML configuration file or environment variables.
-            Visit <router-link :to="{ name: 'users' }">Admin -> Settings -> Users</router-link>.
-            <a :href="$docsUrl('upgrade/')" target="_blank" rel="noopener noreferrer">Learn more.</a>
-          </v-alert>
+        :rail-width="72"
+        :expand-on-hover="!isMobile && rail"
+        :temporary="isMobile"
+        :permanent="!isMobile"
+        width="280"
+        color="surface"
+        border="end"
+        class="app-drawer"
+      >
+        <div class="app-drawer-brand">
+          <router-link :to="{ name: 'dashboard' }" class="app-brand-link">
+            <img class="full" src="@/assets/logo.svg" alt="" />
+            <img class="favicon" src="@/assets/favicon.png" alt="" />
+          </router-link>
         </div>
 
-        <router-view :key="$route.fullPath" />
-      </div>
+        <navigation
+          :active-item="activeItem"
+          :opened-groups="openedGroups"
+          :rail="!isMobile && rail"
+          @updateOpenedGroups="updateOpenedGroups"
+          @navigate="onNavigate"
+        />
+      </v-navigation-drawer>
 
-      <v-overlay
-        :model-value="!$root.isLoaded"
-        class="align-center justify-center"
-        persistent
-      >
-        <v-progress-circular indeterminate size="56" width="5" color="primary" />
-      </v-overlay>
-    </v-main>
+      <v-app-bar v-if="$root.isLoaded" flat color="surface" border="b" class="app-bar">
+        <v-app-bar-nav-icon v-if="isMobile" @click="drawer = !drawer" />
+        <v-btn v-else icon="mdi-dock-left" variant="text" @click="rail = !rail" />
+
+        <v-toolbar-title class="app-title">
+          <span>{{ pageTitle }}</span>
+        </v-toolbar-title>
+
+        <v-spacer />
+
+        <v-btn
+          icon="mdi-refresh"
+          variant="text"
+          @click="emitPageRefresh"
+        />
+
+        <div class="app-user-menu">
+          <v-menu
+            v-model="accountMenuOpen"
+            location="bottom end"
+          >
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                variant="text"
+                class="app-user-trigger"
+              >
+                <v-avatar size="32" color="primary" class="mr-2">
+                  <img v-if="profile.avatar" :src="profile.avatar" alt="" />
+                  <span v-else>{{ userInitial }}</span>
+                </v-avatar>
+                <span class="app-user-name">{{ profile.username }}</span>
+                <v-icon icon="mdi-chevron-down" size="18" class="ml-1" />
+              </v-btn>
+            </template>
+
+            <v-list width="240">
+              <v-list-item :title="profile.username" :subtitle="profile.name" />
+              <v-divider />
+              <v-list-item prepend-icon="mdi-account-outline" @click="goToUserProfile">
+                <v-list-item-title>{{ $t('users.profile') }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item prepend-icon="mdi-logout" @click="doLogout">
+                <v-list-item-title>{{ $t('users.logout') }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-menu>
+        </div>
+      </v-app-bar>
+
+      <v-main class="app-main">
+        <div v-if="$root.isLoaded" class="app-shell">
+          <div class="global-notices" v-if="isGlobalNotices">
+            <v-alert
+              v-if="serverConfig.needs_restart"
+              type="error"
+              variant="tonal"
+              class="mb-4"
+            >
+              <div class="d-flex align-center justify-space-between ga-4 flex-wrap">
+                <span>{{ $t('settings.needsRestart') }}</span>
+                <v-btn color="error" variant="flat" size="small" @click="$utils.confirm($t('settings.confirmRestart'), reloadApp)">
+                  {{ $t('settings.restart') }}
+                </v-btn>
+              </div>
+            </v-alert>
+
+            <template v-if="serverConfig.update">
+              <v-alert
+                v-if="serverConfig.update.update.is_new"
+                type="success"
+                variant="tonal"
+                class="mb-4"
+              >
+                {{ $t('settings.updateAvailable', {
+                  version: `${serverConfig.update.update.release_version} (${$utils.getDate(serverConfig.update.update.release_date).format('DD MMM YY')})`,
+                }) }}
+                <a :href="serverConfig.update.update.url" target="_blank" rel="noopener noreferer">View</a>
+              </v-alert>
+
+              <v-alert
+                v-for="m in serverConfig.update.messages"
+                :key="m.title"
+                :type="m.priority === 'high' ? 'error' : 'info'"
+                variant="tonal"
+                class="mb-4"
+              >
+                <div class="font-weight-bold" v-if="m.title">{{ m.title }}</div>
+                <p v-if="m.description" class="mb-0">{{ m.description }}</p>
+                <a v-if="m.url" :href="m.url" target="_blank" rel="noopener noreferer">View</a>
+              </v-alert>
+            </template>
+
+            <v-alert
+              v-if="serverConfig.has_legacy_user"
+              type="error"
+              variant="tonal"
+              class="mb-4"
+            >
+              Remove the <code>admin_username</code> and <code>admin_password</code> fields from the TOML configuration file or environment variables.
+              Visit <router-link :to="{ name: 'users' }">Admin -> Settings -> Users</router-link>.
+              <a :href="$docsUrl('upgrade/')" target="_blank" rel="noopener noreferrer">Learn more.</a>
+            </v-alert>
+          </div>
+
+          <router-view :key="$route.fullPath" />
+        </div>
+
+        <v-overlay
+          :model-value="!$root.isLoaded"
+          class="align-center justify-center"
+          persistent
+        >
+          <v-progress-circular indeterminate size="56" width="5" color="primary" />
+        </v-overlay>
+      </v-main>
+    </template>
 
     <v-snackbar-queue
       v-model="toastQueue"
@@ -198,7 +205,14 @@ export default {
       return this.windowWidth <= 960;
     },
 
+    isAuthPage() {
+      return Boolean(this.$route.meta && this.$route.meta.authPage);
+    },
+
     pageTitle() {
+      if (this.isAuthPage) {
+        return typeof this.$route.meta.title === 'string' ? this.$route.meta.title : 'Admin';
+      }
       if (this.$route.name === 'dashboard') {
         return 'Overview';
       }

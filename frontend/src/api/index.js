@@ -190,6 +190,10 @@ const http = {
 export const getAuthToken = () => pb.authStore.token;
 export const clearAuthToken = () => pb.authStore.clear();
 export const getAuthRecord = () => pb.authStore.record;
+export const applyClientAuth = ({ token, record }) => {
+  pb.authStore.save(token, record);
+  return syncAuthProfile(record && record.profile ? record.profile : null);
+};
 
 // sendRawRequest dispatches an arbitrary HTTP request to the backend without
 // running the usual response transform / store hooks. It's used by the super
@@ -288,17 +292,56 @@ export const getStoredUserProfile = () => syncAuthProfile(pb.authStore.record &&
   ? pb.authStore.record.profile
   : null);
 
-// Authenticate with PocketBase using username/password
-export const login = async (username, password) => {
-  try {
-    // Use PocketBase SDK's native authentication
-    const authData = await pb.collection('users').authWithPassword(username, password);
-    return authData;
-  } catch (err) {
-    pb.authStore.clear();
-    throw err;
+export const login = async ({ username, password, next }) => sendControlPlane(
+  'POST',
+  '/mailapi/auth/login',
+  { username, password, next },
+  { disableToast: true },
+).then((resp) => {
+  const data = resp || {};
+  if (data.status === 'authenticated') {
+    applyClientAuth(data);
   }
-};
+  return data;
+});
+
+export const verifyTwoFA = async ({ token, totpCode, next }) => sendControlPlane(
+  'POST',
+  '/mailapi/auth/twofa',
+  { token, totp_code: totpCode, next },
+  { disableToast: true },
+).then((resp) => {
+  const data = resp || {};
+  if (data.status === 'authenticated') {
+    applyClientAuth(data);
+  }
+  return data;
+});
+
+export const requestPasswordReset = async (email) => sendControlPlane(
+  'POST',
+  '/mailapi/auth/forgot',
+  { email },
+  { disableToast: true },
+);
+
+export const resetPassword = async ({ token, email, password, password2 }) => sendControlPlane(
+  'POST',
+  '/mailapi/auth/reset',
+  {
+    token,
+    email,
+    password,
+    password2,
+  },
+  { disableToast: true },
+).then((resp) => {
+  const data = resp || {};
+  if (data.status === 'authenticated') {
+    applyClientAuth(data);
+  }
+  return data;
+});
 
 // Check if user is authenticated
 export const isAuthenticated = () => pb.authStore.isValid;
