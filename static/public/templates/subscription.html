@@ -35,10 +35,6 @@
                     <span class="eyebrow">Preferences</span>
                     <h2>{{ L.T "public.managePrefs" }}</h2>
                 </div>
-                <p class="full">
-                    <label for="phone">Phone</label>
-                    <input id="phone" type="tel" name="phone" value="{{ .Data.Subscriber.Phone }}" maxlength="64" />
-                </p>
                 <p>
                     <label for="first_name">First name</label>
                     <input id="first_name" type="text" name="first_name" value="{{ .Data.Subscriber.FirstName }}" maxlength="256" required />
@@ -47,9 +43,28 @@
                     <label for="last_name">Last name</label>
                     <input id="last_name" type="text" name="last_name" value="{{ .Data.Subscriber.LastName }}" maxlength="256" required />
                 </p>
+                <p class="full phone-row">
+                    <label for="phone">Phone</label>
+                    <input id="phone" type="hidden" name="phone" value="{{ .Data.Subscriber.Phone }}" maxlength="64" />
+                    <div class="phone-field">
+                        <select class="phone-prefix" aria-label="Country code" disabled>
+                            <option value="+1" selected>+1</option>
+                        </select>
+                        <input
+                            id="phone_display"
+                            class="phone-display"
+                            data-phone-display
+                            type="text"
+                            inputmode="numeric"
+                            autocomplete="tel-national"
+                            placeholder="(555) 555-5555"
+                            maxlength="14"
+                        />
+                    </div>
+                </p>
 
                 {{ if .Data.Subscriptions }}
-                    <div class="full">
+                    <div class="full subscriptions-heading">
                         <h3>{{ L.T "public.managePrefsUnsub" }}</h3>
                     </div>
                     <ul class="lists full">
@@ -71,7 +86,7 @@
                     </p>
                 {{ end }}
 
-                <p class="full">
+                <p class="full actions-row">
                     <button type="submit" class="button" id="btn-unsub">{{ L.T "globals.buttons.save" }}</button>
                 </p>
             </div>
@@ -105,34 +120,61 @@
         </p>
     </section>
 </form>
+{{ end }}
 <script>
-    function normalizePhone(value) {
-        value = (value || '').trim();
-        if (!value) {
-            return '';
+    function getUSDigits(value) {
+        var digits = (value || '').replace(/\D/g, '');
+        if (digits.length === 11 && digits.charAt(0) === '1') {
+            digits = digits.slice(1);
         }
+        return digits.slice(0, 10);
+    }
 
-        var hasPlus = value.charAt(0) === '+';
-        var digits = value.replace(/\D/g, '');
+    function formatUSPhone(value) {
+        var digits = getUSDigits(value);
         if (!digits) {
             return '';
         }
 
-        if (hasPlus) {
+        if (digits.length < 4) {
+            return '(' + digits;
+        }
+
+        if (digits.length < 7) {
+            return '(' + digits.slice(0, 3) + ') ' + digits.slice(3);
+        }
+
+        return '(' + digits.slice(0, 3) + ') ' + digits.slice(3, 6) + '-' + digits.slice(6);
+    }
+
+    function normalizeUSPhone(value) {
+        var digits = getUSDigits(value);
+        if (!digits) {
+            return '';
+        }
+        if (digits.length !== 10) {
             return '+' + digits;
         }
-        if (digits.length === 10) {
-            return '+1' + digits;
-        }
-        if (digits.length === 11 && digits.charAt(0) === '1') {
-            return '+' + digits;
-        }
-        return '+' + digits;
+        return '+1' + digits;
+    }
+
+    function syncFromDisplay(phone, phoneDisplay) {
+        phoneDisplay.value = formatUSPhone(phoneDisplay.value);
+        phone.value = normalizeUSPhone(phoneDisplay.value);
+    }
+
+    function syncFromStored(phone, phoneDisplay) {
+        phoneDisplay.value = formatUSPhone(phone.value);
+        phone.value = normalizeUSPhone(phoneDisplay.value);
     }
 
     function handleData() {
-        var a = document.querySelector('input[name="data-action"]:checked').value,
-            f = document.querySelector("#data-form");
+        var selected = document.querySelector('input[name="data-action"]:checked');
+        var f = document.querySelector("#data-form");
+        if (!selected || !f) {
+            return false;
+        }
+        var a = selected.value;
         if (a == "export") {
             f.action = "/subscription/export/{{ .Data.SubUUID }}";
             return true;
@@ -144,12 +186,20 @@
     }
 
     function unsubAll(e) {
+        var phoneDisplay = document.querySelector('[data-phone-display]');
+
         if (e.target.checked) {
             document.querySelector("input[name=phone]").disabled = "disabled";
+            if (phoneDisplay) {
+                phoneDisplay.disabled = "disabled";
+            }
             document.querySelector("input[name=first_name]").disabled = "disabled";
             document.querySelector("input[name=last_name]").disabled = "disabled";
         } else {
             document.querySelector("input[name=phone]").removeAttribute("disabled");
+            if (phoneDisplay) {
+                phoneDisplay.removeAttribute("disabled");
+            }
             document.querySelector("input[name=first_name]").removeAttribute("disabled");
             document.querySelector("input[name=last_name]").removeAttribute("disabled");
         }
@@ -166,20 +216,26 @@
     (function() {
         var form = document.querySelector('.manage-form');
         var phone = document.querySelector('input[name="phone"]');
-        if (!form || !phone) {
+        var phoneDisplay = document.querySelector('[data-phone-display]');
+        if (!form || !phone || !phoneDisplay) {
             return;
         }
 
-        phone.addEventListener('blur', function() {
-            phone.value = normalizePhone(phone.value);
+        syncFromStored(phone, phoneDisplay);
+
+        phoneDisplay.addEventListener('input', function() {
+            syncFromDisplay(phone, phoneDisplay);
+        });
+
+        phoneDisplay.addEventListener('blur', function() {
+            syncFromDisplay(phone, phoneDisplay);
         });
 
         form.addEventListener('submit', function() {
-            phone.value = normalizePhone(phone.value);
+            syncFromDisplay(phone, phoneDisplay);
         });
     })();
 </script>
-{{ end }}
 
 {{ template "footer" .}}
 {{ end }}
