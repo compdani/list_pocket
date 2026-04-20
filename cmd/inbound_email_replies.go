@@ -99,8 +99,10 @@ func (a *App) InboundEmailReplyWebhookPublic(c echo.Context) error {
 	expected := strings.TrimSpace(os.Getenv(inboundEmailReplyWebhookSecretEnv))
 	provided := strings.TrimSpace(c.Request().Header.Get("X-Listpocket-Webhook-Secret"))
 	if expected == "" || provided == "" || expected != provided {
+		a.log.Printf("inbound email webhook public: unauthorized remote=%q ua=%q expected_set=%t provided_set=%t", c.RealIP(), c.Request().UserAgent(), expected != "", provided != "")
 		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
+	a.log.Printf("inbound email webhook public: authorized remote=%q ua=%q", c.RealIP(), c.Request().UserAgent())
 	id, err := a.processInboundEmailReplyWebhook(c)
 	if err != nil {
 		return err
@@ -111,11 +113,14 @@ func (a *App) InboundEmailReplyWebhookPublic(c echo.Context) error {
 func (a *App) processInboundEmailReplyWebhook(c echo.Context) (string, error) {
 	body, err := io.ReadAll(io.LimitReader(c.Request().Body, 2<<20))
 	if err != nil {
+		a.log.Printf("inbound email webhook: read body failed remote=%q ua=%q err=%v", c.RealIP(), c.Request().UserAgent(), err)
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid body")
 	}
 	if len(body) >= 2<<20 {
+		a.log.Printf("inbound email webhook: body too large remote=%q ua=%q size=%d", c.RealIP(), c.Request().UserAgent(), len(body))
 		return "", echo.NewHTTPError(http.StatusRequestEntityTooLarge, "body too large")
 	}
+	a.logInboundEmailWebhookRequest(c, body)
 
 	if snsType, ok := parseSNSControlType(body); ok {
 		a.log.Printf("inbound email webhook: SNS control message type=%q acknowledged", snsType)
@@ -124,11 +129,13 @@ func (a *App) processInboundEmailReplyWebhook(c echo.Context) (string, error) {
 
 	rawPayload := models.JSON{}
 	if err := json.Unmarshal(body, &rawPayload); err != nil {
+		a.log.Printf("inbound email webhook: invalid json remote=%q ua=%q err=%v body=%s", c.RealIP(), c.Request().UserAgent(), err, string(body))
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid json")
 	}
 
 	var req inboundEmailReplyWebhookRequest
 	if err := json.Unmarshal(body, &req); err != nil {
+		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body=%s", c.RealIP(), c.Request().UserAgent(), err, string(body))
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
 
@@ -201,8 +208,29 @@ func (a *App) processInboundEmailReplyWebhook(c echo.Context) (string, error) {
 		a.log.Printf("inbound email webhook: persistence failed provider=%q message_id=%q from=%q err=%v", provider, messageID, fromAddress, err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to persist inbound email reply")
 	}
+	a.log.Printf("inbound email webhook: persisted id=%q provider=%q message_id=%q from=%q", id, provider, messageID, fromAddress)
 
 	return id, nil
+}
+
+func (a *App) logInboundEmailWebhookRequest(c echo.Context, body []byte) {
+	headers := c.Request().Header
+	snsType := strings.TrimSpace(headers.Get("x-amz-sns-message-type"))
+	snsTopic := strings.TrimSpace(headers.Get("x-amz-sns-topic-arn"))
+	snsMsgID := strings.TrimSpace(headers.Get("x-amz-sns-message-id"))
+	a.log.Printf(
+		"inbound email webhook: received method=%q path=%q remote=%q ua=%q content_type=%q size=%d sns_type=%q sns_topic=%q sns_message_id=%q body=%s",
+		c.Request().Method,
+		c.Path(),
+		c.RealIP(),
+		c.Request().UserAgent(),
+		c.Request().Header.Get(echo.HeaderContentType),
+		len(body),
+		snsType,
+		snsTopic,
+		snsMsgID,
+		string(body),
+	)
 }
 
 func parseInboundEmailReceivedAt(raw string) time.Time {
