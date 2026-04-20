@@ -247,11 +247,11 @@
               <span class="text-caption">(updates when you save)</span>
             </p>
 
-            <v-row v-if="!showChannelPicker">
+            <v-row>
               <v-col cols="12" md="6">
                 <v-select
                   v-model="form.messenger"
-                  :items="availableMessengers"
+                  :items="displayedMessengers"
                   :label="$tc('globals.terms.messenger')"
                   name="messenger"
                   :disabled="!canEdit || isMessengerFieldLocked"
@@ -974,12 +974,20 @@ export default {
       return this.smtpSenders.find((item) => item.messenger === messenger) || null;
     },
 
+    isSmsMessenger(messenger) {
+      const normalized = String(messenger || '').trim();
+      if (!normalized) {
+        return false;
+      }
+      return !this.emailMessengerSet.has(normalized);
+    },
+
     applyDefaultFromEmailForMessenger(force = false) {
       // SMS reuses from_email as an optional sender-phone override. Blank means
       // "use the Quo default", so never auto-fill with an SMTP email address
       // when switching into the SMS channel.
       let nextDefault = '';
-      if (this.form.messenger !== 'quo') {
+      if (!this.isSmsMessenger(this.form.messenger)) {
         const smtpMeta = this.getSMTPMetaForMessenger(this.form.messenger);
         nextDefault = (smtpMeta && smtpMeta.defaultFromEmail) || this.serverConfig.from_email || '';
       }
@@ -1236,7 +1244,7 @@ export default {
     },
 
     syncCampaignChannelFromMessenger() {
-      this.campaignChannel = this.form.messenger === 'quo' ? 'sms' : 'email';
+      this.campaignChannel = this.isSmsMessenger(this.form.messenger) ? 'sms' : 'email';
     },
 
     sendTest() {
@@ -1483,13 +1491,56 @@ export default {
       return messengers.length > 0 ? messengers : ['email'];
     },
 
+    emailMessengerSet() {
+      const set = new Set(['email']);
+      this.smtpSenders.forEach((sender) => {
+        const messenger = String(sender.messenger || '').trim();
+        if (messenger) {
+          set.add(messenger);
+        }
+      });
+      return set;
+    },
+
+    emailMessengerOptions() {
+      return this.availableMessengers.filter((messenger) => this.emailMessengerSet.has(messenger));
+    },
+
+    smsMessengerOptions() {
+      return this.availableMessengers.filter((messenger) => !this.emailMessengerSet.has(messenger));
+    },
+
+    displayedMessengers() {
+      if (!this.showChannelPicker) {
+        return this.availableMessengers;
+      }
+
+      const options = this.campaignChannel === 'sms'
+        ? this.smsMessengerOptions
+        : this.emailMessengerOptions;
+
+      return options.length > 0 ? options : this.availableMessengers;
+    },
+
+    defaultEmailMessenger() {
+      return this.emailMessengerOptions[0] || this.availableMessengers[0] || 'email';
+    },
+
+    defaultSmsMessenger() {
+      return this.smsMessengerOptions[0] || '';
+    },
+
     hasQuoMessenger() {
       return Array.isArray(this.serverConfig?.messengers)
         && this.serverConfig.messengers.includes('quo');
     },
 
+    hasSmsMessengers() {
+      return this.smsMessengerOptions.length > 0;
+    },
+
     smsChannelSelectable() {
-      return this.hasQuoMessenger;
+      return this.hasSmsMessengers;
     },
 
     smsChannelDisabledHint() {
@@ -1497,7 +1548,7 @@ export default {
     },
 
     isSmsChannel() {
-      return this.form.messenger === 'quo';
+      return this.isSmsMessenger(this.form.messenger);
     },
 
     showChannelPicker() {
@@ -1648,13 +1699,13 @@ export default {
       }
       this.applyDefaultFromEmailForMessenger(true);
       if (this.showChannelPicker) {
-        this.campaignChannel = nextMessenger === 'quo' ? 'sms' : 'email';
+        this.campaignChannel = this.isSmsMessenger(nextMessenger) ? 'sms' : 'email';
       }
 
       // Swap the template to one matching the new channel so a stale
       // HTML-email template isn't carried over into an SMS campaign (or
       // vice-versa).
-      const isSms = nextMessenger === 'quo';
+      const isSms = this.isSmsMessenger(nextMessenger);
       const desiredType = isSms ? 'campaign_sms' : 'campaign';
       const templates = Array.isArray(this.templates) ? this.templates : [];
       const current = templates.find((t) => t.id === this.form.content.templateId);
@@ -1677,10 +1728,17 @@ export default {
         return;
       }
       if (val === 'sms') {
-        this.form.messenger = 'quo';
+        if (!this.isSmsMessenger(this.form.messenger)) {
+          const nextSmsMessenger = this.defaultSmsMessenger;
+          if (nextSmsMessenger) {
+            this.form.messenger = nextSmsMessenger;
+          }
+        }
         this.form.content.contentType = 'plain';
       } else {
-        this.form.messenger = 'email';
+        if (this.isSmsMessenger(this.form.messenger)) {
+          this.form.messenger = this.defaultEmailMessenger;
+        }
         if (this.form.content.contentType === 'plain' && this.isNew) {
           this.form.content.contentType = 'richtext';
         }
@@ -1749,15 +1807,15 @@ export default {
         this.syncActiveTabWithRouteHash();
       });
     } else {
-      this.form.messenger = 'email';
+      this.form.messenger = this.defaultEmailMessenger;
       this.applyDefaultFromEmailForMessenger(true);
     }
 
     this.$nextTick(() => {
-      if (this.isNew && this.hasQuoMessenger && this.$route.query.channel === 'sms') {
+      if (this.isNew && this.hasSmsMessengers && this.$route.query.channel === 'sms') {
         this.isHydratingCampaignForm = true;
         this.campaignChannel = 'sms';
-        this.form.messenger = 'quo';
+        this.form.messenger = this.defaultSmsMessenger || this.form.messenger;
         this.form.content.contentType = 'plain';
         this.$nextTick(() => {
           this.isHydratingCampaignForm = false;
