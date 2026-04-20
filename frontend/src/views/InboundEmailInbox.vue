@@ -63,33 +63,33 @@
       @update:options="onTableOptionsChange"
       @click:row="(_, { item }) => openEmail(item)"
     >
-      <template #item.spam_status="{ item }">
+      <template #item.spamStatus="{ item }">
         <v-chip
-          v-if="item.spam_status"
-          :color="spamChipColor(item.spam_status)"
+          v-if="item.spamStatus"
+          :color="spamChipColor(item.spamStatus)"
           size="small"
           label
         >
-          {{ item.spam_status }}
+          {{ item.spamStatus }}
         </v-chip>
         <span v-else class="text-medium-emphasis text-caption">clean</span>
       </template>
 
-      <template #item.has_attachments="{ item }">
-        <v-icon v-if="item.has_attachments" size="small" color="primary">mdi-paperclip</v-icon>
+      <template #item.hasAttachments="{ item }">
+        <v-icon v-if="item.hasAttachments" size="small" color="primary">mdi-paperclip</v-icon>
       </template>
 
-      <template #item.received_at="{ item }">
-        {{ $utils.formatDate(item.received_at) }}
+      <template #item.receivedAt="{ item }">
+        {{ $utils.formatDate(item.receivedAt) }}
       </template>
 
-      <template #item.subscriber_name="{ item }">
+      <template #item.subscriberName="{ item }">
         <router-link
-          v-if="item.subscriber_id"
-          :to="{ name: 'subscriber', params: { id: item.subscriber_id } }"
+          v-if="item.subscriberId"
+          :to="{ name: 'subscriber', params: { id: item.subscriberId } }"
           @click.stop
         >
-          {{ item.subscriber_name || item.subscriber_email || item.subscriber_id }}
+          {{ item.subscriberName || item.subscriberEmail || item.subscriberId }}
         </router-link>
         <span v-else class="text-medium-emphasis">—</span>
       </template>
@@ -149,27 +149,27 @@
           <v-btn icon="mdi-close" variant="text" @click="detailDialog = false" />
         </v-card-title>
         <v-card-subtitle>
-          <div><strong>From:</strong> {{ selectedEmail.from_address }}</div>
-          <div v-if="selectedEmail.to_address"><strong>To:</strong> {{ selectedEmail.to_address }}</div>
+          <div><strong>From:</strong> {{ selectedEmail.fromAddress }}</div>
+          <div v-if="selectedEmail.toAddress"><strong>To:</strong> {{ selectedEmail.toAddress }}</div>
           <div v-if="selectedEmail.cc"><strong>CC:</strong> {{ selectedEmail.cc }}</div>
-          <div v-if="selectedEmail.reply_to"><strong>Reply-To:</strong> {{ selectedEmail.reply_to }}</div>
-          <div><strong>Received:</strong> {{ $utils.formatDate(selectedEmail.received_at) }}</div>
-          <div v-if="selectedEmail.spam_status">
+          <div v-if="selectedEmail.replyTo"><strong>Reply-To:</strong> {{ selectedEmail.replyTo }}</div>
+          <div><strong>Received:</strong> {{ $utils.formatDate(selectedEmail.receivedAt) }}</div>
+          <div v-if="selectedEmail.spamStatus">
             <strong>Spam Status:</strong>
-            <v-chip :color="spamChipColor(selectedEmail.spam_status)" size="x-small" class="ml-1" label>
-              {{ selectedEmail.spam_status }}
+            <v-chip :color="spamChipColor(selectedEmail.spamStatus)" size="x-small" class="ml-1" label>
+              {{ selectedEmail.spamStatus }}
             </v-chip>
           </div>
         </v-card-subtitle>
         <v-divider />
         <v-card-text>
           <!-- HTML body -->
-          <div v-if="selectedEmail.body_html" class="email-body">
+          <div v-if="selectedEmail.bodyHtml" class="email-body">
             <!-- eslint-disable-next-line vue/no-v-html -->
-            <div v-html="selectedEmail.body_html" class="email-html-body" />
+            <div v-html="selectedEmail.bodyHtml" class="email-html-body" />
           </div>
           <!-- Plain text fallback -->
-          <pre v-else-if="selectedEmail.body_text" class="email-body-text">{{ selectedEmail.body_text }}</pre>
+          <pre v-else-if="selectedEmail.bodyText" class="email-body-text">{{ selectedEmail.bodyText }}</pre>
           <p v-else class="text-medium-emphasis">(no body)</p>
         </v-card-text>
         <v-divider />
@@ -210,9 +210,9 @@
             density="compact"
             hide-default-footer
           >
-            <template #item.is_active="{ item }">
-              <v-icon :color="item.is_active ? 'success' : 'error'" size="small">
-                {{ item.is_active ? 'mdi-check-circle' : 'mdi-close-circle' }}
+            <template #item.isActive="{ item }">
+              <v-icon :color="item.isActive ? 'success' : 'error'" size="small">
+                {{ item.isActive ? 'mdi-check-circle' : 'mdi-close-circle' }}
               </v-icon>
             </template>
             <template #item.actions="{ item }">
@@ -270,21 +270,21 @@ const spamStatusOptions = [
 ];
 
 const tableHeaders = [
-  { title: 'From', key: 'from_address', sortable: false },
+  { title: 'From', key: 'fromAddress', sortable: false },
   { title: 'Subject', key: 'subject', sortable: false },
-  { title: 'Subscriber', key: 'subscriber_name', sortable: false },
-  { title: 'Received', key: 'received_at', sortable: false },
-  { title: 'Status', key: 'spam_status', sortable: false },
-  { title: '', key: 'has_attachments', sortable: false, width: '40px' },
+  { title: 'Subscriber', key: 'subscriberName', sortable: false },
+  { title: 'Received', key: 'receivedAt', sortable: false },
+  { title: 'Status', key: 'spamStatus', sortable: false },
+  { title: '', key: 'hasAttachments', sortable: false, width: '40px' },
   { title: '', key: 'actions', sortable: false, width: '48px' },
 ];
 
 const spamRuleHeaders = [
   { title: 'Type', key: 'type' },
   { title: 'Value', key: 'value' },
-  { title: 'Level', key: 'spam_level' },
-  { title: 'Hits', key: 'hit_count' },
-  { title: 'Active', key: 'is_active' },
+  { title: 'Level', key: 'spamLevel' },
+  { title: 'Hits', key: 'hitCount' },
+  { title: 'Active', key: 'isActive' },
   { title: '', key: 'actions', sortable: false, width: '48px' },
 ];
 
@@ -299,21 +299,21 @@ async function fetchEmails() {
     if (filters.spam_status !== '') params.spam_status = filters.spam_status;
 
     const resp = await getInboundEmailInbox(params);
-    emails.value = resp.data?.data?.results || [];
-    total.value = resp.data?.data?.total || 0;
+    emails.value = resp.results || [];
+    total.value = resp.total || 0;
   } finally {
     loading.value = false;
   }
 }
 
 async function openEmail(item) {
-  const resp = await getInboundEmailByID(item.record_id);
-  selectedEmail.value = resp.data?.data || item;
+  const resp = await getInboundEmailByID(item.recordId);
+  selectedEmail.value = resp || item;
   detailDialog.value = true;
 }
 
 async function markSpam(item, status) {
-  await updateInboundEmailSpamStatus(item.record_id, status);
+  await updateInboundEmailSpamStatus(item.recordId, status);
   await fetchEmails();
 }
 
@@ -321,14 +321,14 @@ async function fetchSpamRules() {
   loadingRules.value = true;
   try {
     const resp = await getInboundSpamRules({ limit: 200 });
-    spamRules.value = resp.data?.data?.results || [];
+    spamRules.value = resp.results || [];
   } finally {
     loadingRules.value = false;
   }
 }
 
 async function deleteSpamRule(rule) {
-  await deleteInboundSpamRule(rule.record_id);
+  await deleteInboundSpamRule(rule.recordId);
   await fetchSpamRules();
 }
 
