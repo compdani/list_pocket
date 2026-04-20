@@ -120,6 +120,10 @@ func (a *App) processInboundEmailReplyWebhook(c echo.Context) (string, error) {
 		a.log.Printf("inbound email webhook: body too large remote=%q ua=%q size=%d", c.RealIP(), c.Request().UserAgent(), len(body))
 		return "", echo.NewHTTPError(http.StatusRequestEntityTooLarge, "body too large")
 	}
+	return a.processInboundEmailReplyWebhookBody(c, body)
+}
+
+func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (string, error) {
 	a.logInboundEmailWebhookRequest(c, body)
 
 	if snsType, ok := parseSNSControlType(body); ok {
@@ -554,4 +558,18 @@ func parseSNSControlType(raw []byte) (string, bool) {
 		return t, true
 	}
 	return "", false
+}
+
+func parseSESNotificationType(raw []byte) string {
+	var sns sesSNSNotification
+	msgBytes := raw
+	if err := json.Unmarshal(raw, &sns); err == nil && strings.TrimSpace(sns.Message) != "" {
+		msgBytes = []byte(sns.Message)
+	}
+
+	var sesMsg sesInboundMessage
+	if err := json.Unmarshal(msgBytes, &sesMsg); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(sesMsg.NotificationType)
 }

@@ -161,6 +161,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 
 	// Amazon SES.
 	case service == "ses" && a.cfg.BounceSESEnabled:
+		a.log.Printf("ses service webhook: received sns_type=%q remote=%q ua=%q body=%s", c.Request().Header.Get("X-Amz-Sns-Message-Type"), c.RealIP(), c.Request().UserAgent(), string(rawReq))
 		switch c.Request().Header.Get("X-Amz-Sns-Message-Type") {
 		// SNS webhook registration confirmation. Only after these are processed will the endpoint
 		// start getting bounce notifications.
@@ -172,9 +173,20 @@ func (a *App) BounceWebhook(c echo.Context) error {
 
 		// Bounce notification.
 		case "Notification":
+			if strings.EqualFold(parseSESNotificationType(rawReq), "Received") {
+				id, err := a.processInboundEmailReplyWebhookBody(c, rawReq)
+				if err != nil {
+					a.log.Printf("ses service webhook: inbound email processing failed err=%v", err)
+					return err
+				}
+				a.log.Printf("ses service webhook: inbound email processed id=%q", id)
+				return c.JSON(http.StatusOK, okResp{true})
+			}
+
 			b, err := a.bounce.SES.ProcessBounce(rawReq)
 			if err != nil {
 				if errors.Is(err, webhooks.ErrNotificationNotBounce) {
+					a.log.Printf("ses service webhook: ignored non-bounce notification")
 					return c.JSON(http.StatusOK, okResp{true})
 				}
 				a.log.Printf("error processing SES notification: %v", err)

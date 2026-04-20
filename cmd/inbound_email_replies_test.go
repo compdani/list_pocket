@@ -214,3 +214,22 @@ func TestNormalizeSESInboundEmail_IgnoresNonNotificationSNSWrapper(t *testing.T)
 		t.Fatal("expected non-notification SNS wrapper to be ignored")
 	}
 }
+
+func TestParseSESNotificationType(t *testing.T) {
+	t.Parallel()
+
+	direct := []byte(`{"notificationType":"Received","mail":{"timestamp":"2026-04-20T15:00:00Z"},"content":"YWJj"}`)
+	if got := parseSESNotificationType(direct); got != "Received" {
+		t.Fatalf("direct type: got %q want %q", got, "Received")
+	}
+
+	wrapped := []byte(`{"Type":"Notification","Message":"{\"notificationType\":\"Bounce\",\"mail\":{}}"}`)
+	if got := parseSESNotificationType(wrapped); got != "Bounce" {
+		t.Fatalf("wrapped type: got %q want %q", got, "Bounce")
+	}
+
+	invalid := []byte(`{"Type":"Notification","Message":"not-json"}`)
+	if got := parseSESNotificationType(invalid); got != "" {
+		t.Fatalf("invalid type: got %q want empty", got)
+	}
+}
