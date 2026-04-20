@@ -208,6 +208,15 @@ const navItems = computed(() => {
     });
   }
 
+  if ($can('inbox:get', 'inbox:manage')) {
+    items.push({
+      key: 'inbox',
+      label: $t('menu.inbox'),
+      icon: 'mdi-inbox-outline',
+      route: { name: 'inbox' },
+    });
+  }
+
   const userChildren = [
     $can('users:get') ? {
       key: 'users',

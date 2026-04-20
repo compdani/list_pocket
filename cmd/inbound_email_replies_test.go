@@ -96,19 +96,14 @@ func TestNormalizeSESInboundEmail_Base64MIME(t *testing.T) {
 	if _, ok := normalized.Headers["from"]; !ok {
 		t.Fatal("expected normalized headers to include from")
 	}
-	if _, ok := normalized.RawBody["raw_mime_base64"]; !ok {
-		t.Fatal("expected raw_mime_base64 in raw body")
+	if normalized.HTML == "" && normalized.Text == "" {
+		t.Fatal("expected parsed body (HTML or text) to be non-empty")
 	}
-	attachmentsRaw, ok := normalized.RawBody["attachments"]
-	if !ok {
-		t.Fatal("expected attachments metadata in raw body")
+	if len(normalized.Attachments) != 1 {
+		t.Fatalf("expected one attachment, got %d", len(normalized.Attachments))
 	}
-	attachments, ok := attachmentsRaw.([]map[string]any)
-	if !ok || len(attachments) != 1 {
-		t.Fatalf("expected one attachment metadata entry, got %#v", attachmentsRaw)
-	}
-	if attachments[0]["filename"] != "proof.txt" {
-		t.Fatalf("attachment filename: got %#v", attachments[0]["filename"])
+	if normalized.Attachments[0].Filename != "proof.txt" {
+		t.Fatalf("attachment filename: got %q", normalized.Attachments[0].Filename)
 	}
 }
 

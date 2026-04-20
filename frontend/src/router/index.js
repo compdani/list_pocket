@@ -184,6 +184,12 @@ const routes = [
     meta: { title: 'Workflow Builder', group: 'workflows' },
     component: () => import('../views/WorkflowBuilder.vue'),
   },
+  {
+    path: '/inbox',
+    name: 'inbox',
+    meta: { title: 'menu.inbox', group: 'inbox' },
+    component: () => import('../views/InboundEmailInbox.vue'),
+  },
 ];
 
 const router = createRouter({
