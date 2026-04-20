@@ -459,10 +459,16 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 				"references" AS "references",
 				received_at,
 				body_snippet,
+				COALESCE(body_html, '') AS body_html,
+				COALESCE(body_text, '') AS body_text,
+				COALESCE(to_address, '') AS to_address,
+				COALESCE(cc, '') AS cc,
+				COALESCE(reply_to, '') AS reply_to,
+				structured_headers,
 				has_attachments,
 				match_score,
-				raw_headers,
-				raw_body,
+				COALESCE(spam_status, '') AS spam_status,
+				COALESCE(spam_score, 0) AS spam_score,
 				processed_at,
 				dedupe_key
 			FROM inbound_email_replies
@@ -476,7 +482,6 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			if mapErr != nil {
 				continue
 			}
-			attachments := timelineAttachmentsFromRawBody(e.RawBody)
 			appendEvent(
 				models.TimelineEventInboundEmailReply,
 				e.ReceivedAt,
@@ -499,7 +504,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 					References:          strings.TrimSpace(e.References),
 					HasAttachments:      e.HasAttachments,
 					MatchScore:          strings.TrimSpace(e.MatchScore),
-					Attachments:         attachments,
+					SpamStatus:          strings.TrimSpace(e.SpamStatus),
 				},
 			)
 		}
@@ -857,10 +862,16 @@ func (c *Core) GetInboundEmailRepliesBySubscriber(ctx context.Context, subscribe
 			"references" AS "references",
 			received_at,
 			body_snippet,
+			COALESCE(body_html, '') AS body_html,
+			COALESCE(body_text, '') AS body_text,
+			COALESCE(to_address, '') AS to_address,
+			COALESCE(cc, '') AS cc,
+			COALESCE(reply_to, '') AS reply_to,
+			structured_headers,
 			has_attachments,
 			match_score,
-			raw_headers,
-			raw_body,
+			COALESCE(spam_status, '') AS spam_status,
+			COALESCE(spam_score, 0) AS spam_score,
 			processed_at,
 			dedupe_key
 		FROM inbound_email_replies
@@ -922,10 +933,16 @@ func (c *Core) GetInboundEmailReplyByMessageID(ctx context.Context, messageID st
 			"references" AS "references",
 			received_at,
 			body_snippet,
+			COALESCE(body_html, '') AS body_html,
+			COALESCE(body_text, '') AS body_text,
+			COALESCE(to_address, '') AS to_address,
+			COALESCE(cc, '') AS cc,
+			COALESCE(reply_to, '') AS reply_to,
+			structured_headers,
 			has_attachments,
 			match_score,
-			raw_headers,
-			raw_body,
+			COALESCE(spam_status, '') AS spam_status,
+			COALESCE(spam_score, 0) AS spam_score,
 			processed_at,
 			dedupe_key
 		FROM inbound_email_replies
@@ -1017,6 +1034,14 @@ func (c *Core) CreateInboundEmailReplyEvent(ctx context.Context, event *models.I
 		}
 	}
 
+	// Check spam rules to auto-classify the incoming email.
+	if event.SpamStatus == "" {
+		if spamStatus, spamScore, checkErr := c.CheckInboundSpamRules(ctx, event.FromAddress, event.Subject, event.BodyText); checkErr == nil && spamStatus != "" {
+			event.SpamStatus = spamStatus
+			event.SpamScore = spamScore
+		}
+	}
+
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return "", fmt.Errorf("pocketbase is not initialized")
@@ -1039,13 +1064,21 @@ func (c *Core) CreateInboundEmailReplyEvent(ctx context.Context, event *models.I
 	rec.Set("references", event.References)
 	rec.Set("received_at", event.ReceivedAt.UTC().Format(time.RFC3339Nano))
 	rec.Set("body_snippet", event.BodySnippet)
+	rec.Set("body_html", event.BodyHTML)
+	rec.Set("body_text", event.BodyText)
+	rec.Set("to_address", event.ToAddress)
+	rec.Set("cc", event.CC)
+	rec.Set("reply_to", event.ReplyTo)
+	if len(event.StructuredHeaders) > 0 {
+		rec.Set("structured_headers", map[string]any(event.StructuredHeaders))
+	}
 	rec.Set("has_attachments", event.HasAttachments)
 	rec.Set("match_score", event.MatchScore)
-	if len(event.RawHeaders) > 0 {
-		rec.Set("raw_headers", map[string]any(event.RawHeaders))
+	if event.SpamStatus != "" {
+		rec.Set("spam_status", event.SpamStatus)
 	}
-	if len(event.RawBody) > 0 {
-		rec.Set("raw_body", map[string]any(event.RawBody))
+	if event.SpamScore > 0 {
+		rec.Set("spam_score", event.SpamScore)
 	}
 	rec.Set("processed_at", event.ProcessedAt.UTC().Format(time.RFC3339Nano))
 	rec.Set("dedupe_key", event.DedupeKey)
@@ -1246,10 +1279,16 @@ type inboundEmailReplyRow struct {
 	References      string         `db:"references"`
 	ReceivedAtRaw   sql.NullString `db:"received_at"`
 	BodySnippet     string         `db:"body_snippet"`
+	BodyHTML        string         `db:"body_html"`
+	BodyText        string         `db:"body_text"`
+	ToAddress       string         `db:"to_address"`
+	CC              string         `db:"cc"`
+	ReplyTo         string         `db:"reply_to"`
+	StructuredHeadersRaw any       `db:"structured_headers"`
 	HasAttachments  bool           `db:"has_attachments"`
 	MatchScore      string         `db:"match_score"`
-	RawHeadersRaw   any            `db:"raw_headers"`
-	RawBodyRaw      any            `db:"raw_body"`
+	SpamStatus      string         `db:"spam_status"`
+	SpamScore       float64        `db:"spam_score"`
 	ProcessedAtRaw  sql.NullString `db:"processed_at"`
 	DedupeKey       string         `db:"dedupe_key"`
 }
@@ -1271,11 +1310,7 @@ func mapInboundEmailReplyRow(r inboundEmailReplyRow) (models.InboundEmailReplyEv
 	if err != nil {
 		return models.InboundEmailReplyEvent{}, err
 	}
-	rawHeaders, err := decodeJSONFieldToModelJSON(r.RawHeadersRaw)
-	if err != nil {
-		return models.InboundEmailReplyEvent{}, err
-	}
-	rawBody, err := decodeJSONFieldToModelJSON(r.RawBodyRaw)
+	structuredHeaders, err := decodeJSONFieldToModelJSON(r.StructuredHeadersRaw)
 	if err != nil {
 		return models.InboundEmailReplyEvent{}, err
 	}
@@ -1285,19 +1320,25 @@ func mapInboundEmailReplyRow(r inboundEmailReplyRow) (models.InboundEmailReplyEv
 			ID:       r.ID,
 			RecordID: r.RecordID,
 		},
-		FromAddress:    r.FromAddress,
-		Subject:        r.Subject,
-		MessageID:      r.MessageID,
-		InReplyTo:      r.InReplyTo,
-		References:     r.References,
-		ReceivedAt:     receivedAt,
-		BodySnippet:    r.BodySnippet,
-		HasAttachments: r.HasAttachments,
-		MatchScore:     r.MatchScore,
-		RawHeaders:     rawHeaders,
-		RawBody:        rawBody,
-		ProcessedAt:    processedAt,
-		DedupeKey:      r.DedupeKey,
+		FromAddress:       r.FromAddress,
+		Subject:           r.Subject,
+		MessageID:         r.MessageID,
+		InReplyTo:         r.InReplyTo,
+		References:        r.References,
+		ReceivedAt:        receivedAt,
+		BodySnippet:       r.BodySnippet,
+		BodyHTML:          r.BodyHTML,
+		BodyText:          r.BodyText,
+		ToAddress:         r.ToAddress,
+		CC:                r.CC,
+		ReplyTo:           r.ReplyTo,
+		StructuredHeaders: structuredHeaders,
+		HasAttachments:    r.HasAttachments,
+		MatchScore:        r.MatchScore,
+		SpamStatus:        r.SpamStatus,
+		SpamScore:         r.SpamScore,
+		ProcessedAt:       processedAt,
+		DedupeKey:         r.DedupeKey,
 	}
 	if r.CreatedAtRaw.Valid {
 		out.CreatedAt.Time = createdAt
@@ -1317,37 +1358,6 @@ func mapInboundEmailReplyRow(r inboundEmailReplyRow) (models.InboundEmailReplyEv
 	}
 
 	return out, nil
-}
-
-func timelineAttachmentsFromRawBody(raw models.JSON) []map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
-	v, ok := raw["attachments"]
-	if !ok || v == nil {
-		return nil
-	}
-
-	out := make([]map[string]any, 0)
-	switch t := v.(type) {
-	case []map[string]any:
-		for _, item := range t {
-			if len(item) > 0 {
-				out = append(out, item)
-			}
-		}
-	case []any:
-		for _, item := range t {
-			if m, ok := item.(map[string]any); ok && len(m) > 0 {
-				out = append(out, m)
-			}
-		}
-	}
-
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func normalizeMessageID(raw string) string {
@@ -1405,6 +1415,640 @@ func extractRecordIDCandidatesFromThreadHeaders(inReplyTo string, references str
 		out = append(out, p)
 	}
 	return out
+}
+
+// spamLevelOrder returns a numeric rank for a spam level to allow max-of comparison.
+func spamLevelOrder(level string) int {
+	switch level {
+	case "confirmed_spam":
+		return 3
+	case "spam":
+		return 2
+	case "suspected":
+		return 1
+	}
+	return 0
+}
+
+// maxSpamLevel returns the higher of two spam level strings.
+func maxSpamLevel(a, b string) string {
+	if spamLevelOrder(a) >= spamLevelOrder(b) {
+		return a
+	}
+	return b
+}
+
+// spamKeywords is a minimal English stop-word set used to filter low-value keywords.
+var spamStopWords = map[string]struct{}{
+	"that": {}, "this": {}, "with": {}, "from": {}, "have": {}, "will": {},
+	"your": {}, "been": {}, "they": {}, "were": {}, "said": {}, "each": {},
+	"which": {}, "their": {}, "there": {}, "when": {}, "what": {}, "some": {},
+	"about": {}, "would": {}, "these": {}, "other": {}, "into": {}, "than": {},
+	"then": {}, "more": {}, "also": {}, "click": {}, "here": {}, "http": {},
+	"https": {}, "email": {}, "message": {}, "reply": {},
+}
+
+// extractSpamKeywords extracts up to maxN significant words from text (subject + body).
+func extractSpamKeywords(subject, bodyText string, maxN int) []string {
+	text := strings.ToLower(subject + " " + bodyText)
+	words := strings.FieldsFunc(text, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
+	})
+	seen := map[string]int{}
+	for _, w := range words {
+		if len(w) < 4 {
+			continue
+		}
+		if _, stop := spamStopWords[w]; stop {
+			continue
+		}
+		seen[w]++
+	}
+	// Sort by frequency descending.
+	type wf struct {
+		word  string
+		count int
+	}
+	ranked := make([]wf, 0, len(seen))
+	for w, c := range seen {
+		ranked = append(ranked, wf{w, c})
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return ranked[i].count > ranked[j].count
+	})
+	out := make([]string, 0, maxN)
+	for i, w := range ranked {
+		if i >= maxN {
+			break
+		}
+		out = append(out, w.word)
+	}
+	return out
+}
+
+// extractDomain returns the domain part of an email address.
+func extractDomain(email string) string {
+	at := strings.LastIndex(email, "@")
+	if at < 0 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(email[at+1:]))
+}
+
+// CheckInboundSpamRules evaluates active spam rules against the incoming email fields.
+// It checks sender address, sender domain, then keyword scoring.
+// Returns the highest implied spam level and composite score, or ("", 0, nil) if no match.
+func (c *Core) CheckInboundSpamRules(ctx context.Context, fromAddress, subject, bodyText string) (string, float64, error) {
+	_ = ctx
+	fromAddress = strings.ToLower(strings.TrimSpace(fromAddress))
+	if fromAddress == "" {
+		return "", 0, nil
+	}
+	domain := extractDomain(fromAddress)
+
+	type ruleRow struct {
+		Type      string  `db:"type"`
+		Value     string  `db:"value"`
+		Weight    float64 `db:"weight"`
+		SpamLevel string  `db:"spam_level"`
+	}
+	rules := []ruleRow{}
+	if err := c.db.Select(&rules, `
+		SELECT type, value, COALESCE(weight, 1.0) AS weight, COALESCE(spam_level, 'suspected') AS spam_level
+		FROM inbound_spam_rules
+		WHERE is_active = 1
+		  AND spam_level != ''
+		ORDER BY rowid ASC
+	`); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", 0, err
+	}
+
+	bestLevel := ""
+	var keywordRules []ruleRow
+	for _, r := range rules {
+		switch r.Type {
+		case "sender":
+			if strings.EqualFold(r.Value, fromAddress) {
+				bestLevel = maxSpamLevel(bestLevel, r.SpamLevel)
+			}
+		case "domain":
+			if domain != "" && strings.EqualFold(r.Value, domain) {
+				bestLevel = maxSpamLevel(bestLevel, r.SpamLevel)
+			}
+		case "keyword":
+			keywordRules = append(keywordRules, r)
+		}
+	}
+
+	// If sender/domain rule already determined spam or confirmed_spam, return early.
+	if spamLevelOrder(bestLevel) >= spamLevelOrder("spam") {
+		return bestLevel, 1.0, nil
+	}
+
+	// Keyword scoring.
+	var keywordScore float64
+	if len(keywordRules) > 0 {
+		keywords := extractSpamKeywords(subject, bodyText, 20)
+		kwSet := make(map[string]struct{}, len(keywords))
+		for _, kw := range keywords {
+			kwSet[kw] = struct{}{}
+		}
+		var totalWeight, matchWeight float64
+		for _, kr := range keywordRules {
+			totalWeight += kr.Weight
+			if _, ok := kwSet[strings.ToLower(kr.Value)]; ok {
+				matchWeight += kr.Weight
+			}
+		}
+		if totalWeight > 0 {
+			keywordScore = matchWeight / totalWeight
+		}
+		// Mark as suspected if keyword score exceeds threshold.
+		if keywordScore >= 0.3 {
+			bestLevel = maxSpamLevel(bestLevel, "suspected")
+		}
+	}
+
+	return bestLevel, keywordScore, nil
+}
+
+// InboxQueryParams contains filter options for the unified inbox listing.
+type InboxQueryParams struct {
+	Limit      int
+	Offset     int
+	Search     string    // filter by from_address or subject (partial match)
+	SpamStatus string    // filter by spam_status value (empty = non-spam only, "all" = all)
+	StartDate  *time.Time
+	EndDate    *time.Time
+	SortOrder  string // "desc" (default) or "asc"
+}
+
+// GetInboundEmailInbox returns a paginated list of all inbound emails across all subscribers.
+func (c *Core) GetInboundEmailInbox(ctx context.Context, params InboxQueryParams) ([]models.InboundEmailSummary, int, error) {
+	_ = ctx
+	limit := params.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	offset := params.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	sortDir := "DESC"
+	if strings.ToLower(params.SortOrder) == "asc" {
+		sortDir = "ASC"
+	}
+
+	conds := []string{}
+	args := []any{}
+	search := strings.TrimSpace(params.Search)
+	if search != "" {
+		conds = append(conds, `(LOWER(e.from_address) LIKE ? OR LOWER(e.subject) LIKE ?)`)
+		like := "%" + strings.ToLower(search) + "%"
+		args = append(args, like, like)
+	}
+	switch params.SpamStatus {
+	case "all":
+		// No filter.
+	case "spam", "confirmed_spam", "suspected":
+		conds = append(conds, `e.spam_status = ?`)
+		args = append(args, params.SpamStatus)
+	default:
+		// Default: exclude spam (show clean inbox only).
+		conds = append(conds, `(e.spam_status IS NULL OR e.spam_status = '')`)
+	}
+	if params.StartDate != nil {
+		conds = append(conds, `e.received_at >= ?`)
+		args = append(args, params.StartDate.UTC().Format(time.RFC3339Nano))
+	}
+	if params.EndDate != nil {
+		conds = append(conds, `e.received_at < ?`)
+		args = append(args, params.EndDate.UTC().Format(time.RFC3339Nano))
+	}
+	where := ""
+	if len(conds) > 0 {
+		where = "WHERE " + strings.Join(conds, " AND ")
+	}
+
+	var total int
+	countQuery := `SELECT COUNT(*) FROM inbound_email_replies e ` + where
+	if err := c.db.Get(&total, countQuery, args...); err != nil {
+		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "inbox", "error", pqErrMsg(err)))
+	}
+	if total == 0 {
+		return []models.InboundEmailSummary{}, 0, nil
+	}
+
+	orderClause := fmt.Sprintf("ORDER BY e.received_at %s, e.rowid %s", sortDir, sortDir)
+	listQuery := fmt.Sprintf(`
+		SELECT
+			e.id AS record_id,
+			e.subscriber_id,
+			e.from_address,
+			e.subject,
+			e.body_snippet,
+			e.message_id,
+			e.received_at,
+			e.has_attachments,
+			e.match_score,
+			COALESCE(e.spam_status, '') AS spam_status,
+			COALESCE(e.spam_score, 0) AS spam_score,
+			s.name AS subscriber_name,
+			s.email AS subscriber_email
+		FROM inbound_email_replies e
+		LEFT JOIN subscribers s ON s.id = e.subscriber_id
+		%s
+		%s
+		LIMIT ? OFFSET ?
+	`, where, orderClause)
+	listArgs := append(args, limit, offset)
+
+	type summaryRow struct {
+		RecordID        string         `db:"record_id"`
+		SubscriberID    sql.NullString `db:"subscriber_id"`
+		FromAddress     string         `db:"from_address"`
+		Subject         string         `db:"subject"`
+		BodySnippet     string         `db:"body_snippet"`
+		MessageID       string         `db:"message_id"`
+		ReceivedAtRaw   sql.NullString `db:"received_at"`
+		HasAttachments  bool           `db:"has_attachments"`
+		MatchScore      string         `db:"match_score"`
+		SpamStatus      string         `db:"spam_status"`
+		SpamScore       float64        `db:"spam_score"`
+		SubscriberName  sql.NullString `db:"subscriber_name"`
+		SubscriberEmail sql.NullString `db:"subscriber_email"`
+	}
+	rows := []summaryRow{}
+	if err := c.db.Select(&rows, listQuery, listArgs...); err != nil {
+		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "inbox", "error", pqErrMsg(err)))
+	}
+
+	out := make([]models.InboundEmailSummary, 0, len(rows))
+	for _, r := range rows {
+		receivedAt, _ := parseSQLiteDateTime(r.ReceivedAtRaw.String)
+		s := models.InboundEmailSummary{
+			RecordID:       r.RecordID,
+			FromAddress:    r.FromAddress,
+			Subject:        r.Subject,
+			BodySnippet:    r.BodySnippet,
+			MessageID:      r.MessageID,
+			ReceivedAt:     receivedAt,
+			HasAttachments: r.HasAttachments,
+			MatchScore:     r.MatchScore,
+			SpamStatus:     r.SpamStatus,
+			SpamScore:      r.SpamScore,
+		}
+		if r.SubscriberID.Valid && r.SubscriberID.String != "" {
+			v := r.SubscriberID.String
+			s.SubscriberID = &v
+		}
+		if r.SubscriberName.Valid && r.SubscriberName.String != "" {
+			v := r.SubscriberName.String
+			s.SubscriberName = &v
+		}
+		if r.SubscriberEmail.Valid && r.SubscriberEmail.String != "" {
+			v := r.SubscriberEmail.String
+			s.SubscriberEmail = &v
+		}
+		out = append(out, s)
+	}
+	return out, total, nil
+}
+
+// GetInboundEmailByID retrieves a single inbound email reply by its PocketBase record ID.
+func (c *Core) GetInboundEmailByID(ctx context.Context, id string) (*models.InboundEmailReplyEvent, error) {
+	_ = ctx
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, echo.NewHTTPError(http.StatusBadRequest, "id is required")
+	}
+	var row inboundEmailReplyRow
+	err := c.db.Get(&row, `
+		SELECT
+			rowid AS id,
+			id AS record_id,
+			created AS created_at,
+			updated AS updated_at,
+			subscriber_id,
+			linked_message_id,
+			from_address,
+			subject,
+			message_id,
+			in_reply_to,
+			"references" AS "references",
+			received_at,
+			body_snippet,
+			COALESCE(body_html, '') AS body_html,
+			COALESCE(body_text, '') AS body_text,
+			COALESCE(to_address, '') AS to_address,
+			COALESCE(cc, '') AS cc,
+			COALESCE(reply_to, '') AS reply_to,
+			structured_headers,
+			has_attachments,
+			match_score,
+			COALESCE(spam_status, '') AS spam_status,
+			COALESCE(spam_score, 0) AS spam_score,
+			processed_at,
+			dedupe_key
+		FROM inbound_email_replies
+		WHERE id = ?
+		LIMIT 1
+	`, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, echo.NewHTTPError(http.StatusNotFound, "inbound email not found")
+		}
+		return nil, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email", "error", pqErrMsg(err)))
+	}
+	e, mapErr := mapInboundEmailReplyRow(row)
+	if mapErr != nil {
+		return nil, mapErr
+	}
+	return &e, nil
+}
+
+// UpdateInboundEmailSpamStatus updates the spam_status on an inbound email reply and triggers
+// spam learning (upserts sender/domain/keyword rules) so future emails are auto-classified.
+func (c *Core) UpdateInboundEmailSpamStatus(ctx context.Context, id string, spamStatus string) error {
+	_ = ctx
+	id = strings.TrimSpace(id)
+	validStatuses := map[string]bool{"": true, "suspected": true, "spam": true, "confirmed_spam": true}
+	if !validStatuses[spamStatus] {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid spam_status value")
+	}
+
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return fmt.Errorf("pocketbase is not initialized")
+	}
+	rec, err := pb.FindRecordById("inbound_email_replies", id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "inbound email not found")
+	}
+
+	rec.Set("spam_status", spamStatus)
+	if err := pb.Save(rec); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update spam status")
+	}
+
+	// Trigger learning when explicitly marking as spam level.
+	if spamStatus == "spam" || spamStatus == "confirmed_spam" {
+		fromAddress := strings.ToLower(strings.TrimSpace(toString(rec.Get("from_address"))))
+		subject := strings.TrimSpace(toString(rec.Get("subject")))
+		bodyText := strings.TrimSpace(toString(rec.Get("body_text")))
+		if learnErr := c.LearnSpamFromEmail(ctx, fromAddress, subject, bodyText, spamStatus); learnErr != nil {
+			c.log.Printf("spam learning warning id=%q: %v", id, learnErr)
+		}
+	}
+	return nil
+}
+
+// LearnSpamFromEmail upserts sender, domain, and keyword spam rules based on
+// an explicitly user-marked spam email.
+func (c *Core) LearnSpamFromEmail(ctx context.Context, fromAddress, subject, bodyText, spamStatus string) error {
+	_ = ctx
+	fromAddress = strings.ToLower(strings.TrimSpace(fromAddress))
+	if fromAddress == "" {
+		return nil
+	}
+	domain := extractDomain(fromAddress)
+
+	upsertRule := func(ruleType, value string) error {
+		if value == "" {
+			return nil
+		}
+		value = strings.ToLower(strings.TrimSpace(value))
+		if err := c.upsertSpamRule(ruleType, value, 1.0, spamStatus); err != nil {
+			c.log.Printf("upsert spam rule type=%q value=%q: %v", ruleType, value, err)
+		}
+		return nil
+	}
+
+	_ = upsertRule("sender", fromAddress)
+	if domain != "" {
+		_ = upsertRule("domain", domain)
+	}
+
+	keywords := extractSpamKeywords(subject, bodyText, 10)
+	for _, kw := range keywords {
+		_ = upsertRule("keyword", kw)
+	}
+	return nil
+}
+
+// upsertSpamRule creates or updates a spam rule, incrementing hit_count and applying the
+// max spam level observed.
+func (c *Core) upsertSpamRule(ruleType, value string, weight float64, spamLevel string) error {
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return fmt.Errorf("pocketbase is not initialized")
+	}
+	collection, err := pb.FindCollectionByNameOrId("inbound_spam_rules")
+	if err != nil {
+		return err
+	}
+
+	// Try to find existing rule.
+	existing, err := pb.FindFirstRecordByFilter("inbound_spam_rules",
+		fmt.Sprintf(`type = "%s" && value = "%s"`,
+			strings.ReplaceAll(ruleType, `"`, ``),
+			strings.ReplaceAll(value, `"`, ``)))
+	if err == nil && existing != nil {
+		// Update existing: increment hit_count, apply max spam_level.
+		hitCount := int(toFloat(existing.Get("hit_count"))) + 1
+		existing.Set("hit_count", hitCount)
+		existing.Set("spam_level", maxSpamLevel(toString(existing.Get("spam_level")), spamLevel))
+		existing.Set("is_active", true)
+		return pb.Save(existing)
+	}
+
+	// Create new rule.
+	rec := pbcore.NewRecord(collection)
+	rec.Set("type", ruleType)
+	rec.Set("value", value)
+	rec.Set("weight", weight)
+	rec.Set("hit_count", 1)
+	rec.Set("spam_level", spamLevel)
+	rec.Set("is_active", true)
+	return pb.Save(rec)
+}
+
+// GetInboundSpamRules returns paginated spam rules.
+func (c *Core) GetInboundSpamRules(ctx context.Context, limit, offset int, ruleType string) ([]models.InboundSpamRule, int, error) {
+	_ = ctx
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	conds := []string{}
+	args := []any{}
+	if ruleType != "" {
+		conds = append(conds, "type = ?")
+		args = append(args, ruleType)
+	}
+	where := ""
+	if len(conds) > 0 {
+		where = "WHERE " + strings.Join(conds, " AND ")
+	}
+
+	var total int
+	if err := c.db.Get(&total, "SELECT COUNT(*) FROM inbound_spam_rules "+where, args...); err != nil {
+		return nil, 0, err
+	}
+
+	type ruleRow struct {
+		RecordID  string         `db:"record_id"`
+		Type      string         `db:"type"`
+		Value     string         `db:"value"`
+		Weight    float64        `db:"weight"`
+		HitCount  int            `db:"hit_count"`
+		SpamLevel string         `db:"spam_level"`
+		IsActive  bool           `db:"is_active"`
+		CreatedAt sql.NullString `db:"created_at"`
+		UpdatedAt sql.NullString `db:"updated_at"`
+	}
+	rows := []ruleRow{}
+	listArgs := append(args, limit, offset)
+	if err := c.db.Select(&rows, `
+		SELECT
+			id AS record_id,
+			type,
+			value,
+			COALESCE(weight, 1.0) AS weight,
+			COALESCE(hit_count, 0) AS hit_count,
+			COALESCE(spam_level, '') AS spam_level,
+			COALESCE(is_active, 0) AS is_active,
+			created AS created_at,
+			updated AS updated_at
+		FROM inbound_spam_rules
+		`+where+`
+		ORDER BY hit_count DESC, rowid DESC
+		LIMIT ? OFFSET ?
+	`, listArgs...); err != nil {
+		return nil, 0, err
+	}
+
+	out := make([]models.InboundSpamRule, 0, len(rows))
+	for _, r := range rows {
+		created, _ := parseSQLiteDateTime(r.CreatedAt.String)
+		updated, _ := parseSQLiteDateTime(r.UpdatedAt.String)
+		out = append(out, models.InboundSpamRule{
+			RecordID:  r.RecordID,
+			Type:      r.Type,
+			Value:     r.Value,
+			Weight:    r.Weight,
+			HitCount:  r.HitCount,
+			SpamLevel: r.SpamLevel,
+			IsActive:  r.IsActive,
+			CreatedAt: created,
+			UpdatedAt: updated,
+		})
+	}
+	return out, total, nil
+}
+
+// DeleteInboundSpamRule removes a spam rule by its PocketBase record ID.
+func (c *Core) DeleteInboundSpamRule(ctx context.Context, id string) error {
+	_ = ctx
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return fmt.Errorf("pocketbase is not initialized")
+	}
+	rec, err := pb.FindRecordById("inbound_spam_rules", id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "spam rule not found")
+	}
+	return pb.Delete(rec)
+}
+
+// DeleteSpamInboundEmails removes inbound emails marked as spam or confirmed_spam that are
+// older than 7 days, along with their associated attachment records.
+// Returns the number of deleted email records.
+func (c *Core) DeleteSpamInboundEmails(ctx context.Context) (int, error) {
+	_ = ctx
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return 0, fmt.Errorf("pocketbase is not initialized")
+	}
+
+	cutoff := time.Now().UTC().Add(-7 * 24 * time.Hour).Format(time.RFC3339Nano)
+
+	// Find spam email record IDs to delete.
+	type idRow struct {
+		RecordID string `db:"record_id"`
+	}
+	rows := []idRow{}
+	if err := c.db.Select(&rows, `
+		SELECT id AS record_id
+		FROM inbound_email_replies
+		WHERE spam_status IN ('spam', 'confirmed_spam')
+		  AND received_at < ?
+	`, cutoff); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	deleted := 0
+	for _, r := range rows {
+		// Delete attachment records first (PocketBase cascades file deletion).
+		attachmentRecords, err := pb.FindRecordsByFilter("inbound_email_attachments",
+			fmt.Sprintf(`inbound_email_reply_id = "%s"`, strings.ReplaceAll(r.RecordID, `"`, ``)), "", 0, 200)
+		if err == nil {
+			for _, a := range attachmentRecords {
+				_ = pb.Delete(a)
+			}
+		}
+		emailRec, err := pb.FindRecordById("inbound_email_replies", r.RecordID)
+		if err != nil {
+			continue
+		}
+		if err := pb.Delete(emailRec); err != nil {
+			c.log.Printf("spam gc: failed to delete email record_id=%q: %v", r.RecordID, err)
+			continue
+		}
+		deleted++
+	}
+	return deleted, nil
+}
+
+// toFloat converts an arbitrary value to float64, returning 0 on failure.
+func toFloat(v any) float64 {
+	switch t := v.(type) {
+	case float64:
+		return t
+	case int:
+		return float64(t)
+	case int64:
+		return float64(t)
+	case string:
+		var f float64
+		_, _ = fmt.Sscanf(t, "%f", &f)
+		return f
+	}
+	return 0
+}
+
+// toString converts an arbitrary value to string.
+func toString(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case []byte:
+		return string(t)
+	default:
+		return fmt.Sprint(t)
+	}
 }
 
 type inboundSMSRow struct {

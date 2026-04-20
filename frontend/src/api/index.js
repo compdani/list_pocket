@@ -1227,3 +1227,30 @@ export const disableTOTP = (id, data) => http.delete(
   `/api/users/${id}/twofa`,
   { data },
 );
+
+export const getInboundEmailInbox = (params) => http.get(
+  '/api/inbound-emails',
+  { params },
+);
+
+export const getInboundEmailByID = (id) => http.get(
+  `/api/inbound-emails/${id}`,
+);
+
+export const updateInboundEmailSpamStatus = (id, status) => http.put(
+  `/api/inbound-emails/${id}/spam`,
+  { status },
+);
+
+export const getInboundSpamRules = (params) => http.get(
+  '/api/inbound-email-spam-rules',
+  { params },
+);
+
+export const deleteInboundSpamRule = (id) => http.delete(
+  `/api/inbound-email-spam-rules/${id}`,
+);
+
+export const deleteGCSpamInboundEmails = () => http.delete(
+  '/api/maintenance/inbound-emails/spam',
+);

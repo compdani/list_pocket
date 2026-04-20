@@ -1321,6 +1321,21 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 		}
 	}
 
+	// Weekly spam inbox cleanup cron job — deletes spam/confirmed_spam emails older than 7 days.
+	if err := pb.Cron().Add("spam-inbox-cleanup", "0 2 * * 0", func() {
+		ctx := context.Background()
+		deleted, err := co.DeleteSpamInboundEmails(ctx)
+		if err != nil {
+			lo.Printf("spam inbox cleanup cron: error: %v", err)
+		} else {
+			lo.Printf("spam inbox cleanup cron: deleted %d spam email(s)", deleted)
+		}
+	}); err != nil {
+		lo.Printf("error initializing spam inbox cleanup cron: %v", err)
+	} else {
+		lo.Println("spam inbox cleanup cron enabled at interval: 0 2 * * 0")
+	}
+
 }
 
 // awaitReload waits for a SIGHUP signal to reload the app. Every setting change on the UI causes a reload.

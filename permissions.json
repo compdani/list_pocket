@@ -74,5 +74,13 @@
             "settings:manage",
             "settings:maintain"
         ]
+    },
+    {
+        "group": "inbox",
+        "permissions":
+        [
+            "inbox:get",
+            "inbox:manage"
+        ]
     }
 ]

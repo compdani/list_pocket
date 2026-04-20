@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	stdmail "net/mail"
 	"os"
@@ -77,20 +76,23 @@ type sesInboundMessage struct {
 }
 
 type normalizedInboundEmail struct {
-	Provider       string
-	From           string
-	MessageID      string
-	InReplyTo      string
-	References     string
-	Subject        string
-	ReceivedAt     time.Time
-	Text           string
-	HTML           string
-	BodySnippet    string
-	HasAttachments bool
-	Attachments    []inboundEmailAttachment
-	Headers        map[string]any
-	RawBody        models.JSON
+	Provider         string
+	From             string
+	MessageID        string
+	InReplyTo        string
+	References       string
+	Subject          string
+	ReceivedAt       time.Time
+	Text             string
+	HTML             string
+	BodySnippet      string
+	HasAttachments   bool
+	Attachments      []inboundEmailAttachment
+	Headers          map[string]any
+	ToAddress        string
+	CC               string
+	ReplyTo          string
+	StructuredHeaders map[string]any
 }
 
 type inboundEmailAttachment struct {
@@ -145,12 +147,6 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 		return "sns_control_" + strings.ToLower(snsType), nil
 	}
 
-	rawPayload := models.JSON{}
-	if err := json.Unmarshal(body, &rawPayload); err != nil {
-		a.log.Printf("inbound email webhook: invalid json remote=%q ua=%q err=%v body=%s", c.RealIP(), c.Request().UserAgent(), err, string(body))
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid json")
-	}
-
 	var req inboundEmailReplyWebhookRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body=%s", c.RealIP(), c.Request().UserAgent(), err, string(body))
@@ -197,29 +193,22 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 	}
 
 	event := &models.InboundEmailReplyEvent{
-		FromAddress:    strings.ToLower(strings.TrimSpace(fromAddress)),
-		Subject:        strings.TrimSpace(subject),
-		MessageID:      messageID,
-		InReplyTo:      inReplyTo,
-		References:     strings.TrimSpace(references),
-		ReceivedAt:     receivedAt,
-		BodySnippet:    bodySnippet,
-		HasAttachments: hasAttachments,
-		MatchScore:     "unmatched",
-		RawHeaders:     models.JSON(headers),
-		RawBody: models.JSON{
-			"text": bodyText,
-			"html": bodyHTML,
-		},
-		ProcessedAt: time.Now().UTC(),
-	}
-	maps.Copy(event.RawBody, normalized.RawBody)
-	if len(req.Attachments) > 0 {
-		event.RawBody["attachments"] = req.Attachments
-	}
-
-	if strings.TrimSpace(toString(rawPayload["raw"])) == "" {
-		event.RawBody["raw_payload"] = rawPayload
+		FromAddress:       strings.ToLower(strings.TrimSpace(fromAddress)),
+		Subject:           strings.TrimSpace(subject),
+		MessageID:         messageID,
+		InReplyTo:         inReplyTo,
+		References:        strings.TrimSpace(references),
+		ReceivedAt:        receivedAt,
+		BodySnippet:       bodySnippet,
+		BodyText:          bodyText,
+		BodyHTML:          bodyHTML,
+		ToAddress:         strings.TrimSpace(normalized.ToAddress),
+		CC:                strings.TrimSpace(normalized.CC),
+		ReplyTo:           strings.TrimSpace(normalized.ReplyTo),
+		StructuredHeaders: models.JSON(extractStructuredHeaders(headers)),
+		HasAttachments:    hasAttachments,
+		MatchScore:        "unmatched",
+		ProcessedAt:       time.Now().UTC(),
 	}
 
 	id, err := a.core.CreateInboundEmailReplyEvent(c.Request().Context(), event)
@@ -227,14 +216,11 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 		a.log.Printf("inbound email webhook: persistence failed provider=%q message_id=%q from=%q err=%v", provider, messageID, fromAddress, err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to persist inbound email reply")
 	}
-	if len(normalized.Attachments) > 0 {
+
+	// Skip saving attachments if the email was classified as spam or confirmed spam.
+	if len(normalized.Attachments) > 0 && event.SpamStatus != "spam" && event.SpamStatus != "confirmed_spam" {
 		pb := c.Get("app").(*pocketbase.PocketBase)
-		attachments, attachmentErrors := a.saveInboundEmailAttachments(pb, id, normalized.Attachments)
-		if len(attachments) > 0 || len(attachmentErrors) > 0 {
-			if updateErr := a.updateInboundEmailReplyAttachmentMetadata(pb, id, attachments, attachmentErrors); updateErr != nil {
-				a.log.Printf("inbound email webhook: attachment metadata update failed record_id=%q message_id=%q err=%v", id, messageID, updateErr)
-			}
-		}
+		a.saveInboundEmailAttachments(pb, id, normalized.Attachments)
 	}
 	a.log.Printf("inbound email webhook: persisted id=%q provider=%q message_id=%q from=%q", id, provider, messageID, fromAddress)
 
@@ -334,37 +320,6 @@ func (a *App) saveInboundEmailAttachment(pb *pocketbase.PocketBase, inboundEmail
 	return rec, nil
 }
 
-func (a *App) updateInboundEmailReplyAttachmentMetadata(pb *pocketbase.PocketBase, recordID string, attachments []map[string]any, attachmentErrors []map[string]any) error {
-	rec, err := pb.FindRecordById("inbound_email_replies", recordID)
-	if err != nil {
-		return err
-	}
-
-	rawBody := map[string]any{}
-	if raw := rec.Get("raw_body"); raw != nil {
-		switch v := raw.(type) {
-		case map[string]any:
-			maps.Copy(rawBody, v)
-		case models.JSON:
-			maps.Copy(rawBody, map[string]any(v))
-		case string:
-			_ = json.Unmarshal([]byte(v), &rawBody)
-		case []byte:
-			_ = json.Unmarshal(v, &rawBody)
-		}
-	}
-
-	if len(attachments) > 0 {
-		rawBody["attachments"] = attachments
-	}
-	if len(attachmentErrors) > 0 {
-		rawBody["attachment_errors"] = attachmentErrors
-	}
-
-	rec.Set("raw_body", rawBody)
-	return pb.Save(rec)
-}
-
 func parseInboundEmailReceivedAt(raw string) time.Time {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -420,20 +375,26 @@ func normalizeGenericInboundEmail(req inboundEmailReplyWebhookRequest) normalize
 	if provider == "" {
 		provider = "inbound_email_webhook"
 	}
+	toAddress := headerFirst(headers, "to")
+	cc := headerFirst(headers, "cc")
+	replyTo := firstNonEmpty(headerFirst(headers, "reply-to"), headerFirst(headers, "reply_to"))
 	return normalizedInboundEmail{
-		Provider:       provider,
-		From:           fromAddress,
-		MessageID:      messageID,
-		InReplyTo:      inReplyTo,
-		References:     references,
-		Subject:        subject,
-		ReceivedAt:     receivedAt,
-		Text:           bodyText,
-		HTML:           bodyHTML,
-		BodySnippet:    makeInboundBodySnippet(bodyText, bodyHTML),
-		HasAttachments: hasAttachments,
-		Headers:        headers,
-		RawBody:        models.JSON{},
+		Provider:          provider,
+		From:              fromAddress,
+		MessageID:         messageID,
+		InReplyTo:         inReplyTo,
+		References:        references,
+		Subject:           subject,
+		ReceivedAt:        receivedAt,
+		Text:              bodyText,
+		HTML:              bodyHTML,
+		BodySnippet:       makeInboundBodySnippet(bodyText, bodyHTML),
+		HasAttachments:    hasAttachments,
+		Headers:           headers,
+		ToAddress:         toAddress,
+		CC:                cc,
+		ReplyTo:           replyTo,
+		StructuredHeaders: extractStructuredHeaders(headers),
 	}
 }
 
@@ -488,13 +449,21 @@ func normalizeSESInboundEmail(raw []byte) (normalizedInboundEmail, bool) {
 			parsed.Headers[k] = strings.TrimSpace(h.Value)
 		}
 	}
-	parsed.RawBody["raw_mime_base64"] = sesMsg.Content
-	parsed.RawBody["ses_message"] = map[string]any{
-		"notificationType": sesMsg.NotificationType,
-		"timestamp":        sesMsg.Mail.Timestamp,
-		"source":           sesMsg.Mail.Source,
-		"messageId":        sesMsg.Mail.MessageID,
+	// Ensure To/CC/ReplyTo are extracted from merged headers.
+	if parsed.ToAddress == "" {
+		if len(sesMsg.Mail.Common.To) > 0 {
+			parsed.ToAddress = strings.Join(sesMsg.Mail.Common.To, ", ")
+		} else {
+			parsed.ToAddress = headerFirst(parsed.Headers, "to")
+		}
 	}
+	if parsed.CC == "" {
+		parsed.CC = headerFirst(parsed.Headers, "cc")
+	}
+	if parsed.ReplyTo == "" {
+		parsed.ReplyTo = firstNonEmpty(headerFirst(parsed.Headers, "reply-to"), headerFirst(parsed.Headers, "reply_to"))
+	}
+	parsed.StructuredHeaders = extractStructuredHeaders(parsed.Headers)
 
 	return parsed, true
 }
@@ -533,7 +502,6 @@ func parseRawMIMEInboundEmail(raw []byte) (normalizedInboundEmail, error) {
 	htmlBody := ""
 	hasAttachments := false
 	attachments := make([]inboundEmailAttachment, 0)
-	attachmentMetadata := make([]map[string]any, 0)
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
@@ -569,13 +537,6 @@ func parseRawMIMEInboundEmail(raw []byte) (normalizedInboundEmail, error) {
 				ContentID:   strings.Trim(contentID, "<>() \t\r\n"),
 				Content:     b,
 			})
-			attachmentMetadata = append(attachmentMetadata, map[string]any{
-				"filename":     filename,
-				"content_type": strings.TrimSpace(ct),
-				"size_bytes":   len(b),
-				"content_id":   strings.Trim(contentID, "<>() \t\r\n"),
-				"disposition":  strings.TrimSpace(disposition),
-			})
 		}
 	}
 
@@ -584,23 +545,27 @@ func parseRawMIMEInboundEmail(raw []byte) (normalizedInboundEmail, error) {
 		textBody = strings.TrimSpace(string(all))
 	}
 
+	toAddress := headerFirst(headers, "to")
+	cc := headerFirst(headers, "cc")
+	replyTo := firstNonEmpty(headerFirst(headers, "reply-to"), headerFirst(headers, "reply_to"))
+
 	return normalizedInboundEmail{
-		From:           from,
-		MessageID:      messageID,
-		InReplyTo:      inReplyTo,
-		References:     references,
-		Subject:        subject,
-		ReceivedAt:     receivedAt,
-		Text:           textBody,
-		HTML:           htmlBody,
-		BodySnippet:    makeInboundBodySnippet(textBody, htmlBody),
-		HasAttachments: hasAttachments,
-		Attachments:    attachments,
-		Headers:        headers,
-		RawBody: models.JSON{
-			"raw_mime":    string(raw),
-			"attachments": attachmentMetadata,
-		},
+		From:              from,
+		MessageID:         messageID,
+		InReplyTo:         inReplyTo,
+		References:        references,
+		Subject:           subject,
+		ReceivedAt:        receivedAt,
+		Text:              textBody,
+		HTML:              htmlBody,
+		BodySnippet:       makeInboundBodySnippet(textBody, htmlBody),
+		HasAttachments:    hasAttachments,
+		Attachments:       attachments,
+		Headers:           headers,
+		ToAddress:         toAddress,
+		CC:                cc,
+		ReplyTo:           replyTo,
+		StructuredHeaders: extractStructuredHeaders(headers),
 	}, nil
 }
 
@@ -804,4 +769,26 @@ func firstFileName(v any) string {
 		}
 	}
 	return ""
+}
+
+// structuredHeaderAllowList contains the header keys that are retained in the
+// structured_headers JSON field (everything else is discarded on ingestion).
+var structuredHeaderAllowList = map[string]struct{}{
+	"date": {}, "content-type": {}, "x-mailer": {}, "x-originating-ip": {},
+	"received": {}, "dkim-signature": {}, "return-path": {}, "mime-version": {},
+	"x-spam-status": {}, "x-spam-score": {}, "x-virus-scanned": {},
+	"x-forwarded-to": {}, "delivered-to": {}, "x-original-to": {},
+	"x-google-smtp-source": {}, "arc-seal": {}, "arc-message-signature": {},
+}
+
+// extractStructuredHeaders returns a curated subset of email headers for storage.
+func extractStructuredHeaders(headers map[string]any) map[string]any {
+	out := make(map[string]any, len(structuredHeaderAllowList))
+	for k, v := range headers {
+		k = strings.ToLower(strings.TrimSpace(k))
+		if _, ok := structuredHeaderAllowList[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
 }

@@ -125,8 +125,8 @@ type TimelineEventInboundEmailReplyMetadata struct {
 	InReplyTo           string           `json:"in_reply_to"`            // RFC 5322 In-Reply-To header (outbound msg linkage)
 	References          string           `json:"references"`             // RFC 5322 References header (thread context)
 	HasAttachments      bool             `json:"has_attachments"`        // Whether email contains MIME attachments
-	Raw                 json.RawMessage  `json:"raw,omitempty"`          // Full raw headers + body for audit
 	MatchScore          string           `json:"match_score"`            // "exact_messageID", "exact_email", "unmatched"
+	SpamStatus          string           `json:"spam_status,omitempty"`  // Spam classification if any
 	Attachments         []map[string]any `json:"attachments,omitempty"`  // List of attachment metadata
 }
 
@@ -167,7 +167,7 @@ type InboundSMSEvent struct {
 // This model is stored in the inbound_email_replies collection and linked to subscribers by email address.
 //
 // Idempotency: message_id + in_reply_to + from_address (strict).
-// Contact matching: Exact email address match only; preserve raw headers/body for audit if no match found.
+// Contact matching: Exact email address match only; preserve headers for audit if no match found.
 // Threading: In-Reply-To and References headers enable grouping with outbound campaigns.
 // Linkage policy: Strict subscriber linkage when determinable; attempt linkage to outbound message via Message-ID if possible.
 type InboundEmailReplyEvent struct {
@@ -185,20 +185,63 @@ type InboundEmailReplyEvent struct {
 	References  string    `db:"references" json:"references"`   // RFC 5322 References (thread context)
 	ReceivedAt  time.Time `db:"received_at" json:"received_at"`
 
-	// Content (storing snippet + full for preview + compliance)
+	// Structured recipients
+	ToAddress string `db:"to_address" json:"to_address,omitempty"`
+	CC        string `db:"cc" json:"cc,omitempty"`
+	ReplyTo   string `db:"reply_to" json:"reply_to,omitempty"`
+
+	// Content
 	BodySnippet    string `db:"body_snippet" json:"body_snippet"` // First 200 chars for preview
+	BodyHTML       string `db:"body_html" json:"body_html,omitempty"`
+	BodyText       string `db:"body_text" json:"body_text,omitempty"`
 	HasAttachments bool   `db:"has_attachments" json:"has_attachments"`
+
+	// Structured headers (date, content-type, x-mailer, received-by, etc.)
+	StructuredHeaders JSON `db:"structured_headers" json:"structured_headers,omitempty"`
 
 	// Match classification
 	MatchScore string `db:"match_score" json:"match_score"` // "exact_messageID", "exact_email", "unmatched"
 
+	// Spam classification
+	SpamStatus string  `db:"spam_status" json:"spam_status,omitempty"` // "suspected", "spam", "confirmed_spam"
+	SpamScore  float64 `db:"spam_score" json:"spam_score,omitempty"`
+
 	// Audit trail
-	RawHeaders  JSON      `db:"raw_headers" json:"raw_headers"`   // Full MIME headers for compliance
-	RawBody     JSON      `db:"raw_body" json:"raw_body"`         // Full decoded body
 	ProcessedAt time.Time `db:"processed_at" json:"processed_at"` // When this event was ingested
 
 	// Idempotency key (unique constraint: message_id + from_address + received_at)
 	DedupeKey string `db:"dedupe_key" json:"dedupe_key"` // Hash of message_id+from_address for dedup
+}
+
+// InboundEmailSummary is a lightweight projection used by the unified inbox listing API.
+// It omits full body content to keep list responses small.
+type InboundEmailSummary struct {
+	RecordID        string     `db:"record_id" json:"id"`
+	SubscriberID    *string    `db:"subscriber_id" json:"subscriber_id,omitempty"`
+	FromAddress     string     `db:"from_address" json:"from_address"`
+	Subject         string     `db:"subject" json:"subject"`
+	BodySnippet     string     `db:"body_snippet" json:"body_snippet"`
+	MessageID       string     `db:"message_id" json:"message_id"`
+	ReceivedAt      time.Time  `db:"received_at" json:"received_at"`
+	HasAttachments  bool       `db:"has_attachments" json:"has_attachments"`
+	MatchScore      string     `db:"match_score" json:"match_score"`
+	SpamStatus      string     `db:"spam_status" json:"spam_status,omitempty"`
+	SpamScore       float64    `db:"spam_score" json:"spam_score,omitempty"`
+	SubscriberName  *string    `db:"subscriber_name" json:"subscriber_name,omitempty"`
+	SubscriberEmail *string    `db:"subscriber_email" json:"subscriber_email,omitempty"`
+}
+
+// InboundSpamRule represents a learned spam rule used for auto-detection on incoming emails.
+type InboundSpamRule struct {
+	RecordID  string    `db:"record_id" json:"id"`
+	Type      string    `db:"type" json:"type"`           // "sender", "domain", "keyword"
+	Value     string    `db:"value" json:"value"`         // email, domain string, or keyword
+	Weight    float64   `db:"weight" json:"weight"`       // scoring weight (default 1.0)
+	HitCount  int       `db:"hit_count" json:"hit_count"` // user-reinforcement count
+	SpamLevel string    `db:"spam_level" json:"spam_level"` // max implied spam level
+	IsActive  bool      `db:"is_active" json:"is_active"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
 // UnifiedContactTimeline represents the response payload from the timeline API endpoint
