@@ -31,6 +31,9 @@ type inboundEmailReplyWebhookRequest struct {
 	InReplyTo      string           `json:"in_reply_to"`
 	References     string           `json:"references"`
 	From           string           `json:"from"`
+	To             string           `json:"to"`
+	CC             string           `json:"cc"`
+	ReplyTo        string           `json:"reply_to"`
 	Subject        string           `json:"subject"`
 	Text           string           `json:"text"`
 	HTML           string           `json:"html"`
@@ -375,9 +378,9 @@ func normalizeGenericInboundEmail(req inboundEmailReplyWebhookRequest) normalize
 	if provider == "" {
 		provider = "inbound_email_webhook"
 	}
-	toAddress := headerFirst(headers, "to")
-	cc := headerFirst(headers, "cc")
-	replyTo := firstNonEmpty(headerFirst(headers, "reply-to"), headerFirst(headers, "reply_to"))
+	toAddress := firstNonEmpty(req.To, headerFirst(headers, "to"))
+	cc := firstNonEmpty(req.CC, headerFirst(headers, "cc"))
+	replyTo := firstNonEmpty(req.ReplyTo, headerFirst(headers, "reply-to"), headerFirst(headers, "reply_to"))
 	return normalizedInboundEmail{
 		Provider:          provider,
 		From:              fromAddress,

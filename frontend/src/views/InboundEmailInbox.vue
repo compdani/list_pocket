@@ -150,7 +150,7 @@
         </v-card-title>
         <v-card-subtitle>
           <div><strong>From:</strong> {{ selectedEmail.fromAddress }}</div>
-          <div v-if="selectedEmail.toAddress"><strong>To:</strong> {{ selectedEmail.toAddress }}</div>
+          <div><strong>To:</strong> {{ selectedEmail.toAddress || '—' }}</div>
           <div v-if="selectedEmail.cc"><strong>CC:</strong> {{ selectedEmail.cc }}</div>
           <div v-if="selectedEmail.replyTo"><strong>Reply-To:</strong> {{ selectedEmail.replyTo }}</div>
           <div><strong>Received:</strong> {{ $utils.niceDate(selectedEmail.receivedAt, true) }}</div>
