@@ -58,7 +58,7 @@
       :page="page"
       :items-per-page="perPage"
       class="inbox-table"
-      item-value="record_id"
+      item-value="id"
       hide-default-footer
       @update:options="onTableOptionsChange"
       @click:row="(_, { item }) => openEmail(item)"
@@ -80,7 +80,7 @@
       </template>
 
       <template #item.receivedAt="{ item }">
-        {{ $utils.formatDate(item.receivedAt) }}
+        {{ $utils.niceDate(item.receivedAt, true) }}
       </template>
 
       <template #item.subscriberName="{ item }">
@@ -153,7 +153,7 @@
           <div v-if="selectedEmail.toAddress"><strong>To:</strong> {{ selectedEmail.toAddress }}</div>
           <div v-if="selectedEmail.cc"><strong>CC:</strong> {{ selectedEmail.cc }}</div>
           <div v-if="selectedEmail.replyTo"><strong>Reply-To:</strong> {{ selectedEmail.replyTo }}</div>
-          <div><strong>Received:</strong> {{ $utils.formatDate(selectedEmail.receivedAt) }}</div>
+          <div><strong>Received:</strong> {{ $utils.niceDate(selectedEmail.receivedAt, true) }}</div>
           <div v-if="selectedEmail.spamStatus">
             <strong>Spam Status:</strong>
             <v-chip :color="spamChipColor(selectedEmail.spamStatus)" size="x-small" class="ml-1" label>
@@ -307,13 +307,13 @@ async function fetchEmails() {
 }
 
 async function openEmail(item) {
-  const resp = await getInboundEmailByID(item.recordId);
+  const resp = await getInboundEmailByID(item.id);
   selectedEmail.value = resp || item;
   detailDialog.value = true;
 }
 
 async function markSpam(item, status) {
-  await updateInboundEmailSpamStatus(item.recordId, status);
+  await updateInboundEmailSpamStatus(item.id, status);
   await fetchEmails();
 }
 
@@ -328,7 +328,7 @@ async function fetchSpamRules() {
 }
 
 async function deleteSpamRule(rule) {
-  await deleteInboundSpamRule(rule.recordId);
+  await deleteInboundSpamRule(rule.id);
   await fetchSpamRules();
 }
 
