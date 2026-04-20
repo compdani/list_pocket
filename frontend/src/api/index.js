@@ -520,6 +520,13 @@ export const getSubscriberTimeline = async (idOrRecordId, params = {}) => http.g
   },
 );
 
+export const getInboundEmailReplyAttachments = async (replyId) => http.get(
+  `/api/inbound-email-replies/${replyId}/attachments`,
+  { loading: models.subscribers },
+);
+
+export const getInboundEmailAttachmentDownloadUrl = (attachmentId) => (`/api/inbound-email-attachments/${attachmentId}/download`);
+
 export const getSubscriberBounces = async (idOrRecordId) => http.get(
   `/api/subscribers/${idOrRecordId}/bounces`,
   { loading: models.bounces },

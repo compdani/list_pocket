@@ -117,15 +117,17 @@ type TimelineEventInboundSMSMetadata struct {
 
 // TimelineEventInboundEmailReplyMetadata is the metadata payload for inbound_email_reply events
 type TimelineEventInboundEmailReplyMetadata struct {
-	FromAddress    string          `json:"from_address"`    // Sender email address
-	Subject        string          `json:"subject"`         // Email subject line
-	BodySnippet    string          `json:"body_snippet"`    // First 200 chars of body for preview
-	MessageID      string          `json:"message_id"`      // RFC 5322 Message-ID for dedup
-	InReplyTo      string          `json:"in_reply_to"`     // RFC 5322 In-Reply-To header (outbound msg linkage)
-	References     string          `json:"references"`      // RFC 5322 References header (thread context)
-	HasAttachments bool            `json:"has_attachments"` // Whether email contains MIME attachments
-	Raw            json.RawMessage `json:"raw,omitempty"`   // Full raw headers + body for audit
-	MatchScore     string          `json:"match_score"`     // "exact_messageID", "exact_email", "unmatched"
+	InboundEmailReplyID string           `json:"inbound_email_reply_id"` // Timeline event source record id
+	FromAddress         string           `json:"from_address"`           // Sender email address
+	Subject             string           `json:"subject"`                // Email subject line
+	BodySnippet         string           `json:"body_snippet"`           // First 200 chars of body for preview
+	MessageID           string           `json:"message_id"`             // RFC 5322 Message-ID for dedup
+	InReplyTo           string           `json:"in_reply_to"`            // RFC 5322 In-Reply-To header (outbound msg linkage)
+	References          string           `json:"references"`             // RFC 5322 References header (thread context)
+	HasAttachments      bool             `json:"has_attachments"`        // Whether email contains MIME attachments
+	Raw                 json.RawMessage  `json:"raw,omitempty"`          // Full raw headers + body for audit
+	MatchScore          string           `json:"match_score"`            // "exact_messageID", "exact_email", "unmatched"
+	Attachments         []map[string]any `json:"attachments,omitempty"`  // List of attachment metadata
 }
 
 // InboundSMSEvent represents a persistent inbound SMS event in the database

@@ -8,6 +8,8 @@ Subscriber **identifiers** in URLs and JSON are **PocketBase record ids** (the `
 | GET    | [/api/subscribers/{id}](#get-apisubscribersid)                    | Retrieve a specific subscriber.                |
 | GET    | [/api/subscribers/{id}/export](#get-apisubscribersidexport)       | Export a specific subscriber.                  |
 | GET    | [/api/subscribers/{id}/bounces](#get-apisubscribersidbounces)     | Retrieve a  subscriber bounce records.         |
+| GET    | [/api/inbound-email-replies/{replyId}/attachments](#get-apiinbound-email-repliesreplyidattachments) | List inbound email attachments for a timeline email reply event. |
+| GET    | [/api/inbound-email-attachments/{id}/download](#get-apiinbound-email-attachmentsiddownload) | Download an inbound email attachment file. |
 | POST   | [/api/subscribers](#post-apisubscribers)                                                | Create a new subscriber.                       |
 | POST   | [/api/subscribers/{id}/optin](#post-apisubscribersidoptin)        | Sends optin confirmation email to subscribers. |
 | POST   | [/api/public/subscription](#post-apipublicsubscription)                                 | Create a public subscription.                  |
@@ -293,6 +295,65 @@ curl -u 'api_username:access_token' 'http://localhost:9000/api/subscribers/pbc_s
   ]
 }
 ```
+
+______________________________________________________________________
+
+#### GET /api/inbound-email-replies/{replyId}/attachments
+
+List attachment records associated with an inbound email reply timeline entry.
+
+##### Parameters
+
+| Name    | Type   | Required | Description |
+| :------ | :----- | :------- | :---------- |
+| replyId | string | Yes      | Inbound email reply PocketBase record id (available as `metadata.inbound_email_reply_id` on timeline `inbound_email_reply` events). |
+
+##### Example Request
+
+```shell
+curl -u 'api_username:access_token' 'http://localhost:9000/api/inbound-email-replies/pbc_inreply_001/attachments'
+```
+
+##### Example Response
+
+```json
+{
+  "data": [
+    {
+      "id": "pbc_inattach_001",
+      "reply_id": "pbc_inreply_001",
+      "original_name": "invoice.pdf",
+      "content_type": "application/pdf",
+      "size_bytes": 184322,
+      "file_name": "invoice_abcd1234.pdf",
+      "download_url": "/api/inbound-email-attachments/pbc_inattach_001/download",
+      "created": "2026-04-20 14:18:39.138Z"
+    }
+  ]
+}
+```
+
+______________________________________________________________________
+
+#### GET /api/inbound-email-attachments/{id}/download
+
+Download a single inbound email attachment file.
+
+##### Parameters
+
+| Name | Type   | Required | Description |
+| :--- | :----- | :------- | :---------- |
+| id   | string | Yes      | Attachment PocketBase record id from `/api/inbound-email-replies/{replyId}/attachments`. |
+
+##### Example Request
+
+```shell
+curl -u 'api_username:access_token' -L 'http://localhost:9000/api/inbound-email-attachments/pbc_inattach_001/download' -o invoice.pdf
+```
+
+##### Example Response
+
+`307 Temporary Redirect` to PocketBase file API, followed by the binary file response.
 
 ______________________________________________________________________
 

@@ -86,6 +86,8 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.GET("/subscribers/{id}/activity", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberActivity, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}/timeline", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberTimeline, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}/export", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.ExportSubscriberData, "subscribers:get_all", "subscribers:get")))
+	api.GET("/inbound-email-replies/{replyId}/attachments", wrapEcho(a, tpl, cfg, urlCfg, []string{"replyId"}, pm(a.GetInboundEmailAttachments, "subscribers:get_all", "subscribers:get")))
+	api.GET("/inbound-email-attachments/{id}/download", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DownloadInboundEmailAttachment, "subscribers:get_all", "subscribers:get")))
 	api.GET("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetSubscriberBounces, "bounces:get")))
 	api.DELETE("/subscribers/{id}/bounces", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteSubscriberBounces, "bounces:manage")))
 	api.POST("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateSubscriber, "subscribers:manage")))

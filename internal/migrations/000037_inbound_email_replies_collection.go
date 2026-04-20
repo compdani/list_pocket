@@ -73,7 +73,7 @@ func init() {
 			},
 			&core.BoolField{
 				Name:     "has_attachments",
-				Required: true,
+				Required: false,
 			},
 			// Match classification
 			&core.SelectField{

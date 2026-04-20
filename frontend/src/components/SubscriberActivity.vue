@@ -55,6 +55,22 @@
             <p class="mb-1 font-weight-medium">{{ eventTitle(event) }}</p>
             <p v-if="eventSubtitle(event)" class="mb-2 text-body-2 text-medium-emphasis">{{ eventSubtitle(event) }}</p>
 
+            <div
+              v-if="event.eventType === 'inbound_email_reply' && emailAttachments(event).length > 0"
+              class="d-flex flex-wrap ga-2 mb-2"
+            >
+              <a
+                v-for="(attachment, attachmentIdx) in emailAttachments(event)"
+                :key="`${event.occurredAt}-${attachmentLabel(attachment)}-${attachmentIdx}`"
+                :href="attachmentLink(attachment)"
+                class="attachment-link"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ attachmentLabel(attachment) }}
+              </a>
+            </div>
+
             <details>
               <summary class="text-caption text-medium-emphasis">Details</summary>
               <pre class="event-metadata">{{ prettyMetadata(event.metadata) }}</pre>
@@ -207,6 +223,48 @@ export default {
       return '';
     },
 
+    emailAttachments(event) {
+      const md = event.metadata || {};
+      if (!Array.isArray(md.attachments)) {
+        return [];
+      }
+      return md.attachments.filter((item) => item && typeof item === 'object');
+    },
+
+    attachmentLabel(attachment) {
+      return attachment.filename
+        || attachment.originalName
+        || attachment.original_name
+        || attachment.fileName
+        || attachment.file_name
+        || 'Attachment';
+    },
+
+    attachmentLink(attachment) {
+      return attachment.downloadUrl || attachment.download_url || '#';
+    },
+
+    async hydrateAttachmentLinks(events) {
+      const inboundEmailEvents = events.filter((event) => event.eventType === 'inbound_email_reply');
+      await Promise.all(inboundEmailEvents.map(async (event) => {
+        const md = event.metadata || {};
+        const hasInline = Array.isArray(md.attachments) && md.attachments.length > 0;
+        if (hasInline || !md.inboundEmailReplyId) {
+          return;
+        }
+        try {
+          const data = await this.$api.getInboundEmailReplyAttachments(md.inboundEmailReplyId);
+          const attachments = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+          if (!event.metadata || typeof event.metadata !== 'object') {
+            event.metadata = {};
+          }
+          event.metadata.attachments = attachments;
+        } catch {
+          // Non-blocking: timeline should still render even if attachment lookup fails.
+        }
+      }));
+    },
+
     prettyMetadata(metadata) {
       try {
         return JSON.stringify(metadata || {}, null, 2);
@@ -238,6 +296,7 @@ export default {
       try {
         const data = await this.fetchTimelinePage(0);
         this.events = Array.isArray(data.events) ? data.events : [];
+        await this.hydrateAttachmentLinks(this.events);
         this.total = data.total || 0;
         this.offset = this.events.length;
         this.hasMore = Boolean(data.hasMore);
@@ -254,6 +313,7 @@ export default {
       try {
         const data = await this.fetchTimelinePage(this.offset);
         const next = Array.isArray(data.events) ? data.events : [];
+        await this.hydrateAttachmentLinks(next);
         this.events = [...this.events, ...next];
         this.offset = this.events.length;
         this.total = data.total || this.total;
@@ -291,5 +351,21 @@ export default {
   overflow-x: auto;
   padding: 10px;
   white-space: pre-wrap;
+}
+
+.attachment-link {
+  align-items: center;
+  border: 1px solid #d6deed;
+  border-radius: 999px;
+  color: #1e4eb3;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  text-decoration: none;
+}
+
+.attachment-link:hover {
+  background: #eef4ff;
 }
 </style>
