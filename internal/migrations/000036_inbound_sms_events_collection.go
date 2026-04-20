@@ -70,7 +70,7 @@ func init() {
 			// Classification
 			&core.BoolField{
 				Name:     "is_stop_keyword",
-				Required: true,
+				Required: false,
 			},
 			&core.SelectField{
 				Name:     "match_score",

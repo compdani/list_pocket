@@ -476,6 +476,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			if mapErr != nil {
 				continue
 			}
+			attachments := timelineAttachmentsFromRawBody(e.RawBody)
 			appendEvent(
 				models.TimelineEventInboundEmailReply,
 				e.ReceivedAt,
@@ -489,14 +490,16 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 					Label: "Email Reply",
 				},
 				models.TimelineEventInboundEmailReplyMetadata{
-					FromAddress:    strings.TrimSpace(e.FromAddress),
-					Subject:        strings.TrimSpace(e.Subject),
-					BodySnippet:    strings.TrimSpace(e.BodySnippet),
-					MessageID:      strings.TrimSpace(e.MessageID),
-					InReplyTo:      strings.TrimSpace(e.InReplyTo),
-					References:     strings.TrimSpace(e.References),
-					HasAttachments: e.HasAttachments,
-					MatchScore:     strings.TrimSpace(e.MatchScore),
+					InboundEmailReplyID: strings.TrimSpace(row.RecordID),
+					FromAddress:         strings.TrimSpace(e.FromAddress),
+					Subject:             strings.TrimSpace(e.Subject),
+					BodySnippet:         strings.TrimSpace(e.BodySnippet),
+					MessageID:           strings.TrimSpace(e.MessageID),
+					InReplyTo:           strings.TrimSpace(e.InReplyTo),
+					References:          strings.TrimSpace(e.References),
+					HasAttachments:      e.HasAttachments,
+					MatchScore:          strings.TrimSpace(e.MatchScore),
+					Attachments:         attachments,
 				},
 			)
 		}
@@ -1314,6 +1317,37 @@ func mapInboundEmailReplyRow(r inboundEmailReplyRow) (models.InboundEmailReplyEv
 	}
 
 	return out, nil
+}
+
+func timelineAttachmentsFromRawBody(raw models.JSON) []map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	v, ok := raw["attachments"]
+	if !ok || v == nil {
+		return nil
+	}
+
+	out := make([]map[string]any, 0)
+	switch t := v.(type) {
+	case []map[string]any:
+		for _, item := range t {
+			if len(item) > 0 {
+				out = append(out, item)
+			}
+		}
+	case []any:
+		for _, item := range t {
+			if m, ok := item.(map[string]any); ok && len(m) > 0 {
+				out = append(out, m)
+			}
+		}
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func normalizeMessageID(raw string) string {

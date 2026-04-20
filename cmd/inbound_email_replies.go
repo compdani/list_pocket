@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	stdmail "net/mail"
 	"os"
@@ -17,6 +19,9 @@ import (
 	_ "github.com/emersion/go-message/charset"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/labstack/echo/v4"
+	"github.com/pocketbase/pocketbase"
+	pbcore "github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
 
 const inboundEmailReplyWebhookSecretEnv = "LISTPOCKET_INBOUND_EMAIL_WEBHOOK_SECRET"
@@ -83,8 +88,17 @@ type normalizedInboundEmail struct {
 	HTML           string
 	BodySnippet    string
 	HasAttachments bool
+	Attachments    []inboundEmailAttachment
 	Headers        map[string]any
 	RawBody        models.JSON
+}
+
+type inboundEmailAttachment struct {
+	Filename    string
+	ContentType string
+	Disposition string
+	ContentID   string
+	Content     []byte
 }
 
 func (a *App) InboundEmailReplyWebhook(c echo.Context) error {
@@ -199,8 +213,9 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 		},
 		ProcessedAt: time.Now().UTC(),
 	}
-	for k, v := range normalized.RawBody {
-		event.RawBody[k] = v
+	maps.Copy(event.RawBody, normalized.RawBody)
+	if len(req.Attachments) > 0 {
+		event.RawBody["attachments"] = req.Attachments
 	}
 
 	if strings.TrimSpace(toString(rawPayload["raw"])) == "" {
@@ -211,6 +226,15 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 	if err != nil {
 		a.log.Printf("inbound email webhook: persistence failed provider=%q message_id=%q from=%q err=%v", provider, messageID, fromAddress, err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to persist inbound email reply")
+	}
+	if len(normalized.Attachments) > 0 {
+		pb := c.Get("app").(*pocketbase.PocketBase)
+		attachments, attachmentErrors := a.saveInboundEmailAttachments(pb, id, normalized.Attachments)
+		if len(attachments) > 0 || len(attachmentErrors) > 0 {
+			if updateErr := a.updateInboundEmailReplyAttachmentMetadata(pb, id, attachments, attachmentErrors); updateErr != nil {
+				a.log.Printf("inbound email webhook: attachment metadata update failed record_id=%q message_id=%q err=%v", id, messageID, updateErr)
+			}
+		}
 	}
 	a.log.Printf("inbound email webhook: persisted id=%q provider=%q message_id=%q from=%q", id, provider, messageID, fromAddress)
 
@@ -235,6 +259,110 @@ func (a *App) logInboundEmailWebhookRequest(c echo.Context, body []byte) {
 		snsMsgID,
 		string(body),
 	)
+}
+
+func (a *App) saveInboundEmailAttachments(pb *pocketbase.PocketBase, inboundEmailReplyID string, attachments []inboundEmailAttachment) ([]map[string]any, []map[string]any) {
+	out := make([]map[string]any, 0, len(attachments))
+	errs := make([]map[string]any, 0)
+	for _, attachment := range attachments {
+		rec, err := a.saveInboundEmailAttachment(pb, inboundEmailReplyID, attachment)
+		if err != nil {
+			errs = append(errs, map[string]any{
+				"filename": strings.TrimSpace(attachment.Filename),
+				"error":    err.Error(),
+			})
+			continue
+		}
+		storedName := ""
+		if raw := rec.Get("file"); raw != nil {
+			switch v := raw.(type) {
+			case []string:
+				if len(v) > 0 {
+					storedName = strings.TrimSpace(v[0])
+				}
+			case []any:
+				if len(v) > 0 {
+					storedName = strings.TrimSpace(toString(v[0]))
+				}
+			case string:
+				storedName = strings.TrimSpace(v)
+			}
+		}
+		out = append(out, map[string]any{
+			"attachment_record_id": rec.Id,
+			"filename":             strings.TrimSpace(attachment.Filename),
+			"content_type":         strings.TrimSpace(attachment.ContentType),
+			"size_bytes":           len(attachment.Content),
+			"content_id":           strings.TrimSpace(attachment.ContentID),
+			"disposition":          strings.TrimSpace(attachment.Disposition),
+			"stored_name":          storedName,
+			"download_url":         fmt.Sprintf("/mailapi/inbound-email-attachments/%s/download", rec.Id),
+		})
+	}
+	return out, errs
+}
+
+func (a *App) saveInboundEmailAttachment(pb *pocketbase.PocketBase, inboundEmailReplyID string, attachment inboundEmailAttachment) (*pbcore.Record, error) {
+	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
+	if err != nil {
+		return nil, err
+	}
+
+	fileName := strings.TrimSpace(attachment.Filename)
+	if fileName == "" {
+		fileName = "attachment.bin"
+	}
+
+	f, err := filesystem.NewFileFromBytes(attachment.Content, fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	rec := pbcore.NewRecord(collection)
+	rec.Set("inbound_email_reply_id", inboundEmailReplyID)
+	rec.Set("file", f)
+	rec.Set("original_name", fileName)
+	rec.Set("content_type", strings.TrimSpace(attachment.ContentType))
+	rec.Set("content_id", strings.TrimSpace(attachment.ContentID))
+	rec.Set("disposition", strings.TrimSpace(attachment.Disposition))
+	rec.Set("size_bytes", len(attachment.Content))
+
+	if err := pb.Save(rec); err != nil {
+		return nil, err
+	}
+
+	return rec, nil
+}
+
+func (a *App) updateInboundEmailReplyAttachmentMetadata(pb *pocketbase.PocketBase, recordID string, attachments []map[string]any, attachmentErrors []map[string]any) error {
+	rec, err := pb.FindRecordById("inbound_email_replies", recordID)
+	if err != nil {
+		return err
+	}
+
+	rawBody := map[string]any{}
+	if raw := rec.Get("raw_body"); raw != nil {
+		switch v := raw.(type) {
+		case map[string]any:
+			maps.Copy(rawBody, v)
+		case models.JSON:
+			maps.Copy(rawBody, map[string]any(v))
+		case string:
+			_ = json.Unmarshal([]byte(v), &rawBody)
+		case []byte:
+			_ = json.Unmarshal(v, &rawBody)
+		}
+	}
+
+	if len(attachments) > 0 {
+		rawBody["attachments"] = attachments
+	}
+	if len(attachmentErrors) > 0 {
+		rawBody["attachment_errors"] = attachmentErrors
+	}
+
+	rec.Set("raw_body", rawBody)
+	return pb.Save(rec)
 }
 
 func parseInboundEmailReceivedAt(raw string) time.Time {
@@ -404,6 +532,8 @@ func parseRawMIMEInboundEmail(raw []byte) (normalizedInboundEmail, error) {
 	textBody := ""
 	htmlBody := ""
 	hasAttachments := false
+	attachments := make([]inboundEmailAttachment, 0)
+	attachmentMetadata := make([]map[string]any, 0)
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
@@ -426,6 +556,26 @@ func parseRawMIMEInboundEmail(raw []byte) (normalizedInboundEmail, error) {
 			}
 		case *gomail.AttachmentHeader:
 			hasAttachments = true
+			ct, _, _ := h.ContentType()
+			filename, _ := h.Filename()
+			disposition, _, _ := h.ContentDisposition()
+			contentID := strings.TrimSpace(h.Get("Content-Id"))
+			b, _ := io.ReadAll(part.Body)
+			filename = strings.TrimSpace(filename)
+			attachments = append(attachments, inboundEmailAttachment{
+				Filename:    filename,
+				ContentType: strings.TrimSpace(ct),
+				Disposition: strings.TrimSpace(disposition),
+				ContentID:   strings.Trim(contentID, "<>() \t\r\n"),
+				Content:     b,
+			})
+			attachmentMetadata = append(attachmentMetadata, map[string]any{
+				"filename":     filename,
+				"content_type": strings.TrimSpace(ct),
+				"size_bytes":   len(b),
+				"content_id":   strings.Trim(contentID, "<>() \t\r\n"),
+				"disposition":  strings.TrimSpace(disposition),
+			})
 		}
 	}
 
@@ -445,9 +595,11 @@ func parseRawMIMEInboundEmail(raw []byte) (normalizedInboundEmail, error) {
 		HTML:           htmlBody,
 		BodySnippet:    makeInboundBodySnippet(textBody, htmlBody),
 		HasAttachments: hasAttachments,
+		Attachments:    attachments,
 		Headers:        headers,
 		RawBody: models.JSON{
-			"raw_mime": string(raw),
+			"raw_mime":    string(raw),
+			"attachments": attachmentMetadata,
 		},
 	}, nil
 }
@@ -572,4 +724,84 @@ func parseSESNotificationType(raw []byte) string {
 		return ""
 	}
 	return strings.TrimSpace(sesMsg.NotificationType)
+}
+
+// GetInboundEmailAttachments lists all attachments for a specific inbound email reply.
+// Handler: GET /mailapi/inbound-email-replies/{replyId}/attachments
+func (a *App) GetInboundEmailAttachments(c echo.Context) error {
+	replyID := strings.TrimSpace(c.Param("replyId"))
+	if replyID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "missing replyId")
+	}
+
+	pb := c.Get("app").(*pocketbase.PocketBase)
+	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "attachment collection not found")
+	}
+
+	records, err := pb.FindRecordsByFilter(collection.Id, fmt.Sprintf(`inbound_email_reply_id = "%s"`, strings.ReplaceAll(replyID, `"`, ``)), "-created", 0, 200)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list attachments")
+	}
+
+	items := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		fileName := firstFileName(record.Get("file"))
+		items = append(items, map[string]any{
+			"id":            record.Id,
+			"reply_id":      replyID,
+			"original_name": strings.TrimSpace(toString(record.Get("original_name"))),
+			"content_type":  strings.TrimSpace(toString(record.Get("content_type"))),
+			"size_bytes":    record.Get("size_bytes"),
+			"file_name":     fileName,
+			"download_url":  fmt.Sprintf("/mailapi/inbound-email-attachments/%s/download", record.Id),
+			"created":       record.Get("created"),
+		})
+	}
+
+	return c.JSON(http.StatusOK, okResp{Data: items})
+}
+
+// DownloadInboundEmailAttachment redirects to PocketBase file download endpoint.
+// Handler: GET /mailapi/inbound-email-attachments/{id}/download
+func (a *App) DownloadInboundEmailAttachment(c echo.Context) error {
+	attachmentID := strings.TrimSpace(c.Param("id"))
+	if attachmentID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "missing attachment id")
+	}
+
+	pb := c.Get("app").(*pocketbase.PocketBase)
+	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "attachment collection not found")
+	}
+
+	record, err := pb.FindRecordById(collection.Id, attachmentID)
+	if err != nil || record == nil {
+		return echo.NewHTTPError(http.StatusNotFound, "attachment not found")
+	}
+
+	fileName := firstFileName(record.Get("file"))
+	if fileName == "" {
+		return echo.NewHTTPError(http.StatusNotFound, "attachment file missing")
+	}
+
+	return c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/api/files/%s/%s/%s?download=1", collection.Id, record.Id, fileName))
+}
+
+func firstFileName(v any) string {
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(t)
+	case []string:
+		if len(t) > 0 {
+			return strings.TrimSpace(t[0])
+		}
+	case []any:
+		if len(t) > 0 {
+			return strings.TrimSpace(toString(t[0]))
+		}
+	}
+	return ""
 }
