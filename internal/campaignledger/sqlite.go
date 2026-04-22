@@ -16,7 +16,9 @@ package campaignledger
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -27,6 +29,20 @@ import (
 )
 
 const tableName = "campaign_send_ledger"
+
+func ledgerMessageID(ledgerID string) string {
+	ledgerID = strings.TrimSpace(ledgerID)
+	if ledgerID == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s@listpocket.local", ledgerID)
+}
+
+func normalizeMessageID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.Trim(raw, "<>")
+	return strings.TrimSpace(raw)
+}
 
 // SubscriberRow matches cmd.manager_store sqliteStoreSubscriberRow for conversion to models.Subscriber.
 type SubscriberRow struct {
@@ -106,9 +122,10 @@ WHERE cl.campaign_id = ?
 	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
 	for _, sid := range subIDs {
 		id := security.RandomString(15)
+		messageID := ledgerMessageID(id)
 		_, err := db.ExecContext(ctx, `
-INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, status, created, updated)
-VALUES (?, ?, ?, 'pending', ?, ?)`, id, campaignRecID, sid, now, now)
+INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, message_id, status, created, updated)
+VALUES (?, ?, ?, ?, 'pending', ?, ?)`, id, campaignRecID, sid, messageID, now, now)
 		if err != nil {
 			return false, err
 		}
@@ -392,14 +409,61 @@ WHERE c.status IN ('scheduled', 'running', 'paused')
 	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
 	for _, cid := range campaignIDs {
 		id := security.RandomString(15)
+		messageID := ledgerMessageID(id)
 		_, err := db.ExecContext(ctx, `
-INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, status, created, updated)
-VALUES (?, ?, ?, 'pending', ?, ?)`, id, cid, subscriberRecordID, now, now)
+INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, message_id, status, created, updated)
+VALUES (?, ?, ?, ?, 'pending', ?, ?)`, id, cid, subscriberRecordID, messageID, now, now)
 		if err != nil && !isUniqueViolation(err) {
 			return err
 		}
 	}
 	return nil
+}
+
+// GetMessageID returns the campaign_send_ledger message_id for the given campaign/subscriber pair.
+// Legacy rows with empty message_id are lazily populated using a deterministic value derived from ledger id.
+func GetMessageID(db sqlx.ExtContext, campaignRecID, subscriberRecID string) (string, error) {
+	ctx := context.Background()
+	campaignRecID = strings.TrimSpace(campaignRecID)
+	subscriberRecID = strings.TrimSpace(subscriberRecID)
+	if campaignRecID == "" || subscriberRecID == "" {
+		return "", nil
+	}
+
+	row := struct {
+		ID        string `db:"id"`
+		MessageID string `db:"message_id"`
+	}{}
+	err := sqlx.GetContext(ctx, db, &row, `
+SELECT id, COALESCE(message_id, '') AS message_id
+FROM `+tableName+`
+WHERE campaign_id = ? AND subscriber_id = ?
+LIMIT 1`, campaignRecID, subscriberRecID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+
+	messageID := normalizeMessageID(row.MessageID)
+	if messageID != "" {
+		return messageID, nil
+	}
+
+	messageID = ledgerMessageID(row.ID)
+	if messageID == "" {
+		return "", nil
+	}
+	_, err = db.ExecContext(ctx, `
+UPDATE `+tableName+`
+SET message_id = ?, updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
+WHERE id = ? AND (message_id IS NULL OR trim(message_id) = '')`, messageID, row.ID)
+	if err != nil {
+		return "", err
+	}
+
+	return messageID, nil
 }
 
 func isUniqueViolation(err error) bool {

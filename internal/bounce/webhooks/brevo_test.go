@@ -76,3 +76,28 @@ func TestBrevo_ProcessBounce_Array(t *testing.T) {
 		t.Fatalf("got %+v", bs)
 	}
 }
+
+func TestBrevo_ProcessBounce_ExtractsMessageID(t *testing.T) {
+	secret := "test-secret-token-ok"
+	b := NewBrevo(secret)
+
+	body := []byte(`{
+		"event":"hard_bounce",
+		"email":"User@Example.com",
+		"ts_event":1604933654,
+		"X-Mailin-custom":"550e8400-e29b-41d4-a716-446655440000",
+		"message-id":"<camprecid01234567@listpocket.local>",
+		"reason":"mailbox unavailable"
+	}`)
+
+	bs, err := b.ProcessBounce("Bearer "+secret, body)
+	if err != nil {
+		t.Fatalf("ProcessBounce: %v", err)
+	}
+	if len(bs) != 1 {
+		t.Fatalf("expected 1 bounce, got %d", len(bs))
+	}
+	if bs[0].MessageID != "camprecid01234567@listpocket.local" {
+		t.Fatalf("message id: %q", bs[0].MessageID)
+	}
+}

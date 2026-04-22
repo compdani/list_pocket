@@ -23,6 +23,7 @@ type sendgridNotif struct {
 	Timestamp            int64  `json:"timestamp"`
 	Event                string `json:"event"`
 	BounceClassification string `json:"bounce_classification"`
+	MessageID            string `json:"smtp-id"`
 
 	// SendGrid flattens all X-headers and adds them to the bounce
 	// event notification.
@@ -50,6 +51,19 @@ func (n *sendgridNotif) UnmarshalJSON(data []byte) error {
 	}
 	if v, ok := raw["bounce_classification"].(string); ok {
 		n.BounceClassification = v
+	}
+	if v, ok := raw["smtp-id"].(string); ok {
+		n.MessageID = strings.TrimSpace(v)
+	}
+	if n.MessageID == "" {
+		if v, ok := raw["message-id"].(string); ok {
+			n.MessageID = strings.TrimSpace(v)
+		}
+	}
+	if n.MessageID == "" {
+		if v, ok := raw["sg_message_id"].(string); ok {
+			n.MessageID = strings.TrimSpace(v)
+		}
 	}
 
 	if v, ok := raw["timestamp"]; ok {
@@ -230,6 +244,7 @@ func (s *Sendgrid) ProcessBounce(sig, timestamp string, b []byte) ([]models.Boun
 
 		bn := models.Bounce{
 			CampaignUUID: strings.TrimSpace(n.CampaignUUID),
+			MessageID:    normalizeMessageID(n.MessageID),
 			Email:        strings.ToLower(strings.TrimSpace(n.Email)),
 			Type:         typ,
 			Meta:         json.RawMessage(b),

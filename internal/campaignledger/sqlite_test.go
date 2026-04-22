@@ -512,6 +512,46 @@ func TestRollbackInflightDoesNotDowngradeSent(t *testing.T) {
 	}
 }
 
+func TestGetMessageIDReturnsStoredValue(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	subRec := "sub_rec_1"
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'running')`, campRec)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u1', 'a@b.c', 'enabled')`, subRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, message_id, status, created, updated) VALUES ('l1', ?, ?, 'custom@domain.test', 'pending', '2026-01-01', '2026-01-01')`, campRec, subRec)
+
+	mid, err := GetMessageID(db, campRec, subRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mid != "custom@domain.test" {
+		t.Fatalf("message_id=%q, want custom@domain.test", mid)
+	}
+}
+
+func TestGetMessageIDLazilyBackfillsLegacyRow(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	subRec := "sub_rec_1"
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'running')`, campRec)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u1', 'a@b.c', 'enabled')`, subRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('legacy_l1', ?, ?, 'pending', '2026-01-01', '2026-01-01')`, campRec, subRec)
+
+	mid, err := GetMessageID(db, campRec, subRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mid != "legacy_l1@listpocket.local" {
+		t.Fatalf("message_id=%q, want legacy_l1@listpocket.local", mid)
+	}
+
+	var stored string
+	mustGet(t, db, &stored, `SELECT message_id FROM campaign_send_ledger WHERE id = 'legacy_l1'`)
+	if stored != "legacy_l1@listpocket.local" {
+		t.Fatalf("stored message_id=%q", stored)
+	}
+}
+
 // --- test helpers ---
 
 func newTestLedgerDB(t *testing.T) *sqlx.DB {
@@ -584,12 +624,14 @@ CREATE TABLE campaign_send_ledger (
   id TEXT NOT NULL UNIQUE,
   campaign_id TEXT NOT NULL,
   subscriber_id TEXT NOT NULL,
+	message_id TEXT,
   status TEXT NOT NULL,
   created TEXT,
   updated TEXT,
   UNIQUE (campaign_id, subscriber_id)
 );
 CREATE INDEX idx_campaign_ledger_campaign_status ON campaign_send_ledger (campaign_id, status);
+CREATE UNIQUE INDEX idx_campaign_ledger_message_id ON campaign_send_ledger (message_id) WHERE message_id IS NOT NULL AND message_id != '';
 `
 	if _, err := db.ExecContext(context.Background(), ddl); err != nil {
 		t.Fatalf("schema: %v", err)

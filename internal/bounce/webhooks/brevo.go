@@ -33,6 +33,8 @@ type brevoEvent struct {
 	TS            int64  `json:"ts"`
 	TSEpoch       int64  `json:"ts_epoch"`
 	XMailinCustom string `json:"X-Mailin-custom"`
+	MessageID     string `json:"message-id"`
+	MessageIDAlt  string `json:"messageId"`
 	Reason        string `json:"reason"`
 }
 
@@ -77,6 +79,7 @@ func (b *Brevo) ProcessBounce(authorization string, body []byte) ([]models.Bounc
 
 		out = append(out, models.Bounce{
 			CampaignUUID: campUUID,
+			MessageID:    normalizeMessageID(firstNonEmptyBounceID(e.MessageID, e.MessageIDAlt)),
 			Email:        email,
 			Type:         typ,
 			Meta:         meta,
@@ -86,6 +89,16 @@ func (b *Brevo) ProcessBounce(authorization string, body []byte) ([]models.Bounc
 	}
 
 	return out, nil
+}
+
+func firstNonEmptyBounceID(values ...string) string {
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func verifyBearerToken(authorization, secret string) error {

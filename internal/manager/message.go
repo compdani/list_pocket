@@ -31,6 +31,12 @@ func (m *Manager) NewCampaignMessage(c *models.Campaign, s models.Subscriber) (C
 		if msg.from != "" && strings.Contains(msg.from, "@") {
 			msg.from = ""
 		}
+	} else if m.store != nil && strings.TrimSpace(s.RecordID) != "" {
+		messageID, err := m.store.GetCampaignLedgerMessageID(c.ID, s.RecordID)
+		if err != nil {
+			return msg, err
+		}
+		msg.messageID = strings.TrimSpace(messageID)
 	}
 
 	if err := msg.render(); err != nil {

@@ -1252,8 +1252,21 @@ func (c *Core) LinkInboundEmailToOutboundMessage(ctx context.Context, inReplyTo 
 		return nil, nil
 	}
 	for _, candidate := range candidateIDs {
+		candidate = normalizeMessageID(candidate)
+		if candidate == "" {
+			continue
+		}
 		var recID string
-		err := c.db.Get(&recID, `SELECT id FROM campaign_send_ledger WHERE id = ? LIMIT 1`, candidate)
+		err := c.db.Get(&recID, `SELECT id FROM campaign_send_ledger WHERE message_id = ? LIMIT 1`, candidate)
+		if err == nil {
+			v := recID
+			return &v, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+
+		err = c.db.Get(&recID, `SELECT id FROM campaign_send_ledger WHERE id = ? LIMIT 1`, candidate)
 		if err == nil {
 			v := recID
 			return &v, nil
@@ -1266,31 +1279,31 @@ func (c *Core) LinkInboundEmailToOutboundMessage(ctx context.Context, inReplyTo 
 }
 
 type inboundEmailReplyRow struct {
-	ID              int            `db:"id"`
-	RecordID        string         `db:"record_id"`
-	CreatedAtRaw    sql.NullString `db:"created_at"`
-	UpdatedAtRaw    sql.NullString `db:"updated_at"`
-	SubscriberID    sql.NullString `db:"subscriber_id"`
-	LinkedMessageID sql.NullString `db:"linked_message_id"`
-	FromAddress     string         `db:"from_address"`
-	Subject         string         `db:"subject"`
-	MessageID       string         `db:"message_id"`
-	InReplyTo       string         `db:"in_reply_to"`
-	References      string         `db:"references"`
-	ReceivedAtRaw   sql.NullString `db:"received_at"`
-	BodySnippet     string         `db:"body_snippet"`
-	BodyHTML        string         `db:"body_html"`
-	BodyText        string         `db:"body_text"`
-	ToAddress       string         `db:"to_address"`
-	CC              string         `db:"cc"`
-	ReplyTo         string         `db:"reply_to"`
-	StructuredHeadersRaw any       `db:"structured_headers"`
-	HasAttachments  bool           `db:"has_attachments"`
-	MatchScore      string         `db:"match_score"`
-	SpamStatus      string         `db:"spam_status"`
-	SpamScore       float64        `db:"spam_score"`
-	ProcessedAtRaw  sql.NullString `db:"processed_at"`
-	DedupeKey       string         `db:"dedupe_key"`
+	ID                   int            `db:"id"`
+	RecordID             string         `db:"record_id"`
+	CreatedAtRaw         sql.NullString `db:"created_at"`
+	UpdatedAtRaw         sql.NullString `db:"updated_at"`
+	SubscriberID         sql.NullString `db:"subscriber_id"`
+	LinkedMessageID      sql.NullString `db:"linked_message_id"`
+	FromAddress          string         `db:"from_address"`
+	Subject              string         `db:"subject"`
+	MessageID            string         `db:"message_id"`
+	InReplyTo            string         `db:"in_reply_to"`
+	References           string         `db:"references"`
+	ReceivedAtRaw        sql.NullString `db:"received_at"`
+	BodySnippet          string         `db:"body_snippet"`
+	BodyHTML             string         `db:"body_html"`
+	BodyText             string         `db:"body_text"`
+	ToAddress            string         `db:"to_address"`
+	CC                   string         `db:"cc"`
+	ReplyTo              string         `db:"reply_to"`
+	StructuredHeadersRaw any            `db:"structured_headers"`
+	HasAttachments       bool           `db:"has_attachments"`
+	MatchScore           string         `db:"match_score"`
+	SpamStatus           string         `db:"spam_status"`
+	SpamScore            float64        `db:"spam_score"`
+	ProcessedAtRaw       sql.NullString `db:"processed_at"`
+	DedupeKey            string         `db:"dedupe_key"`
 }
 
 func mapInboundEmailReplyRow(r inboundEmailReplyRow) (models.InboundEmailReplyEvent, error) {
@@ -1576,8 +1589,8 @@ func (c *Core) CheckInboundSpamRules(ctx context.Context, fromAddress, subject, 
 type InboxQueryParams struct {
 	Limit      int
 	Offset     int
-	Search     string    // filter by from_address or subject (partial match)
-	SpamStatus string    // filter by spam_status value (empty = non-spam only, "all" = all)
+	Search     string // filter by from_address or subject (partial match)
+	SpamStatus string // filter by spam_status value (empty = non-spam only, "all" = all)
 	StartDate  *time.Time
 	EndDate    *time.Time
 	SortOrder  string // "desc" (default) or "asc"
