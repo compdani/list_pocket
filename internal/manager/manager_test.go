@@ -14,6 +14,7 @@ type testStore struct{}
 
 func (testStore) NextCampaigns([]int64, []int64) ([]*models.Campaign, error)  { return nil, nil }
 func (testStore) NextSubscribers(int, int) ([]models.Subscriber, bool, error) { return nil, false, nil }
+func (testStore) GetCampaignLedgerMessageID(int, string) (string, error)      { return "", nil }
 func (testStore) GetCampaign(int) (*models.Campaign, error)                   { return nil, nil }
 func (testStore) GetAttachment(int) (models.Attachment, error)                { return models.Attachment{}, nil }
 func (testStore) UpdateCampaignStatus(int, string) error                      { return nil }

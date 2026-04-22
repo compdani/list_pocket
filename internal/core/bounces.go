@@ -274,8 +274,18 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 	}
 
 	campID := ""
-	if b.CampaignUUID != "" {
-		_ = tx.Get(&campID, `SELECT id FROM campaigns WHERE uuid = ? LIMIT 1`, b.CampaignUUID)
+	if mid := normalizeMessageID(b.MessageID); mid != "" {
+		_ = tx.Get(&campID, `SELECT campaign_id FROM campaign_send_ledger WHERE message_id = ? LIMIT 1`, mid)
+	}
+	if campID == "" && b.CampaignUUID != "" {
+		v := strings.TrimSpace(b.CampaignUUID)
+		_ = tx.Get(&campID, `SELECT id FROM campaigns WHERE id = ? LIMIT 1`, v)
+		if campID == "" {
+			_ = tx.Get(&campID, `SELECT id FROM campaigns WHERE uuid = ? LIMIT 1`, v)
+		}
+	}
+	if campID == "" && (strings.TrimSpace(b.MessageID) != "" || strings.TrimSpace(b.CampaignUUID) != "") {
+		c.log.Printf("bounce linkage unresolved: source=%q subscriber=%q email=%q message_id=%q campaign_ref=%q", b.Source, b.SubscriberUUID, b.Email, b.MessageID, b.CampaignUUID)
 	}
 
 	var num int

@@ -18,6 +18,7 @@ type Bounce struct {
 	Source    string          `db:"source" json:"source"`
 	Meta      json.RawMessage `db:"meta" json:"meta"`
 	CreatedAt time.Time       `db:"created_at" json:"created_at"`
+	MessageID string          `db:"message_id" json:"message_id,omitempty"`
 
 	// One of these should be provided.
 	Email            string `db:"email" json:"email,omitempty"`

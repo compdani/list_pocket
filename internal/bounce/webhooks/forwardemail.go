@@ -80,16 +80,37 @@ func (p *Forwardemail) ProcessBounce(sigHex string, body []byte) ([]models.Bounc
 	}
 
 	campUUID := ""
-	if v, ok := n.Headers[models.EmailHeaderCampaignUUID]; ok {
-		campUUID = v
+	if v, ok := lookupHeaderCI(n.Headers, models.EmailHeaderCampaignUUID); ok {
+		campUUID = strings.TrimSpace(v)
+	}
+
+	messageID := ""
+	if v, ok := lookupHeaderCI(n.Headers, models.EmailHeaderMessageId); ok {
+		messageID = normalizeMessageID(v)
 	}
 
 	return []models.Bounce{{
 		Email:        strings.ToLower(n.Recipient),
 		CampaignUUID: campUUID,
+		MessageID:    messageID,
 		Type:         typ,
 		Source:       "forwardemail",
 		Meta:         json.RawMessage(body),
 		CreatedAt:    n.BouncedAt,
 	}}, nil
+}
+
+func lookupHeaderCI(headers map[string]string, key string) (string, bool) {
+	if headers == nil {
+		return "", false
+	}
+	if v, ok := headers[key]; ok {
+		return v, true
+	}
+	for k, v := range headers {
+		if strings.EqualFold(strings.TrimSpace(k), key) {
+			return v, true
+		}
+	}
+	return "", false
 }

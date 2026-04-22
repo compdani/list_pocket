@@ -88,9 +88,17 @@ func (p *Postmark) ProcessBounce(b []byte, c echo.Context) ([]models.Bounce, err
 		campUUID = v
 	}
 
+	messageID := normalizeMessageID(n.MessageID)
+	if messageID == "" {
+		if v, ok := n.Metadata[models.EmailHeaderMessageId]; ok {
+			messageID = normalizeMessageID(v)
+		}
+	}
+
 	return []models.Bounce{{
 		Email:        strings.ToLower(n.Email),
 		CampaignUUID: campUUID,
+		MessageID:    messageID,
 		Type:         typ,
 		Source:       "postmark",
 		Meta:         json.RawMessage(b),

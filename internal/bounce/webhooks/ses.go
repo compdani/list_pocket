@@ -70,6 +70,12 @@ type SES struct {
 	certs map[string]*x509.Certificate
 }
 
+func normalizeMessageID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.Trim(raw, "<>")
+	return strings.TrimSpace(raw)
+}
+
 // NewSES returns a new SES instance.
 func NewSES() *SES {
 	return &SES{
@@ -147,26 +153,35 @@ func (s *SES) ProcessBounce(b []byte) (models.Bounce, error) {
 		typ = models.BounceTypeComplaint
 	}
 
-	// Look for the campaign ID in headers.
+	// Look for campaign and message IDs in headers.
 	campUUID := ""
+	messageID := ""
 	if !m.Mail.HeadersTruncated {
 		for _, h := range m.Mail.Headers {
 			key, ok := h["name"]
-			if !ok || key != models.EmailHeaderCampaignUUID {
-				continue
-			}
-
-			campUUID, ok = h["value"]
 			if !ok {
 				continue
 			}
-			break
+			val, ok := h["value"]
+			if !ok {
+				continue
+			}
+			switch {
+			case strings.EqualFold(key, models.EmailHeaderCampaignUUID):
+				campUUID = strings.TrimSpace(val)
+			case strings.EqualFold(key, models.EmailHeaderMessageId):
+				messageID = normalizeMessageID(val)
+			}
+			if campUUID != "" && messageID != "" {
+				break
+			}
 		}
 	}
 
 	return models.Bounce{
 		Email:        strings.ToLower(m.Mail.Destination[0]),
 		CampaignUUID: campUUID,
+		MessageID:    messageID,
 		Type:         typ,
 		Source:       "ses",
 		Meta:         json.RawMessage(n.Message),

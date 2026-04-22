@@ -26,7 +26,6 @@ const (
 
 	// ContentTpl is the name of the compiled message.
 	ContentTpl = "content"
-
 )
 
 // Store represents a data backend, such as a database,
@@ -34,6 +33,7 @@ const (
 type Store interface {
 	NextCampaigns(currentIDs []int64, sentCounts []int64) ([]*models.Campaign, error)
 	NextSubscribers(campID, limit int) ([]models.Subscriber, bool, error)
+	GetCampaignLedgerMessageID(campaignID int, subscriberRecordID string) (string, error)
 	GetCampaign(campID int) (*models.Campaign, error)
 	GetAttachment(mediaID int) (models.Attachment, error)
 	UpdateCampaignStatus(campID int, status string) error
@@ -117,12 +117,13 @@ type CampaignMessage struct {
 	Campaign   *models.Campaign
 	Subscriber models.Subscriber
 
-	from     string
-	to       string
-	subject  string
-	body     []byte
-	altBody  []byte
-	unsubURL string
+	from      string
+	to        string
+	subject   string
+	body      []byte
+	altBody   []byte
+	unsubURL  string
+	messageID string
 
 	pipe *pipe
 }
@@ -185,14 +186,14 @@ func New(cfg Config, store Store, i *i18n.I18n, l *log.Logger) *Manager {
 		fnNotify: func(subject string, data any) error {
 			return notifs.NotifySystem(subject, notifs.TplCampaignStatus, data, nil)
 		},
-		log:          l,
-		messengers:   make(map[string]Messenger),
-		pipes:        make(map[int]*pipe),
-		tpls:         make(map[int]*models.Template),
-		links:        make(map[string]string),
-		nextPipes:    make(chan *pipe, 1000),
-		campMsgQ:     make(chan CampaignMessage, cfg.Concurrency*cfg.MessageRate*2),
-		msgQ:         make(chan models.Message, cfg.Concurrency*cfg.MessageRate*2),
+		log:             l,
+		messengers:      make(map[string]Messenger),
+		pipes:           make(map[int]*pipe),
+		tpls:            make(map[int]*models.Template),
+		links:           make(map[string]string),
+		nextPipes:       make(chan *pipe, 1000),
+		campMsgQ:        make(chan CampaignMessage, cfg.Concurrency*cfg.MessageRate*2),
+		msgQ:            make(chan models.Message, cfg.Concurrency*cfg.MessageRate*2),
 		slidingStart:    time.Now(),
 		smsSlidingStart: time.Now(),
 	}
@@ -580,6 +581,15 @@ func (m *Manager) worker() {
 
 			h := textproto.MIMEHeader{}
 			if !models.IsTextMessenger(msg.Campaign.Messenger) {
+				if mid := strings.TrimSpace(msg.messageID); mid != "" {
+					if !strings.HasPrefix(mid, "<") {
+						mid = "<" + mid
+					}
+					if !strings.HasSuffix(mid, ">") {
+						mid = mid + ">"
+					}
+					h.Set(models.EmailHeaderMessageId, mid)
+				}
 				h.Set(models.EmailHeaderCampaignUUID, msg.Campaign.RecordID)
 				h.Set(models.EmailHeaderSubscriberUUID, msg.Subscriber.RecordID)
 

@@ -183,6 +183,18 @@ func (s *store) NextSubscribers(campID, limit int) ([]models.Subscriber, bool, e
 	return s.nextSubscribersSQLite(campID, limit)
 }
 
+func (s *store) GetCampaignLedgerMessageID(campaignID int, subscriberRecordID string) (string, error) {
+	subscriberRecordID = strings.TrimSpace(subscriberRecordID)
+	if subscriberRecordID == "" {
+		return "", nil
+	}
+	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)
+	if err != nil {
+		return "", err
+	}
+	return campaignledger.GetMessageID(s.db, campaignRecID, subscriberRecordID)
+}
+
 // GetCampaign fetches a campaign from the database.
 func (s *store) GetCampaign(campID int) (*models.Campaign, error) {
 	recordID, err := s.sqliteCampaignRecordID(campID)
@@ -774,8 +786,20 @@ func (s *store) RecordBounce(b models.Bounce) (int64, int, error) {
 	}
 
 	var campID sql.NullInt64
-	if b.CampaignUUID != "" {
-		_ = s.db.Get(&campID, `SELECT id FROM campaigns WHERE uuid = ? LIMIT 1`, b.CampaignUUID)
+	if strings.TrimSpace(b.MessageID) != "" {
+		_ = s.db.Get(&campID, `
+			SELECT c.rowid
+			FROM campaign_send_ledger l
+			JOIN campaigns c ON c.id = l.campaign_id
+			WHERE l.message_id = ?
+			LIMIT 1`, strings.Trim(strings.TrimSpace(b.MessageID), "<>"))
+	}
+	if !campID.Valid && b.CampaignUUID != "" {
+		v := strings.TrimSpace(b.CampaignUUID)
+		_ = s.db.Get(&campID, `SELECT rowid FROM campaigns WHERE id = ? LIMIT 1`, v)
+		if !campID.Valid {
+			_ = s.db.Get(&campID, `SELECT rowid FROM campaigns WHERE uuid = ? LIMIT 1`, v)
+		}
 	}
 
 	metaJSON := b.Meta
