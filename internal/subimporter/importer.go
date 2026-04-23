@@ -773,7 +773,12 @@ func tagsFromAny(v any) []string {
 	case []any:
 		out := make([]string, 0, len(vv))
 		for _, item := range vv {
-			out = append(out, fmt.Sprint(item))
+			switch val := item.(type) {
+			case string:
+				out = append(out, val)
+			case []byte:
+				out = append(out, string(val))
+			}
 		}
 		return out
 	default:

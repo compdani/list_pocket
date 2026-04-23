@@ -451,6 +451,7 @@ export default {
       try {
         await this.persistSubscriberTagOptions();
       } catch (e) {
+        this.$utils.toast((e && e.message) || this.$t('globals.messages.errorFetching'), 'is-danger');
         this.isProcessing = false;
         return;
       }
