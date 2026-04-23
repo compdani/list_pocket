@@ -376,7 +376,21 @@ func (s *Session) Start() {
 		}
 
 		if s.opt.Mode == ModeSubscribe {
-			if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
+			overwriteAttribs := s.opt.OverwriteUserInfo
+			if !s.opt.OverwriteUserInfo && len(s.opt.Tags) > 0 {
+				existingAttribs, found, getErr := getSubscriberAttribs(tx, sub.Email)
+				if getErr != nil {
+					err = getErr
+				} else if found {
+					sub.Attribs = mergeImportTags(existingAttribs, s.opt.Tags)
+					overwriteAttribs = true
+				}
+			}
+
+			if err == nil {
+				_, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, overwriteAttribs)
+			}
+			if err == nil {
 				s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
 				_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus, s.opt.OverwriteSubStatus)
 			}
@@ -800,6 +814,47 @@ func mergeImportTags(attribs models.JSON, tags []string) models.JSON {
 		attribs["tags"] = normalized
 	}
 	return attribs
+}
+
+func getSubscriberAttribs(tx *sql.Tx, email string) (models.JSON, bool, error) {
+	var raw any
+	if err := tx.QueryRow("SELECT attribs FROM subscribers WHERE email = ?", email).Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	switch v := raw.(type) {
+	case nil:
+		return models.JSON{}, true, nil
+	case []byte:
+		if len(v) == 0 {
+			return models.JSON{}, true, nil
+		}
+		var out models.JSON
+		if err := json.Unmarshal(v, &out); err != nil {
+			return nil, false, err
+		}
+		if out == nil {
+			out = models.JSON{}
+		}
+		return out, true, nil
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return models.JSON{}, true, nil
+		}
+		var out models.JSON
+		if err := json.Unmarshal([]byte(v), &out); err != nil {
+			return nil, false, err
+		}
+		if out == nil {
+			out = models.JSON{}
+		}
+		return out, true, nil
+	default:
+		return nil, false, fmt.Errorf("unexpected attribs type %T for %s", raw, email)
+	}
 }
 
 // Check the domain against the given map of domains (block/allowlist).
