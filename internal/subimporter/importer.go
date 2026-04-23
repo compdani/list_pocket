@@ -141,6 +141,7 @@ type SessionOpt struct {
 	OverwriteUserInfo  bool     `json:"overwrite_userinfo"`
 	OverwriteSubStatus bool     `json:"overwrite_subscription_status"`
 	Delim              string   `json:"delim"`
+	Tags               []string `json:"tags"`
 	ListIDs            []int    `json:"lists"`
 	ListRecordIDs      []string `json:"list_record_ids"`
 }
@@ -226,6 +227,7 @@ func (im *Importer) NewSession(opt SessionOpt) (*Session, error) {
 		opt.OverwriteUserInfo = true
 		opt.OverwriteSubStatus = true
 	}
+	opt.Tags = normalizeImportTags(opt.Tags)
 
 	im.Lock()
 	im.status = Status{Status: StatusImporting,
@@ -352,8 +354,8 @@ func (s *Session) Start() {
 	}
 	listIDsJSON := string(b)
 	listIDsArg := any(listIDsJSON)
-	s.log.Printf("import session config: mode=%q sub_status=%q list_ids=%v list_record_ids=%v list_ids_json=%s overwrite_userinfo=%v overwrite_subscription_status=%v",
-		s.opt.Mode, s.opt.SubStatus, listIDs, listRecordIDs, listIDsJSON, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
+	s.log.Printf("import session config: mode=%q sub_status=%q list_ids=%v list_record_ids=%v tags=%v list_ids_json=%s overwrite_userinfo=%v overwrite_subscription_status=%v",
+		s.opt.Mode, s.opt.SubStatus, listIDs, listRecordIDs, s.opt.Tags, listIDsJSON, s.opt.OverwriteUserInfo, s.opt.OverwriteSubStatus)
 
 	for sub := range s.subQueue {
 		if cur == 0 {
@@ -647,6 +649,7 @@ func (s *Session) LoadCSV(srcPath string, delim rune) error {
 				sub.Attribs = attribs
 			}
 		}
+		sub.Attribs = mergeImportTags(sub.Attribs, s.opt.Tags)
 
 		// Send the subscriber to the queue.
 		s.subQueue <- sub
@@ -743,6 +746,60 @@ func (im *Importer) ValidateFields(s SubReq) (SubReq, error) {
 	}
 
 	return s, nil
+}
+
+func normalizeImportTags(tags []string) []string {
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		key := strings.ToLower(tag)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, tag)
+	}
+	return out
+}
+
+func tagsFromAny(v any) []string {
+	switch vv := v.(type) {
+	case []string:
+		return append([]string{}, vv...)
+	case []any:
+		out := make([]string, 0, len(vv))
+		for _, item := range vv {
+			switch val := item.(type) {
+			case string:
+				out = append(out, val)
+			case []byte:
+				out = append(out, string(val))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func mergeImportTags(attribs models.JSON, tags []string) models.JSON {
+	if len(tags) == 0 {
+		return attribs
+	}
+	if attribs == nil {
+		attribs = models.JSON{}
+	}
+
+	merged := append(tagsFromAny(attribs["tags"]), tags...)
+	normalized := normalizeImportTags(merged)
+	if len(normalized) > 0 {
+		attribs["tags"] = normalized
+	}
+	return attribs
 }
 
 // Check the domain against the given map of domains (block/allowlist).

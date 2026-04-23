@@ -117,6 +117,21 @@
               />
             </div>
 
+            <div v-if="form.mode === 'subscribe'" class="mt-4">
+              <v-combobox
+                v-model="form.tags"
+                :items="subscriberTagOptions"
+                :aria-label="$t('globals.terms.tags')"
+                :label="$t('globals.terms.tags')"
+                :placeholder="$t('globals.terms.tags')"
+                multiple
+                chips
+                closable-chips
+                variant="outlined"
+                density="comfortable"
+              />
+            </div>
+
             <v-divider class="my-6" />
 
             <v-file-input
@@ -243,10 +258,12 @@ export default {
         subStatus: 'unconfirmed',
         delim: ',',
         lists: [],
+        tags: [],
         overwriteUserInfo: false,
         overwriteSubStatus: false,
         file: null,
       },
+      subscriberTagOptions: [],
       example: '',
 
       // Initial page load still has to wait for the status API to return
@@ -274,6 +291,36 @@ export default {
   },
 
   methods: {
+    normalizeTags(values = []) {
+      const seen = new Set();
+      return (Array.isArray(values) ? values : [])
+        .map((tag) => String(tag || '').trim())
+        .filter((tag) => {
+          const key = tag.toLowerCase();
+          if (!key || seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        });
+    },
+
+    loadSubscriberTagOptions() {
+      this.$api.getSubscriberTagsCatalog().then((tags) => {
+        this.subscriberTagOptions = this.normalizeTags(tags);
+      });
+    },
+
+    async persistSubscriberTagOptions() {
+      const tags = this.normalizeTags(this.form.tags);
+      this.form.tags = tags;
+      if (tags.length === 0) {
+        return;
+      }
+      await this.$api.ensureSubscriberTags(tags, this.subscriberTagOptions);
+      this.subscriberTagOptions = this.normalizeTags([...this.subscriberTagOptions, ...tags]);
+    },
+
     clearFile() {
       this.form.file = null;
     },
@@ -378,6 +425,7 @@ export default {
       this.form.overwriteSubStatus = false;
       this.form.file = null;
       this.form.lists = [];
+      this.form.tags = [];
       this.form.subStatus = 'unconfirmed';
       this.form.delim = ',';
     },
@@ -391,11 +439,19 @@ export default {
       this.onSubmit();
     },
 
-    onSubmit() {
+    async onSubmit() {
       this.isProcessing = true;
 
       const file = this.selectedFile;
       if (!file) {
+        this.isProcessing = false;
+        return;
+      }
+
+      try {
+        await this.persistSubscriberTagOptions();
+      } catch (e) {
+        this.$utils.toast((e && e.message) || this.$t('globals.messages.errorFetching'), 'is-danger');
         this.isProcessing = false;
         return;
       }
@@ -409,6 +465,7 @@ export default {
         list_record_ids: this.form.lists
           .map((l) => l.id)
           .filter((id) => typeof id === 'string' && id.length > 0),
+        tags: this.form.tags,
         overwrite_userinfo: this.form.overwriteUserInfo,
         overwrite_subscription_status: this.form.overwriteSubStatus,
       }));
@@ -462,6 +519,7 @@ export default {
   mounted() {
     this.renderExample();
     this.pollStatus();
+    this.loadSubscriberTagOptions();
 
     const recordIDs = typeof this.$route.query.list_record_id === 'object'
       ? this.$route.query.list_record_id
