@@ -377,6 +377,11 @@ func (s *Session) Start() {
 
 		if s.opt.Mode == ModeSubscribe {
 			if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo); err == nil {
+				if err = s.applyImportTags(tx, sub.Email); err != nil {
+					s.log.Printf("error merging import tags: %v", err)
+				}
+			}
+			if err == nil {
 				s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
 				_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus, s.opt.OverwriteSubStatus)
 			}
@@ -800,6 +805,36 @@ func mergeImportTags(attribs models.JSON, tags []string) models.JSON {
 		attribs["tags"] = normalized
 	}
 	return attribs
+}
+
+func (s *Session) applyImportTags(tx *sql.Tx, email string) error {
+	if len(s.opt.Tags) == 0 {
+		return nil
+	}
+
+	var rawAttribs sql.NullString
+	if err := tx.QueryRow(`SELECT attribs FROM subscribers WHERE email = ?`, email).Scan(&rawAttribs); err != nil {
+		return err
+	}
+
+	var attribs models.JSON
+	if rawAttribs.Valid && strings.TrimSpace(rawAttribs.String) != "" {
+		if err := json.Unmarshal([]byte(rawAttribs.String), &attribs); err != nil {
+			s.log.Printf("invalid subscriber attribs JSON while importing tags for %q: %v", email, err)
+			attribs = nil
+		}
+	}
+
+	// Import tags are additive only: merge new tags into existing tags,
+	// but never remove existing tags through importer operations.
+	mergedAttribs := mergeImportTags(attribs, s.opt.Tags)
+	_, err := tx.Exec(`
+UPDATE subscribers
+SET attribs = ?, updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+WHERE email = ?;
+`, mergedAttribs, email)
+
+	return err
 }
 
 // Check the domain against the given map of domains (block/allowlist).
