@@ -388,11 +388,10 @@ func (s *Session) Start() {
 			}
 
 			if err == nil {
-				_, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, overwriteAttribs)
-			}
-			if err == nil {
-				s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
-				_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus, s.opt.OverwriteSubStatus)
+				if _, err = tx.Exec(sqliteUpsertSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, s.opt.OverwriteUserInfo, overwriteAttribs); err == nil {
+					s.log.Printf("sqlite subscribe import: email=%q resolved_list_record_ids=%v list_ids_json=%s", sub.Email, listRecordIDs, listIDsJSON)
+					_, err = tx.Exec(sqliteUpsertSubscriberLists, s.opt.SubStatus, s.opt.SubStatus, listIDsJSON, sub.Email, s.opt.OverwriteSubStatus, s.opt.OverwriteSubStatus)
+				}
 			}
 		} else if s.opt.Mode == ModeBlocklist {
 			if _, err = tx.Exec(sqliteUpsertBlocklistedSubscriber, uu, sub.Email, sub.Phone, sub.FirstName, sub.LastName, sub.Name, sub.Attribs); err == nil {
