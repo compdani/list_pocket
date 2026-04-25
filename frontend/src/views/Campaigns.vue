@@ -705,6 +705,8 @@ export default {
         content_type: c.contentType,
         messenger: c.messenger,
         tags: c.tags,
+        include_tags: c.includeTags || [],
+        exclude_tags: c.excludeTags || [],
         template_id: c.templateId,
         body,
         body_source: bodySource,
