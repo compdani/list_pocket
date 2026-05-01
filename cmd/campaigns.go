@@ -589,6 +589,48 @@ func (a *App) ResolveCampaignLedgerInflight(c echo.Context) error {
 	return c.JSON(http.StatusOK, okResp{out})
 }
 
+// GetCampaignRecover previews how many currently eligible recipients are missing
+// from the send ledger before recovering a paused or finished campaign.
+func (a *App) GetCampaignRecover(c echo.Context) error {
+	recordID, err := a.resolveCampaignRouteID(c)
+	if err != nil {
+		return err
+	}
+
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+		return err
+	}
+
+	out, err := a.core.PreviewCampaignRecover(recordID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, okResp{out})
+}
+
+// RecoverCampaign fills missing campaign_send_ledger rows and starts the campaign.
+func (a *App) RecoverCampaign(c echo.Context) error {
+	recordID, err := a.resolveCampaignRouteID(c)
+	if err != nil {
+		return err
+	}
+
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+		return err
+	}
+
+	a.log.Printf("recover campaign: request record_id=%q", recordID)
+	out, err := a.core.RecoverCampaign(recordID)
+	if err != nil {
+		a.log.Printf("recover campaign: failed record_id=%q error=%v", recordID, err)
+		return err
+	}
+	a.log.Printf("recover campaign: success record_id=%q inserted=%d reset_inflight=%d missing=%d status=%q",
+		recordID, out.Inserted, out.ResetInflight, out.Missing, out.Status)
+
+	return c.JSON(http.StatusOK, okResp{out})
+}
+
 // UpdateCampaignArchive handles campaign status modification.
 func (a *App) UpdateCampaignArchive(c echo.Context) error {
 	recordID, err := a.resolveCampaignRouteID(c)

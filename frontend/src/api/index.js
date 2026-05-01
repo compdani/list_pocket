@@ -765,6 +765,17 @@ export const changeCampaignStatus = async (idOrRecordId, status) => http.put(
   { loading: models.campaigns },
 );
 
+export const getCampaignRecover = async (idOrRecordId) => http.get(
+  `/api/campaigns/${idOrRecordId}/recover`,
+  { loading: models.campaigns },
+);
+
+export const recoverCampaign = async (idOrRecordId) => http.post(
+  `/api/campaigns/${idOrRecordId}/recover`,
+  {},
+  { loading: models.campaigns },
+);
+
 export const updateCampaignArchive = async (idOrRecordId, data) => http.put(
   `/api/campaigns/${idOrRecordId}/archive`,
   data,

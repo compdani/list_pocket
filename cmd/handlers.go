@@ -144,6 +144,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 
 	api.GET("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetCampaigns, "campaigns:get_all", "campaigns:get")))
 	api.GET("/campaigns/running/stats", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.GetRunningCampaignStats, "campaigns:get_all", "campaigns:get")))
+	api.GET("/campaigns/{id}/recover", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetCampaignRecover, "campaigns:manage_all", "campaigns:manage")))
 	api.GET("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.GetCampaign, "campaigns:get_all", "campaigns:get")))
 	api.GET("/campaigns/{first}/{second}", wrapEcho(a, tpl, cfg, urlCfg, []string{"first", "second"}, func(c echo.Context) error {
 		switch {
@@ -167,6 +168,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	api.POST("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.CreateCampaign, "campaigns:manage_all", "campaigns:manage")))
 	api.PUT("/campaigns/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaign, "campaigns:manage_all", "campaigns:manage")))
 	api.PUT("/campaigns/{id}/status", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaignStatus, "campaigns:manage_all", "campaigns:manage")))
+	api.POST("/campaigns/{id}/recover", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.RecoverCampaign, "campaigns:manage_all", "campaigns:manage")))
 	api.POST("/campaigns/{id}/ledger/resolve-inflight", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.ResolveCampaignLedgerInflight, "campaigns:manage_all", "campaigns:manage")))
 	api.PUT("/campaigns/{id}/archive", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.UpdateCampaignArchive, "campaigns:manage_all", "campaigns:manage")))
 	api.DELETE("/campaigns", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteCampaigns, "campaigns:manage", "campaigns:manage_all")))
