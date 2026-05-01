@@ -1,10 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"log"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/labstack/echo/v4"
 )
 
 func TestNormalizeSESInboundEmail_Base64MIME(t *testing.T) {
@@ -237,5 +243,52 @@ func TestParseSESNotificationType(t *testing.T) {
 	invalid := []byte(`{"Type":"Notification","Message":"not-json"}`)
 	if got := parseSESNotificationType(invalid); got != "" {
 		t.Fatalf("invalid type: got %q want empty", got)
+	}
+}
+
+func TestLogInboundEmailWebhookRequestDoesNotLogBody(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	app := &App{log: log.New(&logs, "", 0)}
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/ses", strings.NewReader(""))
+	req.Header.Set(echo.HeaderContentType, "text/plain; charset=UTF-8")
+	req.Header.Set("X-Amz-Sns-Message-Type", "Notification")
+	req.Header.Set("X-Amz-Sns-Topic-Arn", "arn:aws:sns:us-east-1:123456789012:ses-received")
+	req.Header.Set("X-Amz-Sns-Message-Id", "sns-message-id")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/webhooks/ses")
+
+	body := []byte(`{"Type":"Notification","Message":"{\"notificationType\":\"Received\",\"content\":\"secret-body\"}"}`)
+	app.logInboundEmailWebhookRequest(c, body)
+
+	line := logs.String()
+	if strings.Contains(line, "body=") || strings.Contains(line, "secret-body") {
+		t.Fatalf("expected log to omit raw body, got: %s", line)
+	}
+	for _, want := range []string{
+		`size=`,
+		`sns_type="Notification"`,
+		`sns_message_id="sns-message-id"`,
+		`ses_notification_type="Received"`,
+	} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("expected log to contain %s, got: %s", want, line)
+		}
+	}
+}
+
+func TestInboundWebhookBodyPreviewForLogTruncates(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(strings.Repeat("a", 600))
+	preview, truncated := inboundWebhookBodyPreviewForLog(body)
+	if !truncated {
+		t.Fatal("expected preview to report truncation")
+	}
+	if len(preview) != 512 {
+		t.Fatalf("preview length: got %d want 512", len(preview))
 	}
 }
