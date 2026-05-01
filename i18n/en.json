@@ -109,6 +109,8 @@
     "campaigns.queryPlaceholder": "Name or subject",
     "campaigns.rateMinuteShort": "min",
     "campaigns.rawHTML": "Raw HTML",
+    "campaigns.recover": "Recover campaign",
+    "campaigns.confirmRecover": "The system will first check which emails were already sent, then fill the campaign ledger only for missing eligible contacts. Missing contacts to add: {missing}. Already sent: {sent}. Ledger rows: {ledger}. Eligible contacts: {eligible}. Recover and start this campaign now?",
     "campaigns.removeAltText": "Remove alternate plain text message",
     "campaigns.richText": "Rich text",
     "campaigns.importVisualTemplate": "Import visual template",

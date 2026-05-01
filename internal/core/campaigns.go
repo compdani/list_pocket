@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -532,6 +533,13 @@ type CampaignLedgerInflightResult struct {
 	Sent     int    `json:"sent"`
 }
 
+// CampaignRecoverResult describes the current or applied campaign recovery state.
+type CampaignRecoverResult struct {
+	campaignledger.RecoverStats
+	Status string `json:"status,omitempty"`
+	ToSend int    `json:"to_send,omitempty"`
+}
+
 // Valid actions for ResolveCampaignLedgerInflight.
 const (
 	CampaignLedgerInflightActionMarkSent     = "mark_sent"
@@ -599,6 +607,89 @@ func (c *Core) ResolveCampaignLedgerInflight(recordID, action string) (CampaignL
 		res.Sent = updated.Sent
 	}
 	return res, nil
+}
+
+func (c *Core) campaignRecoverCandidate(recordID string) (models.Campaign, error) {
+	cm, err := c.GetCampaign(recordID, "", "")
+	if err != nil {
+		return models.Campaign{}, err
+	}
+	if cm.Status != models.CampaignStatusPaused && cm.Status != models.CampaignStatusFinished {
+		return models.Campaign{}, echo.NewHTTPError(http.StatusBadRequest,
+			"only paused or finished campaigns can be recovered")
+	}
+	return cm, nil
+}
+
+// PreviewCampaignRecover reports how many eligible recipients are missing from
+// the ledger before an operator recovers a paused or finished campaign.
+func (c *Core) PreviewCampaignRecover(recordID string) (CampaignRecoverResult, error) {
+	cm, err := c.campaignRecoverCandidate(recordID)
+	if err != nil {
+		return CampaignRecoverResult{}, err
+	}
+	stats, err := campaignledger.RecoveryStats(c.db, recordID)
+	if err != nil {
+		c.log.Printf("error previewing campaign recovery (%s): %v", recordID, err)
+		return CampaignRecoverResult{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+	return CampaignRecoverResult{
+		RecoverStats: stats,
+		Status:       cm.Status,
+		ToSend:       cm.ToSend,
+	}, nil
+}
+
+// RecoverCampaign fills missing ledger rows for a paused or finished campaign,
+// resets stranded inflight rows, reconciles counters, and starts it immediately.
+func (c *Core) RecoverCampaign(recordID string) (CampaignRecoverResult, error) {
+	cm, err := c.campaignRecoverCandidate(recordID)
+	if err != nil {
+		return CampaignRecoverResult{}, err
+	}
+
+	ctx := context.Background()
+	tx, err := c.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return CampaignRecoverResult{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+	defer tx.Rollback()
+
+	stats, err := campaignledger.RecoverMissing(tx, cm.ID, recordID)
+	if err != nil {
+		c.log.Printf("error recovering campaign ledger (%s): %v", recordID, err)
+		return CampaignRecoverResult{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+UPDATE campaigns SET
+  status = 'running',
+  send_at = NULL,
+  started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
+  updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
+WHERE id = ?`, recordID); err != nil {
+		c.log.Printf("error starting recovered campaign (%s): %v", recordID, err)
+		return CampaignRecoverResult{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+
+	if err := tx.Commit(); err != nil {
+		return CampaignRecoverResult{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+	}
+
+	updated, err := c.GetCampaign(recordID, "", "")
+	if err != nil {
+		return CampaignRecoverResult{}, err
+	}
+	return CampaignRecoverResult{
+		RecoverStats: stats,
+		Status:       updated.Status,
+		ToSend:       updated.ToSend,
+	}, nil
 }
 
 // UpdateCampaignArchive updates a campaign's archive properties.

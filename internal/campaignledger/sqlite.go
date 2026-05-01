@@ -60,6 +60,18 @@ type SubscriberRow struct {
 	Status    string `db:"status"`
 }
 
+// RecoverStats describes the current ledger coverage for a campaign recovery.
+type RecoverStats struct {
+	Eligible      int   `json:"eligible"`
+	LedgerTotal   int   `json:"ledger_total"`
+	Sent          int   `json:"sent"`
+	Pending       int   `json:"pending"`
+	Inflight      int   `json:"inflight"`
+	Missing       int   `json:"missing"`
+	Inserted      int64 `json:"inserted,omitempty"`
+	ResetInflight int64 `json:"reset_inflight,omitempty"`
+}
+
 // RecipientMembershipSQL filters list membership using email list status or SMS-specific
 // sms_status (COALESCE with email status for rows before sms_status exists).
 func RecipientMembershipSQL() string {
@@ -82,6 +94,135 @@ func RecipientMembershipSQL() string {
   )`
 }
 
+func eligibleSubscriberIDs(db sqlx.ExtContext, campaignRecID string, missingOnly bool) ([]string, error) {
+	ctx := context.Background()
+	q := `
+SELECT DISTINCT s.id
+FROM campaign_lists cl
+JOIN campaigns c ON c.id = cl.campaign_id
+JOIN lists l ON l.id = cl.list_id
+JOIN subscriber_lists sl ON sl.list_id = cl.list_id
+JOIN subscribers s ON s.id = sl.subscriber_id`
+	if missingOnly {
+		q += `
+LEFT JOIN ` + tableName + ` csl ON csl.campaign_id = c.id AND csl.subscriber_id = s.id`
+	}
+	q += `
+WHERE cl.campaign_id = ?
+  AND s.status != 'blocklisted'`
+	q += RecipientMembershipSQL()
+	if missingOnly {
+		q += `
+  AND csl.id IS NULL`
+	}
+
+	includeTags, excludeTags, err := campaignTagFilters(db, campaignRecID)
+	if err != nil {
+		return nil, err
+	}
+	tagClause, tagArgs := sqliteSubscriberTagFilterClause(includeTags, excludeTags)
+	q += tagClause
+
+	var subIDs []string
+	args := []any{campaignRecID}
+	args = append(args, tagArgs...)
+	if err := sqlx.SelectContext(ctx, db, &subIDs, q, args...); err != nil {
+		return nil, err
+	}
+	return subIDs, nil
+}
+
+// RecoveryStats calculates campaign ledger coverage without changing data.
+func RecoveryStats(db sqlx.ExtContext, campaignRecID string) (RecoverStats, error) {
+	ctx := context.Background()
+	out := RecoverStats{}
+
+	eligible, err := eligibleSubscriberIDs(db, campaignRecID, false)
+	if err != nil {
+		return out, err
+	}
+	out.Eligible = len(eligible)
+
+	missing, err := eligibleSubscriberIDs(db, campaignRecID, true)
+	if err != nil {
+		return out, err
+	}
+	out.Missing = len(missing)
+
+	rows := []struct {
+		Status string `db:"status"`
+		Count  int    `db:"count"`
+	}{}
+	if err := sqlx.SelectContext(ctx, db, &rows, `
+SELECT status, COUNT(1) AS count
+FROM `+tableName+`
+WHERE campaign_id = ?
+GROUP BY status`, campaignRecID); err != nil {
+		return out, err
+	}
+	for _, row := range rows {
+		out.LedgerTotal += row.Count
+		switch row.Status {
+		case "sent":
+			out.Sent = row.Count
+		case "pending":
+			out.Pending = row.Count
+		case "inflight":
+			out.Inflight = row.Count
+		}
+	}
+
+	return out, nil
+}
+
+// RecoverMissing inserts pending ledger rows for currently eligible subscribers
+// who are not yet represented in the ledger, resets stranded inflight rows, and
+// reconciles campaign counters. Existing sent rows are preserved.
+func RecoverMissing(db sqlx.ExtContext, campaignRowID int, campaignRecID string) (RecoverStats, error) {
+	ctx := context.Background()
+	out, err := RecoveryStats(db, campaignRecID)
+	if err != nil {
+		return out, err
+	}
+
+	missingIDs, err := eligibleSubscriberIDs(db, campaignRecID, true)
+	if err != nil {
+		return out, err
+	}
+
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	for _, sid := range missingIDs {
+		id := security.RandomString(15)
+		messageID := ledgerMessageID(id)
+		res, err := db.ExecContext(ctx, `
+INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, message_id, status, created, updated)
+VALUES (?, ?, ?, ?, 'pending', ?, ?)`, id, campaignRecID, sid, messageID, now, now)
+		if err != nil {
+			return out, err
+		}
+		n, _ := res.RowsAffected()
+		out.Inserted += n
+	}
+
+	reset, err := ResetInflight(db, campaignRecID)
+	if err != nil {
+		return out, err
+	}
+	out.ResetInflight = reset
+
+	if err := FinalizeCampaignStats(db, campaignRowID, campaignRecID); err != nil {
+		return out, err
+	}
+
+	updated, err := RecoveryStats(db, campaignRecID)
+	if err != nil {
+		return out, err
+	}
+	updated.Inserted = out.Inserted
+	updated.ResetInflight = out.ResetInflight
+	return updated, nil
+}
+
 // BackfillIfEmpty inserts one ledger row per eligible (campaign, subscriber) pair when the
 // ledger has no rows yet for this campaign. Returns true if a backfill ran.
 func BackfillIfEmpty(db sqlx.ExtContext, campaignRowID int, campaignRecID string) (bool, error) {
@@ -94,28 +235,8 @@ func BackfillIfEmpty(db sqlx.ExtContext, campaignRowID int, campaignRecID string
 		return false, nil
 	}
 
-	q := `
-SELECT DISTINCT s.id
-FROM campaign_lists cl
-JOIN campaigns c ON c.id = cl.campaign_id
-JOIN lists l ON l.id = cl.list_id
-JOIN subscriber_lists sl ON sl.list_id = cl.list_id
-JOIN subscribers s ON s.id = sl.subscriber_id
-WHERE cl.campaign_id = ?
-  AND s.status != 'blocklisted'`
-	q += RecipientMembershipSQL()
-
-	includeTags, excludeTags, err := campaignTagFilters(db, campaignRecID)
+	subIDs, err := eligibleSubscriberIDs(db, campaignRecID, false)
 	if err != nil {
-		return false, err
-	}
-	tagClause, tagArgs := sqliteSubscriberTagFilterClause(includeTags, excludeTags)
-	q += tagClause
-
-	var subIDs []string
-	args := []any{campaignRecID}
-	args = append(args, tagArgs...)
-	if err := sqlx.SelectContext(ctx, db, &subIDs, q, args...); err != nil {
 		return false, err
 	}
 

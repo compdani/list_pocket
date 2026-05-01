@@ -292,6 +292,59 @@ func TestBackfillIfEmpty(t *testing.T) {
 	}
 }
 
+func TestRecoveryStatsAndRecoverMissing(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	listRec := "list_rec_1"
+	var campRowID int
+
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger, to_send, sent) VALUES (?, 'broadcast', 'paused', 'email', 99, 99)`, campRec)
+	mustGet(t, db, &campRowID, `SELECT rowid FROM campaigns WHERE id = ?`, campRec)
+	mustExec(t, db, `INSERT INTO lists (id, optin) VALUES (?, 'single')`, listRec)
+	mustExec(t, db, `INSERT INTO campaign_lists (campaign_id, list_id) VALUES (?, ?)`, campRec, listRec)
+
+	for _, sid := range []string{"s1", "s2", "s3", "s4"} {
+		mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, ?, ?, 'enabled')`, sid, sid, sid+"@t.c")
+		mustExec(t, db, `INSERT INTO subscriber_lists (subscriber_id, list_id, status) VALUES (?, ?, 'confirmed')`, sid, listRec)
+	}
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s5', 's5', 's5@t.c', 'blocklisted')`)
+	mustExec(t, db, `INSERT INTO subscriber_lists (subscriber_id, list_id, status) VALUES ('s5', ?, 'confirmed')`, listRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', ?, 's1', 'sent', '2026-01-01', '2026-01-01')`, campRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', ?, 's2', 'pending', '2026-01-01', '2026-01-01')`, campRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l3', ?, 's3', 'inflight', '2026-01-01', '2026-01-01')`, campRec)
+
+	stats, err := RecoveryStats(db, campRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Eligible != 4 || stats.LedgerTotal != 3 || stats.Sent != 1 || stats.Pending != 1 || stats.Inflight != 1 || stats.Missing != 1 {
+		t.Fatalf("unexpected stats before recovery: %+v", stats)
+	}
+
+	stats, err = RecoverMissing(db, campRowID, campRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Inserted != 1 || stats.ResetInflight != 1 || stats.Eligible != 4 || stats.LedgerTotal != 4 || stats.Sent != 1 || stats.Pending != 3 || stats.Inflight != 0 || stats.Missing != 0 {
+		t.Fatalf("unexpected stats after recovery: %+v", stats)
+	}
+
+	var sentStatus, inflightStatus, missingStatus string
+	mustGet(t, db, &sentStatus, `SELECT status FROM campaign_send_ledger WHERE campaign_id = ? AND subscriber_id = 's1'`, campRec)
+	mustGet(t, db, &inflightStatus, `SELECT status FROM campaign_send_ledger WHERE campaign_id = ? AND subscriber_id = 's3'`, campRec)
+	mustGet(t, db, &missingStatus, `SELECT status FROM campaign_send_ledger WHERE campaign_id = ? AND subscriber_id = 's4'`, campRec)
+	if sentStatus != "sent" || inflightStatus != "pending" || missingStatus != "pending" {
+		t.Fatalf("statuses after recovery: sent=%q inflight=%q missing=%q", sentStatus, inflightStatus, missingStatus)
+	}
+
+	var toSend, sent int
+	mustGet(t, db, &toSend, `SELECT to_send FROM campaigns WHERE rowid = ?`, campRowID)
+	mustGet(t, db, &sent, `SELECT sent FROM campaigns WHERE rowid = ?`, campRowID)
+	if toSend != 4 || sent != 1 {
+		t.Fatalf("campaign counters after recovery: to_send=%d sent=%d", toSend, sent)
+	}
+}
+
 func TestInsertPendingIfEligible(t *testing.T) {
 	db := newTestLedgerDB(t)
 	campRec := "camp_rec_1"

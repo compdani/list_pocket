@@ -26,10 +26,11 @@
 
         <v-col cols="12" md="6">
           <div
-            v-if="canManage && isEditing && canEdit"
+            v-if="canManage && isEditing && (canEdit || canRecover)"
             class="campaign-actions d-flex flex-wrap justify-md-end ga-2"
           >
             <v-btn
+              v-if="canEdit"
               type="button"
               color="primary"
               class="action-btn"
@@ -41,6 +42,19 @@
             >
               <v-icon start icon="mdi-content-save-outline" />
               <span class="has-kbd">{{ $t('globals.buttons.saveChanges') }} <span class="kbd">Ctrl+S</span></span>
+            </v-btn>
+            <v-btn
+              v-if="canRecover"
+              type="button"
+              color="warning"
+              class="action-btn"
+              :disabled="loading.campaigns"
+              :loading="loading.campaigns"
+              data-cy="btn-recover"
+              @click="recoverCampaign"
+            >
+              <v-icon start icon="mdi-restore" />
+              <span>{{ $t('campaigns.recover') }}</span>
             </v-btn>
             <v-btn
               v-if="canStart"
@@ -1423,6 +1437,27 @@ export default {
       );
     },
 
+    recoverCampaign() {
+      if (!this.canRecover) {
+        return;
+      }
+
+      this.$api.getCampaignRecover(this.data.id).then((stats) => {
+        const message = this.$t('campaigns.confirmRecover', {
+          missing: this.$utils.formatNumber(stats.missing),
+          sent: this.$utils.formatNumber(stats.sent),
+          ledger: this.$utils.formatNumber(stats.ledgerTotal),
+          eligible: this.$utils.formatNumber(stats.eligible),
+        });
+
+        this.$utils.confirm(message, () => {
+          this.$api.recoverCampaign(this.data.id).then(() => {
+            this.$router.push({ name: 'campaigns' });
+          });
+        });
+      });
+    },
+
     unscheduleCampaign() {
       this.$api.changeCampaignStatus(this.data.id, 'draft').then((d) => {
         this.data = d;
@@ -1452,6 +1487,10 @@ export default {
 
     canStart() {
       return (this.data.status === 'draft' || this.data.status === 'paused') && !this.form.sendLater;
+    },
+
+    canRecover() {
+      return this.data.status === 'paused' || this.data.status === 'finished';
     },
 
     canArchive() {
