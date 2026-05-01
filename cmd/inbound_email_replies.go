@@ -79,22 +79,22 @@ type sesInboundMessage struct {
 }
 
 type normalizedInboundEmail struct {
-	Provider         string
-	From             string
-	MessageID        string
-	InReplyTo        string
-	References       string
-	Subject          string
-	ReceivedAt       time.Time
-	Text             string
-	HTML             string
-	BodySnippet      string
-	HasAttachments   bool
-	Attachments      []inboundEmailAttachment
-	Headers          map[string]any
-	ToAddress        string
-	CC               string
-	ReplyTo          string
+	Provider          string
+	From              string
+	MessageID         string
+	InReplyTo         string
+	References        string
+	Subject           string
+	ReceivedAt        time.Time
+	Text              string
+	HTML              string
+	BodySnippet       string
+	HasAttachments    bool
+	Attachments       []inboundEmailAttachment
+	Headers           map[string]any
+	ToAddress         string
+	CC                string
+	ReplyTo           string
 	StructuredHeaders map[string]any
 }
 
@@ -152,7 +152,8 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 
 	var req inboundEmailReplyWebhookRequest
 	if err := json.Unmarshal(body, &req); err != nil {
-		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body=%s", c.RealIP(), c.Request().UserAgent(), err, string(body))
+		bodyPreview, bodyTruncated := inboundWebhookBodyPreviewForLog(body)
+		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body_preview=%q body_truncated=%t", c.RealIP(), c.Request().UserAgent(), err, bodyPreview, bodyTruncated)
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
 
@@ -235,8 +236,9 @@ func (a *App) logInboundEmailWebhookRequest(c echo.Context, body []byte) {
 	snsType := strings.TrimSpace(headers.Get("x-amz-sns-message-type"))
 	snsTopic := strings.TrimSpace(headers.Get("x-amz-sns-topic-arn"))
 	snsMsgID := strings.TrimSpace(headers.Get("x-amz-sns-message-id"))
+	sesNotificationType := parseSESNotificationType(body)
 	a.log.Printf(
-		"inbound email webhook: received method=%q path=%q remote=%q ua=%q content_type=%q size=%d sns_type=%q sns_topic=%q sns_message_id=%q body=%s",
+		"inbound email webhook: received method=%q path=%q remote=%q ua=%q content_type=%q size=%d sns_type=%q sns_topic=%q sns_message_id=%q ses_notification_type=%q",
 		c.Request().Method,
 		c.Path(),
 		c.RealIP(),
@@ -246,8 +248,16 @@ func (a *App) logInboundEmailWebhookRequest(c echo.Context, body []byte) {
 		snsType,
 		snsTopic,
 		snsMsgID,
-		string(body),
+		sesNotificationType,
 	)
+}
+
+func inboundWebhookBodyPreviewForLog(body []byte) (string, bool) {
+	const max = 512
+	if len(body) <= max {
+		return string(body), false
+	}
+	return string(body[:max]), true
 }
 
 func (a *App) saveInboundEmailAttachments(pb *pocketbase.PocketBase, inboundEmailReplyID string, attachments []inboundEmailAttachment) ([]map[string]any, []map[string]any) {
