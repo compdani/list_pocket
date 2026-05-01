@@ -667,7 +667,7 @@ func (c *Core) RecoverCampaign(recordID string) (CampaignRecoverResult, error) {
 	if _, err := tx.ExecContext(ctx, `
 UPDATE campaigns SET
   status = 'running',
-  send_at = NULL,
+  send_at = '',
   started_at = (CASE WHEN started_at IS NULL THEN (strftime('%Y-%m-%d %H:%M:%fZ')) ELSE started_at END),
   updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 WHERE id = ?`, recordID); err != nil {
