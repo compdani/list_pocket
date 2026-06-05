@@ -11,9 +11,11 @@ Subscriber **identifiers** in URLs and JSON are **PocketBase record ids** (the `
 | GET    | [/api/inbound-email-replies/{replyId}/attachments](#get-apiinbound-email-repliesreplyidattachments) | List inbound email attachments for a timeline email reply event. |
 | GET    | [/api/inbound-email-attachments/{id}/download](#get-apiinbound-email-attachmentsiddownload) | Download an inbound email attachment file. |
 | POST   | [/api/subscribers](#post-apisubscribers)                                                | Create a new subscriber.                       |
+| POST   | [/api/subscribers/bulk-add](#post-apisubscribersbulk-add)                               | Bulk upsert subscribers from JSON contacts.    |
 | POST   | [/api/subscribers/{id}/optin](#post-apisubscribersidoptin)        | Sends optin confirmation email to subscribers. |
 | POST   | [/api/public/subscription](#post-apipublicsubscription)                                 | Create a public subscription.                  |
 | PUT    | [/api/subscribers/lists](#put-apisubscriberslists)                                      | Modify subscriber list memberships.            |
+| PUT    | [/api/subscribers/bulk-update](#put-apisubscribersbulk-update)                          | Bulk tag/list updates for existing contacts.   |
 | PUT    | [/api/subscribers/{id}](#put-apisubscribersid)                    | Update a specific subscriber.                  |
 | PUT    | [/api/subscribers/{id}/blocklist](#put-apisubscribersidblocklist) | Blocklist a specific subscriber.               |
 | PUT    | [/api/subscribers/blocklist](#put-apisubscribersblocklist)                              | Blocklist one or many subscribers.             |
@@ -495,9 +497,13 @@ ______________________________________________________________________
 
 #### PUT /api/subscribers/bulk-update
 
-Apply tag and list operations to existing subscribers identified by email. Unknown emails are skipped and counted in the response.
+Apply tag and list operations to **existing** subscribers identified by email. Unknown emails are skipped and counted in the response; the request does not fail when some emails are missing.
 
 Requires permission: `subscribers:manage`.
+
+Maximum batch size: **5,000** email addresses per request.
+
+List record ids in `list_remove` and `list_update` are filtered against the authenticated user's list manage permissions.
 
 ##### Parameters
 
@@ -511,6 +517,17 @@ Requires permission: `subscribers:manage`.
 | subscription_status  | string     |          | Status for `list_update` (`confirmed`, `unconfirmed`, `unsubscribed`). Default: `unconfirmed`. |
 
 At least one of `tags_add`, `tags_remove`, `list_remove`, or `list_update` must be provided.
+
+##### Response fields
+
+| Name            | Type   | Description                                                       |
+| :-------------- | :----- | :---------------------------------------------------------------- |
+| ok              | bool   | Always `true` on success.                                         |
+| matched         | number | Subscribers found and processed.                                  |
+| skipped         | number | Email addresses with no matching subscriber.                      |
+| tags_updated    | number | Subscribers whose tags were updated.                              |
+| lists_removed   | number | List membership rows removed.                                     |
+| lists_updated   | number | List membership rows inserted or updated.                           |
 
 ##### Example Request
 
@@ -539,21 +556,56 @@ ______________________________________________________________________
 
 #### POST /api/subscribers/bulk-add
 
-Bulk upsert subscribers from JSON contact objects (similar to CSV import). Creates new subscribers or updates existing ones by email.
+Bulk upsert subscribers from JSON contact objects. Behavior is similar to [CSV import](import.md), but runs synchronously and accepts structured JSON instead of a file upload. Creates new subscribers or updates existing ones matched by email.
 
 Requires permission: `subscribers:import`.
+
+Maximum batch size: **5,000** contacts per request.
+
+List record ids in `list_remove` and `list_update` are filtered against the authenticated user's list manage permissions. Updating an existing subscriber requires access to at least one of that subscriber's lists (same as other subscriber manage APIs).
 
 ##### Parameters
 
 | Name                 | Type       | Required | Description                                                                 |
 | :------------------- | :--------- | :------- | :-------------------------------------------------------------------------- |
-| contacts             | object\[\] | Yes      | Contact objects with `email`, optional `phone`, `name`, `first_name`, `last_name`, `attribs` (or `attributes`). |
+| contacts             | object\[\] | Yes      | Contact objects (see table below).                                          |
 | tags_add             | string\[\] |          | Tags merged into each contact after upsert.                                 |
 | tags_remove          | string\[\] |          | Tags removed from each contact after upsert.                                |
 | list_remove          | string\[\] |          | PocketBase list record ids to remove each contact from.                     |
 | list_update          | string\[\] |          | PocketBase list record ids to add or update membership on.                  |
 | subscription_status  | string     |          | Status for `list_update`. Default: `unconfirmed`.                           |
 | override_details     | bool       |          | When `true`, overwrite profile fields on email conflict. Default: `false`.  |
+
+##### Contact object fields
+
+Each item in `contacts` supports the following fields:
+
+| Name        | Type   | Required | Description                                                                 |
+| :---------- | :----- | :------- | :-------------------------------------------------------------------------- |
+| email       | string | Yes      | Subscriber email address.                                                   |
+| phone       | string |          | Phone number.                                                               |
+| name        | string |          | Full name. Derived from email local-part if omitted on create.              |
+| first_name  | string |          | First name.                                                                 |
+| last_name   | string |          | Last name.                                                                  |
+| attribs     | JSON   |          | Custom attributes stored on the subscriber.                                 |
+| attributes  | JSON   |          | Alias for `attribs` (same as CSV import column name).                       |
+
+When `override_details` is `false` and the email already exists, existing `phone`, name fields, and `attribs` are preserved. When `true`, incoming contact fields replace those values on conflict.
+
+Global `tags_add`, `tags_remove`, `list_update`, and `list_remove` are applied to every contact in the batch after each upsert.
+
+##### Response fields
+
+| Name            | Type   | Description                                                       |
+| :-------------- | :----- | :---------------------------------------------------------------- |
+| ok              | bool   | Always `true` on success.                                         |
+| matched         | number | Contacts successfully upserted (`created` + `updated`).           |
+| skipped         | number | Invalid or empty contact entries skipped during processing.       |
+| created         | number | New subscribers inserted.                                         |
+| updated         | number | Existing subscribers matched by email.                            |
+| tags_updated    | number | Contacts whose tags were updated.                                 |
+| lists_removed   | number | List membership rows removed.                                     |
+| lists_updated   | number | List membership rows inserted or updated.                           |
 
 ##### Example Request
 
