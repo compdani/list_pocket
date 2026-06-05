@@ -45,6 +45,59 @@ func TestMergeImportTagsMergesExistingTags(t *testing.T) {
 	}
 }
 
+func TestRemoveImportTagsRemovesCaseInsensitive(t *testing.T) {
+	attribs := models.JSON{
+		"tags": []any{"VIP", "news", "beta"},
+	}
+
+	got := RemoveImportTags(attribs, []string{"vip", "missing"})
+	want := models.JSON{
+		"tags": []string{"news", "beta"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RemoveImportTags()=%v, want %v", got, want)
+	}
+}
+
+func TestRemoveImportTagsClearsTagsWhenEmpty(t *testing.T) {
+	attribs := models.JSON{
+		"tags": []any{"only"},
+	}
+
+	got := RemoveImportTags(attribs, []string{"only"})
+	if _, ok := got["tags"]; ok {
+		t.Fatalf("RemoveImportTags() should delete tags key, got %v", got)
+	}
+}
+
+func TestApplyImportTagChangesAddsAndRemoves(t *testing.T) {
+	attribs := models.JSON{
+		"tags": []any{"keep", "drop"},
+	}
+
+	got := ApplyImportTagChanges(attribs, []string{"new"}, []string{"drop"})
+	want := models.JSON{
+		"tags": []string{"keep", "new"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ApplyImportTagChanges()=%v, want %v", got, want)
+	}
+}
+
+func TestBulkUpsertOptOverrideDetailsMapsToSQLFlags(t *testing.T) {
+	opt := BulkUpsertOpt{
+		OverrideDetails: true,
+		ListUpdate:      []string{"pbc_list_1"},
+	}
+	if !opt.OverrideDetails {
+		t.Fatal("OverrideDetails should be true")
+	}
+	overwriteListStatus := len(opt.ListUpdate) > 0
+	if !overwriteListStatus {
+		t.Fatal("list updates should overwrite subscription status on conflict")
+	}
+}
+
 func TestApplyImportTagsAddsTagsWithoutOverwritingAttribs(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

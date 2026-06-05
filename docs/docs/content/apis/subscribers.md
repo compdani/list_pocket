@@ -493,6 +493,95 @@ curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscriber
 
 ______________________________________________________________________
 
+#### PUT /api/subscribers/bulk-update
+
+Apply tag and list operations to existing subscribers identified by email. Unknown emails are skipped and counted in the response.
+
+Requires permission: `subscribers:manage`.
+
+##### Parameters
+
+| Name                 | Type       | Required | Description                                                                 |
+| :------------------- | :--------- | :------- | :-------------------------------------------------------------------------- |
+| contacts             | string\[\] | Yes      | Subscriber email addresses.                                                   |
+| tags_add             | string\[\] |          | Tags to merge into each matched subscriber's `attribs.tags`.                |
+| tags_remove          | string\[\] |          | Tags to remove from each matched subscriber (case-insensitive).            |
+| list_remove          | string\[\] |          | PocketBase list record ids to remove matched subscribers from.              |
+| list_update          | string\[\] |          | PocketBase list record ids to add or update membership on.                  |
+| subscription_status  | string     |          | Status for `list_update` (`confirmed`, `unconfirmed`, `unsubscribed`). Default: `unconfirmed`. |
+
+At least one of `tags_add`, `tags_remove`, `list_remove`, or `list_update` must be provided.
+
+##### Example Request
+
+```shell
+curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscribers/bulk-update' \
+-H 'Content-Type: application/json' \
+--data-raw '{"contacts":["john@example.com","missing@example.com"],"tags_add":["vip"],"tags_remove":["old-tag"],"list_update":["pbc_list_a_004"],"list_remove":["pbc_list_b_005"],"subscription_status":"confirmed"}'
+```
+
+##### Example Response
+
+```json
+{
+  "data": {
+    "ok": true,
+    "matched": 1,
+    "skipped": 1,
+    "tags_updated": 1,
+    "lists_removed": 1,
+    "lists_updated": 1
+  }
+}
+```
+
+______________________________________________________________________
+
+#### POST /api/subscribers/bulk-add
+
+Bulk upsert subscribers from JSON contact objects (similar to CSV import). Creates new subscribers or updates existing ones by email.
+
+Requires permission: `subscribers:import`.
+
+##### Parameters
+
+| Name                 | Type       | Required | Description                                                                 |
+| :------------------- | :--------- | :------- | :-------------------------------------------------------------------------- |
+| contacts             | object\[\] | Yes      | Contact objects with `email`, optional `phone`, `name`, `first_name`, `last_name`, `attribs` (or `attributes`). |
+| tags_add             | string\[\] |          | Tags merged into each contact after upsert.                                 |
+| tags_remove          | string\[\] |          | Tags removed from each contact after upsert.                                |
+| list_remove          | string\[\] |          | PocketBase list record ids to remove each contact from.                     |
+| list_update          | string\[\] |          | PocketBase list record ids to add or update membership on.                  |
+| subscription_status  | string     |          | Status for `list_update`. Default: `unconfirmed`.                           |
+| override_details     | bool       |          | When `true`, overwrite profile fields on email conflict. Default: `false`.  |
+
+##### Example Request
+
+```shell
+curl -u 'api_username:access_token' -X POST 'http://localhost:9000/api/subscribers/bulk-add' \
+-H 'Content-Type: application/json' \
+--data-raw '{"contacts":[{"email":"john@example.com","first_name":"John","last_name":"Doe","attribs":{"city":"Berlin"}}],"tags_add":["vip"],"list_update":["pbc_list_a_004"],"subscription_status":"confirmed","override_details":false}'
+```
+
+##### Example Response
+
+```json
+{
+  "data": {
+    "ok": true,
+    "matched": 1,
+    "skipped": 0,
+    "created": 1,
+    "updated": 0,
+    "tags_updated": 1,
+    "lists_removed": 0,
+    "lists_updated": 1
+  }
+}
+```
+
+______________________________________________________________________
+
 #### PUT /api/subscribers/{id}
 
 Update a specific subscriber. The `{id}` path segment is the subscriber's PocketBase record id (same as JSON `id`).
