@@ -116,6 +116,8 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 		}
 	}))
 	api.PUT("/subscribers/lists", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.ManageSubscriberLists, "subscribers:manage")))
+	api.PUT("/subscribers/bulk-update", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BulkUpdateSubscribers, "subscribers:manage")))
+	api.POST("/subscribers/bulk-add", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.BulkAddSubscribers, "subscribers:import")))
 	api.DELETE("/subscribers/{id}", wrapEcho(a, tpl, cfg, urlCfg, []string{"id"}, pm(a.DeleteSubscriber, "subscribers:manage")))
 	api.DELETE("/subscribers", wrapEcho(a, tpl, cfg, urlCfg, nil, pm(a.DeleteSubscribers, "subscribers:manage")))
 
