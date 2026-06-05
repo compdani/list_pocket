@@ -509,6 +509,52 @@ paths:
                   data:
                     type: boolean
 
+  /subscribers/bulk-update:
+    put:
+      description: Apply tag and list operations to existing subscribers identified by email.
+      operationId: bulkUpdateSubscribers
+      tags:
+        - Subscribers
+      requestBody:
+        description: Bulk update request with email contacts and tag/list operations.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkContactUpdateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/BulkContactResponse"
+
+  /subscribers/bulk-add:
+    post:
+      description: Bulk upsert subscribers from JSON contact objects.
+      operationId: bulkAddSubscribers
+      tags:
+        - Subscribers
+      requestBody:
+        description: Bulk add/upsert request with contact objects and tag/list operations.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkContactAddRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/BulkContactResponse"
+
   "/subscribers/blocklist":
     put:
       description: handles blocklisting of subscriber list
@@ -3752,6 +3798,118 @@ components:
           type: string
           enum: [confirmed, unconfirmed, unsubscribed]
           description: confirmed, unconfirmed, or unsubscribed status.
+
+    BulkContactUpdateRequest:
+      type: object
+      required:
+        - contacts
+      properties:
+        contacts:
+          type: array
+          description: Subscriber email addresses (max 5000).
+          items:
+            type: string
+            format: email
+        tags_add:
+          type: array
+          items:
+            type: string
+        tags_remove:
+          type: array
+          items:
+            type: string
+        list_remove:
+          type: array
+          description: PocketBase list record ids to remove matched subscribers from.
+          items:
+            type: string
+        list_update:
+          type: array
+          description: PocketBase list record ids to add or update membership on.
+          items:
+            type: string
+        subscription_status:
+          type: string
+          enum: [confirmed, unconfirmed, unsubscribed]
+          default: unconfirmed
+
+    BulkContactAddRequest:
+      type: object
+      required:
+        - contacts
+      properties:
+        contacts:
+          type: array
+          description: Contact objects to upsert (max 5000).
+          items:
+            $ref: "#/components/schemas/BulkContactObject"
+        tags_add:
+          type: array
+          items:
+            type: string
+        tags_remove:
+          type: array
+          items:
+            type: string
+        list_remove:
+          type: array
+          items:
+            type: string
+        list_update:
+          type: array
+          items:
+            type: string
+        subscription_status:
+          type: string
+          enum: [confirmed, unconfirmed, unsubscribed]
+          default: unconfirmed
+        override_details:
+          type: boolean
+          default: false
+
+    BulkContactObject:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        name:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        attribs:
+          type: object
+          additionalProperties: true
+        attributes:
+          type: object
+          additionalProperties: true
+          description: Alias for attribs.
+
+    BulkContactResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        matched:
+          type: integer
+        skipped:
+          type: integer
+        created:
+          type: integer
+        updated:
+          type: integer
+        tags_updated:
+          type: integer
+        lists_removed:
+          type: integer
+        lists_updated:
+          type: integer
 
     Bounce:
       type: object
