@@ -2,6 +2,8 @@
 
 All features that are available on the List Pocket admin dashboard are also available as REST-like HTTP APIs that can be interacted with directly. Request and response bodies are JSON. This allows easy scripting and integration with other systems, for instance, synchronisation with external subscriber databases.
 
+Custom List Pocket APIs are registered under **`/mailapi`** (for example `/mailapi/subscribers`, `/mailapi/lists`). When calling the server directly, use that prefix. The admin UI dev server may proxy the same routes as `/api/...`.
+
 !!! note
     If you come across API calls that are yet to be documented, please consider contributing to docs.
 
@@ -11,12 +13,12 @@ HTTP API requests support BasicAuth and a Authorization `token` headers. API use
 
 ##### BasicAuth example
 ```shell
-curl -u "api_user:token" http://localhost:9000/api/lists
+curl -u "api_user:token" http://localhost:9000/mailapi/lists
 ```
 
 ##### Authorization token example
 ```shell
-curl -H "Authorization: token api_user:token" http://localhost:9000/api/lists
+curl -H "Authorization: token api_user:token" http://localhost:9000/mailapi/lists
 ```
 
 ## Permissions

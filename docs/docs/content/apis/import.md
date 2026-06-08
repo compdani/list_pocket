@@ -58,7 +58,7 @@ ______________________________________________________________________
 
 Send a CSV (optionally ZIP compressed) file to import subscribers. Use a multipart form POST.
 
-For smaller JSON-based upserts without a file upload, see [POST /api/subscribers/bulk-add](subscribers.md#post-apisubscribersbulk-add).
+For smaller JSON-based upserts without a file upload, see [POST /mailapi/subscribers/bulk-add](subscribers.md#post-mailapisubscribersbulk-add).
 
 ##### Parameters
 
