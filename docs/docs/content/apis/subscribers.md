@@ -2,6 +2,8 @@
 
 Subscriber **identifiers** in URLs and JSON are **PocketBase record ids** (the `subscribers.id` string returned as `id` on subscriber objects), not numeric SQLite rowids. Bulk actions use the repeated query parameter `subscriber_record_id` or the JSON field `subscriber_record_ids`.
 
+Custom List Pocket APIs are served under **`/mailapi`** (for example `/mailapi/subscribers`). The admin UI dev proxy may expose the same routes as `/api/...`; use `/mailapi` when calling the backend directly.
+
 | Method | Endpoint                                                                                | Description                                    |
 | ------ | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | GET    | [/api/subscribers](#get-apisubscribers)                                                 | Query and retrieve subscribers.                |
@@ -11,11 +13,11 @@ Subscriber **identifiers** in URLs and JSON are **PocketBase record ids** (the `
 | GET    | [/api/inbound-email-replies/{replyId}/attachments](#get-apiinbound-email-repliesreplyidattachments) | List inbound email attachments for a timeline email reply event. |
 | GET    | [/api/inbound-email-attachments/{id}/download](#get-apiinbound-email-attachmentsiddownload) | Download an inbound email attachment file. |
 | POST   | [/api/subscribers](#post-apisubscribers)                                                | Create a new subscriber.                       |
-| POST   | [/api/subscribers/bulk-add](#post-apisubscribersbulk-add)                               | Bulk upsert subscribers from JSON contacts.    |
+| POST   | [/mailapi/subscribers/bulk-add](#post-mailapisubscribersbulk-add)                         | Bulk upsert subscribers from JSON contacts.    |
 | POST   | [/api/subscribers/{id}/optin](#post-apisubscribersidoptin)        | Sends optin confirmation email to subscribers. |
 | POST   | [/api/public/subscription](#post-apipublicsubscription)                                 | Create a public subscription.                  |
 | PUT    | [/api/subscribers/lists](#put-apisubscriberslists)                                      | Modify subscriber list memberships.            |
-| PUT    | [/api/subscribers/bulk-update](#put-apisubscribersbulk-update)                          | Bulk tag/list updates for existing contacts.   |
+| PUT    | [/mailapi/subscribers/bulk-update](#put-mailapisubscribersbulk-update)                  | Bulk tag/list updates for existing contacts.   |
 | PUT    | [/api/subscribers/{id}](#put-apisubscribersid)                    | Update a specific subscriber.                  |
 | PUT    | [/api/subscribers/{id}/blocklist](#put-apisubscribersidblocklist) | Blocklist a specific subscriber.               |
 | PUT    | [/api/subscribers/blocklist](#put-apisubscribersblocklist)                              | Blocklist one or many subscribers.             |
@@ -495,7 +497,7 @@ curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscriber
 
 ______________________________________________________________________
 
-#### PUT /api/subscribers/bulk-update
+#### PUT /mailapi/subscribers/bulk-update
 
 Apply tag and list operations to **existing** subscribers identified by email. Unknown emails are skipped and counted in the response; the request does not fail when some emails are missing.
 
@@ -532,7 +534,7 @@ At least one of `tags_add`, `tags_remove`, `list_remove`, or `list_update` must 
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscribers/bulk-update' \
+curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/mailapi/subscribers/bulk-update' \
 -H 'Content-Type: application/json' \
 --data-raw '{"contacts":["john@example.com","missing@example.com"],"tags_add":["vip"],"tags_remove":["old-tag"],"list_update":["pbc_list_a_004"],"list_remove":["pbc_list_b_005"],"subscription_status":"confirmed"}'
 ```
@@ -554,7 +556,7 @@ curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscriber
 
 ______________________________________________________________________
 
-#### POST /api/subscribers/bulk-add
+#### POST /mailapi/subscribers/bulk-add
 
 Bulk upsert subscribers from JSON contact objects. Behavior is similar to [CSV import](import.md), but runs synchronously and accepts structured JSON instead of a file upload. Creates new subscribers or updates existing ones matched by email.
 
@@ -610,7 +612,7 @@ Global `tags_add`, `tags_remove`, `list_update`, and `list_remove` are applied t
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' -X POST 'http://localhost:9000/api/subscribers/bulk-add' \
+curl -u 'api_username:access_token' -X POST 'http://localhost:9000/mailapi/subscribers/bulk-add' \
 -H 'Content-Type: application/json' \
 --data-raw '{"contacts":[{"email":"john@example.com","first_name":"John","last_name":"Doe","attribs":{"city":"Berlin"}}],"tags_add":["vip"],"list_update":["pbc_list_a_004"],"subscription_status":"confirmed","override_details":false}'
 ```

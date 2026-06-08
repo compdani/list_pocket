@@ -2,7 +2,7 @@ openapi: 3.0.0
 
 servers:
   - description: ListPocket Development Server
-    url: http://localhost:9000/api
+    url: http://localhost:9000/mailapi
 
 info:
   version: "1.0.0"
