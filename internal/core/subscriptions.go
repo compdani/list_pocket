@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -59,8 +60,8 @@ func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
 
 // AddSubscriptionsByQuery adds list subscriptions to subscribers by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
-func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, status string, subStatus string) (int, error) {
-	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
+func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, filters json.RawMessage, sourceListIDs, targetListIDs []int, status string, subStatus string) (int, error) {
+	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,
@@ -90,8 +91,8 @@ func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
 
 // DeleteSubscriptionsByQuery deletes list subscriptions from subscribers by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
-func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) (int, error) {
-	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
+func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, filters json.RawMessage, sourceListIDs, targetListIDs []int, subStatus string) (int, error) {
+	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,
@@ -152,8 +153,8 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 
 // UnsubscribeListsByQuery sets list subscriptions to 'unsubscribed' by a given arbitrary query expression.
 // sourceListIDs is the list of list IDs to filter the subscriber query with.
-func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, sourceListIDs, targetListIDs []int, subStatus string) (int, error) {
-	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, sourceListIDs, subStatus, 0, 0)
+func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, filters json.RawMessage, sourceListIDs, targetListIDs []int, subStatus string) (int, error) {
+	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,

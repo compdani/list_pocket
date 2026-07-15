@@ -262,8 +262,8 @@ func (c *Core) GetSubscribersByNormalizedPhones(digits []string) (models.Subscri
 }
 
 // QuerySubscribers queries and returns paginated subscrribers based on the given params including the total count.
-func (c *Core) QuerySubscribers(searchStr, queryExp string, listIDs []int, subStatus string, order, orderBy string, offset, limit int) (models.Subscribers, int, error) {
-	return c.querySubscribersSQLite(searchStr, queryExp, listIDs, subStatus, order, orderBy, offset, limit)
+func (c *Core) QuerySubscribers(searchStr, queryExp string, filters json.RawMessage, listIDs []int, subStatus string, order, orderBy string, offset, limit int) (models.Subscribers, int, error) {
+	return c.querySubscribersSQLite(searchStr, queryExp, filters, listIDs, subStatus, order, orderBy, offset, limit)
 }
 
 // GetSubscriberLists returns a subscriber's lists based on the given conditions.
@@ -287,8 +287,8 @@ func (c *Core) GetSubscriberActivity(id int) (models.SubscriberActivity, error) 
 // on the given criteria in an exportable form. The iterator function returned can be called
 // repeatedly until there are nil subscribers. It's an iterator because exports can be extremely
 // large and may have to be fetched in batches from the DB and streamed somewhere.
-func (c *Core) ExportSubscribers(searchStr, query string, subIDs, listIDs []int, subStatus string, batchSize int) (func() ([]models.SubscriberExport, error), error) {
-	return c.exportSubscribersSQLite(searchStr, query, subIDs, listIDs, subStatus, batchSize)
+func (c *Core) ExportSubscribers(searchStr, query string, filters json.RawMessage, subIDs, listIDs []int, subStatus string, batchSize int) (func() ([]models.SubscriberExport, error), error) {
+	return c.exportSubscribersSQLite(searchStr, query, filters, subIDs, listIDs, subStatus, batchSize)
 }
 
 // InsertSubscriber inserts a subscriber and returns the ID. The first bool indicates if
@@ -500,8 +500,8 @@ func (c *Core) BlocklistSubscribers(recordIDs []string) error {
 }
 
 // BlocklistSubscribersByQuery blocklists the given list of subscribers.
-func (c *Core) BlocklistSubscribersByQuery(searchStr, queryExp string, listIDs []int, subStatus string) error {
-	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, listIDs, subStatus, 0, 0)
+func (c *Core) BlocklistSubscribersByQuery(searchStr, queryExp string, filters json.RawMessage, listIDs []int, subStatus string) error {
+	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, listIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -564,8 +564,8 @@ func (c *Core) DeleteSubscribers(recordIDs []string, uuids []string) error {
 }
 
 // DeleteSubscribersByQuery deletes subscribers by a given arbitrary query expression.
-func (c *Core) DeleteSubscribersByQuery(searchStr, queryExp string, listIDs []int, subStatus string) error {
-	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, listIDs, subStatus, 0, 0)
+func (c *Core) DeleteSubscribersByQuery(searchStr, queryExp string, filters json.RawMessage, listIDs []int, subStatus string) error {
+	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, listIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscribers: %v", err)
 		return echo.NewHTTPError(http.StatusInternalServerError,
@@ -1104,8 +1104,11 @@ func (c *Core) DeleteBlocklistedSubscribers() (int, error) {
 	return int(n), nil
 }
 
-func (c *Core) getSubscriberCount(searchStr, queryExp, subStatus string, listIDs []int) (int, error) {
-	whereSQL, args := c.subscriberFilterSQLite(searchStr, queryExp, listIDs, subStatus)
+func (c *Core) getSubscriberCount(searchStr, queryExp string, filters json.RawMessage, subStatus string, listIDs []int) (int, error) {
+	whereSQL, args, err := c.subscriberFilterSQLite(searchStr, queryExp, filters, listIDs, subStatus)
+	if err != nil {
+		return 0, err
+	}
 	total := 0
 	if err := c.db.Get(&total, `SELECT COUNT(*) FROM subscribers WHERE `+whereSQL, args...); err != nil {
 		return 0, echo.NewHTTPError(http.StatusInternalServerError,
@@ -1278,7 +1281,7 @@ func (c *Core) getSubscribersByNormalizedPhonesSQLite(digits []string) (models.S
 	return out, nil
 }
 
-func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int, subStatus string, order, orderBy string, offset, limit int) (models.Subscribers, int, error) {
+func (c *Core) querySubscribersSQLite(searchStr, queryExp string, filters json.RawMessage, listIDs []int, subStatus string, order, orderBy string, offset, limit int) (models.Subscribers, int, error) {
 	if order != SortAsc && order != SortDesc {
 		order = SortDesc
 	}
@@ -1296,7 +1299,10 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, listIDs []int,
 		sortCol = "subscribers.updated"
 	}
 
-	whereSQL, args := c.subscriberFilterSQLite(searchStr, queryExp, listIDs, subStatus)
+	whereSQL, args, err := c.subscriberFilterSQLite(searchStr, queryExp, filters, listIDs, subStatus)
+	if err != nil {
+		return nil, 0, err
+	}
 	total := 0
 	if err := c.db.Get(&total, `SELECT COUNT(*) FROM subscribers WHERE `+whereSQL, args...); err != nil {
 		c.log.Printf("error getting subscriber count: %v", err)
@@ -1443,7 +1449,7 @@ func (c *Core) getSubscriberListsSQLite(subID int, uuid string, listIDs []int, l
 	return out, nil
 }
 
-func (c *Core) exportSubscribersSQLite(searchStr, query string, subIDs, listIDs []int, subStatus string, batchSize int) (func() ([]models.SubscriberExport, error), error) {
+func (c *Core) exportSubscribersSQLite(searchStr, query string, filters json.RawMessage, subIDs, listIDs []int, subStatus string, batchSize int) (func() ([]models.SubscriberExport, error), error) {
 	if subIDs == nil {
 		subIDs = []int{}
 	}
@@ -1455,14 +1461,17 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, subIDs, listIDs 
 		cond = query
 	}
 
-	if _, err := c.getSubscriberCount(searchStr, cond, subStatus, listIDs); err != nil {
+	if _, err := c.getSubscriberCount(searchStr, cond, filters, subStatus, listIDs); err != nil {
 		c.log.Printf("error getting subscriber count: %v", err)
 		return nil, err
 	}
 
 	id := 0
 	return func() ([]models.SubscriberExport, error) {
-		whereSQL, args := c.subscriberFilterSQLite(searchStr, cond, listIDs, subStatus)
+		whereSQL, args, err := c.subscriberFilterSQLite(searchStr, cond, filters, listIDs, subStatus)
+		if err != nil {
+			return nil, err
+		}
 		whereSQL = `subscribers.rowid > ? AND ` + whereSQL
 		args = append([]any{id}, args...)
 
@@ -1517,8 +1526,11 @@ func (c *Core) loadSubscriberListsSQLite(subs models.Subscribers) error {
 	return nil
 }
 
-func (c *Core) findSubscriberIDsSQLite(searchStr, queryExp string, listIDs []int, subStatus string, offset, limit int) ([]int, error) {
-	whereSQL, args := c.subscriberFilterSQLite(searchStr, queryExp, listIDs, subStatus)
+func (c *Core) findSubscriberIDsSQLite(searchStr, queryExp string, filters json.RawMessage, listIDs []int, subStatus string, offset, limit int) ([]int, error) {
+	whereSQL, args, err := c.subscriberFilterSQLite(searchStr, queryExp, filters, listIDs, subStatus)
+	if err != nil {
+		return nil, err
+	}
 	q := `SELECT subscribers.rowid AS id FROM subscribers WHERE ` + whereSQL + ` ORDER BY subscribers.rowid ASC`
 	if limit > 0 {
 		q += ` LIMIT ?`
@@ -1539,7 +1551,7 @@ func (c *Core) findSubscriberIDsSQLite(searchStr, queryExp string, listIDs []int
 	return out, nil
 }
 
-func (c *Core) subscriberFilterSQLite(searchStr, queryExp string, listIDs []int, subStatus string) (string, []any) {
+func (c *Core) subscriberFilterSQLite(searchStr, queryExp string, filters json.RawMessage, listIDs []int, subStatus string) (string, []any, error) {
 	where := []string{"1=1"}
 	args := []any{}
 
@@ -1566,10 +1578,19 @@ func (c *Core) subscriberFilterSQLite(searchStr, queryExp string, listIDs []int,
 		args = append(args, like, like, like)
 	}
 
+	filterSQL, filterArgs, err := c.CompileSubscriberFilters(filters)
+	if err != nil {
+		return "", nil, err
+	}
+	if filterSQL != "" {
+		where = append(where, filterSQL)
+		args = append(args, filterArgs...)
+	}
+
 	exp := strings.TrimSpace(sanitizeSQLExp(queryExp))
 	if exp != "" && exp != "TRUE" {
 		where = append(where, "("+exp+")")
 	}
 
-	return strings.Join(where, " AND "), args
+	return strings.Join(where, " AND "), args, nil
 }

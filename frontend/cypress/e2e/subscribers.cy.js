@@ -32,10 +32,16 @@ describe('Subscribers', () => {
         listIDs: [], ids: [], query: '', length: 3,
       },
       {
-        listIDs: [], ids: [], query: "name ILIKE '%anon%'", length: 2,
+        listIDs: [],
+        ids: [],
+        query: "subscribers.name LIKE '%anon%'",
+        length: 2,
       },
       {
-        listIDs: [], ids: [], query: "name like 'nope'", length: 1,
+        listIDs: [],
+        ids: [],
+        query: "subscribers.name LIKE 'nope'",
+        length: 1,
       },
     ];
 
@@ -47,22 +53,31 @@ describe('Subscribers', () => {
     });
   });
 
-  it('Advanced searches subscribers', () => {
+  it('Filters subscribers with the visual builder', () => {
     cy.get('[data-cy=btn-advanced-search]').click();
+    cy.get('[data-cy=filter-builder]').should('be.visible');
 
-    const cases = [
-      { value: 'subscribers.attribs->>\'city\'=\'Bengaluru\'', count: 2 },
-      { value: 'subscribers.attribs->>\'city\'=\'Bengaluru\' AND id=1', count: 1 },
-      { value: '(subscribers.attribs->>\'good\')::BOOLEAN = true AND name like \'Anon%\'', count: 1 },
-    ];
-
-    cases.forEach((c) => {
-      cy.get('[data-cy=query]').clear().type(c.value);
-      cy.get('[data-cy=btn-query]').click();
-      cy.get('tbody td[data-label=E-mail]').its('length').should('eq', c.count);
+    cy.get('[data-cy=filter-rule]').first().within(() => {
+      cy.get('[data-cy=filter-field]').click();
+      cy.get('.v-list-item').contains('Attribute').click();
+      cy.get('[data-cy=filter-attrib-key]').clear().type('city');
+      cy.get('[data-cy=filter-value]').clear().type('Bengaluru');
     });
+    cy.get('[data-cy=btn-query]').click();
+    cy.get('[data-cy=active-filter-chips]').should('exist');
+    cy.get('tbody td[data-label=E-mail]').its('length').should('eq', 2);
 
+    cy.get('[data-cy=btn-advanced-search]').click();
+    if (Cypress.$('[data-cy=btn-mode-sql]').length) {
+      cy.get('[data-cy=btn-mode-sql]').click();
+      cy.get('[data-cy=query]').clear().type("json_extract(subscribers.attribs, '$.city') = 'Bengaluru' AND subscribers.name LIKE 'Anon%'");
+      cy.get('[data-cy=btn-query]').click();
+      cy.get('tbody td[data-label=E-mail]').its('length').should('eq', 1);
+    }
+
+    cy.get('[data-cy=btn-advanced-search]').click();
     cy.get('[data-cy=btn-query-reset]').click();
+    cy.get('[data-cy=active-filter-chips]').should('not.exist');
     cy.wait(1000);
     cy.get('tbody td[data-label=E-mail]').its('length').should('eq', 2);
   });

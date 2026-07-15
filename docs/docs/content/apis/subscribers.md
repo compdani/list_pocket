@@ -37,7 +37,9 @@ Retrieve all subscribers.
 
 | Name                | Type   | Required | Description                                                           |
 | :------------------ | :----- | :------- | :-------------------------------------------------------------------- |
-| query               | string |          | Subscriber search by SQL expression.                                  |
+| search              | string |          | Free-text match on name, email, or phone (case-insensitive).          |
+| filters             | string |          | JSON filter tree for tags, attributes, status, fields, and lists. Does not require `subscribers:sql_query`. See [querying and segmentation](../querying-and-segmentation.md). |
+| query               | string |          | Partial SQL expression (requires `subscribers:sql_query`).            |
 | list_record_id      | string |          | PocketBase list record id to filter by. Repeat the query key for multiple lists. |
 | subscription_status | string |          | Subscription status to filter by if there are one or more `list_id`s. |
 | order_by            | string |          | Result sorting field. Options: name, status, created_at, updated_at, id (PocketBase record id).  |
@@ -59,7 +61,14 @@ curl -u 'api_username:access_token' 'http://localhost:9000/api/subscribers?list_
 curl -u 'api_username:access_token' -X GET 'http://localhost:9000/api/subscribers' \
     --url-query 'page=1' \
     --url-query 'per_page=100' \
-    --url-query "query=subscribers.name LIKE 'Test%' AND subscribers.attribs->>'city' = 'Bengaluru'"
+    --url-query 'filters={"logic":"and","rules":[{"field":"attrib","key":"city","op":"eq","value":"Bengaluru"}]}'
+```
+
+```shell
+curl -u 'api_username:access_token' -X GET 'http://localhost:9000/api/subscribers' \
+    --url-query 'page=1' \
+    --url-query 'per_page=100' \
+    --url-query "query=subscribers.name LIKE 'Test%' AND json_extract(subscribers.attribs, '$.city') = 'Bengaluru'"
 ```
 
 ##### Example Response
@@ -698,15 +707,17 @@ ______________________________________________________________________
 
 #### PUT /api/subscribers/query/blocklist
 
-Blocklist subscribers based on SQL expression.
+Blocklist subscribers matching `search`, structured `filters`, and/or a SQL `query`.
 
-> Refer to the [querying and segmentation](../querying-and-segmentation.md#querying-and-segmenting-subscribers) section for more information on how to query subscribers with SQL expressions.
+> Refer to the [querying and segmentation](../querying-and-segmentation.md) section for filter JSON and SQL examples.
 
 ##### Parameters
 
 | Name     | Type     | Required | Description                                  |
 | :------- | :------- | :------- | :------------------------------------------- |
-| query    | string   | Yes      | SQL expression to filter subscribers with.   |
+| search   | string   | No       | Free-text match on name, email, or phone.    |
+| filters  | object   | No       | Structured filter tree (no SQL permission required). |
+| query    | string   | No       | SQL expression (requires `subscribers:sql_query`). Provide at least one of `search`, `filters`, `query`, or `all`. |
 | list_record_ids | string[] | No       | Optional PocketBase list record ids to limit the filtering to. |
 
 ##### Example Request
@@ -714,7 +725,7 @@ Blocklist subscribers based on SQL expression.
 ```shell
 curl -u 'api_username:access_token' -X PUT 'http://localhost:9000/api/subscribers/query/blocklist' \
 -H 'Content-Type: application/json' \
---data-raw '{"query":"subscribers.name LIKE \'John Doe\' AND subscribers.attribs->>'\''city'\'' = '\''Bengaluru'\''"}'
+--data-raw '{"filters":{"logic":"and","rules":[{"field":"attrib","key":"city","op":"eq","value":"Bengaluru"}]}}'
 ```
 
 ##### Example Response
@@ -807,13 +818,15 @@ ______________________________________________________________________
 
 #### POST /api/subscribers/query/delete
 
-Delete subscribers based on SQL expression.
+Delete subscribers matching `search`, structured `filters`, and/or a SQL `query`.
 
 ##### Parameters
 
 | Name     | Type     | Required | Description                                                        |
 | :------- | :------- | :------- | :----------------------------------------------------------------- |
-| query    | string   | No       | SQL expression to filter subscribers with.                         |
+| search   | string   | No       | Free-text match on name, email, or phone.                          |
+| filters  | object   | No       | Structured filter tree (no SQL permission required).               |
+| query    | string   | No       | SQL expression (requires `subscribers:sql_query`).                 |
 | list_record_ids | string[] | No       | Optional PocketBase list record ids to limit the filtering to.     |
 | all      | bool     | No       | When set to `true`, ignores any query and deletes all subscribers. |
 
@@ -823,7 +836,7 @@ Delete subscribers based on SQL expression.
 ```shell
 curl -u 'api_username:access_token' -X POST 'http://localhost:9000/api/subscribers/query/delete' \
 -H 'Content-Type: application/json' \
---data-raw '{"query":"subscribers.name LIKE \'John Doe\' AND subscribers.attribs->>'\''city'\'' = '\''Bengaluru'\''"}'
+--data-raw '{"filters":{"logic":"and","rules":[{"field":"tag","op":"has_any","value":["do-not-contact"]}]}}'
 ```
 
 ##### Example Response
