@@ -1,145 +1,179 @@
 <template>
-  <section class="maintenance wrap">
-    <h1 class="title is-4">
-      {{ $t('maintenance.title') }}
-    </h1>
-    <hr />
-    <p class="has-text-grey">
-      {{ $t('maintenance.help') }}
-    </p>
-    <br />
+  <section class="maintenance">
+    <header class="page-header">
+      <h1 class="page-title">
+        {{ $t('maintenance.title') }}
+      </h1>
+      <p class="page-help">
+        {{ $t('maintenance.help') }}
+      </p>
+    </header>
 
-    <div class="box">
-      <h4 class="is-size-4">
+    <v-card variant="outlined" class="section-card">
+      <h2 class="section-title">
         {{ $t('globals.terms.subscribers') }}
-      </h4><br />
-      <div class="columns">
-        <div class="column is-4">
-          <b-field label="Data" :message="$t('maintenance.orphanHelp')">
-            <b-select v-model="subscriberType" expanded>
-              <option value="orphan">
-                {{ $t('dashboard.orphanSubs') }}
-              </option>
-              <option value="blocklisted">
-                {{ $t('subscribers.status.blocklisted') }}
-              </option>
-            </b-select>
-          </b-field>
-        </div>
-        <div class="column is-5" />
-        <div class="column">
-          <br />
-          <b-field>
-            <b-button class="is-primary" :loading="loading.maintenance" @click="deleteSubscribers" expanded>
-              {{ $t('globals.buttons.delete') }}
-            </b-button>
-          </b-field>
-        </div>
-      </div>
-    </div><!-- subscribers -->
+      </h2>
+      <v-row align="end">
+        <v-col cols="12" md="5">
+          <v-select
+            v-model="subscriberType"
+            :items="subscriberTypeOptions"
+            item-title="title"
+            item-value="value"
+            label="Data"
+            :hint="$t('maintenance.orphanHelp')"
+            persistent-hint
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-col>
+        <v-col cols="12" md="3" offset-md="4">
+          <v-btn
+            color="primary"
+            variant="flat"
+            block
+            :loading="loading.maintenance"
+            @click="deleteSubscribers"
+          >
+            {{ $t('globals.buttons.delete') }}
+          </v-btn>
+        </v-col>
+      </v-row>
+    </v-card>
 
-    <div class="box mt-6">
-      <h4 class="is-size-4">
+    <v-card variant="outlined" class="section-card">
+      <h2 class="section-title">
         {{ $tc('globals.terms.subscriptions', 2) }}
-      </h4><br />
-      <div class="columns">
-        <div class="column is-4">
-          <b-field label="Data">
-            <b-select v-model="subscriptionType" expanded>
-              <option value="optin">
-                {{ $t('maintenance.maintenance.unconfirmedOptins') }}
-              </option>
-            </b-select>
-          </b-field>
-        </div>
-        <div class="column is-4">
-          <b-field :label="$t('maintenance.olderThan')">
-            <b-datepicker v-model="subscriptionDate" required expanded icon="calendar-clock"
-              :date-formatter="formatDateTime" />
-          </b-field>
-        </div>
-        <div class="column is-1" />
-        <div class="column">
-          <br />
-          <b-field>
-            <b-button class="is-primary" :loading="loading.maintenance" @click="deleteSubscriptions" expanded>
-              {{ $t('globals.buttons.delete') }}
-            </b-button>
-          </b-field>
-        </div>
-      </div>
-    </div><!-- subscriptions -->
+      </h2>
+      <v-row align="end">
+        <v-col cols="12" md="4">
+          <v-select
+            v-model="subscriptionType"
+            :items="subscriptionTypeOptions"
+            item-title="title"
+            item-value="value"
+            label="Data"
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-text-field
+            v-model="subscriptionDate"
+            :label="$t('maintenance.olderThan')"
+            type="date"
+            required
+            variant="outlined"
+            density="comfortable"
+            prepend-inner-icon="mdi-calendar-clock"
+          />
+        </v-col>
+        <v-col cols="12" md="3" offset-md="1">
+          <v-btn
+            color="primary"
+            variant="flat"
+            block
+            :loading="loading.maintenance"
+            @click="deleteSubscriptions"
+          >
+            {{ $t('globals.buttons.delete') }}
+          </v-btn>
+        </v-col>
+      </v-row>
+    </v-card>
 
-    <div class="box mt-6">
-      <h4 class="is-size-4">
+    <v-card variant="outlined" class="section-card">
+      <h2 class="section-title">
         {{ $t('globals.terms.analytics') }}
-      </h4><br />
-      <div class="columns">
-        <div class="column is-4">
-          <b-field label="Data">
-            <b-select v-model="analyticsType" expanded>
-              <option selected value="all">
-                {{ $t('globals.terms.all') }}
-              </option>
-              <option value="views">
-                {{ $t('dashboard.campaignViews') }}
-              </option>
-              <option value="clicks">
-                {{ $t('dashboard.linkClicks') }}
-              </option>
-            </b-select>
-          </b-field>
-        </div>
-        <div class="column is-4">
-          <b-field :label="$t('maintenance.olderThan')">
-            <b-datepicker v-model="analyticsDate" required expanded icon="calendar-clock"
-              :date-formatter="formatDateTime" />
-          </b-field>
-        </div>
-        <div class="column is-1" />
-        <div class="column">
-          <br />
-          <b-field>
-            <b-button expanded class="is-primary" :loading="loading.maintenance" @click="deleteAnalytics">
-              {{ $t('globals.buttons.delete') }}
-            </b-button>
-          </b-field>
-        </div>
-      </div>
-    </div><!-- analytics -->
+      </h2>
+      <v-row align="end">
+        <v-col cols="12" md="4">
+          <v-select
+            v-model="analyticsType"
+            :items="analyticsTypeOptions"
+            item-title="title"
+            item-value="value"
+            label="Data"
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-text-field
+            v-model="analyticsDate"
+            :label="$t('maintenance.olderThan')"
+            type="date"
+            required
+            variant="outlined"
+            density="comfortable"
+            prepend-inner-icon="mdi-calendar-clock"
+          />
+        </v-col>
+        <v-col cols="12" md="3" offset-md="1">
+          <v-btn
+            color="primary"
+            variant="flat"
+            block
+            :loading="loading.maintenance"
+            @click="deleteAnalytics"
+          >
+            {{ $t('globals.buttons.delete') }}
+          </v-btn>
+        </v-col>
+      </v-row>
+    </v-card>
 
-    <form @submit.prevent="onUpdateDBSettings" class="box mt-6">
-      <h4 class="is-size-4">
+    <v-card variant="outlined" class="section-card">
+      <h2 class="section-title">
         {{ $t('maintenance.database.title') }}
-      </h4><br />
-      <h5 class="is-size-5">Vacuum</h5>
-      <p class="has-text-grey is-size-7">
+      </h2>
+      <h3 class="subsection-title">Vacuum</h3>
+      <p class="section-help">
         {{ $t('maintenance.database.vacuumHelp') }}
       </p>
-      <br />
-      <div class="columns">
-        <div class="column is-2">
-          <b-field :label="$t('globals.buttons.enabled')">
-            <b-switch v-model="dbSettings.vacuum" />
-          </b-field>
-        </div>
-        <div class="column is-4" :class="{ disabled: !dbSettings.vacuum }">
-          <b-field :label="$t('settings.maintenance.cron')">
-            <b-input v-model="dbSettings.vacuum_cron_interval" placeholder="0 2 * * *" :disabled="!dbSettings.vacuum"
-              pattern="((\*|[0-9,\-\/]+)\s+){4}(\*|[0-9,\-\/]+)" />
-          </b-field>
-        </div>
-        <div class="column is-3" />
-        <div class="column is-3">
-          <br />
-          <b-button type="is-primary" native-type="submit" :loading="loading.settings" expanded>
-            {{ $t('globals.buttons.save') }}
-          </b-button>
-        </div>
-      </div>
-    </form><!-- database -->
+      <v-form @submit.prevent="onUpdateDBSettings">
+        <v-row align="end">
+          <v-col cols="12" md="2">
+            <v-switch
+              v-model="dbSettings.vacuum"
+              :label="$t('globals.buttons.enabled')"
+              color="primary"
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" md="5">
+            <v-text-field
+              v-model="dbSettings.vacuum_cron_interval"
+              :label="$t('settings.maintenance.cron')"
+              placeholder="0 2 * * *"
+              :disabled="!dbSettings.vacuum"
+              pattern="((\*|[0-9,\-\/]+)\s+){4}(\*|[0-9,\-\/]+)"
+              variant="outlined"
+              density="comfortable"
+            />
+          </v-col>
+          <v-col cols="12" md="3" offset-md="2">
+            <v-btn
+              color="primary"
+              variant="flat"
+              block
+              type="submit"
+              :loading="loading.settings"
+            >
+              {{ $t('globals.buttons.save') }}
+            </v-btn>
+          </v-col>
+        </v-row>
+      </v-form>
+    </v-card>
 
-    <b-loading :is-full-page="true" v-if="isLoading" active />
+    <v-overlay
+      :model-value="isLoading"
+      class="align-center justify-center"
+      persistent
+    >
+      <v-progress-circular indeterminate color="primary" size="56" />
+    </v-overlay>
   </section>
 </template>
 
@@ -148,17 +182,14 @@ import dayjs from 'dayjs';
 import { mapState } from 'vuex';
 
 export default {
-  components: {
-  },
-
   data() {
     return {
       isLoading: false,
       subscriberType: 'orphan',
       analyticsType: 'all',
       subscriptionType: 'optin',
-      analyticsDate: dayjs().subtract(7, 'day').toDate(),
-      subscriptionDate: dayjs().subtract(7, 'day').toDate(),
+      analyticsDate: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
+      subscriptionDate: dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
       dbSettings: {
         vacuum: false,
         vacuum_cron_interval: '0 2 * * *',
@@ -171,10 +202,6 @@ export default {
   },
 
   methods: {
-    formatDateTime(s) {
-      return dayjs(s).format('YYYY-MM-DD');
-    },
-
     deleteSubscribers() {
       this.$utils.confirm(
         null,
@@ -233,7 +260,72 @@ export default {
 
   computed: {
     ...mapState(['loading']),
-  },
 
+    subscriberTypeOptions() {
+      return [
+        { title: this.$t('dashboard.orphanSubs'), value: 'orphan' },
+        { title: this.$t('subscribers.status.blocklisted'), value: 'blocklisted' },
+      ];
+    },
+
+    subscriptionTypeOptions() {
+      return [
+        { title: this.$t('maintenance.maintenance.unconfirmedOptins'), value: 'optin' },
+      ];
+    },
+
+    analyticsTypeOptions() {
+      return [
+        { title: this.$t('globals.terms.all'), value: 'all' },
+        { title: this.$t('dashboard.campaignViews'), value: 'views' },
+        { title: this.$t('dashboard.linkClicks'), value: 'clicks' },
+      ];
+    },
+  },
 };
 </script>
+
+<style scoped>
+.maintenance {
+  max-width: 960px;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+
+.page-help {
+  color: #64748b;
+  margin: 0;
+}
+
+.section-card {
+  margin-bottom: 20px;
+  padding: 20px;
+}
+
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+
+.subsection-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.section-help {
+  color: #64748b;
+  font-size: 0.85rem;
+  margin: 0 0 16px;
+}
+</style>

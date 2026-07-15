@@ -8,12 +8,14 @@
 
     <section class="counts wrap">
       <div class="overview-grid relative">
-        <b-loading v-if="isCountsLoading" active :is-full-page="false" />
+        <div v-if="isCountsLoading" class="section-loading">
+          <v-progress-circular indeterminate color="primary" size="40" />
+        </div>
 
         <article class="overview-card" data-cy="lists">
           <div class="metric-head">
             <p class="metric-value">
-              <span class="metric-icon"><b-icon icon="format-list-bulleted-square" /></span>
+              <span class="metric-icon"><v-icon icon="mdi-format-list-bulleted-square" size="20" /></span>
               {{ $utils.niceNumber(counts.lists.total) }}
             </p>
             <p class="metric-label">
@@ -43,7 +45,7 @@
         <article class="overview-card" data-cy="campaigns">
           <div class="metric-head">
             <p class="metric-value">
-              <span class="metric-icon"><b-icon icon="rocket-launch-outline" /></span>
+              <span class="metric-icon"><v-icon icon="mdi-rocket-launch-outline" size="20" /></span>
               {{ $utils.niceNumber(counts.campaigns.total) }}
             </p>
             <p class="metric-label">
@@ -62,7 +64,7 @@
         <article class="overview-card" data-cy="subscribers">
           <div class="metric-head">
             <p class="metric-value">
-              <span class="metric-icon"><b-icon icon="account-multiple" /></span>
+              <span class="metric-icon"><v-icon icon="mdi-account-multiple" size="20" /></span>
               {{ $utils.niceNumber(counts.subscribers.total) }}
             </p>
             <p class="metric-label">
@@ -89,7 +91,7 @@
 
           <div class="messages-block" data-cy="messages">
             <p class="metric-value compact">
-              <span class="metric-icon"><b-icon icon="email-outline" /></span>
+              <span class="metric-icon"><v-icon icon="mdi-email-outline" size="20" /></span>
               {{ $utils.niceNumber(counts.messages) }}
             </p>
             <p class="metric-label">
@@ -100,7 +102,9 @@
       </div>
 
       <div class="charts-card relative">
-        <b-loading v-if="isChartsLoading" active :is-full-page="false" />
+        <div v-if="isChartsLoading" class="section-loading">
+          <v-progress-circular indeterminate color="primary" size="40" />
+        </div>
         <article class="charts-panel">
           <div class="charts-grid">
             <div class="chart-block">
@@ -344,6 +348,21 @@ export default {
 .dashboard-date {
   line-height: 1.25;
   margin: 0;
+}
+
+.relative {
+  position: relative;
+}
+
+.section-loading {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: 16px;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 2;
 }
 
 .overview-grid {

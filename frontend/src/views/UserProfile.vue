@@ -1,124 +1,179 @@
 <template>
-  <section class="user-profile section-mini">
-    <b-loading v-if="loading.users" :active="loading.users" :is-full-page="false" />
+  <section class="user-profile">
+    <div v-if="loading.users" class="section-loading">
+      <v-progress-circular indeterminate color="primary" size="48" />
+    </div>
 
-    <h1 class="title">
-      @{{ data.username }}
-    </h1>
-    <b-tag v-if="data.userRole">{{ data.userRole.name }}</b-tag>
+    <header class="profile-header">
+      <h1 class="profile-title">
+        @{{ data.username }}
+      </h1>
+      <v-chip v-if="data.userRole" size="small" variant="tonal" color="primary">
+        {{ data.userRole.name }}
+      </v-chip>
+    </header>
 
-    <br /><br /><br />
-    <form @submit.prevent="onSubmit">
-      <b-field v-if="data.type !== 'api'" :label="$t('subscribers.email')" label-position="on-border">
-        <b-input :maxlength="200" v-model="form.email" name="email" :placeholder="$t('subscribers.email')"
-          :disabled="!data.passwordLogin" required autofocus />
-      </b-field>
+    <v-form class="profile-form" @submit.prevent="onSubmit">
+      <v-text-field
+        v-if="data.type !== 'api'"
+        v-model="form.email"
+        :label="$t('subscribers.email')"
+        :placeholder="$t('subscribers.email')"
+        :disabled="!data.passwordLogin"
+        maxlength="200"
+        name="email"
+        type="email"
+        required
+        autofocus
+        variant="outlined"
+        density="comfortable"
+        class="mb-2"
+      />
 
-      <b-field :label="$t('globals.fields.name')" label-position="on-border">
-        <b-input :maxlength="200" v-model="form.name" name="name" :placeholder="$t('globals.fields.name')" />
-      </b-field>
+      <v-text-field
+        v-model="form.name"
+        :label="$t('globals.fields.name')"
+        :placeholder="$t('globals.fields.name')"
+        maxlength="200"
+        name="name"
+        variant="outlined"
+        density="comfortable"
+        class="mb-2"
+      />
 
-      <div v-if="data.passwordLogin" class="columns">
-        <div class="column is-6">
-          <b-field :label="$t('users.password')" label-position="on-border">
-            <b-input minlength="8" :maxlength="200" v-model="form.password" type="password" name="password"
-              :placeholder="$t('users.password')" />
-          </b-field>
+      <v-row v-if="data.passwordLogin">
+        <v-col cols="12" md="6">
+          <v-text-field
+            v-model="form.password"
+            :label="$t('users.password')"
+            :placeholder="$t('users.password')"
+            type="password"
+            minlength="8"
+            maxlength="200"
+            name="password"
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-col>
+        <v-col cols="12" md="6">
+          <v-text-field
+            v-model="form.password2"
+            :label="$t('users.passwordRepeat')"
+            type="password"
+            minlength="8"
+            maxlength="200"
+            name="password2"
+            variant="outlined"
+            density="comfortable"
+          />
+        </v-col>
+      </v-row>
+
+      <v-btn
+        color="primary"
+        variant="flat"
+        type="submit"
+        data-cy="btn-save"
+        prepend-icon="mdi-content-save-outline"
+        class="mt-2"
+      >
+        {{ $t('globals.buttons.save') }}
+      </v-btn>
+    </v-form>
+
+    <section v-if="data.passwordLogin" class="twofa-section">
+      <v-card v-if="data.twofaType === 'none'" variant="outlined" class="twofa-card">
+        <div class="twofa-card-head">
+          <h3 class="twofa-title">{{ $t('users.twoFA') }}</h3>
+          <v-switch
+            v-if="!isTotpVisible"
+            :model-value="twofaEnabled"
+            hide-details
+            density="compact"
+            color="primary"
+            @update:model-value="onEnableSwitch"
+          />
         </div>
-        <div class="column is-6">
-          <b-field :label="$t('users.passwordRepeat')" label-position="on-border">
-            <b-input minlength="8" :maxlength="200" v-model="form.password2" type="password" name="password2" />
-          </b-field>
-        </div>
-      </div>
 
-      <b-field expanded>
-        <b-button type="is-primary" icon-left="content-save-outline" native-type="submit" data-cy="btn-save">
-          {{ $t('globals.buttons.save') }}
-        </b-button>
-      </b-field>
-    </form>
+        <p class="twofa-desc">{{ $t('users.twoFANotEnabled') }}</p>
 
-    <br /><br />
-
-    <!-- 2FA -->
-    <section v-if="this.data.passwordLogin" class="twofa-section">
-      <!-- TOTP disabled -->
-      <div v-if="data.twofaType === 'none'" class="box">
-        <div class="columns is-vcentered mb-4">
-          <div class="column">
-            <h3 class="title is-size-5 mb-0">{{ $t('users.twoFA') }}</h3>
-          </div>
-          <div class="column is-narrow">
-            <b-switch v-if="!isTotpVisible" v-model="twofaEnabled" @input="onToggleEnableTotp" />
-          </div>
-        </div>
-
-        <p>{{ $t('users.twoFANotEnabled') }}</p>
-        <br />
-
-        <!-- TOTP setup -->
         <div v-if="isTotpVisible" class="totp-setup">
           <div v-if="totpQR" class="qr-section">
-            <p class="has-text-grey">{{ $t('users.totpScanQR') }}</p><br />
+            <p class="text-medium-emphasis">{{ $t('users.totpScanQR') }}</p>
 
-            <img :src="'data:image/png;base64,' + totpQR" alt="QR Code" />
+            <img class="qr-image" :src="'data:image/png;base64,' + totpQR" alt="QR Code" />
 
-            <br /><br />
-            <p>
+            <p class="mt-4">
               <strong>{{ $t('users.totpSecret') }}</strong><br />
               <code><copy-text :text="`${totpSecret}`" /></code>
             </p>
 
-            <br /><br />
-            <form @submit.prevent="confirmTOTP">
-              <b-field :label="$t('users.totpCode')" label-position="on-border">
-                <b-input ref="totpCodeInput" v-model="totpCode" maxlength="6" pattern="[0-9]{6}" placeholder="000000"
-                  required />
-              </b-field>
-              <div class="buttons">
-                <b-button type="is-primary" native-type="submit">
+            <v-form class="mt-4" @submit.prevent="confirmTOTP">
+              <v-text-field
+                ref="totpCodeInput"
+                v-model="totpCode"
+                :label="$t('users.totpCode')"
+                maxlength="6"
+                pattern="[0-9]{6}"
+                placeholder="000000"
+                required
+                variant="outlined"
+                density="comfortable"
+                class="mb-3"
+              />
+              <div class="d-flex ga-3">
+                <v-btn color="primary" variant="flat" type="submit">
                   {{ $t('globals.buttons.enable') }}
-                </b-button>
-                <b-button type="button" @click="onCancelTOTPSetup">
+                </v-btn>
+                <v-btn type="button" variant="outlined" @click="onCancelTOTPSetup">
                   {{ $t('globals.buttons.cancel') }}
-                </b-button>
+                </v-btn>
               </div>
-            </form>
+            </v-form>
           </div>
         </div>
-      </div>
+      </v-card>
 
-      <!-- TOTP Enabled -->
-      <div v-if="data.twofaType === 'totp'" class="box">
-        <div class="columns is-vcentered">
-          <div class="column">
-            <h3 class="title is-size-5">
-              <b-icon icon="check-circle-outline" type="is-success" /> {{ $t('users.twoFAEnabled') }}
-            </h3>
-          </div>
-          <div class="column is-narrow">
-            <b-switch v-if="!showDisableTOTP" v-model="twofaEnabled" @input="toggleDisableTOTP" />
-          </div>
+      <v-card v-if="data.twofaType === 'totp'" variant="outlined" class="twofa-card">
+        <div class="twofa-card-head">
+          <h3 class="twofa-title">
+            <v-icon icon="mdi-check-circle-outline" color="success" class="mr-1" />
+            {{ $t('users.twoFAEnabled') }}
+          </h3>
+          <v-switch
+            v-if="!showDisableTOTP"
+            :model-value="twofaEnabled"
+            hide-details
+            density="compact"
+            color="primary"
+            @update:model-value="onDisableSwitch"
+          />
         </div>
 
-        <p>{{ $t('users.twoFAEnabledDesc', { type: data.twofaType.toUpperCase() }) }}</p>
+        <p class="twofa-desc">{{ $t('users.twoFAEnabledDesc', { type: data.twofaType.toUpperCase() }) }}</p>
 
-        <!-- Disable TOTP Flow -->
-        <form v-if="showDisableTOTP" class="disable-totp mt-5" @submit.prevent="confirmDisableTOTP">
-          <b-field :label="$t('users.password')" label-position="on-border">
-            <b-input ref="disablePasswordInput" v-model="disableTOTPPassword" type="password" minlength="8" required />
-          </b-field>
-          <div class="buttons">
-            <b-button type="is-danger" native-type="submit">
+        <v-form v-if="showDisableTOTP" class="mt-4" @submit.prevent="confirmDisableTOTP">
+          <v-text-field
+            ref="disablePasswordInput"
+            v-model="disableTOTPPassword"
+            :label="$t('users.password')"
+            type="password"
+            minlength="8"
+            required
+            variant="outlined"
+            density="comfortable"
+            class="mb-3"
+          />
+          <div class="d-flex ga-3">
+            <v-btn color="error" variant="flat" type="submit">
               {{ $t('globals.buttons.disable') }}
-            </b-button>
-            <b-button type="button" @click="onCancelTOTPSetup">
+            </v-btn>
+            <v-btn type="button" variant="outlined" @click="onCancelTOTPSetup">
               {{ $t('globals.buttons.cancel') }}
-            </b-button>
+            </v-btn>
           </div>
-        </form>
-      </div>
+        </v-form>
+      </v-card>
     </section>
   </section>
 </template>
@@ -172,6 +227,22 @@ export default {
       });
     },
 
+    onEnableSwitch(enabled) {
+      this.twofaEnabled = enabled;
+      if (enabled) {
+        this.onToggleEnableTotp();
+      } else {
+        this.onCancelTOTPSetup();
+      }
+    },
+
+    onDisableSwitch(enabled) {
+      this.twofaEnabled = enabled;
+      if (!enabled) {
+        this.toggleDisableTOTP();
+      }
+    },
+
     onToggleEnableTotp() {
       this.$api.getTOTPQR(this.data.id).then((data) => {
         this.totpQR = data.qr;
@@ -184,6 +255,7 @@ export default {
           }
         });
       }).catch(() => {
+        this.twofaEnabled = false;
         this.$utils.toast(this.$t('globals.messages.errorFetching'), 'is-danger');
       });
     },
@@ -212,7 +284,6 @@ export default {
         this.$utils.toast(this.$t('users.twoFAEnabled'));
         this.onCancelTOTPSetup();
 
-        // Reload user profile
         this.$api.refreshUserProfile().then((data) => {
           this.data = { ...data };
           this.twofaEnabled = data.twofaType === 'totp';
@@ -232,11 +303,6 @@ export default {
       });
     },
 
-    cancelDisableTOTP() {
-      this.showDisableTOTP = false;
-      this.disableTOTPPassword = '';
-    },
-
     confirmDisableTOTP() {
       if (!this.disableTOTPPassword) {
         this.$utils.toast(this.$t('globals.messages.invalidFields'), 'is-danger');
@@ -250,7 +316,6 @@ export default {
         this.$utils.toast(this.$t('globals.messages.done'));
         this.showDisableTOTP = false;
         this.disableTOTPPassword = '';
-        // Reload user profile
         this.$api.refreshUserProfile().then((data) => {
           this.data = { ...data };
           this.twofaEnabled = data.twofaType === 'totp';
@@ -272,6 +337,76 @@ export default {
   computed: {
     ...mapState(['loading']),
   },
-
 };
 </script>
+
+<style scoped>
+.user-profile {
+  max-width: 720px;
+  position: relative;
+}
+
+.section-loading {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 2;
+}
+
+.profile-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.profile-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.profile-form {
+  margin-bottom: 32px;
+}
+
+.twofa-section {
+  margin-top: 8px;
+}
+
+.twofa-card {
+  padding: 20px;
+}
+
+.twofa-card-head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.twofa-title {
+  align-items: center;
+  display: flex;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.twofa-desc {
+  color: #64748b;
+  margin: 0;
+}
+
+.qr-image {
+  display: block;
+  margin-top: 12px;
+  max-width: 200px;
+}
+</style>

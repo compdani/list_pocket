@@ -2,43 +2,70 @@
   <form @submit.prevent="onSubmit">
     <div class="admin-dialog-card modal-card">
       <header class="admin-dialog-head modal-card-head">
-        <h4 class="title is-size-5">
+        <h4 class="dialog-title">
           {{ $t('subscribers.manageLists') }}
         </h4>
       </header>
 
-      <section expanded class="admin-dialog-body modal-card-body">
-        <b-field label="Action">
-          <div>
-            <b-radio v-model="form.action" name="action" native-value="add" data-cy="check-list-add">
+      <section class="admin-dialog-body modal-card-body">
+        <div class="field-block">
+          <div class="field-label">Action</div>
+          <v-btn-toggle
+            v-model="form.action"
+            mandatory
+            divided
+            variant="outlined"
+            density="comfortable"
+            class="action-toggle"
+          >
+            <v-btn value="add" data-cy="check-list-add">
               {{ $t('globals.buttons.add') }}
-            </b-radio>
-            <b-radio v-model="form.action" name="action" native-value="remove" data-cy="check-list-remove">
+            </v-btn>
+            <v-btn value="remove" data-cy="check-list-remove">
               {{ $t('globals.buttons.remove') }}
-            </b-radio>
-            <b-radio v-model="form.action" name="action" native-value="unsubscribe" data-cy="check-list-unsubscribe">
+            </v-btn>
+            <v-btn value="unsubscribe" data-cy="check-list-unsubscribe">
               {{ $t('subscribers.markUnsubscribed') }}
-            </b-radio>
-          </div>
-        </b-field>
+            </v-btn>
+          </v-btn-toggle>
+        </div>
 
-        <list-selector label="Target lists" placeholder="Lists to apply to" v-model="form.lists" :selected="form.lists"
-          :all="lists.results" />
+        <list-selector
+          class="mt-4"
+          label="Target lists"
+          placeholder="Lists to apply to"
+          v-model="form.lists"
+          :selected="form.lists"
+          :all="lists.results"
+        />
 
-        <b-field :message="$t('subscribers.preconfirmHelp')">
-          <b-checkbox v-model="form.preconfirm" data-cy="preconfirm" :native-value="true" :disabled="!hasOptinList">
-            {{ $t('subscribers.preconfirm') }}
-          </b-checkbox>
-        </b-field>
+        <div class="preconfirm-block mt-4">
+          <v-checkbox
+            v-model="form.preconfirm"
+            data-cy="preconfirm"
+            :disabled="!hasOptinList"
+            :label="$t('subscribers.preconfirm')"
+            density="comfortable"
+            hide-details
+          />
+          <p class="form-help mt-1">{{ $t('subscribers.preconfirmHelp') }}</p>
+        </div>
       </section>
 
-      <footer class="admin-dialog-foot modal-card-foot has-text-right">
-        <b-button @click="$emit('close')">
+      <footer class="admin-dialog-foot modal-card-foot">
+        <v-btn type="button" variant="outlined" class="dialog-action" @click="$emit('close')">
           {{ $t('globals.buttons.close') }}
-        </b-button>
-        <b-button native-type="submit" type="is-primary" :disabled="form.lists.length === 0">
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          class="dialog-action"
+          type="submit"
+          data-cy="btn-save"
+          :disabled="form.lists.length === 0"
+        >
           {{ $t('globals.buttons.save') }}
-        </b-button>
+        </v-btn>
       </footer>
     </div>
   </form>
@@ -53,13 +80,14 @@ export default {
     ListSelector,
   },
 
+  emits: ['finished', 'close'],
+
   props: {
     numSubscribers: { type: Number, default: 0 },
   },
 
   data() {
     return {
-      // Binds form input values.
       form: {
         action: 'add',
         lists: [],
@@ -104,9 +132,45 @@ export default {
   padding: 20px 20px 0;
 }
 
+.dialog-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+}
+
 .admin-dialog-body {
   overflow: auto;
   padding: 24px 20px;
+}
+
+.field-block {
+  margin-bottom: 4px;
+}
+
+.field-label {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.action-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.action-toggle :deep(.v-btn) {
+  flex: 1 1 auto;
+  text-transform: none;
+}
+
+.form-help {
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
 }
 
 .admin-dialog-foot {
@@ -118,7 +182,7 @@ export default {
   padding: 0 20px 20px;
 }
 
-.admin-dialog-foot button {
+.dialog-action {
   flex: 1 1 0;
 }
 </style>

@@ -103,29 +103,29 @@ describe('Subscribers', () => {
       cy.get('[data-cy=btn-manage-lists]').click();
 
       // Check both lists in the modal.
-      c.lists.forEach((l) => {
+      c.lists.forEach(() => {
         cy.get('.list-selector input').click();
-        cy.get('.list-selector .autocomplete a').first().click();
+        cy.get('.v-overlay-container .v-list-item').first().click();
       });
 
-      // Select the radio option in the modal.
-      cy.get(`[data-cy=${c.radio}] .check`).click();
+      // Select the action option in the modal.
+      cy.get(`[data-cy=${c.radio}]`).click();
 
       // For the first test, check the optin preconfirm box.
       if (n === 0) {
-        cy.get('[data-cy=preconfirm]').click();
+        cy.get('[data-cy=preconfirm] input[type=checkbox]').click({ force: true });
       }
 
       // Save.
-      cy.get('.modal button.is-primary').click();
+      cy.get('[data-cy=btn-save]').click();
 
       // Check the status of the lists on the subscriber.
       Object.keys(c.rows).forEach((r) => {
         cy.get('tbody td[data-label=E-mail]').eq(r).find('.tags').then(($el) => {
           cy.wrap($el).find('.tag').should('have.length', c.rows[r].length);
-          c.rows[r].forEach((status, n) => {
+          c.rows[r].forEach((status, idx) => {
             // eg: .tag(n).unconfirmed
-            cy.wrap($el).find('.tag').eq(n).should('have.class', status);
+            cy.wrap($el).find('.tag').eq(idx).should('have.class', status);
           });
         });
       });

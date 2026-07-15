@@ -49,21 +49,21 @@
 
               <v-col cols="12" md="3">
                 <v-text-field
-                  :value="toDateTimeLocal(form.from)"
+                  :model-value="toDateTimeLocal(form.from)"
                   :label="$t('analytics.fromDate')"
                   type="datetime-local"
                   data-cy="from"
-                  @input="onFromInput($event)"
+                  @update:model-value="onFromInput"
                 />
               </v-col>
 
               <v-col cols="12" md="3">
                 <v-text-field
-                  :value="toDateTimeLocal(form.to)"
+                  :model-value="toDateTimeLocal(form.to)"
                   :label="$t('analytics.toDate')"
                   type="datetime-local"
                   data-cy="to"
-                  @input="onToInput($event)"
+                  @update:model-value="onToInput"
                 />
               </v-col>
 
