@@ -58,7 +58,8 @@ export default function App(props: AppProps) {
         sx={{
           marginRight: inspectorDrawerOpen ? `${INSPECTOR_DRAWER_WIDTH}px` : 0,
           transition: [marginLeftTransition, marginRightTransition].join(', '),
-          height: props.height ? props.height : 'auto',
+          height: props.height ?? '100%',
+          minHeight: 0,
         }}
       >
         <TemplatePanel />

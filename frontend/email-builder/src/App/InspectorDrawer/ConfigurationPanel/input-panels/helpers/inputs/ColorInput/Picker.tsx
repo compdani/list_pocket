@@ -40,7 +40,7 @@ const DEFAULT_PRESET_COLORS = [
 
 const SX: SxProps = {
   p: 1,
-  '.react-colorful__pointer ': {
+  '.react-colorful__pointer': {
     width: 16,
     height: 16,
   },

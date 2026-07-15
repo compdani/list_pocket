@@ -33,25 +33,44 @@ export default function InspectorDrawer() {
       sx={{
         width: inspectorDrawerOpen ? INSPECTOR_DRAWER_WIDTH : 0,
       }}
-      // Make the drawer relative to the wrapper instead of body.
-      PaperProps={{ style: { position: 'absolute', zIndex: 0 } }}
-      ModalProps={{
-        container: document.querySelector('.email-builder-container'),
-        style: { position: 'absolute', zIndex: 0 },
+      slotProps={{
+        paper: {
+          style: {
+            position: 'absolute',
+            zIndex: 0,
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          },
+        },
+        modal: {
+          container: document.querySelector('.email-builder-container'),
+          style: { position: 'absolute', zIndex: 0 },
+        },
       }}
     >
       <Box sx={{
-        width: INSPECTOR_DRAWER_WIDTH, height: 49, borderBottom: 1, borderColor: 'divider',
+        width: INSPECTOR_DRAWER_WIDTH,
+        height: 49,
+        flexShrink: 0,
+        borderBottom: 1,
+        borderColor: 'divider',
+        display: 'flex',
+        alignItems: 'center',
       }}
       >
-        <Box px={2}>
-          <Tabs value={selectedSidebarTab} onChange={(_, v) => setSidebarTab(v)}>
+        <Box px={2} width="100%">
+          <Tabs
+            value={selectedSidebarTab}
+            onChange={(_, v) => setSidebarTab(v)}
+            sx={{ minHeight: 49, '& .MuiTabs-flexContainer': { height: 49 } }}
+          >
             <Tab value="styles" label="Styles" />
             <Tab value="block-configuration" label="Inspect" />
           </Tabs>
         </Box>
       </Box>
-      <Box sx={{ width: INSPECTOR_DRAWER_WIDTH, height: 'calc(100% - 49px)', overflow: 'auto' }}>
+      <Box sx={{ width: INSPECTOR_DRAWER_WIDTH, flex: 1, minHeight: 0, overflow: 'auto' }}>
         {renderCurrentSidebarPanel()}
       </Box>
     </Drawer>

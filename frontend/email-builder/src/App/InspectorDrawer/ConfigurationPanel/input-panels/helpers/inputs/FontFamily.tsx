@@ -20,8 +20,10 @@ export function NullableFontFamily({ label, onChange, defaultValue }: NullablePr
   return (
     <TextField
       select
+      fullWidth
       variant="standard"
       label={label}
+      sx={{ m: 0 }}
       value={value}
       onChange={(ev) => {
         const v = ev.target.value;
