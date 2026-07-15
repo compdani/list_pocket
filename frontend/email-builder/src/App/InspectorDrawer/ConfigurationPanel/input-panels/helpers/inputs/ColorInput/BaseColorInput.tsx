@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 
 import { AddOutlined, CloseOutlined } from '@mui/icons-material';
-import { ButtonBase, InputLabel, Menu, Stack } from '@mui/material';
+import { ButtonBase, Menu, Stack } from '@mui/material';
 
+import SidebarFieldLabel from '../SidebarFieldLabel';
 import Picker from './Picker';
 
 const BUTTON_SX = {
@@ -65,8 +66,8 @@ export default function ColorInput({ label, defaultValue, onChange, nullable }: 
   };
 
   return (
-    <Stack alignItems="flex-start">
-      <InputLabel sx={{ mb: 0.5 }}>{label}</InputLabel>
+    <Stack alignItems="flex-start" width="100%">
+      <SidebarFieldLabel>{label}</SidebarFieldLabel>
       <Stack direction="row" spacing={1}>
         {renderOpenButton()}
         {renderResetButton()}
@@ -75,8 +76,10 @@ export default function ColorInput({ label, defaultValue, onChange, nullable }: 
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={() => setAnchorEl(null)}
-        MenuListProps={{
-          sx: { height: 'auto', padding: 0 },
+        slotProps={{
+          list: {
+            sx: { height: 'auto', padding: 0 },
+          }
         }}
       >
         <Picker

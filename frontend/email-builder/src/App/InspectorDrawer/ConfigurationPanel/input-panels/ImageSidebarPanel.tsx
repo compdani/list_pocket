@@ -42,7 +42,7 @@ export default function ImageSidebarPanel({ data, setData }: ImageSidebarPanelPr
           updateData({ ...data, props: { ...data.props, url } });
         }}
       />
-      <a href="#" class="select-media"
+      <a href="#" className="select-media"
         style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginTop: '5px' }}
         onClick={(e) => {
         // @ts-ignore

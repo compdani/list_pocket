@@ -6,8 +6,9 @@ import {
   AlignVerticalBottomOutlined,
   AlignVerticalTopOutlined,
 } from '@mui/icons-material';
-import { InputLabel, Stack } from '@mui/material';
+import { Stack } from '@mui/material';
 
+import SidebarFieldLabel from './SidebarFieldLabel';
 import RawSliderInput from './raw/RawSliderInput';
 
 type TPaddingValue = {
@@ -44,8 +45,8 @@ export default function PaddingInput({ label, defaultValue, onChange }: Props) {
   }
 
   return (
-    <Stack spacing={2} alignItems="flex-start" pb={1}>
-      <InputLabel shrink>{label}</InputLabel>
+    <Stack spacing={2} alignItems="flex-start" width="100%" pb={1}>
+      <SidebarFieldLabel>{label}</SidebarFieldLabel>
 
       <RawSliderInput
         iconLabel={<AlignVerticalTopOutlined sx={{ fontSize: 16 }} />}

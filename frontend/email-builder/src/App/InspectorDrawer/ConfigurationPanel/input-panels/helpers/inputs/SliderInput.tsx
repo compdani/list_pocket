@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 
-import { InputLabel, Stack } from '@mui/material';
+import { Stack } from '@mui/material';
 
+import SidebarFieldLabel from './SidebarFieldLabel';
 import RawSliderInput from './raw/RawSliderInput';
 
 type SliderInputProps = {
@@ -21,8 +22,8 @@ type SliderInputProps = {
 export default function SliderInput({ label, defaultValue, onChange, ...props }: SliderInputProps) {
   const [value, setValue] = useState(defaultValue);
   return (
-    <Stack spacing={1} alignItems="flex-start">
-      <InputLabel shrink>{label}</InputLabel>
+    <Stack spacing={1} alignItems="flex-start" width="100%">
+      <SidebarFieldLabel>{label}</SidebarFieldLabel>
       <RawSliderInput
         value={value}
         setValue={(value: number) => {
