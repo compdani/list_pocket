@@ -62,39 +62,98 @@
             </div>
 
             <div v-if="isSearchAdvanced" class="advanced-query mt-2">
-              <v-textarea
-                v-model="queryParams.queryExp"
-                @keydown.enter="onAdvancedQueryEnter"
-                ref="queryExp"
-                placeholder="subscribers.name LIKE '%user%' or subscribers.status='blocklisted'"
-                auto-grow
-                rows="3"
-                density="comfortable"
-                hide-details
-                data-cy="query"
-              />
-              <span class="text-body-2 text-medium-emphasis">
-                {{ $t('subscribers.advancedQueryHelp') }}.{{ ' ' }}
-                <a :href="$docsUrl('querying-and-segmentation/')" target="_blank"
-                  rel="noopener noreferrer">
-                  {{ $t('globals.buttons.learnMore') }}.
-                </a>
-              </span>
-              <div class="buttons">
+              <div v-if="canUseSqlQuery" class="advanced-mode-tabs mb-3">
+                <button
+                  type="button"
+                  class="mode-tab"
+                  :class="{ active: advancedMode === 'filters' }"
+                  data-cy="btn-mode-filters"
+                  @click="setAdvancedMode('filters')"
+                >
+                  {{ $t('subscribers.filters.title') }}
+                </button>
+                <button
+                  type="button"
+                  class="mode-tab"
+                  :class="{ active: advancedMode === 'sql' }"
+                  data-cy="btn-mode-sql"
+                  @click="setAdvancedMode('sql')"
+                >
+                  SQL
+                </button>
+              </div>
+
+              <template v-if="advancedMode === 'filters'">
+                <p class="text-body-2 text-medium-emphasis mb-3">
+                  {{ $t('subscribers.filters.help') }}
+                  <a :href="$docsUrl('querying-and-segmentation/')" target="_blank" rel="noopener noreferrer">
+                    {{ $t('globals.buttons.learnMore') }}.
+                  </a>
+                </p>
+                <subscriber-filter-builder
+                  v-model="filterBuilder"
+                  :tag-options="subscriberTagOptions"
+                  :list-options="filterListOptions"
+                />
+              </template>
+
+              <template v-else>
+                <v-textarea
+                  v-model="queryParams.queryExp"
+                  @keydown.enter="onAdvancedQueryEnter"
+                  ref="queryExp"
+                  placeholder="subscribers.name LIKE '%user%' OR subscribers.status = 'blocklisted'"
+                  auto-grow
+                  rows="3"
+                  density="comfortable"
+                  hide-details
+                  data-cy="query"
+                />
+                <span class="text-body-2 text-medium-emphasis">
+                  {{ $t('subscribers.advancedQueryHelp') }}.{{ ' ' }}
+                  <a :href="$docsUrl('querying-and-segmentation/')" target="_blank"
+                    rel="noopener noreferrer">
+                    {{ $t('globals.buttons.learnMore') }}.
+                  </a>
+                </span>
+              </template>
+
+              <div class="buttons mt-3">
                 <v-btn type="submit" color="primary" prepend-icon="mdi-magnify" data-cy="btn-query">
-                  {{
-                    $t('subscribers.query') }}
+                  {{ $t('subscribers.query') }}
                 </v-btn>
-                <v-btn @click.prevent="toggleAdvancedSearch" prepend-icon="mdi-cancel" data-cy="btn-query-reset">
+                <v-btn @click.prevent="resetAdvancedSearch" prepend-icon="mdi-cancel" data-cy="btn-query-reset">
                   {{ $t('subscribers.reset') }}
                 </v-btn>
               </div>
             </div>
           </form>
+
+          <div
+            v-if="!isSearchAdvanced && activeFilterChips.length"
+            class="active-filter-chips mt-2"
+            data-cy="active-filter-chips"
+          >
+            <v-chip
+              v-for="(chip, idx) in activeFilterChips"
+              :key="`${chip.label}-${idx}`"
+              size="small"
+              variant="tonal"
+              closable
+              @click:close="clearFiltersAndRefresh"
+            >
+              {{ chip.label }}
+            </v-chip>
+            <button type="button" class="clear-filters-link" @click="clearFiltersAndRefresh">
+              {{ $t('subscribers.reset') }}
+            </button>
+          </div>
+
           <div v-if="!isSearchAdvanced" class="toggle-advanced">
             <a href="#" @click.prevent="toggleAdvancedSearch" data-cy="btn-advanced-search">
-              <v-icon icon="mdi-cog-outline" size="16" />
-              {{ $t('subscribers.advancedQuery') }}
+              <v-icon icon="mdi-filter-variant" size="16" />
+              {{ $t('subscribers.filters.title') }}
+              <span v-if="activeFilterCount" class="filter-count">({{ activeFilterCount }})</span>
             </a>
           </div>
         </v-card-text>
@@ -280,7 +339,16 @@
 <script>
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
+import SubscriberFilterBuilder from '../components/SubscriberFilterBuilder.vue';
 import { uris } from '../constants';
+import {
+  countActiveFilterRules,
+  describeFilterRule,
+  emptyFilterGroup,
+  flattenFilterRules,
+  hydrateFilterBuilder,
+  serializeSubscriberFilters,
+} from '../utils/subscriberFilters';
 import SubscriberBulkList from './SubscriberBulkList.vue';
 import SubscriberForm from './SubscriberForm.vue';
 import CopyText from '../components/CopyText.vue';
@@ -289,6 +357,7 @@ export default {
   components: {
     SubscriberForm,
     SubscriberBulkList,
+    SubscriberFilterBuilder,
     CopyText,
     EmptyPlaceholder,
   },
@@ -298,8 +367,12 @@ export default {
       // Current subscriber item for create overlay.
       curItem: null,
       isSearchAdvanced: false,
+      advancedMode: 'filters',
       isFormVisible: false,
       isBulkListFormVisible: false,
+      filterBuilder: emptyFilterGroup(),
+      appliedFiltersJson: null,
+      subscriberTagOptions: [],
 
       // Table bulk row selection states.
       bulk: {
@@ -340,37 +413,72 @@ export default {
     },
 
     toggleAdvancedSearch() {
-      this.isSearchAdvanced = !this.isSearchAdvanced;
-      this.queryParams.search = '';
-
-      // Toggling to simple search.
-      if (!this.isSearchAdvanced) {
-        this.queryInput = '';
+      this.isSearchAdvanced = true;
+      this.advancedMode = this.canUseSqlQuery && this.queryParams.queryExp ? 'sql' : 'filters';
+      if (this.advancedMode === 'filters') {
         this.queryParams.queryExp = '';
-        this.queryParams.page = 1;
-        this.querySubscribers();
+        this.filterBuilder = hydrateFilterBuilder(this.appliedFiltersJson);
+      }
+      this.loadSubscriberTagOptions();
+    },
+
+    resetAdvancedSearch() {
+      this.isSearchAdvanced = false;
+      this.advancedMode = 'filters';
+      this.filterBuilder = emptyFilterGroup();
+      this.appliedFiltersJson = null;
+      this.queryParams.queryExp = '';
+      this.queryParams.page = 1;
+      this.querySubscribers();
+      this.$nextTick(() => {
         if (this.$refs.query && typeof this.$refs.query.focus === 'function') {
           this.$refs.query.focus();
         }
+      });
+    },
+
+    setAdvancedMode(mode) {
+      if (mode === 'sql' && !this.canUseSqlQuery) {
         return;
       }
-
-      // Toggling to advanced search.
-      const q = this.queryInput.replace(/'/, "''").trim();
-      if (q) {
-        if (this.$utils.validateEmail(q)) {
-          this.queryParams.queryExp = `email = '${q.toLowerCase()}'`;
-        } else {
-          this.queryParams.queryExp = `(name ~* '${q}' OR email ~* '${q.toLowerCase()}')`;
-        }
+      if (mode === this.advancedMode) {
+        return;
       }
+      // Mutually exclusive: clear the other mode when switching.
+      if (mode === 'sql') {
+        this.filterBuilder = emptyFilterGroup();
+        this.appliedFiltersJson = null;
+      } else {
+        this.queryParams.queryExp = '';
+      }
+      this.advancedMode = mode;
+    },
 
-      // Toggling to advanced search.
-      this.$nextTick(() => {
-        if (this.$refs.queryExp && typeof this.$refs.queryExp.focus === 'function') {
-          this.$refs.queryExp.focus();
-        }
+    clearFiltersAndRefresh() {
+      this.filterBuilder = emptyFilterGroup();
+      this.appliedFiltersJson = null;
+      this.queryParams.queryExp = '';
+      this.queryParams.page = 1;
+      this.querySubscribers();
+    },
+
+    loadSubscriberTagOptions() {
+      this.$api.getSubscriberTagsCatalog().then((tags) => {
+        this.subscriberTagOptions = tags || [];
+      }).catch(() => {
+        this.subscriberTagOptions = [];
       });
+    },
+
+    currentFiltersPayload() {
+      if (this.advancedMode === 'sql' && this.queryParams.queryExp) {
+        return null;
+      }
+      // Prefer in-progress builder when advanced filters panel is open; otherwise applied.
+      if (this.isSearchAdvanced && this.advancedMode === 'filters') {
+        return serializeSubscriberFilters(this.filterBuilder);
+      }
+      return this.appliedFiltersJson;
     },
 
     // Mark all subscribers in the query as selected.
@@ -480,11 +588,8 @@ export default {
       this.onTableCheck();
     },
 
-    // Prepares an SQL expression for simple name search inputs and saves it
-    // in this.queryExp.
     onSimpleQueryInput(v) {
       const q = v.replace(/'/, "''").trim();
-      this.queryParams.queryExp = '';
       this.queryParams.page = 1;
       this.queryParams.search = q.toLowerCase();
     },
@@ -498,26 +603,39 @@ export default {
 
     onSubmit() {
       this.querySubscribers({ page: 1 });
+      // Collapse the builder after applying filters so chips remain visible.
+      if (this.isSearchAdvanced && this.advancedMode === 'filters') {
+        this.isSearchAdvanced = false;
+      }
     },
 
     // Search / query subscribers.
     querySubscribers(params) {
       this.queryParams = { ...this.queryParams, ...params };
 
+      const filtersJson = this.currentFiltersPayload();
+      if (this.isSearchAdvanced && this.advancedMode === 'filters') {
+        this.appliedFiltersJson = filtersJson;
+      }
+
       const qp = {
         list_record_id: this.queryParams.listRecordID,
         search: this.queryParams.search,
-        query: this.queryParams.queryExp,
+        query: this.advancedMode === 'sql' ? this.queryParams.queryExp : '',
+        filters: filtersJson,
         page: this.queryParams.page,
         subscription_status: this.queryParams.subStatus,
         order_by: this.queryParams.orderBy,
         order: this.queryParams.order,
       };
 
-      if (this.queryParams.queryExp) {
-        delete qp.search;
+      if (qp.query) {
+        delete qp.filters;
       } else {
         delete qp.query;
+      }
+      if (!qp.filters) {
+        delete qp.filters;
       }
 
       const filteredQP = Object.fromEntries(
@@ -561,6 +679,7 @@ export default {
           this.$api.blocklistSubscribersByQuery({
             search: this.queryParams.search,
             query: this.queryParams.queryExp,
+            filters: this.appliedFiltersJson ? JSON.parse(this.appliedFiltersJson) : null,
             list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
             subscription_status: this.queryParams.subStatus,
           }).then(() => this.querySubscribers());
@@ -577,10 +696,15 @@ export default {
       this.$utils.confirm(this.$t('subscribers.confirmExport', { num }), () => {
         const q = new URLSearchParams();
 
-        if (this.queryParams.search) {
-          q.append('search', this.queryParams.search);
-        } else if (this.queryParams.queryExp) {
+        if (this.queryParams.queryExp) {
           q.append('query', this.queryParams.queryExp);
+        } else {
+          if (this.queryParams.search) {
+            q.append('search', this.queryParams.search);
+          }
+          if (this.appliedFiltersJson) {
+            q.append('filters', this.appliedFiltersJson);
+          }
         }
 
         if (this.queryParams.listRecordID) {
@@ -656,9 +780,12 @@ export default {
           this.$api.deleteSubscribersByQuery({
             // If the query expression is empty, explicitly pass `all=true`
             // so that the backend deletes all records in the DB with an empty query string.
-            all: this.queryParams.queryExp.trim() === '' && this.queryParams.search.trim() === '',
+            all: this.queryParams.queryExp.trim() === ''
+              && this.queryParams.search.trim() === ''
+              && !this.appliedFiltersJson,
             search: this.queryParams.search,
             query: this.queryParams.queryExp,
+            filters: this.appliedFiltersJson ? JSON.parse(this.appliedFiltersJson) : null,
             list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
             subscription_status: this.queryParams.subStatus,
           }).then(() => {
@@ -678,8 +805,9 @@ export default {
     bulkChangeLists(action, preconfirm, lists) {
       const data = {
         action,
-        query: this.fullQueryExp,
+        query: this.queryParams.queryExp,
         search: this.queryParams.search,
+        filters: this.appliedFiltersJson ? JSON.parse(this.appliedFiltersJson) : null,
         list_record_ids: this.queryParams.listRecordID ? [this.queryParams.listRecordID] : null,
         target_list_record_ids: lists
           .map((l) => l.id)
@@ -781,6 +909,47 @@ export default {
         String(l.id) === this.queryParams.listRecordID
       ));
     },
+
+    canUseSqlQuery() {
+      return this.$can('subscribers:sql_query');
+    },
+
+    filterListOptions() {
+      const results = this.lists?.results || [];
+      return results.map((l) => ({
+        title: l.name,
+        value: String(l.id),
+      }));
+    },
+
+    listNameById() {
+      return Object.fromEntries(this.filterListOptions.map((l) => [l.value, l.title]));
+    },
+
+    activeFilterCount() {
+      if (this.appliedFiltersJson) {
+        try {
+          return countActiveFilterRules(JSON.parse(this.appliedFiltersJson));
+        } catch {
+          return 0;
+        }
+      }
+      return 0;
+    },
+
+    activeFilterChips() {
+      if (!this.appliedFiltersJson) {
+        return [];
+      }
+      try {
+        const rules = flattenFilterRules(JSON.parse(this.appliedFiltersJson));
+        return rules.map((rule) => ({
+          label: describeFilterRule(rule, this.listNameById),
+        }));
+      } catch {
+        return [];
+      }
+    },
   },
 
   created() {
@@ -799,6 +968,7 @@ export default {
       this.queryParams.subStatus = this.$route.query.subscription_status;
     }
 
+    this.loadSubscriberTagOptions();
     // Get subscribers on load.
     this.querySubscribers();
   },
@@ -825,6 +995,52 @@ export default {
 
 .query-card-body {
   padding: 16px;
+}
+
+.advanced-mode-tabs {
+  display: inline-flex;
+  gap: 4px;
+  background: #eef3fb;
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.mode-tab {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+}
+
+.mode-tab.active {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 76, 129, 0.12);
+  color: #0f4c81;
+}
+
+.active-filter-chips {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.clear-filters-link {
+  background: none;
+  border: 0;
+  color: #0f4c81;
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.filter-count {
+  color: #64748b;
+  font-weight: 500;
 }
 
 .query-form {
