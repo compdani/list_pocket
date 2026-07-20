@@ -88,6 +88,33 @@ func sqliteSubscriberRowsToModels(rows []sqliteSubscriberRow) models.Subscribers
 	return out
 }
 
+func sqliteSubscriberRowsToExports(rows []sqliteSubscriberRow) []models.SubscriberExport {
+	out := make([]models.SubscriberExport, 0, len(rows))
+	for _, row := range rows {
+		attribs := ""
+		if len(row.Attribs) > 0 && string(row.Attribs) != "null" {
+			attribs = string(row.Attribs)
+		}
+		out = append(out, models.SubscriberExport{
+			Base: models.Base{
+				ID:        row.ID,
+				RecordID:  row.RecordID,
+				CreatedAt: parseNullTime(row.CreatedAt),
+				UpdatedAt: parseNullTime(row.UpdatedAt),
+			},
+			UUID:      row.UUID,
+			Email:     row.Email,
+			Phone:     row.Phone,
+			FirstName: row.FirstName,
+			LastName:  row.LastName,
+			Name:      row.Name,
+			Attribs:   attribs,
+			Status:    row.Status,
+		})
+	}
+	return out
+}
+
 func (c *Core) sqliteListRecordIDs(listIDs []int, listUUIDs []string) ([]string, error) {
 	if len(listIDs) == 0 && len(listUUIDs) == 0 {
 		return nil, nil
@@ -1483,7 +1510,7 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, filters json.Raw
 		}
 
 		q := `
-			SELECT subscribers.rowid AS id, subscribers.uuid, subscribers.email, subscribers.phone, subscribers.name,
+			SELECT subscribers.rowid AS id, subscribers.id AS record_id, subscribers.uuid, subscribers.email, subscribers.phone, subscribers.name,
 			       subscribers.first_name, subscribers.last_name,
 			       subscribers.status, subscribers.attribs,
 			       subscribers.created AS created_at,
@@ -1496,16 +1523,17 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, filters json.Raw
 			args = append(args, batchSize)
 		}
 
-		var out []models.SubscriberExport
-		if err := c.db.Select(&out, q, args...); err != nil {
+		var rows []sqliteSubscriberRow
+		if err := c.db.Select(&rows, q, args...); err != nil {
 			c.log.Printf("error exporting subscribers by query: %v", err)
 			return nil, echo.NewHTTPError(http.StatusInternalServerError,
 				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
-		if len(out) == 0 {
+		if len(rows) == 0 {
 			return nil, nil
 		}
 
+		out := sqliteSubscriberRowsToExports(rows)
 		id = out[len(out)-1].ID
 		return out, nil
 	}, nil
