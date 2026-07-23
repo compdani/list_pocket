@@ -2,11 +2,10 @@ package core
 
 import (
 	"encoding/json"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"time"
 
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
@@ -20,8 +19,7 @@ func (c *Core) GetSubscriptions(subID int, subUUID string, allLists bool) ([]mod
 	lists, err := c.getSubscriberListsSQLite(subID, subUUID, nil, nil, "", listType)
 	if err != nil {
 		c.log.Printf("error getting subscriptions: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
 	out := make([]models.Subscription, 0, len(lists))
@@ -51,8 +49,7 @@ func nullStringFrom(v string) null.String {
 func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
 	if _, err := c.addSubscriptionsSQLite(subIDs, listIDs, status); err != nil {
 		c.log.Printf("error adding subscriptions: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -64,15 +61,13 @@ func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, filters json.
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	affected, err := c.addSubscriptionsSQLite(subIDs, targetListIDs, status)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	return affected, nil
 }
@@ -81,8 +76,7 @@ func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, filters json.
 func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
 	if _, err := c.deleteSubscriptionsSQLite(subIDs, listIDs); err != nil {
 		c.log.Printf("error deleting subscriptions: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 
 	}
 
@@ -95,15 +89,13 @@ func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, filters js
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	affected, err := c.deleteSubscriptionsSQLite(subIDs, targetListIDs)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	return affected, nil
 }
@@ -119,8 +111,7 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 		lists, err := c.getSubscriberListsSQLite(subIDs[0], "", nil, listUUIDs, "", "")
 		if err != nil {
 			c.log.Printf("error unsubscribing from lists: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
 		for _, list := range lists {
@@ -145,8 +136,7 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 
 	if _, err := c.unsubscribeSubscriptionsSQLite(subIDs, deduped); err != nil {
 		c.log.Printf("error unsubscribing from lists: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	return nil
 }
@@ -157,15 +147,13 @@ func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, filters json.
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	affected, err := c.unsubscribeSubscriptionsSQLite(subIDs, targetListIDs)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	return affected, nil
 }
@@ -180,8 +168,7 @@ func (c *Core) DeleteUnconfirmedSubscriptions(beforeDate time.Time) (int, error)
 		beforeDate.UTC().Format("2006-01-02 15:04:05"))
 	if err != nil {
 		c.log.Printf("error deleting unconfirmed subscribers: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	n, _ := res.RowsAffected()

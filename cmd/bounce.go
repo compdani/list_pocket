@@ -1,18 +1,17 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"errors"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/bounce/webhooks"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 // GetBounce handles retrieval of a specific bounce record by ID.
@@ -38,7 +37,7 @@ func (a *App) GetBounces(re *pbcore.RequestEvent) error {
 	)
 	campIDs, err := a.core.ResolveCampaignIDs(nil, getQueryStrings("campaign_id", re.Request.URL.Query()))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 	}
 	campID := 0
 	if len(campIDs) > 0 {
@@ -90,7 +89,7 @@ func (a *App) DeleteBounces(re *pbcore.RequestEvent) error {
 	if !all {
 		ids = getQueryStrings("id", re.Request.URL.Query())
 		if len(ids) == 0 {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidID"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidID"))
 		}
 	}
 
@@ -128,7 +127,7 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 	rawReq, err := io.ReadAll(re.Request.Body)
 	if err != nil {
 		a.log.Printf("error reading ses notification body: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.internalError"))
 	}
 
 	var (
@@ -141,7 +140,7 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 	case service == "":
 		var b models.Bounce
 		if err := json.Unmarshal(rawReq, &b); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidData")+":"+err.Error())
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidData") + ":" + err.Error())
 		}
 
 		if bv, err := a.validateBounceFields(b); err != nil {
@@ -168,7 +167,7 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 		case "SubscriptionConfirmation", "UnsubscribeConfirmation":
 			if err := a.bounce.SES.ProcessSubscription(rawReq); err != nil {
 				a.log.Printf("error processing SNS (SES) subscription: %v", err)
-				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+				return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 			}
 
 		// Bounce notification.
@@ -189,12 +188,12 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 					return okJSON(re, true)
 				}
 				a.log.Printf("error processing SES notification: %v", err)
-				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+				return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 			}
 			bounces = append(bounces, b)
 
 		default:
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+			return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 		}
 
 	// SendGrid.
@@ -208,20 +207,20 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 		bs, err := a.bounce.Sendgrid.ProcessBounce(sig, ts, rawReq)
 		if err != nil {
 			a.log.Printf("error processing sendgrid notification: %v", err)
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+			return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 		}
 		bounces = append(bounces, bs...)
 
 	// Postmark.
 	case service == "postmark" && a.cfg.BouncePostmarkEnabled:
-		bs, err := a.bounce.Postmark.ProcessBounce(rawReq, a.echo.NewContext(re.Request, re.Response))
+		bs, err := a.bounce.Postmark.ProcessBounce(rawReq, re.Request)
 		if err != nil {
 			a.log.Printf("error processing postmark notification: %v", err)
-			if _, ok := err.(*echo.HTTPError); ok {
+			if _, _, ok := asHTTPError(err); ok {
 				return err
 			}
 
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+			return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 		}
 		bounces = append(bounces, bs...)
 
@@ -234,29 +233,29 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 		bs, err := a.bounce.Forwardemail.ProcessBounce(sig, rawReq)
 		if err != nil {
 			a.log.Printf("error processing forwardemail notification: %v", err)
-			if _, ok := err.(*echo.HTTPError); ok {
+			if _, _, ok := asHTTPError(err); ok {
 				return err
 			}
 
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+			return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 		}
 		bounces = append(bounces, bs...)
 
 	// Brevo (Sendinblue) transactional webhooks — Bearer token must match settings.
 	case service == "brevo" && a.cfg.BounceBrevoEnabled:
 		if a.bounce.Brevo == nil {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
+			return apperr.BadRequest(a.i18n.Ts("bounces.unknownService"))
 		}
-		authz := re.Request.Header.Get(echo.HeaderAuthorization)
+		authz := re.Request.Header.Get("Authorization")
 		bs, err := a.bounce.Brevo.ProcessBounce(authz, rawReq)
 		if err != nil {
 			a.log.Printf("error processing brevo notification: %v", err)
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidData"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidData"))
 		}
 		bounces = append(bounces, bs...)
 
 	default:
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
+		return apperr.BadRequest(a.i18n.Ts("bounces.unknownService"))
 	}
 
 	// Insert bounces into the DB.
@@ -271,23 +270,23 @@ func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
 
 func (a *App) validateBounceFields(b models.Bounce) (models.Bounce, error) {
 	if b.Email == "" && b.SubscriberUUID == "" {
-		return b, echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email / subscriber_uuid"))
+		return b, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "email / subscriber_uuid"))
 	}
 
 	if b.SubscriberUUID != "" && !reUUID.MatchString(b.SubscriberUUID) {
-		return b, echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_uuid"))
+		return b, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_uuid"))
 	}
 
 	if b.Email != "" {
 		em, err := a.importer.SanitizeEmail(b.Email)
 		if err != nil {
-			return b, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return b, apperr.BadRequest(err.Error())
 		}
 		b.Email = em
 	}
 
 	if b.Type != models.BounceTypeHard && b.Type != models.BounceTypeSoft && b.Type != models.BounceTypeComplaint {
-		return b, echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "type"))
+		return b, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "type"))
 	}
 
 	return b, nil

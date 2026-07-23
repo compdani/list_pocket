@@ -1,11 +1,12 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"html/template"
 	"io"
 	"net/http"
@@ -19,7 +20,6 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/phoneutil"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	"gopkg.in/volatiletech/null.v6"
 )
@@ -63,7 +63,7 @@ var (
 func (a *App) resolveCampaignRouteID(re *pbcore.RequestEvent) (string, error) {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return "", apperr.BadRequest("invalid ID")
 	}
 
 	return recordID, nil
@@ -196,8 +196,7 @@ func (a *App) GetCampaigns(re *pbcore.RequestEvent) error {
 		hasAllPerm, permittedRecordIDs = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
 		permittedLists, err = a.core.ResolveListIDs(nil, permittedRecordIDs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 	}
 
@@ -324,16 +323,14 @@ func (a *App) PreviewCampaign(re *pbcore.RequestEvent) error {
 	camp.RecordID = models.PreviewTrackingRecordID
 	if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
 		a.log.Printf("error compiling template: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
 	}
 
 	// Render the message body.
 	msg, err := a.manager.NewCampaignMessage(&camp, dummySubscriber)
 	if err != nil {
 		a.log.Printf("error rendering message: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 	}
 
 	// Plaintext headers for plain body.
@@ -395,7 +392,7 @@ func (a *App) CampaignContent(re *pbcore.RequestEvent) error {
 	// Convert formats, eg: markdown to HTML.
 	out, err := camp.ConvertContent(camp.From, camp.To)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 
 	return okJSON(re, out)
@@ -416,16 +413,14 @@ func (a *App) CreateCampaign(re *pbcore.RequestEvent) error {
 	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListRecordIDs)
 	resolvedListIDs, err := a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	o.ListIDs = resolvedListIDs
 	a.log.Printf("create campaign: filtered lists username=%q role_id=%d permitted_list_ids=%v", user.Username, user.UserRoleID, o.ListIDs)
 
 	mediaRecordIDs, err := a.core.ResolveMediaRecordIDs(o.MediaIDs, o.MediaRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	// If the campaign's 'opt-in', prepare a default message.
@@ -447,7 +442,7 @@ func (a *App) CreateCampaign(re *pbcore.RequestEvent) error {
 	// Validate.
 	if c, err := a.validateCampaignFields(o); err != nil {
 		a.log.Printf("create campaign: validation failed name=%q error=%v", o.Name, err)
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	} else {
 		o = c
 	}
@@ -495,7 +490,7 @@ func (a *App) UpdateCampaign(re *pbcore.RequestEvent) error {
 	user := auth.GetUserRE(re)
 
 	if !canEditCampaign(cm.Status) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.cantUpdate"))
+		return apperr.BadRequest(a.i18n.T("campaigns.cantUpdate"))
 	}
 
 	// Clear attribs to avoid merging old and new values as json.Unmarshal in JSON.scan() merges maps,
@@ -516,18 +511,16 @@ func (a *App) UpdateCampaign(re *pbcore.RequestEvent) error {
 	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListRecordIDs)
 	o.ListIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	mediaRecordIDs, err := a.core.ResolveMediaRecordIDs(o.MediaIDs, o.MediaRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	if c, err := a.validateCampaignFields(o); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	} else {
 		o = c
 	}
@@ -740,8 +733,7 @@ func (a *App) DeleteCampaigns(re *pbcore.RequestEvent) error {
 		hasAllPerm, permittedRecordIDs = user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage)
 		permittedLists, err = a.core.ResolveListIDs(nil, permittedRecordIDs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 	}
 
@@ -762,8 +754,7 @@ func (a *App) DeleteCampaigns(re *pbcore.RequestEvent) error {
 
 	// Validate that either IDs or query is provided.
 	if len(recordIDs) == 0 && (query == "" && !all) {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "record_id or query required"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "record_id or query required"))
 	}
 
 	// Delete the campaigns from the DB.
@@ -839,19 +830,18 @@ func (a *App) TestCampaign(re *pbcore.RequestEvent) error {
 		req.ListRecordIDs = campaignListRecordIDs(camp.Lists)
 		req.ListIDs, err = a.core.ResolveListIDs(nil, req.ListRecordIDs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 	}
 
 	// Validate.
 	if c, err := a.validateCampaignFieldsForTest(req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	} else {
 		req = c
 	}
 	if len(req.SubscriberEmails) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.noSubsToTest"))
+		return apperr.BadRequest(a.i18n.T("campaigns.noSubsToTest"))
 	}
 
 	var subs models.Subscribers
@@ -902,13 +892,11 @@ func (a *App) TestCampaign(re *pbcore.RequestEvent) error {
 	camp.TemplateID = req.TemplateID
 	mediaRecordIDs, err := a.core.ResolveMediaRecordIDs(req.MediaIDs, req.MediaRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	mediaRowIDs, err := a.core.ResolveMediaRowIDs(mediaRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	camp.MediaIDs = mediaRowIDs
 
@@ -918,8 +906,7 @@ func (a *App) TestCampaign(re *pbcore.RequestEvent) error {
 
 		if err := a.sendTestMessage(sub, &camp); err != nil {
 			a.log.Printf("error sending test message: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				a.i18n.Ts("campaigns.errorSendTest", "error", err.Error()))
+			return apperr.Internal(a.i18n.Ts("campaigns.errorSendTest", "error", err.Error()))
 		}
 	}
 
@@ -949,15 +936,13 @@ func (a *App) GetCampaignViewAnalytics(re *pbcore.RequestEvent) error {
 	if len(legacyIDs) > 0 {
 		resolved, err := a.core.ResolveCampaignRecordIDs(legacyIDs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 		recordIDs = append(recordIDs, resolved...)
 	}
 
 	if len(recordIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.missingFields", "name", "`id`"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.missingFields", "name", "`id`"))
 	}
 
 	var (
@@ -974,7 +959,7 @@ func (a *App) GetCampaignViewAnalytics(re *pbcore.RequestEvent) error {
 		}
 	}
 	if !strHasLen(from, 10, 30) || !strHasLen(to, 10, 30) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("analytics.invalidDates"))
+		return apperr.BadRequest(a.i18n.T("analytics.invalidDates"))
 	}
 
 	// Campaign link stats.
@@ -1000,15 +985,14 @@ func (a *App) GetCampaignViewAnalytics(re *pbcore.RequestEvent) error {
 func (a *App) sendTestMessage(sub models.Subscriber, camp *models.Campaign) error {
 	if err := camp.CompileTemplate(a.manager.TemplateFuncs(camp)); err != nil {
 		a.log.Printf("error compiling template: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
 	}
 
 	// Create a sample campaign message.
 	msg, err := a.manager.NewCampaignMessage(camp, sub)
 	if err != nil {
 		a.log.Printf("error rendering message: %v", err)
-		return echo.NewHTTPError(http.StatusNotFound, a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+		return apperr.NotFound(a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 	}
 
 	return a.manager.PushCampaignMessage(msg)
@@ -1227,7 +1211,7 @@ func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
 // makeOptinCampaignMessage makes a default opt-in campaign message body.
 func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 	if len(o.ListIDs) == 0 {
-		return o, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.fieldInvalidListIDs"))
+		return o, apperr.BadRequest(a.i18n.T("campaigns.fieldInvalidListIDs"))
 	}
 
 	// Fetch double opt-in lists from the given list IDs from the DB.
@@ -1238,7 +1222,7 @@ func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 
 	// There are no double opt-in lists.
 	if len(lists) == 0 {
-		return o, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.noOptinLists"))
+		return o, apperr.BadRequest(a.i18n.T("campaigns.noOptinLists"))
 	}
 
 	// Construct the opt-in URL with list IDs.
@@ -1257,8 +1241,7 @@ func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 		OptinURLAttr template.HTMLAttr
 	}{lists, optinURLAttr}); err != nil {
 		a.log.Printf("error compiling 'optin-campaign' template: %v", err)
-		return o, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+		return o, apperr.BadRequest(a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
 	}
 
 	o.Body = b.String()
@@ -1294,14 +1277,12 @@ func (a *App) checkCampaignPerm(types auth.PermType, recordID string, re *pbcore
 	if hasAllPerm, permittedListRecordIDs := user.GetPermittedLists(auth.PermTypeGet | auth.PermTypeManage); !hasAllPerm {
 		permittedListIDs, err := a.core.ResolveListIDs(nil, permittedListRecordIDs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 		if ok, err := a.core.CampaignHasLists(recordID, permittedListIDs); err != nil {
 			return err
 		} else if !ok {
-			return echo.NewHTTPError(http.StatusForbidden,
-				a.i18n.Ts("globals.messages.permissionDenied", "name", perm))
+			return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", perm))
 		}
 	}
 

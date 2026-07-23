@@ -1,16 +1,15 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 // ImportSubscribers handles the uploading and bulk importing of
@@ -18,21 +17,20 @@ import (
 func (a *App) ImportSubscribers(re *pbcore.RequestEvent) error {
 	// Is an import already running?
 	if a.importer.GetStats().Status == subimporter.StatusImporting {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("import.alreadyRunning"))
+		return apperr.BadRequest(a.i18n.T("import.alreadyRunning"))
 	}
 
 	// Unmarshal the JSON params.
 	var opt subimporter.SessionOpt
 	if err := json.Unmarshal([]byte(re.Request.FormValue("params")), &opt); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("import.invalidParams", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("import.invalidParams", "error", err.Error()))
 	}
 	a.log.Printf("import subscribers: received mode=%q sub_status=%q delim=%q list_ids=%v list_record_ids=%v overwrite_userinfo=%v overwrite_subscription_status=%v",
 		opt.Mode, opt.SubStatus, opt.Delim, opt.ListIDs, opt.ListRecordIDs, opt.OverwriteUserInfo, opt.OverwriteSubStatus)
 
 	// Validate mode.
 	if opt.Mode != subimporter.ModeSubscribe && opt.Mode != subimporter.ModeBlocklist {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("import.invalidMode"))
+		return apperr.BadRequest(a.i18n.T("import.invalidMode"))
 	}
 
 	// If no status is specified, pick a default one.
@@ -48,22 +46,20 @@ func (a *App) ImportSubscribers(re *pbcore.RequestEvent) error {
 	if opt.SubStatus != models.SubscriptionStatusUnconfirmed &&
 		opt.SubStatus != models.SubscriptionStatusConfirmed &&
 		opt.SubStatus != models.SubscriptionStatusUnsubscribed {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("import.invalidSubStatus"))
+		return apperr.BadRequest(a.i18n.T("import.invalidSubStatus"))
 	}
 
 	if len(opt.Delim) != 1 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("import.invalidDelim"))
+		return apperr.BadRequest(a.i18n.T("import.invalidDelim"))
 	}
 
 	// Open the HTTP file.
 	if err := re.Request.ParseMultipartForm(32 << 20); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("import.invalidFile", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("import.invalidFile", "error", err.Error()))
 	}
 	_, file, err := re.Request.FormFile("file")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("import.invalidFile", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("import.invalidFile", "error", err.Error()))
 	}
 	a.log.Printf("import subscribers: file=%q size=%d", file.Filename, file.Size)
 
@@ -76,22 +72,19 @@ func (a *App) ImportSubscribers(re *pbcore.RequestEvent) error {
 	// Copy it to a temp location.
 	out, err := os.CreateTemp("", "listpocket")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("import.errorCopyingFile", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("import.errorCopyingFile", "error", err.Error()))
 	}
 	defer out.Close()
 
 	if _, err = io.Copy(out, src); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("import.errorCopyingFile", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("import.errorCopyingFile", "error", err.Error()))
 	}
 
 	// Start the importer session.
 	opt.Filename = file.Filename
 	sess, err := a.importer.NewSession(opt)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("import.errorStarting", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("import.errorStarting", "error", err.Error()))
 	}
 	go sess.Start()
 
@@ -106,8 +99,7 @@ func (a *App) ImportSubscribers(re *pbcore.RequestEvent) error {
 		// place and upload as one in the first place.
 		dir, files, err := sess.ExtractZIP(out.Name(), 1)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				a.i18n.Ts("import.errorProcessingZIP", "error", err.Error()))
+			return apperr.Internal(a.i18n.Ts("import.errorProcessingZIP", "error", err.Error()))
 		}
 
 		go sess.LoadCSV(dir+"/"+files[0], rune(opt.Delim[0]))

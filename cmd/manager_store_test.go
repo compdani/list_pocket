@@ -89,4 +89,3 @@ func TestSQLiteAdvanceBatchCursorStaysMonotonicWhenLastSubscriberDropsOut(t *tes
 		t.Fatalf("expected cursor to advance to sub-003, got last_id=%q", next.LastID)
 	}
 }
-

@@ -8,14 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/phoneutil"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
@@ -217,8 +216,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			JOIN campaigns c ON c.id = l.campaign_id
 			WHERE s.rowid = ?
 		`, params.SubscriberID); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
+			return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
 		}
 		for _, r := range rows {
 			occurredAt, err := parseSQLiteDateTime(r.OccurredAtRaw.String)
@@ -293,8 +291,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			  AND COALESCE(cv.is_suspected_privacy_open, 0) = 0
 			GROUP BY c.rowid, c.id, c.uuid, c.name, c.subject
 		`, params.SubscriberID); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
+			return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
 		}
 		for _, r := range rows {
 			occurredAt, err := parseSQLiteDateTime(r.LastViewedAtRaw.String)
@@ -354,8 +351,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			WHERE s.rowid = ?
 			GROUP BY c.rowid, c.id, c.uuid, c.name, c.subject, l.url
 		`, params.SubscriberID); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
+			return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
 		}
 		for _, r := range rows {
 			occurredAt, err := parseSQLiteDateTime(r.LastClickedAtRaw.String)
@@ -410,8 +406,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			FROM inbound_sms_events
 			WHERE subscriber_id = ?
 		`, subscriberRecordID); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
+			return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
 		}
 		for _, row := range rows {
 			e, mapErr := mapInboundSMSRow(row)
@@ -474,8 +469,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 			FROM inbound_email_replies
 			WHERE subscriber_id = ?
 		`, subscriberRecordID); err != nil {
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
+			return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "timeline", "error", pqErrMsg(err)))
 		}
 		for _, row := range rows {
 			e, mapErr := mapInboundEmailReplyRow(row)
@@ -581,8 +575,7 @@ func (c *Core) GetInboundSMSEventsBySubscriber(ctx context.Context, subscriberID
 	var total int
 	if err := c.db.Get(&total, `SELECT COUNT(*) FROM inbound_sms_events WHERE subscriber_id = ?`, subRecID); err != nil {
 		c.log.Printf("error counting inbound sms events: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbound sms events", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbound sms events", "error", pqErrMsg(err)))
 	}
 	if total == 0 {
 		return []models.InboundSMSEvent{}, 0, nil
@@ -614,8 +607,7 @@ func (c *Core) GetInboundSMSEventsBySubscriber(ctx context.Context, subscriberID
 		LIMIT ? OFFSET ?
 	`, subRecID, limit, offset); err != nil {
 		c.log.Printf("error querying inbound sms events: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbound sms events", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbound sms events", "error", pqErrMsg(err)))
 	}
 
 	out := make([]models.InboundSMSEvent, 0, len(rows))
@@ -839,8 +831,7 @@ func (c *Core) GetInboundEmailRepliesBySubscriber(ctx context.Context, subscribe
 	var total int
 	if err := c.db.Get(&total, `SELECT COUNT(*) FROM inbound_email_replies WHERE subscriber_id = ?`, subRecID); err != nil {
 		c.log.Printf("error counting inbound email replies: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email replies", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email replies", "error", pqErrMsg(err)))
 	}
 	if total == 0 {
 		return []models.InboundEmailReplyEvent{}, 0, nil
@@ -880,8 +871,7 @@ func (c *Core) GetInboundEmailRepliesBySubscriber(ctx context.Context, subscribe
 		LIMIT ? OFFSET ?
 	`, subRecID, limit, offset); err != nil {
 		c.log.Printf("error querying inbound email replies: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email replies", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email replies", "error", pqErrMsg(err)))
 	}
 
 	out := make([]models.InboundEmailReplyEvent, 0, len(rows))
@@ -1646,8 +1636,7 @@ func (c *Core) GetInboundEmailInbox(ctx context.Context, params InboxQueryParams
 	var total int
 	countQuery := `SELECT COUNT(*) FROM inbound_email_replies e ` + where
 	if err := c.db.Get(&total, countQuery, args...); err != nil {
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbox", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbox", "error", pqErrMsg(err)))
 	}
 	if total == 0 {
 		return []models.InboundEmailSummary{}, 0, nil
@@ -1694,8 +1683,7 @@ func (c *Core) GetInboundEmailInbox(ctx context.Context, params InboxQueryParams
 	}
 	rows := []summaryRow{}
 	if err := c.db.Select(&rows, listQuery, listArgs...); err != nil {
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbox", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbox", "error", pqErrMsg(err)))
 	}
 
 	out := make([]models.InboundEmailSummary, 0, len(rows))
@@ -1735,7 +1723,7 @@ func (c *Core) GetInboundEmailByID(ctx context.Context, id string) (*models.Inbo
 	_ = ctx
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, "id is required")
+		return nil, apperr.BadRequest("id is required")
 	}
 	var row inboundEmailReplyRow
 	err := c.db.Get(&row, `
@@ -1771,10 +1759,9 @@ func (c *Core) GetInboundEmailByID(ctx context.Context, id string) (*models.Inbo
 	`, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, echo.NewHTTPError(http.StatusNotFound, "inbound email not found")
+			return nil, apperr.NotFound("inbound email not found")
 		}
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "inbound email", "error", pqErrMsg(err)))
 	}
 	e, mapErr := mapInboundEmailReplyRow(row)
 	if mapErr != nil {
@@ -1790,7 +1777,7 @@ func (c *Core) UpdateInboundEmailSpamStatus(ctx context.Context, id string, spam
 	id = strings.TrimSpace(id)
 	validStatuses := map[string]bool{"": true, "suspected": true, "spam": true, "confirmed_spam": true}
 	if !validStatuses[spamStatus] {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid spam_status value")
+		return apperr.BadRequest("invalid spam_status value")
 	}
 
 	pb := c.db.PocketBase()
@@ -1799,12 +1786,12 @@ func (c *Core) UpdateInboundEmailSpamStatus(ctx context.Context, id string, spam
 	}
 	rec, err := pb.FindRecordById("inbound_email_replies", id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "inbound email not found")
+		return apperr.NotFound("inbound email not found")
 	}
 
 	rec.Set("spam_status", spamStatus)
 	if err := pb.Save(rec); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to update spam status")
+		return apperr.Internal("failed to update spam status")
 	}
 
 	// Trigger learning when explicitly marking as spam level.
@@ -1975,7 +1962,7 @@ func (c *Core) DeleteInboundSpamRule(ctx context.Context, id string) error {
 	}
 	rec, err := pb.FindRecordById("inbound_spam_rules", id)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "spam rule not found")
+		return apperr.NotFound("spam rule not found")
 	}
 	return pb.Delete(rec)
 }

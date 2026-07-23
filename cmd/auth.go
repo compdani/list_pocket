@@ -1,10 +1,11 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"image/png"
 	"net/http"
 	"net/url"
@@ -18,7 +19,6 @@ import (
 	"github.com/compdani/list_pocket/internal/tmptokens"
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	"github.com/pquerna/otp/totp"
 	"gopkg.in/volatiletech/null.v6"
 )
@@ -35,8 +35,8 @@ type loginTpl struct {
 	Title       string
 	Description string
 
-	NextURI     string
-	Error       string
+	NextURI string
+	Error   string
 }
 
 type loginReq struct {
@@ -63,10 +63,10 @@ type resetPasswordReq struct {
 }
 
 type clientAuthResp struct {
-	Status string          `json:"status"`
-	Next   string          `json:"next,omitempty"`
-	Token  string          `json:"token,omitempty"`
-	Record map[string]any  `json:"record,omitempty"`
+	Status string         `json:"status"`
+	Next   string         `json:"next,omitempty"`
+	Token  string         `json:"token,omitempty"`
+	Record map[string]any `json:"record,omitempty"`
 }
 
 type twofaChallengeResp struct {
@@ -143,8 +143,8 @@ func (a *App) renderLoginSetupPage(re *pbcore.RequestEvent, loginErr error) erro
 
 	// If there was an error in the previous state (POST reqest), set it to render in the template.
 	if loginErr != nil {
-		if e, ok := loginErr.(*echo.HTTPError); ok {
-			out.Error = e.Message.(string)
+		if _, msg, ok := asHTTPError(loginErr); ok {
+			out.Error = msg
 		} else {
 			out.Error = loginErr.Error()
 		}
@@ -157,7 +157,7 @@ func (a *App) renderLoginSetupPage(re *pbcore.RequestEvent, loginErr error) erro
 func (a *App) AuthLogin(re *pbcore.RequestEvent) error {
 	var req loginReq
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidJSON"))
 	}
 
 	var (
@@ -175,10 +175,10 @@ func (a *App) AuthLogin(re *pbcore.RequestEvent) error {
 	}()
 
 	if !strHasLen(username, 3, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
 	}
 	if !strHasLen(password, 8, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 	}
 
 	// Log the user in by fetching and verifying credentials from the DB.
@@ -193,7 +193,7 @@ func (a *App) AuthLogin(re *pbcore.RequestEvent) error {
 		token, err := generateRandomString(tmpAuthTokenLen)
 		if err != nil {
 			a.log.Printf("error generating 2FA token: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+			return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 		}
 
 		// Set the token.
@@ -219,16 +219,16 @@ func (a *App) doFirstTimeSetup(re *pbcore.RequestEvent) error {
 	)
 	a.log.Printf("first-time setup: starting for username=%q email=%q", username, email)
 	if !utils.ValidateEmail(email) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
 	}
 	if !strHasLen(username, 3, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
 	}
 	if !strHasLen(password, 8, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 	}
 	if password != password2 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.passwordMismatch"))
+		return apperr.BadRequest(a.i18n.T("users.passwordMismatch"))
 	}
 
 	// Resolve or create the default "Super Admin" role in an idempotent way.
@@ -297,7 +297,7 @@ func (a *App) doFirstTimeSetup(re *pbcore.RequestEvent) error {
 func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 	var req forgotPasswordReq
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidJSON"))
 	}
 
 	email := strings.ToLower(strings.TrimSpace(req.Email))
@@ -323,7 +323,7 @@ func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 	token, err := generateRandomString(tmpAuthTokenLen)
 	if err != nil {
 		a.log.Printf("error generating reset token: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
 	// Store the reset token in tmptokens.
@@ -345,7 +345,7 @@ func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 	// Render the email template.
 	if err := notifs.Tpls.ExecuteTemplate(&msg, notifs.TplForgotPassword, data); err != nil {
 		a.log.Printf("error compiling notification template '%s': %v", notifs.TplForgotPassword, err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
 	subject, body := notifs.GetTplSubject(a.i18n.T("email.forgotPassword.subject"), msg.Bytes())
@@ -368,7 +368,7 @@ func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 	var req resetPasswordReq
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidJSON"))
 	}
 
 	token := strings.TrimSpace(req.Token)
@@ -378,38 +378,38 @@ func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 
 	// Validate password.
 	if !strHasLen(password, 8, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 	}
 	if password != password2 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.passwordMismatch"))
+		return apperr.BadRequest(a.i18n.T("users.passwordMismatch"))
 	}
 
 	// Validate and consume the token (this deletes it).
 	data, err := tmptokens.Get(email)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidResetLink"))
+		return apperr.BadRequest(a.i18n.T("users.invalidResetLink"))
 	}
 
 	tk, ok := data.(string)
 	if !ok || tk != token {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidResetLink"))
+		return apperr.BadRequest(a.i18n.T("users.invalidResetLink"))
 	}
 
 	// Get the user.
 	user, err := a.core.GetUser("", "", email)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidResetLink"))
+		return apperr.BadRequest(a.i18n.T("users.invalidResetLink"))
 	}
 
 	// Password login is disabled for the user.
 	if !user.PasswordLogin {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.invalidFeature"))
+		return apperr.BadRequest(a.i18n.T("public.invalidFeature"))
 	}
 
 	user.Password = null.NewString(password, true)
 	if _, err := a.core.UpdateUserProfile(user.RecordID, user); err != nil {
 		a.log.Printf("error updating user password: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
 	return a.writeClientAuth(re, user, uriAdmin)
@@ -419,7 +419,7 @@ func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 func (a *App) AuthVerifyTwoFA(re *pbcore.RequestEvent) error {
 	var req twofaVerifyReq
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidJSON"))
 	}
 
 	token := strings.TrimSpace(req.Token)
@@ -428,34 +428,34 @@ func (a *App) AuthVerifyTwoFA(re *pbcore.RequestEvent) error {
 
 	// Validate.
 	if !strHasLen(totpCode, 6, 6) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidValue"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidValue"))
 	}
 
 	data, err := tmptokens.Check(token)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidRequest"))
+		return apperr.BadRequest(a.i18n.T("users.invalidRequest"))
 	}
 
 	userRecordID, ok := data.(string)
 	if !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidRequest"))
+		return apperr.BadRequest(a.i18n.T("users.invalidRequest"))
 	}
 
 	// Get the user.
 	user, err := a.core.GetUser(userRecordID, "", "")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidRequest"))
+		return apperr.BadRequest(a.i18n.T("users.invalidRequest"))
 	}
 
 	// Verify that TOTP is actually enabled for the user.
 	if user.TwofaType != models.TwofaTypeTOTP {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.twoFANotEnabled"))
+		return apperr.BadRequest(a.i18n.T("users.twoFANotEnabled"))
 	}
 
 	// Verify the TOTP code.
 	valid := totp.Validate(totpCode, user.TwofaKey.String)
 	if !valid {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidValue"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidValue"))
 	}
 
 	// Invalidate the token.
@@ -489,7 +489,7 @@ func (a *App) GenerateTOTPQR(re *pbcore.RequestEvent) error {
 
 	// If TOTP is already enabled, don't generate a new key.
 	if u.TwofaType == models.TwofaTypeTOTP {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.twoFAAlreadyEnabled"))
+		return apperr.BadRequest(a.i18n.T("users.twoFAAlreadyEnabled"))
 	}
 
 	// Generate a new TOTP key.
@@ -499,21 +499,21 @@ func (a *App) GenerateTOTPQR(re *pbcore.RequestEvent) error {
 	})
 	if err != nil {
 		a.log.Printf("error generating TOTP key: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
 	// Convert the TOTP key to a QR code image.
 	img, err := key.Image(200, 200)
 	if err != nil {
 		a.log.Printf("error generating QR code: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
 	// Encode the QR code as a PNG and return it as base64.
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		a.log.Printf("error encoding QR code: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
 	return okJSON(re, struct {

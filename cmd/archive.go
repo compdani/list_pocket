@@ -1,17 +1,17 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"html/template"
 	"net/http"
 	"net/url"
 
-	"github.com/gorilla/feeds"
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
+	"github.com/gorilla/feeds"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
@@ -90,7 +90,7 @@ func (a *App) GetCampaignArchivesFeed(re *pbcore.RequestEvent) error {
 
 	if err := feed.WriteRss(re.Response); err != nil {
 		a.log.Printf("error generating archive RSS feed: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.errorProcessingRequest"))
+		return apperr.BadRequest(a.i18n.T("public.errorProcessingRequest"))
 	}
 
 	return nil
@@ -193,7 +193,7 @@ func (a *App) CampaignArchivePageLatest(re *pbcore.RequestEvent) error {
 func (a *App) getCampaignArchives(offset, limit int, renderBody bool) ([]campArchive, int, error) {
 	pubCamps, total, err := a.core.GetArchivedCampaigns(offset, limit)
 	if err != nil {
-		return []campArchive{}, total, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorFetchingCampaign"))
+		return []campArchive{}, total, apperr.Internal(a.i18n.T("public.errorFetchingCampaign"))
 	}
 
 	msgs, err := a.compileArchiveCampaigns(pubCamps)
@@ -245,14 +245,14 @@ func (a *App) compileArchiveCampaigns(camps []models.Campaign) ([]manager.Campai
 		camp := c
 		if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
 			a.log.Printf("error compiling template: %v", err)
-			return nil, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorFetchingCampaign"))
+			return nil, apperr.Internal(a.i18n.T("public.errorFetchingCampaign"))
 		}
 
 		// Load the dummy subscriber meta.
 		var sub models.Subscriber
 		if err := json.Unmarshal([]byte(camp.ArchiveMeta), &sub); err != nil {
 			a.log.Printf("error unmarshalling campaign archive meta: %v", err)
-			return nil, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorFetchingCampaign"))
+			return nil, apperr.Internal(a.i18n.T("public.errorFetchingCampaign"))
 		}
 
 		m := manager.CampaignMessage{

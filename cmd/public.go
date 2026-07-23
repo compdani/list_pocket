@@ -1,9 +1,10 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"database/sql"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"html/template"
 	"image"
 	"image/png"
@@ -19,7 +20,6 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 )
 
@@ -48,7 +48,7 @@ func publicLinkKey(re *pbcore.RequestEvent) string {
 	return strings.TrimSpace(pathParam(re, "linkID"))
 }
 
-// tplRenderer wraps a template.tplRenderer for echo.
+// tplRenderer wraps public HTML templates with shared layout data.
 type tplRenderer struct {
 	templates           *template.Template
 	i18n                *i18n.I18n
@@ -142,8 +142,8 @@ func trackingOpenEvent(re *pbcore.RequestEvent) models.OpenEvent {
 	}
 }
 
-// Render executes and renders a template for echo / RequestEvent helpers.
-func (t *tplRenderer) Render(w io.Writer, name string, data any, c echo.Context) error {
+// Render executes and renders a template for RequestEvent helpers.
+func (t *tplRenderer) Render(w io.Writer, name string, data any) error {
 	lang := t.i18n
 	return t.templates.ExecuteTemplate(w, name, tplData{
 		SiteName:            t.SiteName,
@@ -165,7 +165,7 @@ func (a *App) GetPublicLists(re *pbcore.RequestEvent) error {
 	// Get all public lists.
 	lists, err := a.core.GetLists(models.ListTypePublic, models.ListStatusActive, true, nil)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.errorFetchingLists"))
+		return apperr.BadRequest(a.i18n.T("public.errorFetchingLists"))
 	}
 
 	type list struct {
@@ -277,7 +277,7 @@ func (a *App) SubscriptionPage(re *pbcore.RequestEvent) error {
 		// Get the subscriber's lists from the DB to render in the template.
 		subs, err := a.core.GetSubscriptions(0, subUUID, false)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.errorFetchingLists"))
+			return apperr.BadRequest(a.i18n.T("public.errorFetchingLists"))
 		}
 
 		out.Subscriptions = make([]models.Subscription, 0, len(subs))
@@ -379,7 +379,7 @@ func (a *App) SubscriptionPrefs(re *pbcore.RequestEvent) error {
 	// Get subscription from teh DB.
 	subs, err := a.core.GetSubscriptions(0, subUUID, false)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.errorFetchingLists"))
+		return apperr.BadRequest(a.i18n.T("public.errorFetchingLists"))
 	}
 
 	// Filter the lists in the request against the subscriptions in the DB.
@@ -511,13 +511,13 @@ func (a *App) SubscriptionFormPage(re *pbcore.RequestEvent) error {
 // HTML subscription forms.
 func (a *App) SubscriptionForm(re *pbcore.RequestEvent) error {
 	if !a.cfg.EnablePublicSubPage {
-		return echo.NewHTTPError(http.StatusNotFound, a.i18n.T("public.invalidFeature"))
+		return apperr.NotFound(a.i18n.T("public.invalidFeature"))
 
 	}
 
 	// If there's a nonce value, a bot could've filled the form.
 	if re.Request.FormValue("nonce") != "" {
-		return echo.NewHTTPError(http.StatusBadGateway, a.i18n.T("public.invalidFeature"))
+		return apperr.New(http.StatusBadGateway, a.i18n.T("public.invalidFeature"))
 	}
 
 	// Process CAPTCHA.
@@ -573,7 +573,7 @@ func (a *App) SubscriptionForm(re *pbcore.RequestEvent) error {
 // API calls.
 func (a *App) PublicSubscription(re *pbcore.RequestEvent) error {
 	if !a.cfg.EnablePublicSubPage {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.invalidFeature"))
+		return apperr.BadRequest(a.i18n.T("public.invalidFeature"))
 	}
 
 	hasOptin, err := a.processSubForm(re)
@@ -783,14 +783,14 @@ func (a *App) WipeSubscriberData(re *pbcore.RequestEvent) error {
 func (a *App) AltchaChallenge(re *pbcore.RequestEvent) error {
 	// Check if Altcha is enabled.
 	if !a.captcha.IsEnabled() || a.captcha.GetProvider() != captcha.ProviderAltcha {
-		return echo.NewHTTPError(http.StatusNotFound, "captcha not enabled")
+		return apperr.NotFound("captcha not enabled")
 	}
 
 	// Generate challenge.
 	out, err := a.captcha.GenerateChallenge()
 	if err != nil {
 		a.log.Printf("error generating altcha challenge: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "Error generating challenge")
+		return apperr.Internal("Error generating challenge")
 	}
 
 	// Return the challenge as JSON.
@@ -828,17 +828,17 @@ func (a *App) processSubForm(re *pbcore.RequestEvent) (bool, error) {
 	}
 
 	if len(req.FormListUUIDs) == 0 {
-		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.noListsSelected"))
+		return false, apperr.BadRequest(a.i18n.T("public.noListsSelected"))
 	}
 
 	// Validate fields.
 	if len(req.Email) > 1000 {
-		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidEmail"))
+		return false, apperr.BadRequest(a.i18n.T("subscribers.invalidEmail"))
 	}
 
 	em, err := a.importer.SanitizeEmail(req.Email)
 	if err != nil {
-		return false, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return false, apperr.BadRequest(err.Error())
 	}
 	req.Email = em
 
@@ -852,13 +852,13 @@ func (a *App) processSubForm(re *pbcore.RequestEvent) (bool, error) {
 	subReq.NormalizeName()
 	subReq.Phone = utils.NormalizePhone(subReq.Phone)
 	if strings.TrimSpace(subReq.FirstName) == "" || strings.TrimSpace(subReq.LastName) == "" {
-		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+		return false, apperr.BadRequest(a.i18n.T("subscribers.invalidName"))
 	}
 	if len(subReq.Name) > stdInputMaxLen {
-		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+		return false, apperr.BadRequest(a.i18n.T("subscribers.invalidName"))
 	}
 	if subReq.Phone != "" && len(strings.TrimSpace(subReq.Phone)) > 64 {
-		return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return false, apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	listUUIDs := pq.StringArray(req.FormListUUIDs)
@@ -867,14 +867,14 @@ func (a *App) processSubForm(re *pbcore.RequestEvent) (bool, error) {
 	listTypes, err := a.core.GetListTypes(nil, req.FormListUUIDs)
 	if err != nil {
 		if _, msg, ok := asHTTPError(err); ok {
-			return false, echo.NewHTTPError(http.StatusInternalServerError, msg)
+			return false, apperr.Internal(msg)
 		}
-		return false, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorProcessingRequest"))
+		return false, apperr.Internal(a.i18n.T("public.errorProcessingRequest"))
 	}
 
 	for _, t := range listTypes {
 		if t == models.ListTypePrivate {
-			return false, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidUUID"))
+			return false, apperr.BadRequest(a.i18n.T("globals.messages.invalidUUID"))
 		}
 	}
 
@@ -912,7 +912,7 @@ func (a *App) processSubForm(re *pbcore.RequestEvent) (bool, error) {
 
 	// Something else went wrong.
 	if _, msg, ok := asHTTPError(lastErr); ok {
-		return false, echo.NewHTTPError(http.StatusBadRequest, msg)
+		return false, apperr.BadRequest(msg)
 	}
-	return false, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorProcessingRequest"))
+	return false, apperr.Internal(a.i18n.T("public.errorProcessingRequest"))
 }

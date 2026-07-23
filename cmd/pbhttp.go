@@ -11,13 +11,12 @@ import (
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const appContextKey = "app"
 
-// asHandler wraps a native handler so *echo.HTTPError and plain errors are
+// asHandler wraps a native handler so *apperr.Error and plain errors are
 // written in the listmonk JSON shape {"message":"..."} instead of PocketBase ApiError.
 func asHandler(h func(*pbcore.RequestEvent) error) func(*pbcore.RequestEvent) error {
 	return func(re *pbcore.RequestEvent) error {
@@ -78,7 +77,7 @@ func okJSON(re *pbcore.RequestEvent, data any) error {
 
 func bindJSON(re *pbcore.RequestEvent, dst any) error {
 	if err := re.BindBody(dst); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+		return apperr.BadRequest(fmt.Sprintf("invalid JSON: %v", err))
 	}
 	return nil
 }
@@ -94,7 +93,7 @@ func writeAppError(re *pbcore.RequestEvent, err error) error {
 	return nil
 }
 
-// isHTTPStatus reports whether err is an app/echo HTTP error with the given status.
+// isHTTPStatus reports whether err is an app HTTP error with the given status.
 func isHTTPStatus(err error, status int) bool {
 	s, _, ok := asHTTPError(err)
 	return ok && s == status
@@ -104,16 +103,6 @@ func asHTTPError(err error) (int, string, bool) {
 	if err == nil {
 		return 0, "", false
 	}
-	status, msg := extractHTTPError(err)
-	var ae *apperr.Error
-	var he *echo.HTTPError
-	if errors.As(err, &ae) || errors.As(err, &he) {
-		return status, msg, true
-	}
-	return 0, "", false
-}
-
-func extractHTTPError(err error) (int, string) {
 	var ae *apperr.Error
 	if errors.As(err, &ae) && ae != nil {
 		status := ae.Status
@@ -124,19 +113,14 @@ func extractHTTPError(err error) (int, string) {
 		if msg == "" {
 			msg = http.StatusText(status)
 		}
-		return status, msg
+		return status, msg, true
 	}
+	return 0, "", false
+}
 
-	var he *echo.HTTPError
-	if errors.As(err, &he) {
-		msg := http.StatusText(he.Code)
-		if he.Message != nil {
-			msg = fmt.Sprint(he.Message)
-		}
-		if he.Code > 0 {
-			return he.Code, msg
-		}
-		return http.StatusInternalServerError, msg
+func extractHTTPError(err error) (int, string) {
+	if status, msg, ok := asHTTPError(err); ok {
+		return status, msg
 	}
 	return http.StatusInternalServerError, err.Error()
 }
@@ -150,17 +134,17 @@ func hydrateAuthUser(re *pbcore.RequestEvent) error {
 	re.Set(auth.AuthRecordHTTPCtxKey, re.Auth)
 
 	if strings.TrimSpace(re.Auth.Id) == "" {
-		return writeAppError(re, echo.NewHTTPError(http.StatusForbidden, "invalid auth user"))
+		return writeAppError(re, apperr.Forbidden("invalid auth user"))
 	}
 
 	app := getApp(re)
 	if app == nil || app.core == nil {
-		return writeAppError(re, echo.NewHTTPError(http.StatusForbidden, "invalid auth user"))
+		return writeAppError(re, apperr.Forbidden("invalid auth user"))
 	}
 
 	user, err := app.core.GetUser(re.Auth.Id, "", "")
 	if err != nil {
-		return writeAppError(re, echo.NewHTTPError(http.StatusForbidden, "invalid auth user"))
+		return writeAppError(re, apperr.Forbidden("invalid auth user"))
 	}
 
 	if roleID := auth.ExtractRoleIDFromRecord(re.Auth); roleID > 0 {
@@ -173,17 +157,13 @@ func hydrateAuthUser(re *pbcore.RequestEvent) error {
 // renderTpl renders a public HTML template using the shared tplRenderer data envelope.
 func renderTpl(re *pbcore.RequestEvent, status int, name string, data any) error {
 	app := getApp(re)
-	if app == nil || app.echo == nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "templates unavailable")
-	}
-	r, ok := app.echo.Renderer.(*tplRenderer)
-	if !ok || r.templates == nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "templates unavailable")
+	if app == nil || app.renderer == nil {
+		return apperr.Internal("templates unavailable")
 	}
 
 	var buf bytes.Buffer
-	if err := r.Render(&buf, name, data, nil); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+	if err := app.renderer.Render(&buf, name, data); err != nil {
+		return apperr.Internal(err.Error())
 	}
 	re.Response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	re.Response.WriteHeader(status)

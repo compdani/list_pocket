@@ -4,17 +4,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/labstack/echo/v4"
 )
 
 func TestPostmarkProcessBounceExtractsMessageID(t *testing.T) {
 	p := NewPostmark("user", "pass")
-	e := echo.New()
 	req := httptest.NewRequest("POST", "/", nil)
 	req.SetBasicAuth("user", "pass")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
 
 	body := []byte(`{
 		"RecordType":"Bounce",
@@ -27,7 +22,7 @@ func TestPostmarkProcessBounceExtractsMessageID(t *testing.T) {
 		}
 	}`)
 
-	out, err := p.ProcessBounce(body, ctx)
+	out, err := p.ProcessBounce(body, req)
 	if err != nil {
 		t.Fatalf("ProcessBounce returned error: %v", err)
 	}

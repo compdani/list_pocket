@@ -37,7 +37,7 @@ Copy `config.toml.sample` → `config.toml` before first run. Env vars are prefi
 ### Request flow
 The process starts with `pb.Start()` (PocketBase cobra CLI). Default command is `serve`; `app.address` from `config.toml` is bridged to `--http` when missing. App migrations and settings load in `OnBootstrap`; services wire and routes register in `OnServe`.
 
-`/mailapi` handlers are native PocketBase `RequestEvent` handlers registered in `cmd/handlers.go` (`wrapEcho` is gone). Public subscription/tracking pages are registered separately (see `cmd/public.go`).
+`/mailapi` handlers are native PocketBase `RequestEvent` handlers registered in `cmd/handlers.go`. Public subscription/tracking pages are registered separately (see `cmd/public.go`).
 
 ```
 pb.Start() → serve
@@ -91,7 +91,7 @@ Core helpers like `ResolveSubscriberIDs` and `ResolveListIDs` translate when a h
 Permissions are declared in `permissions.json` and enforced per-route via permission middleware helpers. The Super Admin role always receives all permissions (synced on startup in `main.go`). Passing multiple permission strings means the user needs **any one** of them.
 
 ### Core methods and errors
-`internal/core` methods return HTTP errors (`echo.NewHTTPError` / `apperr.*`) on failure — callers can return these directly from handlers without wrapping.
+`internal/core` methods return HTTP errors (`apperr.*`) on failure — callers can return these directly from handlers without wrapping.
 
 ### Migrations
 Each migration is a numbered Go file in `internal/migrations/` that calls `m.Register(up, down)` from an `init()` function. Migrations are applied on bootstrap/serve (and via `migrate up`). `Automigrate` is disabled to prevent accidental file generation. The old `--install` / `--upgrade` flags are deprecated no-ops kept for listmonk automation compatibility.

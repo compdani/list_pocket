@@ -1,20 +1,19 @@
 package main
 
 import (
+	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 func (a *App) resolveListRouteID(re *pbcore.RequestEvent) (string, error) {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return "", apperr.BadRequest("invalid ID")
 	}
 
 	return recordID, nil
@@ -23,8 +22,7 @@ func (a *App) resolveListRouteID(re *pbcore.RequestEvent) (string, error) {
 func (a *App) resolveListRequestIDs(recordIDs []string) ([]int, error) {
 	ids, err := a.core.ResolveListIDs(nil, recordIDs)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return nil, apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	return ids, nil
 }
@@ -126,7 +124,7 @@ func (a *App) CreateList(re *pbcore.RequestEvent) error {
 
 	// Validate.
 	if !strHasLen(l.Name, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("lists.invalidName"))
+		return apperr.BadRequest(a.i18n.T("lists.invalidName"))
 	}
 
 	out, err := a.core.CreateList(l)
@@ -160,7 +158,7 @@ func (a *App) UpdateList(re *pbcore.RequestEvent) error {
 
 	// Validate.
 	if !strHasLen(l.Name, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("lists.invalidName"))
+		return apperr.BadRequest(a.i18n.T("lists.invalidName"))
 	}
 
 	// Update the list in the DB.
@@ -212,8 +210,7 @@ func (a *App) DeleteLists(re *pbcore.RequestEvent) error {
 
 	// Validate that either IDs or query is provided.
 	if len(recordIDs) == 0 && (query == "" && !all) {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "record_id or query required"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "record_id or query required"))
 	}
 
 	// For ID deletion, check if the user has manage permission for the specific lists.

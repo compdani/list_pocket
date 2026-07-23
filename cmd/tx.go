@@ -1,9 +1,10 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/internal/txemail"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 // SendTxMessage handles the sending of a transactional message.
@@ -21,39 +21,34 @@ func (a *App) SendTxMessage(re *pbcore.RequestEvent) error {
 	// If it's a multipart form, there may be file attachments.
 	if strings.HasPrefix(re.Request.Header.Get("Content-Type"), "multipart/form-data") {
 		if err := re.Request.ParseMultipartForm(32 << 20); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", err.Error()))
 		}
 		form := re.Request.MultipartForm
 		if form == nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", "multipart form"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "multipart form"))
 		}
 
 		data, ok := form.Value["data"]
 		if !ok || len(data) != 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "data"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "data"))
 		}
 
 		// Parse the JSON data.
 		if err := json.Unmarshal([]byte(data[0]), &m); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("data: %s", err.Error())))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("data: %s", err.Error())))
 		}
 
 		// Attach files.
 		for _, f := range form.File["file"] {
 			file, err := f.Open()
 			if err != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("file: %s", err.Error())))
+				return apperr.Internal(a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("file: %s", err.Error())))
 			}
 			defer file.Close()
 
 			b, err := io.ReadAll(file)
 			if err != nil {
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("file: %s", err.Error())))
+				return apperr.Internal(a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("file: %s", err.Error())))
 			}
 
 			m.Attachments = append(m.Attachments, models.Attachment{
@@ -164,7 +159,7 @@ func (a *App) SendTxMessage(re *pbcore.RequestEvent) error {
 	}
 
 	if len(notFound) > 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, strings.Join(notFound, "; "))
+		return apperr.BadRequest(strings.Join(notFound, "; "))
 	}
 
 	return okJSON(re, true)
@@ -173,12 +168,10 @@ func (a *App) SendTxMessage(re *pbcore.RequestEvent) error {
 // validateTxMessage validates the tx message fields.
 func (a *App) validateTxMessage(m models.TxMessage) (models.TxMessage, error) {
 	if len(m.SubscriberEmails) > 0 && m.SubscriberEmail != "" {
-		return m, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.invalidFields", "name", "do not send `subscriber_email`"))
+		return m, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "do not send `subscriber_email`"))
 	}
 	if len(m.SubscriberIDs) > 0 && m.SubscriberID != 0 {
-		return m, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.invalidFields", "name", "do not send `subscriber_id`"))
+		return m, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "do not send `subscriber_id`"))
 	}
 
 	if m.SubscriberEmail != "" {
@@ -212,29 +205,25 @@ func (a *App) validateTxMessage(m models.TxMessage) (models.TxMessage, error) {
 			idModes++
 		}
 		if idModes != 1 {
-			return m, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", "send subscriber_emails OR subscriber_record_ids"))
+			return m, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "send subscriber_emails OR subscriber_record_ids"))
 		}
 	case models.TxSubModeFallback, models.TxSubModeExternal:
 		// `fallback` and `external` can only use subscriber_emails.
 		if hasRecordIDs || hasLegacyIDs {
-			return m, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_record_ids/subscriber_ids not allowed in fallback or external mode"))
+			return m, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_record_ids/subscriber_ids not allowed in fallback or external mode"))
 		}
 		if !hasEmails {
-			return m, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_emails"))
+			return m, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_emails"))
 		}
 	default:
-		return m, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_mode"))
+		return m, apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_mode"))
 	}
 
 	for n, email := range m.SubscriberEmails {
 		if email != "" {
 			em, err := a.importer.SanitizeEmail(email)
 			if err != nil {
-				return m, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+				return m, apperr.BadRequest(err.Error())
 			}
 			m.SubscriberEmails[n] = em
 		}
@@ -247,7 +236,7 @@ func (a *App) validateTxMessage(m models.TxMessage) (models.TxMessage, error) {
 	if m.Messenger == "" {
 		m.Messenger = emailMsgr
 	} else if !a.manager.HasMessenger(m.Messenger) {
-		return m, echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("campaigns.fieldInvalidMessenger", "name", m.Messenger))
+		return m, apperr.BadRequest(a.i18n.Ts("campaigns.fieldInvalidMessenger", "name", m.Messenger))
 	}
 
 	return m, nil

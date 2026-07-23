@@ -3,14 +3,13 @@ package core
 import (
 	"database/sql"
 	"encoding/json"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx/types"
-	"github.com/labstack/echo/v4"
 )
 
 // GetDashboardCharts returns chart data points to render on the dashboard.
@@ -49,8 +48,7 @@ func (c *Core) getDashboardChartsSQLite(timeZone string) (types.JSONText, error)
 		SELECT created
 		FROM link_clicks
 		WHERE datetime(created) >= datetime(?) AND datetime(created) <= datetime(?)`, startUTC, endUTC); err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
 	}
 
 	type viewRow struct {
@@ -65,8 +63,7 @@ func (c *Core) getDashboardChartsSQLite(timeZone string) (types.JSONText, error)
 		SELECT rowid, campaign_id, subscriber_id, COALESCE(is_suspected_privacy_open, 0) AS suspected, created
 		FROM campaign_views
 		WHERE datetime(created) >= datetime(?) AND datetime(created) <= datetime(?)`, startUTC, endUTC); err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
 	}
 
 	linkClicksByDay := map[string]int{}
@@ -148,8 +145,7 @@ func (c *Core) getDashboardChartsSQLite(timeZone string) (types.JSONText, error)
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
 	}
 	return types.JSONText(b), nil
 }
@@ -201,8 +197,7 @@ func (c *Core) getDashboardCountsSQLite() (types.JSONText, error) {
 
 	var out types.JSONText
 	if err := c.db.Get(&out, q); err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard stats", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard stats", "error", pqErrMsg(err)))
 	}
 
 	return out, nil

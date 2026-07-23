@@ -2,11 +2,10 @@ package core
 
 import (
 	"encoding/json"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 const bulkContactBatchSize = 5000
@@ -24,10 +23,10 @@ type BulkUpdateResult struct {
 func (c *Core) BulkUpdateSubscribersByEmail(emails, tagsAdd, tagsRemove, listRemoveRecordIDs, listUpdateRecordIDs []string, subStatus string) (BulkUpdateResult, error) {
 	var result BulkUpdateResult
 	if len(emails) == 0 {
-		return result, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+		return result, apperr.BadRequest(c.i18n.T("campaigns.noKnownSubsToTest"))
 	}
 	if len(emails) > bulkContactBatchSize {
-		return result, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("globals.messages.invalidData"))
+		return result, apperr.BadRequest(c.i18n.T("globals.messages.invalidData"))
 	}
 
 	tagsAdd = subimporter.NormalizeImportTags(tagsAdd)
@@ -64,30 +63,26 @@ func (c *Core) BulkUpdateSubscribersByEmail(emails, tagsAdd, tagsRemove, listRem
 
 	listRemoveIDs, err := c.ResolveListIDs(nil, listRemoveRecordIDs)
 	if err != nil {
-		return result, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return result, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if len(listRemoveIDs) > 0 {
 		n, err := c.deleteSubscriptionsSQLite(subIDs, listRemoveIDs)
 		if err != nil {
 			c.log.Printf("error removing bulk subscriptions: %v", err)
-			return result, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 		result.ListsRemoved = n
 	}
 
 	listUpdateIDs, err := c.ResolveListIDs(nil, listUpdateRecordIDs)
 	if err != nil {
-		return result, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return result, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if len(listUpdateIDs) > 0 {
 		n, err := c.upsertSubscriptionsSQLite(subIDs, listUpdateIDs, subStatus)
 		if err != nil {
 			c.log.Printf("error upserting bulk subscriptions: %v", err)
-			return result, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 		result.ListsUpdated = n
 	}
@@ -128,8 +123,7 @@ func (c *Core) lookupSubscribersByEmails(emails []string) (models.Subscribers, i
 	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(unique)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscribers by email: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	found := make(map[string]struct{}, len(rows))

@@ -1,16 +1,16 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strings"
 
-	"github.com/disintegration/imaging"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
+	"github.com/disintegration/imaging"
 )
 
 const (
@@ -26,20 +26,17 @@ var (
 // UploadMedia handles media file uploads.
 func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
 	if err := re.Request.ParseMultipartForm(32 << 20); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("media.invalidFile", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("media.invalidFile", "error", err.Error()))
 	}
 	_, file, err := re.Request.FormFile("file")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("media.invalidFile", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("media.invalidFile", "error", err.Error()))
 	}
 
 	// Read the file from the HTTP form.
 	src, err := file.Open()
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("media.errorReadingFile", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("media.errorReadingFile", "error", err.Error()))
 	}
 	defer src.Close()
 
@@ -52,8 +49,7 @@ func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
 	// Validate file extension.
 	if !inArray("*", a.cfg.MediaUpload.Extensions) {
 		if ok := inArray(ext, a.cfg.MediaUpload.Extensions); !ok {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("media.unsupportedFileType", "type", ext))
+			return apperr.BadRequest(a.i18n.Ts("media.unsupportedFileType", "type", ext))
 		}
 	}
 
@@ -65,7 +61,7 @@ func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
 		suffix, err := generateRandomString(6)
 		if err != nil {
 			a.log.Printf("error generating random string: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
+			return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 		}
 
 		fName = appendSuffixToFilename(fName, suffix)
@@ -75,8 +71,7 @@ func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
 	fName, err = a.media.Put(fName, contentType, src)
 	if err != nil {
 		a.log.Printf("error uploading file: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("media.errorUploading", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("media.errorUploading", "error", err.Error()))
 	}
 
 	// This keeps track of whether the file has to be deleted from the DB and the store
@@ -105,8 +100,7 @@ func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
 		if err != nil {
 			cleanUp = true
 			a.log.Printf("error resizing image: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				a.i18n.Ts("media.errorResizing", "error", err.Error()))
+			return apperr.Internal(a.i18n.Ts("media.errorResizing", "error", err.Error()))
 		}
 		width = wi
 		height = he
@@ -116,8 +110,7 @@ func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
 		if err != nil {
 			cleanUp = true
 			a.log.Printf("error saving thumbnail: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				a.i18n.Ts("media.errorSavingThumbnail", "error", err.Error()))
+			return apperr.Internal(a.i18n.Ts("media.errorSavingThumbnail", "error", err.Error()))
 		}
 		thumbfName = tf
 	}
@@ -171,7 +164,7 @@ func (a *App) GetAllMedia(re *pbcore.RequestEvent) error {
 func (a *App) GetMedia(re *pbcore.RequestEvent) error {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return apperr.BadRequest("invalid ID")
 	}
 
 	out, err := a.core.GetMedia(recordID, "", "", a.media)
@@ -186,7 +179,7 @@ func (a *App) GetMedia(re *pbcore.RequestEvent) error {
 func (a *App) DeleteMedia(re *pbcore.RequestEvent) error {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return apperr.BadRequest("invalid ID")
 	}
 
 	// Delete the media from the DB. The query returns the filename.
@@ -206,13 +199,13 @@ func (a *App) DeleteMedia(re *pbcore.RequestEvent) error {
 func (a *App) ServeS3Media(re *pbcore.RequestEvent) error {
 	key := pathParam(re, "filepath")
 	if key == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing media file path")
+		return apperr.BadRequest("missing media file path")
 	}
 
 	b, err := a.media.GetBlob(key)
 	if err != nil {
 		a.log.Printf("error fetching media from s3 %s: %v", key, err)
-		return echo.NewHTTPError(http.StatusInternalServerError, "error fetching media")
+		return apperr.Internal("error fetching media")
 	}
 
 	return writeStream(re, http.StatusOK, http.DetectContentType(b), bytes.NewReader(b))
