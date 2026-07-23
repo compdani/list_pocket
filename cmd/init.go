@@ -181,8 +181,11 @@ func initFlags(ko *koanf.Koanf) {
 
 // ensureDefaultServeArgs makes `serve` the default PocketBase command and bridges
 // config.toml app.address into PocketBase's --http flag when missing.
+// List Pocket–only flags (--config, --passive, …) are stripped so PocketBase's
+// cobra parser does not reject them when they appear after a subcommand
+// (e.g. `serve --config /app/config.toml` from the Docker CMD).
 func ensureDefaultServeArgs() {
-	args := append([]string(nil), os.Args[1:]...)
+	args := stripListPocketFlags(append([]string(nil), os.Args[1:]...))
 	for i, a := range args {
 		if a == "start" {
 			args[i] = "serve"
@@ -210,12 +213,56 @@ func ensureDefaultServeArgs() {
 	os.Args = append([]string{os.Args[0]}, append(insert, args...)...)
 }
 
+// listPocketFlagsWithValue are List Pocket flags that take a separate argv value.
+// They are parsed by initFlags and must not reach PocketBase's CLI.
+var listPocketFlagsWithValue = map[string]bool{
+	"--config": true, "--static-dir": true, "--i18n-dir": true,
+}
+
+// listPocketBoolFlags are List Pocket boolean flags that must not reach PocketBase.
+var listPocketBoolFlags = map[string]bool{
+	"--install": true, "--idempotent": true, "--upgrade": true,
+	"--version": true, "--new-config": true, "--yes": true, "--passive": true,
+}
+
 // flags that take a separate argv value (not --flag=value).
 var cliFlagsWithValue = map[string]bool{
 	"--config": true, "--static-dir": true, "--i18n-dir": true,
 	"--http": true, "--https": true, "--dir": true, "--encryptionEnv": true,
 	"--queryTimeout": true, "--origins": true,
 	"-c": true,
+}
+
+// stripListPocketFlags removes List Pocket–only flags (already consumed by initFlags)
+// so PocketBase's cobra root/serve commands do not see unknown flags.
+func stripListPocketFlags(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			out = append(out, args[i:]...)
+			break
+		}
+		if name, val, ok := strings.Cut(a, "="); ok && strings.HasPrefix(name, "-") {
+			if listPocketFlagsWithValue[name] || listPocketBoolFlags[name] {
+				_ = val
+				continue
+			}
+			out = append(out, a)
+			continue
+		}
+		if listPocketFlagsWithValue[a] {
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++ // skip value
+			}
+			continue
+		}
+		if listPocketBoolFlags[a] {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func findPocketBaseCommand(args []string) (int, string) {

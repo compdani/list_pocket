@@ -63,4 +63,6 @@ EXPOSE 9000
 VOLUME ["/app/pb_data"]
 
 USER listpocket
-CMD ["/app/listpocket", "serve", "--config", "/app/config.toml"]
+# --config is a List Pocket flag (default: config.toml in WORKDIR). Put it before
+# any PocketBase subcommand, or omit it when using the image's /app/config.toml.
+CMD ["/app/listpocket"]
