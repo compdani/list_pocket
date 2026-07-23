@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"io"
 	"net/http"
 	stdmail "net/mail"
@@ -17,7 +18,6 @@ import (
 	"github.com/emersion/go-message"
 	_ "github.com/emersion/go-message/charset"
 	gomail "github.com/emersion/go-message/mail"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
@@ -119,7 +119,7 @@ func (a *App) InboundEmailReplyWebhookPublic(re *pbcore.RequestEvent) error {
 	provided := strings.TrimSpace(re.Request.Header.Get("X-Listpocket-Webhook-Secret"))
 	if expected == "" || provided == "" || expected != provided {
 		a.log.Printf("inbound email webhook public: unauthorized remote=%q ua=%q expected_set=%t provided_set=%t", clientIP(re), re.Request.UserAgent(), expected != "", provided != "")
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+		return apperr.New(http.StatusUnauthorized, "unauthorized")
 	}
 	a.log.Printf("inbound email webhook public: authorized remote=%q ua=%q", clientIP(re), re.Request.UserAgent())
 	id, err := a.processInboundEmailReplyWebhook(re)
@@ -133,11 +133,11 @@ func (a *App) processInboundEmailReplyWebhook(re *pbcore.RequestEvent) (string, 
 	body, err := io.ReadAll(io.LimitReader(re.Request.Body, 2<<20))
 	if err != nil {
 		a.log.Printf("inbound email webhook: read body failed remote=%q ua=%q err=%v", clientIP(re), re.Request.UserAgent(), err)
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+		return "", apperr.BadRequest("invalid body")
 	}
 	if len(body) >= 2<<20 {
 		a.log.Printf("inbound email webhook: body too large remote=%q ua=%q size=%d", clientIP(re), re.Request.UserAgent(), len(body))
-		return "", echo.NewHTTPError(http.StatusRequestEntityTooLarge, "body too large")
+		return "", apperr.New(http.StatusRequestEntityTooLarge, "body too large")
 	}
 	return a.processInboundEmailReplyWebhookBody(re, body)
 }
@@ -154,7 +154,7 @@ func (a *App) processInboundEmailReplyWebhookBody(re *pbcore.RequestEvent, body 
 	if err := json.Unmarshal(body, &req); err != nil {
 		bodyPreview, bodyTruncated := inboundWebhookBodyPreviewForLog(body)
 		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body_preview=%q body_truncated=%t", clientIP(re), re.Request.UserAgent(), err, bodyPreview, bodyTruncated)
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
+		return "", apperr.BadRequest("invalid payload")
 	}
 
 	normalized, ok := normalizeSESInboundEmail(body)
@@ -193,7 +193,7 @@ func (a *App) processInboundEmailReplyWebhookBody(re *pbcore.RequestEvent, body 
 
 	if fromAddress == "" {
 		a.log.Printf("inbound email webhook: missing from address message_id=%q", messageID)
-		return "", echo.NewHTTPError(http.StatusBadRequest, "from is required")
+		return "", apperr.BadRequest("from is required")
 	}
 
 	event := &models.InboundEmailReplyEvent{
@@ -218,7 +218,7 @@ func (a *App) processInboundEmailReplyWebhookBody(re *pbcore.RequestEvent, body 
 	id, err := a.core.CreateInboundEmailReplyEvent(re.Request.Context(), event)
 	if err != nil {
 		a.log.Printf("inbound email webhook: persistence failed provider=%q message_id=%q from=%q err=%v", provider, messageID, fromAddress, err)
-		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to persist inbound email reply")
+		return "", apperr.Internal("failed to persist inbound email reply")
 	}
 
 	// Skip saving attachments if the email was classified as spam or confirmed spam.
@@ -243,7 +243,7 @@ func (a *App) logInboundEmailWebhookRequest(re *pbcore.RequestEvent, body []byte
 		re.Request.URL.Path,
 		clientIP(re),
 		re.Request.UserAgent(),
-		re.Request.Header.Get(echo.HeaderContentType),
+		re.Request.Header.Get("Content-Type"),
 		len(body),
 		snsType,
 		snsTopic,
@@ -709,18 +709,18 @@ func parseSESNotificationType(raw []byte) string {
 func (a *App) GetInboundEmailAttachments(re *pbcore.RequestEvent) error {
 	replyID := strings.TrimSpace(pathParam(re, "replyId"))
 	if replyID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing replyId")
+		return apperr.BadRequest("missing replyId")
 	}
 
 	pb := a.pb
 	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "attachment collection not found")
+		return apperr.Internal("attachment collection not found")
 	}
 
 	records, err := pb.FindRecordsByFilter(collection.Id, fmt.Sprintf(`inbound_email_reply_id = "%s"`, strings.ReplaceAll(replyID, `"`, ``)), "-created", 0, 200)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to list attachments")
+		return apperr.Internal("failed to list attachments")
 	}
 
 	items := make([]map[string]any, 0, len(records))
@@ -746,23 +746,23 @@ func (a *App) GetInboundEmailAttachments(re *pbcore.RequestEvent) error {
 func (a *App) DownloadInboundEmailAttachment(re *pbcore.RequestEvent) error {
 	attachmentID := strings.TrimSpace(pathParam(re, "id"))
 	if attachmentID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing attachment id")
+		return apperr.BadRequest("missing attachment id")
 	}
 
 	pb := a.pb
 	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "attachment collection not found")
+		return apperr.Internal("attachment collection not found")
 	}
 
 	record, err := pb.FindRecordById(collection.Id, attachmentID)
 	if err != nil || record == nil {
-		return echo.NewHTTPError(http.StatusNotFound, "attachment not found")
+		return apperr.NotFound("attachment not found")
 	}
 
 	fileName := firstFileName(record.Get("file"))
 	if fileName == "" {
-		return echo.NewHTTPError(http.StatusNotFound, "attachment file missing")
+		return apperr.NotFound("attachment file missing")
 	}
 
 	return re.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/api/files/%s/%s/%s?download=1", collection.Id, record.Id, fileName))

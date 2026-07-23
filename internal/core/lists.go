@@ -2,12 +2,11 @@ package core
 
 import (
 	"encoding/json"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"strings"
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
@@ -154,8 +153,7 @@ func (c *Core) getListsSQLite(typ, status string, getAll bool, permittedIDs []in
 	rows := []sqliteListRow{}
 	if err := c.db.Select(&rows, query, args...); err != nil {
 		c.log.Printf("error fetching lists: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 	}
 
 	return sqliteListRowsToModels(rows), nil
@@ -254,8 +252,7 @@ func (c *Core) queryListsSQLite(searchStr, typ, optin, status string, tags []str
 	rows := []sqliteListRow{}
 	if err := c.db.Select(&rows, query, args...); err != nil {
 		c.log.Printf("error fetching lists: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 	}
 
 	out := sqliteListRowsToModels(rows)
@@ -312,12 +309,10 @@ func (c *Core) getListSQLite(recordID, uuid string) (models.List, error) {
 	var rows []sqliteListRow
 	if err := c.db.Select(&rows, query, args...); err != nil {
 		c.log.Printf("error fetching lists: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 	}
 	if len(rows) == 0 {
-		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
+		return models.List{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 	}
 
 	out := sqliteListRowsToModels(rows)
@@ -357,8 +352,7 @@ func (c *Core) GetListsByOptin(ids []int, optinType string) ([]models.List, erro
 
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching lists for opt-in: %s", pqErrMsg(err))
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
 	return sqliteListRowsToModels(rows), nil
@@ -395,8 +389,7 @@ func (c *Core) GetListTypes(ids []int, uuids []string) (map[any]string, error) {
 
 	if err := c.db.Select(&res, q, args...); err != nil {
 		c.log.Printf("error fetching list types: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
 	isIDs := ids != nil
@@ -416,8 +409,7 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 	uu, err := uuid.NewV4()
 	if err != nil {
 		c.log.Printf("error generating UUID: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
 	}
 
 	if l.Type == "" {
@@ -432,15 +424,13 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", "pocketbase is not initialized"))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", "pocketbase is not initialized"))
 	}
 
 	col, err := pb.FindCollectionByNameOrId("lists")
 	if err != nil {
 		c.log.Printf("error finding lists collection: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
 	rec := pbcore.NewRecord(col)
@@ -454,8 +444,7 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 
 	if err := pb.Save(rec); err != nil {
 		c.log.Printf("error creating list: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
 	return c.GetList(rec.Id, "")
@@ -465,21 +454,18 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 func (c *Core) UpdateList(recordID string, l models.List) (models.List, error) {
 	recordID = strings.TrimSpace(recordID)
 	if recordID == "" {
-		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
+		return models.List{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 	}
 
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", "pocketbase is not initialized"))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", "pocketbase is not initialized"))
 	}
 
 	rec, err := pb.FindRecordById("lists", recordID)
 	if err != nil {
 		c.log.Printf("error updating list: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
+		return models.List{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 	}
 
 	if l.Name != "" {
@@ -501,8 +487,7 @@ func (c *Core) UpdateList(recordID string, l models.List) (models.List, error) {
 
 	if err := pb.Save(rec); err != nil {
 		c.log.Printf("error updating list: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		return models.List{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
 	return c.GetList(recordID, "")
@@ -546,8 +531,7 @@ func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permit
 
 		if err := c.db.Select(&ids, q, args...); err != nil {
 			c.log.Printf("error resolving lists for delete: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 		}
 	}
 
@@ -557,8 +541,7 @@ func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permit
 
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", "pocketbase is not initialized"))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", "pocketbase is not initialized"))
 	}
 
 	for _, id := range ids {
@@ -569,8 +552,7 @@ func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permit
 		}
 		if err := pb.Delete(rec); err != nil {
 			c.log.Printf("error deleting list %s: %v", id, err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 		}
 	}
 	return nil

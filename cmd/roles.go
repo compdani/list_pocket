@@ -1,19 +1,18 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"fmt"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
-	"github.com/labstack/echo/v4"
 )
 
 func roleRouteRecordID(re *pbcore.RequestEvent) (string, error) {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return "", apperr.BadRequest("invalid ID")
 	}
 	return recordID, nil
 }
@@ -91,7 +90,7 @@ func (a *App) UpdateUserRole(re *pbcore.RequestEvent) error {
 		return err
 	}
 	if current.ID == auth.SuperAdminRoleID {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 	}
 
 	// Incoming params.
@@ -133,7 +132,7 @@ func (a *App) UpdateListRole(re *pbcore.RequestEvent) error {
 		return err
 	}
 	if current.ID == auth.SuperAdminRoleID {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 	}
 
 	// Incoming params.
@@ -176,7 +175,7 @@ func (a *App) DeleteRole(re *pbcore.RequestEvent) error {
 		return err
 	}
 	if current.ID == auth.SuperAdminRoleID {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 	}
 
 	// Delete the role from the DB.
@@ -194,12 +193,12 @@ func (a *App) DeleteRole(re *pbcore.RequestEvent) error {
 
 func (a *App) validateUserRole(r auth.Role) error {
 	if !strHasLen(r.Name.String, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "name"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "name"))
 	}
 
 	for _, p := range r.Permissions {
 		if _, ok := a.cfg.Permissions[p]; !ok {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("permission: %s", p)))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("permission: %s", p)))
 		}
 	}
 
@@ -208,13 +207,13 @@ func (a *App) validateUserRole(r auth.Role) error {
 
 func (a *App) validateListRole(r auth.ListRole) error {
 	if !strHasLen(r.Name.String, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "name"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "name"))
 	}
 
 	for _, l := range r.Lists {
 		for _, p := range l.Permissions {
 			if p != auth.PermListGet && p != auth.PermListManage {
-				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("list permission: %s", p)))
+				return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", fmt.Sprintf("list permission: %s", p)))
 			}
 		}
 	}

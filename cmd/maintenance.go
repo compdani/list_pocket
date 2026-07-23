@@ -1,13 +1,12 @@
 package main
 
 import (
+	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/pbdb"
-	"github.com/labstack/echo/v4"
 )
 
 // GCSubscribers garbage collects (deletes) orphaned or blocklisted subscribers.
@@ -25,7 +24,7 @@ func (a *App) GCSubscribers(re *pbcore.RequestEvent) error {
 	case "orphan":
 		n, err = a.core.DeleteOrphanSubscribers()
 	default:
-		err = echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		err = apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	if err != nil {
@@ -42,7 +41,7 @@ func (a *App) GCSubscriptions(re *pbcore.RequestEvent) error {
 	// Validate the date.
 	t, err := time.Parse(time.RFC3339, re.Request.FormValue("before_date"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	// Delete unconfirmed subscriptions from the DB in bulk.
@@ -61,7 +60,7 @@ func (a *App) GCCampaignAnalytics(re *pbcore.RequestEvent) error {
 
 	t, err := time.Parse(time.RFC3339, re.Request.FormValue("before_date"))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	switch pathParam(re, "type") {
@@ -75,7 +74,7 @@ func (a *App) GCCampaignAnalytics(re *pbcore.RequestEvent) error {
 	case "clicks":
 		err = a.core.DeleteCampaignLinkClicks(t)
 	default:
-		err = echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		err = apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	if err != nil {

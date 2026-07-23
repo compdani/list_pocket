@@ -4,12 +4,12 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
 type postmarkNotif struct {
@@ -37,21 +37,20 @@ type postmarkNotif struct {
 
 // Postmark handles webhook notifications (mainly bounce notifications).
 type Postmark struct {
-	authHandler echo.HandlerFunc
+	user     []byte
+	password []byte
 }
 
 func NewPostmark(username, password string) *Postmark {
 	return &Postmark{
-		authHandler: middleware.BasicAuth(makePostmarkAuthHandler(username, password))(func(c echo.Context) error {
-			return nil
-		}),
+		user:     []byte(username),
+		password: []byte(password),
 	}
 }
 
 // ProcessBounce processes Postmark bounce notifications and returns one object.
-func (p *Postmark) ProcessBounce(b []byte, c echo.Context) ([]models.Bounce, error) {
-	// Do basicauth.
-	if err := p.authHandler(c); err != nil {
+func (p *Postmark) ProcessBounce(b []byte, r *http.Request) ([]models.Bounce, error) {
+	if err := p.checkBasicAuth(r); err != nil {
 		return nil, err
 	}
 
@@ -106,21 +105,19 @@ func (p *Postmark) ProcessBounce(b []byte, c echo.Context) ([]models.Bounce, err
 	}}, nil
 }
 
-func makePostmarkAuthHandler(cfgUser, cfgPassword string) func(username, password string, c echo.Context) (bool, error) {
-	var (
-		u = []byte(cfgUser)
-		p = []byte(cfgPassword)
-	)
-
-	return func(username, password string, c echo.Context) (bool, error) {
-		if len(u) == 0 || len(p) == 0 {
-			return true, nil
-		}
-
-		if subtle.ConstantTimeCompare([]byte(username), u) == 1 && subtle.ConstantTimeCompare([]byte(password), p) == 1 {
-			return true, nil
-		}
-
-		return false, nil
+func (p *Postmark) checkBasicAuth(r *http.Request) error {
+	if len(p.user) == 0 || len(p.password) == 0 {
+		return nil
 	}
+	if r == nil {
+		return apperr.New(http.StatusUnauthorized, "unauthorized")
+	}
+
+	username, password, ok := r.BasicAuth()
+	if !ok ||
+		subtle.ConstantTimeCompare([]byte(username), p.user) != 1 ||
+		subtle.ConstantTimeCompare([]byte(password), p.password) != 1 {
+		return apperr.New(http.StatusUnauthorized, "unauthorized")
+	}
+	return nil
 }

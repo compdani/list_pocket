@@ -1,14 +1,13 @@
 package main
 
 import (
+	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/core"
-	"github.com/labstack/echo/v4"
 )
 
 // GetInboundEmailInbox returns a paginated list of all inbound emails.
@@ -57,7 +56,7 @@ func (a *App) GetInboundEmailInbox(re *pbcore.RequestEvent) error {
 func (a *App) GetInboundEmailByID(re *pbcore.RequestEvent) error {
 	id := strings.TrimSpace(pathParam(re, "id"))
 	if id == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing id")
+		return apperr.BadRequest("missing id")
 	}
 	email, err := a.core.GetInboundEmailByID(re.Request.Context(), id)
 	if err != nil {
@@ -71,13 +70,13 @@ func (a *App) GetInboundEmailByID(re *pbcore.RequestEvent) error {
 func (a *App) UpdateInboundEmailSpamStatus(re *pbcore.RequestEvent) error {
 	id := strings.TrimSpace(pathParam(re, "id"))
 	if id == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing id")
+		return apperr.BadRequest("missing id")
 	}
 	var req struct {
 		Status string `json:"status"`
 	}
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
+		return apperr.BadRequest("invalid request body")
 	}
 	if err := a.core.UpdateInboundEmailSpamStatus(re.Request.Context(), id, strings.TrimSpace(req.Status)); err != nil {
 		return err
@@ -100,7 +99,7 @@ func (a *App) GetInboundSpamRules(re *pbcore.RequestEvent) error {
 
 	rules, total, err := a.core.GetInboundSpamRules(re.Request.Context(), limit, offset, ruleType)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch spam rules")
+		return apperr.Internal("failed to fetch spam rules")
 	}
 	return okJSON(re, map[string]any{
 		"results": rules,
@@ -113,7 +112,7 @@ func (a *App) GetInboundSpamRules(re *pbcore.RequestEvent) error {
 func (a *App) DeleteInboundSpamRule(re *pbcore.RequestEvent) error {
 	id := strings.TrimSpace(pathParam(re, "id"))
 	if id == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing id")
+		return apperr.BadRequest("missing id")
 	}
 	if err := a.core.DeleteInboundSpamRule(re.Request.Context(), id); err != nil {
 		return err
@@ -126,7 +125,7 @@ func (a *App) DeleteInboundSpamRule(re *pbcore.RequestEvent) error {
 func (a *App) GCSpamInboundEmails(re *pbcore.RequestEvent) error {
 	deleted, err := a.core.DeleteSpamInboundEmails(re.Request.Context())
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "spam GC failed")
+		return apperr.Internal("spam GC failed")
 	}
 	return okJSON(re, map[string]any{"deleted": deleted})
 }

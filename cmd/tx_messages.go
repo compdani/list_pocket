@@ -1,18 +1,17 @@
 package main
 
 import (
+	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"net/http"
 	"strings"
 
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 func (a *App) resolveTxRouteID(re *pbcore.RequestEvent) (string, error) {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return "", apperr.BadRequest("invalid ID")
 	}
 	return recordID, nil
 }

@@ -36,7 +36,6 @@ import (
 	"github.com/knadh/koanf/v2"
 	"github.com/knadh/paginator"
 	"github.com/knadh/stuffbin"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
@@ -65,7 +64,7 @@ type App struct {
 	bufLog     *buflog.BufLog
 	pb         *pocketbase.PocketBase
 	tpl        *template.Template
-	echo       *echo.Echo
+	renderer   *tplRenderer
 
 	about         about
 	fnOptinNotify func(models.Subscriber, []int) (int, error)
@@ -343,7 +342,7 @@ func wireApp(chReload chan os.Signal) *App {
 	}
 
 	tpl := parsePublicTemplates(i18n, urlCfg, fs)
-	echoAdaptor := newEchoAdaptor(tpl, cfg, urlCfg, lo, i18n)
+	renderer := newTplRenderer(tpl, cfg, urlCfg, i18n)
 
 	app := &App{
 		cfg:        cfg,
@@ -366,7 +365,7 @@ func wireApp(chReload chan os.Signal) *App {
 		bufLog:     bufLog,
 		pb:         pb,
 		tpl:        tpl,
-		echo:       echoAdaptor,
+		renderer:   renderer,
 
 		pg: paginator.New(paginator.Opt{
 			DefaultPerPage: 20,

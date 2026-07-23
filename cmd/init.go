@@ -1239,10 +1239,6 @@ func initAbout(db *pbdb.DB) about {
 
 // registerServeRoutes registers listpocket HTTP routes on a PocketBase ServeEvent.
 func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
-	cfg := app.cfg
-	urlCfg := app.urlCfg
-	tpl := app.tpl
-
 	se.Router.BindFunc(func(e *pbcore.RequestEvent) error {
 		e.Set("app", app)
 		return e.Next()
@@ -1269,16 +1265,32 @@ func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
 		se.Router.GET(path.Join(publicURL, "{filepath}"), asHandler(app.ServeS3Media))
 	}
 
-	registerHandlers(se.Router, app, tpl, cfg, urlCfg)
+	registerHandlers(se.Router, app)
 }
 
-// parsePublicTemplates parses public HTML templates used by Echo-backed handlers.
+// parsePublicTemplates parses public HTML templates used by public RequestEvent handlers.
 func parsePublicTemplates(i *i18n.I18n, urlCfg *UrlConfig, fs stuffbin.FileSystem) *template.Template {
 	tpl, err := stuffbin.ParseTemplatesGlob(initTplFuncs(i, urlCfg), fs, "/public/templates/*.html")
 	if err != nil {
 		lo.Fatalf("error parsing public templates: %v", err)
 	}
 	return tpl
+}
+
+// newTplRenderer builds the shared HTML template renderer for public pages.
+func newTplRenderer(tpl *template.Template, cfg *Config, urlCfg *UrlConfig, lang *i18n.I18n) *tplRenderer {
+	return &tplRenderer{
+		templates:           tpl,
+		i18n:                lang,
+		SiteName:            cfg.SiteName,
+		RootURL:             urlCfg.RootURL,
+		LogoURL:             urlCfg.LogoURL,
+		FaviconURL:          urlCfg.FaviconURL,
+		AssetVersion:        cfg.AssetVersion,
+		EnablePublicSubPage: cfg.EnablePublicSubPage,
+		EnablePublicArchive: cfg.EnablePublicArchive,
+		IndividualTracking:  cfg.Privacy.IndividualTracking,
+	}
 }
 
 // initCaptcha initializes the captcha service.

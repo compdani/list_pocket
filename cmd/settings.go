@@ -1,10 +1,11 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
 	"net/url"
@@ -20,7 +21,6 @@ import (
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/cron"
@@ -114,8 +114,7 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 			}
 
 			if _, ok := names[name]; ok {
-				return echo.NewHTTPError(http.StatusBadRequest,
-					a.i18n.Ts("settings.duplicateMessengerName", "name", name))
+				return apperr.BadRequest(a.i18n.Ts("settings.duplicateMessengerName", "name", name))
 			}
 
 			names[name] = true
@@ -135,7 +134,7 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 		set.SMTP[i].Host = strings.TrimSpace(s.Host)
 		fromAddrs, defaultFromEmail, err := a.sanitizeSMTPFromEmails(s.FromAddresses, s.DefaultFromEmail)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return apperr.BadRequest(err.Error())
 		}
 		set.SMTP[i].FromAddresses = fromAddrs
 		set.SMTP[i].DefaultFromEmail = defaultFromEmail
@@ -151,7 +150,7 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 		}
 	}
 	if !has {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("settings.errorNoSMTP"))
+		return apperr.BadRequest(a.i18n.T("settings.errorNoSMTP"))
 	}
 
 	// Always remove the trailing slash from the app root URL.
@@ -172,7 +171,7 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 		set.BounceBoxes[i].Host = strings.TrimSpace(s.Host)
 
 		if d, _ := time.ParseDuration(s.ScanInterval); d.Minutes() < 1 {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("settings.bounces.invalidScanInterval"))
+			return apperr.BadRequest(a.i18n.T("settings.bounces.invalidScanInterval"))
 		}
 
 		// If there's no password coming in from the frontend, copy the existing
@@ -202,11 +201,10 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 
 		name := reAlphaNum.ReplaceAllString(strings.ToLower(m.Name), "")
 		if _, ok := names[name]; ok {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("settings.duplicateMessengerName", "name", name))
+			return apperr.BadRequest(a.i18n.Ts("settings.duplicateMessengerName", "name", name))
 		}
 		if len(name) == 0 {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("settings.invalidMessengerName"))
+			return apperr.BadRequest(a.i18n.T("settings.invalidMessengerName"))
 		}
 
 		set.Messengers[i].Name = name
@@ -262,8 +260,7 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 			// Parse and validate the URL.
 			u, err := url.Parse(d)
 			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-				return echo.NewHTTPError(http.StatusBadRequest,
-					a.i18n.Ts("globals.messages.invalidData")+": invalid CORS domain: "+d)
+				return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidData") + ": invalid CORS domain: " + d)
 			}
 			// Save clean scheme + host
 			cors = append(cors, u.Scheme+"://"+u.Host)
@@ -274,7 +271,7 @@ func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 	// Validate slow query caching cron.
 	if set.CacheSlowQueries {
 		if _, err := cron.NewSchedule(set.CacheSlowQueriesInterval); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidData")+": slow query cron: "+err.Error())
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidData") + ": slow query cron: " + err.Error())
 		}
 	}
 
@@ -339,7 +336,7 @@ func (a *App) sanitizeSMTPFromEmails(fromAddresses []string, defaultFromEmail st
 func (a *App) UpdateSettingsByKey(re *pbcore.RequestEvent) error {
 	key := pathParam(re, "key")
 	if key == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	// Read the raw JSON body as the value.
@@ -391,16 +388,16 @@ func (a *App) TestSMTPSettings(re *pbcore.RequestEvent) error {
 	reqBody, err := io.ReadAll(re.Request.Body)
 	if err != nil {
 		a.log.Printf("error reading SMTP test: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.internalError"))
 	}
 
 	req, to, from, err := email.ParseSMTPTestRequest(reqBody)
 	if err != nil {
 		a.log.Printf("error unmarshalling SMTP test request: %v", err)
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.internalError"))
 	}
 	if to == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.missingFields", "name", "email"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.missingFields", "name", "email"))
 	}
 
 	// Initialize a new SMTP pool.
@@ -409,8 +406,7 @@ func (a *App) TestSMTPSettings(re *pbcore.RequestEvent) error {
 	req.PoolWaitTimeout = time.Second * 2
 	msgr, err := email.New("", req)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorCreating", "name", "SMTP", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorCreating", "name", "SMTP", "error", err.Error()))
 	}
 
 	// Render the test email template body.
@@ -430,7 +426,7 @@ func (a *App) TestSMTPSettings(re *pbcore.RequestEvent) error {
 	m.Subject = a.i18n.T("settings.smtp.testConnection")
 	m.Body = b.Bytes()
 	if err := msgr.Push(m); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return apperr.Internal(err.Error())
 	}
 
 	return okJSON(re, a.bufLog.Lines())
@@ -470,20 +466,20 @@ func (a *App) UpdateAIBuilderSettings(re *pbcore.RequestEvent) error {
 
 	availableModels, err := sanitizeAIBuilderAvailableModels(in.AvailableModels)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 	model := strings.TrimSpace(in.Model)
 	if model == "" {
 		model = availableModels[0]
 	}
 	if len(model) > 120 {
-		return echo.NewHTTPError(http.StatusBadRequest, "model is too long")
+		return apperr.BadRequest("model is too long")
 	}
 	if !containsString(availableModels, model) {
-		return echo.NewHTTPError(http.StatusBadRequest, "model must be one of availableModels")
+		return apperr.BadRequest("model must be one of availableModels")
 	}
 	if a == nil || a.pb == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings backend unavailable")
+		return apperr.New(http.StatusServiceUnavailable, "settings backend unavailable")
 	}
 	timeout := in.TimeoutSeconds
 	if timeout <= 0 {
@@ -491,7 +487,7 @@ func (a *App) UpdateAIBuilderSettings(re *pbcore.RequestEvent) error {
 		timeout = currentTimeout
 	}
 	if timeout < 30 || timeout > 900 {
-		return echo.NewHTTPError(http.StatusBadRequest, "timeoutSeconds must be between 30 and 900")
+		return apperr.BadRequest("timeoutSeconds must be between 30 and 900")
 	}
 
 	savePayload := map[string]any{
@@ -501,7 +497,7 @@ func (a *App) UpdateAIBuilderSettings(re *pbcore.RequestEvent) error {
 	}
 	payloadBytes, err := json.Marshal(savePayload)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save ai settings")
+		return apperr.Internal("failed to save ai settings")
 	}
 
 	if err := a.upsertTypedSettingsRecord("ai_builder", string(payloadBytes)); err != nil {
@@ -605,12 +601,12 @@ func defaultAIBuilderAvailableModels() []string {
 
 func (a *App) upsertTypedSettingsRecord(recordType, value string) error {
 	if a == nil || a.pb == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "settings backend unavailable")
+		return apperr.New(http.StatusServiceUnavailable, "settings backend unavailable")
 	}
 
 	col, err := a.pb.FindCollectionByNameOrId("listpocket_settings")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "settings collection not found")
+		return apperr.Internal("settings collection not found")
 	}
 
 	rec, err := a.pb.FindFirstRecordByFilter("listpocket_settings", "type={:type}", dbx.Params{"type": recordType})

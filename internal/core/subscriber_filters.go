@@ -3,12 +3,10 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/labstack/echo/v4"
 )
 
 // SubscriberFilters is a structured AND/OR tree used to segment subscribers
@@ -43,7 +41,7 @@ func ParseSubscriberFilters(raw json.RawMessage) (*SubscriberFilters, error) {
 
 	var f SubscriberFilters
 	if err := json.Unmarshal(raw, &f); err != nil {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid filters: %v", err))
+		return nil, apperr.BadRequest(fmt.Sprintf("invalid filters: %v", err))
 	}
 	if len(f.Rules) == 0 {
 		return nil, nil
@@ -69,14 +67,14 @@ func (c *Core) CompileSubscriberFilters(raw json.RawMessage) (string, []any, err
 
 func validateFilterGroup(logic *string, rules []SubscriberFilterNode, depth int) error {
 	if depth > maxFilterDepth {
-		return echo.NewHTTPError(http.StatusBadRequest, "filters nest too deeply (max one nested group)")
+		return apperr.BadRequest("filters nest too deeply (max one nested group)")
 	}
 	l := strings.ToLower(strings.TrimSpace(*logic))
 	if l == "" {
 		l = "and"
 	}
 	if l != "and" && l != "or" {
-		return echo.NewHTTPError(http.StatusBadRequest, "filters.logic must be 'and' or 'or'")
+		return apperr.BadRequest("filters.logic must be 'and' or 'or'")
 	}
 	*logic = l
 
@@ -92,7 +90,7 @@ func validateFilterNode(n *SubscriberFilterNode, depth int) error {
 	isGroup := len(n.Rules) > 0
 	if isGroup {
 		if strings.TrimSpace(n.Field) != "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "filter group cannot also set field")
+			return apperr.BadRequest("filter group cannot also set field")
 		}
 		return validateFilterGroup(&n.Logic, n.Rules, depth+1)
 	}
@@ -105,34 +103,34 @@ func validateFilterNode(n *SubscriberFilterNode, depth int) error {
 	switch field {
 	case "tag":
 		if !isOneOf(op, "has_any", "has_all", "has_none") {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid tag operator")
+			return apperr.BadRequest("invalid tag operator")
 		}
 	case "attrib":
 		if !isOneOf(op, "eq", "neq", "contains", "exists", "not_exists", "gt", "gte", "lt", "lte") {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid attrib operator")
+			return apperr.BadRequest("invalid attrib operator")
 		}
 		key := strings.TrimSpace(n.Key)
 		if key == "" || !attribKeyPattern.MatchString(key) {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid attrib key")
+			return apperr.BadRequest("invalid attrib key")
 		}
 		if key == "tags" {
-			return echo.NewHTTPError(http.StatusBadRequest, "use the tag field to filter on tags")
+			return apperr.BadRequest("use the tag field to filter on tags")
 		}
 		n.Key = key
 	case "email", "name", "phone":
 		if !isOneOf(op, "eq", "contains", "starts_with", "ends_with") {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid "+field+" operator")
+			return apperr.BadRequest("invalid " + field + " operator")
 		}
 	case "status":
 		if !isOneOf(op, "eq", "neq") {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid status operator")
+			return apperr.BadRequest("invalid status operator")
 		}
 	case "list":
 		if !isOneOf(op, "in", "not_in") {
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid list operator")
+			return apperr.BadRequest("invalid list operator")
 		}
 	default:
-		return echo.NewHTTPError(http.StatusBadRequest, "unknown filter field: "+n.Field)
+		return apperr.BadRequest("unknown filter field: " + n.Field)
 	}
 	return nil
 }
@@ -178,14 +176,14 @@ func (c *Core) compileFilterNode(n *SubscriberFilterNode) (string, []any, error)
 	case "list":
 		return c.compileListRule(n)
 	default:
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "unknown filter field: "+n.Field)
+		return "", nil, apperr.BadRequest("unknown filter field: " + n.Field)
 	}
 }
 
 func compileTagRule(n *SubscriberFilterNode) (string, []any, error) {
 	tags, err := parseStringSlice(n.Value)
 	if err != nil {
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid tag value")
+		return "", nil, apperr.BadRequest("invalid tag value")
 	}
 	tags = normalizeFilterStrings(tags)
 	if len(tags) == 0 {
@@ -227,7 +225,7 @@ func compileTagRule(n *SubscriberFilterNode) (string, []any, error) {
 		)`
 		return sql, args, nil
 	default:
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid tag operator")
+		return "", nil, apperr.BadRequest("invalid tag operator")
 	}
 }
 
@@ -256,18 +254,18 @@ func compileAttribRule(n *SubscriberFilterNode) (string, []any, error) {
 	case "gt", "gte", "lt", "lte":
 		num, err := parseScalarNumber(n.Value)
 		if err != nil {
-			return "", nil, echo.NewHTTPError(http.StatusBadRequest, "attrib numeric comparison requires a number")
+			return "", nil, apperr.BadRequest("attrib numeric comparison requires a number")
 		}
 		op := map[string]string{"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[n.Op]
 		return `(CAST(` + extract + ` AS REAL) ` + op + ` ?)`, []any{path, num}, nil
 	}
-	return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid attrib operator")
+	return "", nil, apperr.BadRequest("invalid attrib operator")
 }
 
 func compileTextFieldRule(n *SubscriberFilterNode) (string, []any, error) {
 	val, err := parseScalarString(n.Value)
 	if err != nil {
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid "+n.Field+" value")
+		return "", nil, apperr.BadRequest("invalid " + n.Field + " value")
 	}
 	val = strings.TrimSpace(val)
 	if val == "" {
@@ -284,18 +282,18 @@ func compileTextFieldRule(n *SubscriberFilterNode) (string, []any, error) {
 	case "ends_with":
 		return `(` + col + ` LIKE ? COLLATE NOCASE)`, []any{"%" + val}, nil
 	default:
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid "+n.Field+" operator")
+		return "", nil, apperr.BadRequest("invalid " + n.Field + " operator")
 	}
 }
 
 func compileStatusRule(n *SubscriberFilterNode) (string, []any, error) {
 	val, err := parseScalarString(n.Value)
 	if err != nil {
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid status value")
+		return "", nil, apperr.BadRequest("invalid status value")
 	}
 	val = strings.ToLower(strings.TrimSpace(val))
 	if !isOneOf(val, "enabled", "disabled", "blocklisted") {
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid status value")
+		return "", nil, apperr.BadRequest("invalid status value")
 	}
 	switch n.Op {
 	case "eq":
@@ -303,14 +301,14 @@ func compileStatusRule(n *SubscriberFilterNode) (string, []any, error) {
 	case "neq":
 		return `(subscribers.status != ?)`, []any{val}, nil
 	default:
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid status operator")
+		return "", nil, apperr.BadRequest("invalid status operator")
 	}
 }
 
 func (c *Core) compileListRule(n *SubscriberFilterNode) (string, []any, error) {
 	recordIDs, err := parseStringSlice(n.Value)
 	if err != nil {
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, "invalid list value")
+		return "", nil, apperr.BadRequest("invalid list value")
 	}
 	recordIDs = normalizeRecordIDs(recordIDs)
 	if len(recordIDs) == 0 {
@@ -319,7 +317,7 @@ func (c *Core) compileListRule(n *SubscriberFilterNode) (string, []any, error) {
 
 	listIDs, err := c.ResolveListIDs(nil, recordIDs)
 	if err != nil {
-		return "", nil, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("invalid list ids: %v", err))
+		return "", nil, apperr.BadRequest(fmt.Sprintf("invalid list ids: %v", err))
 	}
 	if len(listIDs) == 0 {
 		// No matching lists → in matches nothing; not_in matches everything.

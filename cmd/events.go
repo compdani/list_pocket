@@ -1,14 +1,13 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"log"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/events"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase/tools/subscriptions"
 )
 
@@ -16,9 +15,9 @@ import (
 // live event stream (text/event-stream) such as a error messages.
 func (a *App) EventStream(re *pbcore.RequestEvent) error {
 	hdr := re.Response.Header()
-	hdr.Set(echo.HeaderContentType, "text/event-stream")
-	hdr.Set(echo.HeaderCacheControl, "no-store")
-	hdr.Set(echo.HeaderConnection, "keep-alive")
+	hdr.Set("Content-Type", "text/event-stream")
+	hdr.Set("Cache-Control", "no-store")
+	hdr.Set("Connection", "keep-alive")
 
 	// Subscribe to the event stream with a random ID.
 	id := fmt.Sprintf("api:%v", time.Now().UnixNano())

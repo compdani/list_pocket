@@ -3,12 +3,11 @@ package core
 import (
 	"database/sql"
 	"encoding/json"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"strings"
 	"time"
 
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 type txMessageRow struct {
@@ -91,7 +90,7 @@ func (c *Core) QueryTransactionalMessages(search string, offset, limit int) ([]m
 		WHERE (? = '' OR tm.subject LIKE ? OR tm.to_email LIKE ? OR COALESCE(t.name, '') LIKE ?)
 	`, search, searchLike, searchLike, searchLike); err != nil {
 		c.log.Printf("error counting transactional messages: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("globals.messages.errorFetching", "name", "transactional messages", "error", err.Error()))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "transactional messages", "error", err.Error()))
 	}
 
 	rows := []txMessageRow{}
@@ -127,7 +126,7 @@ func (c *Core) QueryTransactionalMessages(search string, offset, limit int) ([]m
 		LIMIT ? OFFSET ?
 	`, search, searchLike, searchLike, searchLike, limit, offset); err != nil {
 		c.log.Printf("error querying transactional messages: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("globals.messages.errorFetching", "name", "transactional messages", "error", err.Error()))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "transactional messages", "error", err.Error()))
 	}
 
 	out := make([]models.TransactionalMessage, 0, len(rows))
@@ -140,7 +139,7 @@ func (c *Core) QueryTransactionalMessages(search string, offset, limit int) ([]m
 func (c *Core) GetTransactionalMessage(recordID string) (models.TransactionalMessage, error) {
 	recordID = strings.TrimSpace(recordID)
 	if recordID == "" {
-		return models.TransactionalMessage{}, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return models.TransactionalMessage{}, apperr.BadRequest("invalid ID")
 	}
 
 	row := txMessageRow{}
@@ -176,10 +175,10 @@ func (c *Core) GetTransactionalMessage(recordID string) (models.TransactionalMes
 	`, recordID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.TransactionalMessage{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("globals.messages.notFound", "name", "transactional message"))
+			return models.TransactionalMessage{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "transactional message"))
 		}
 		c.log.Printf("error fetching transactional message: %v", err)
-		return models.TransactionalMessage{}, echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("globals.messages.errorFetching", "name", "transactional message", "error", err.Error()))
+		return models.TransactionalMessage{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "transactional message", "error", err.Error()))
 	}
 
 	out := txMessageRowToModel(row)
@@ -213,7 +212,7 @@ func (c *Core) RegisterTransactionalMessageView(msgUUID string, event models.Ope
 			return nil
 		}
 		c.log.Printf("error resolving transactional message view target: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+		return apperr.Internal(c.i18n.Ts("public.errorProcessingRequest"))
 	}
 
 	sentAt := time.Time{}
@@ -231,7 +230,7 @@ func (c *Core) RegisterTransactionalMessageView(msgUUID string, event models.Ope
 		VALUES (?, ?, ?, ?, ?)
 	`, row.MessageID, row.SubscriberID, meta, suspected, sqliteTimestampValue(event.OpenedAt)); err != nil {
 		c.log.Printf("error registering transactional message view: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+		return apperr.Internal(c.i18n.Ts("public.errorProcessingRequest"))
 	}
 	return nil
 }
@@ -244,10 +243,10 @@ func (c *Core) RegisterTransactionalLinkClick(linkUUID, msgUUID string) (string,
 
 	if err := c.db.Get(&out, `SELECT id, url FROM links WHERE id = ? OR uuid = ?`, linkUUID, linkUUID); err != nil {
 		if err == sql.ErrNoRows {
-			return "", echo.NewHTTPError(http.StatusBadRequest, c.i18n.Ts("public.invalidLink"))
+			return "", apperr.BadRequest(c.i18n.Ts("public.invalidLink"))
 		}
 		c.log.Printf("error getting transactional link URL: %v", err)
-		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+		return "", apperr.Internal(c.i18n.Ts("public.errorProcessingRequest"))
 	}
 
 	if _, err := c.db.Exec(`
@@ -258,7 +257,7 @@ func (c *Core) RegisterTransactionalLinkClick(linkUUID, msgUUID string) (string,
 		LIMIT 1
 	`, out.ID, msgUUID); err != nil {
 		c.log.Printf("error registering transactional link click: %v", err)
-		return "", echo.NewHTTPError(http.StatusInternalServerError, c.i18n.Ts("public.errorProcessingRequest"))
+		return "", apperr.Internal(c.i18n.Ts("public.errorProcessingRequest"))
 	}
 
 	return out.URL, nil

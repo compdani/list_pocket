@@ -1,15 +1,14 @@
 package main
 
 import (
+	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
-	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	"github.com/pquerna/otp/totp"
 	"gopkg.in/volatiletech/null.v6"
 )
@@ -30,7 +29,7 @@ func (a *App) userFromReq(req userReq) (auth.User, error) {
 	if strings.TrimSpace(req.UserRoleRecordID) != "" {
 		roleID, err := a.core.ResolveRoleLegacyID(req.UserRoleRecordID)
 		if err != nil {
-			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			return auth.User{}, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 		}
 		u.UserRoleID = roleID
 		u.UserRoleRecID = strings.TrimSpace(req.UserRoleRecordID)
@@ -39,7 +38,7 @@ func (a *App) userFromReq(req userReq) (auth.User, error) {
 	if strings.TrimSpace(req.ListRoleRecordID) != "" {
 		roleID, err := a.core.ResolveRoleLegacyID(req.ListRoleRecordID)
 		if err != nil {
-			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			return auth.User{}, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 		}
 		u.ListRoleID = &roleID
 		u.ListRoleRecID = strings.TrimSpace(req.ListRoleRecordID)
@@ -54,7 +53,7 @@ func (a *App) userFromReq(req userReq) (auth.User, error) {
 func userRouteRecordID(re *pbcore.RequestEvent) (string, error) {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return "", apperr.BadRequest("invalid ID")
 	}
 
 	return recordID, nil
@@ -111,18 +110,18 @@ func (a *App) CreateUser(re *pbcore.RequestEvent) error {
 
 	// Validate fields.
 	if !strHasLen(u.Username, 3, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
 	}
 	if !reUsername.MatchString(u.Username) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
 	}
 	if u.Type != auth.UserTypeAPI {
 		if !utils.ValidateEmail(email) {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
 		}
 		if u.PasswordLogin {
 			if !strHasLen(u.Password.String, 8, stdInputMaxLen) {
-				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+				return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 			}
 		}
 
@@ -183,10 +182,10 @@ func (a *App) UpdateUser(re *pbcore.RequestEvent) error {
 
 	// Validate fields.
 	if !strHasLen(u.Username, 3, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
 	}
 	if !reUsername.MatchString(u.Username) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "username"))
 	}
 
 	// Get the user ID.
@@ -196,19 +195,19 @@ func (a *App) UpdateUser(re *pbcore.RequestEvent) error {
 	}
 	if u.Type != auth.UserTypeAPI {
 		if !utils.ValidateEmail(email) {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
 		}
 
 		// Validate password if password login is enabled.
 		if u.PasswordLogin && u.Password.String != "" {
 			if !strHasLen(u.Password.String, 8, stdInputMaxLen) {
-				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+				return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 			}
 
 			if u.Password.String != "" {
 				// If a password is sent, validate it before updating in the DB. If it's not set, leave the password in the DB untouched.
 				if !strHasLen(u.Password.String, 8, stdInputMaxLen) {
-					return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+					return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 				}
 			} else {
 				// Get the user from the DB.
@@ -220,7 +219,7 @@ func (a *App) UpdateUser(re *pbcore.RequestEvent) error {
 				// If password login is enabled, but there's no password in the DB and there's no incoming
 				// password, throw an error.
 				if !user.HasPassword {
-					return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+					return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 				}
 			}
 		}
@@ -292,7 +291,7 @@ func (a *App) DeleteUser(re *pbcore.RequestEvent) error {
 func (a *App) DeleteUsers(re *pbcore.RequestEvent) error {
 	recordIDs := getQueryStrings("record_id", re.Request.URL.Query())
 	if len(recordIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 	}
 
 	// Delete the user(s) from the DB.
@@ -341,14 +340,14 @@ func (a *App) UpdateUserProfile(re *pbcore.RequestEvent) error {
 	// Validate fields.
 	if user.PasswordLogin {
 		if !utils.ValidateEmail(email) {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "email"))
 		}
 		u.Email = null.String{String: email, Valid: true}
 	}
 
 	if u.PasswordLogin && u.Password.String != "" {
 		if !strHasLen(u.Password.String, 8, stdInputMaxLen) {
-			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 		}
 	}
 
@@ -377,23 +376,23 @@ func (a *App) EnableTOTP(re *pbcore.RequestEvent) error {
 	)
 
 	if secret == "" || code == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidFields"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidFields"))
 	}
 
 	// If password login is disabled, can't enable TOTP.
 	if !u.PasswordLogin {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.invalidFeature"))
+		return apperr.BadRequest(a.i18n.T("public.invalidFeature"))
 	}
 
 	// If TOTP is already enabled, don't allow re-enabling.
 	if u.TwofaType == models.TwofaTypeTOTP {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.twoFAAlreadyEnabled"))
+		return apperr.BadRequest(a.i18n.T("users.twoFAAlreadyEnabled"))
 	}
 
 	// Verify the TOTP code.
 	valid := totp.Validate(code, secret)
 	if !valid {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.invalidTOTPCode"))
+		return apperr.BadRequest(a.i18n.T("users.invalidTOTPCode"))
 	}
 
 	// Enable TOTP in the DB.
@@ -413,17 +412,17 @@ func (a *App) DisableTOTP(re *pbcore.RequestEvent) error {
 
 	// TOTP isn't enabled.
 	if u.TwofaType != models.TwofaTypeTOTP {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("users.twoFANotEnabled"))
+		return apperr.BadRequest(a.i18n.T("users.twoFANotEnabled"))
 	}
 
 	// Validate password.
 	if !strHasLen(password, 8, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "password"))
 	}
 
 	// Verify the password.
 	if _, err := a.auth.LoginUser(u.Username, password); err != nil {
-		return echo.NewHTTPError(http.StatusForbidden, a.i18n.T("users.invalidPassword"))
+		return apperr.Forbidden(a.i18n.T("users.invalidPassword"))
 	}
 
 	// Disable TOTP in the DB.

@@ -4,10 +4,11 @@ package main
 // record ids (SQLite subscribers.id), never numeric rowids.
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -22,7 +23,6 @@ import (
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 const dummyUUID = models.DummyUUID
@@ -82,16 +82,15 @@ var (
 func (a *App) resolveSubscriberRouteID(re *pbcore.RequestEvent) (int, error) {
 	rawID := strings.TrimSpace(pathParam(re, "id"))
 	if rawID == "" {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return 0, apperr.BadRequest("invalid ID")
 	}
 
 	ids, err := a.core.ResolveSubscriberIDs(nil, []string{rawID})
 	if err != nil {
-		return 0, echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return 0, apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if len(ids) != 1 || ids[0] < 1 {
-		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return 0, apperr.BadRequest("invalid ID")
 	}
 
 	return ids[0], nil
@@ -210,8 +209,7 @@ func (a *App) QuerySubscribers(re *pbcore.RequestEvent) error {
 	query := formatSQLExp(re.Request.FormValue("query"))
 	if query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
-			return echo.NewHTTPError(http.StatusForbidden,
-				a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
+			return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
 		}
 	}
 
@@ -263,8 +261,7 @@ func (a *App) ExportSubscribers(re *pbcore.RequestEvent) error {
 		var err error
 		subIDs, err = a.core.ResolveSubscriberIDs(nil, recordIDs)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 	}
 
@@ -279,8 +276,7 @@ func (a *App) ExportSubscribers(re *pbcore.RequestEvent) error {
 	)
 	if query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
-			return echo.NewHTTPError(http.StatusForbidden,
-				a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
+			return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
 		}
 	}
 
@@ -295,9 +291,9 @@ func (a *App) ExportSubscribers(re *pbcore.RequestEvent) error {
 		wr  = csv.NewWriter(re.Response)
 	)
 
-	hdr.Set(echo.HeaderContentType, echo.MIMEOctetStream)
+	hdr.Set("Content-Type", "application/octet-stream")
 	hdr.Set("Content-type", "text/csv")
-	hdr.Set(echo.HeaderContentDisposition, "attachment; filename="+"subscribers.csv")
+	hdr.Set("Content-Disposition", "attachment; filename="+"subscribers.csv")
 	hdr.Set("Content-Transfer-Encoding", "binary")
 	hdr.Set("Cache-Control", "no-cache")
 	wr.Write([]string{"uuid", "email", "phone", "first_name", "last_name", "name", "attributes", "status", "created_at", "updated_at"})
@@ -342,20 +338,18 @@ func (a *App) CreateSubscriber(re *pbcore.RequestEvent) error {
 	// Validate fields.
 	req, err := a.importer.ValidateFields(req)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 
 	// Filter lists against the current user's permitted lists.
 	listIDs, err := a.core.ResolveListIDs(req.Lists, req.ListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeManage, req.ListRecordIDs)
 	listIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	a.log.Printf("create subscriber: email=%q phone=%q first_name=%q last_name=%q name=%q requested_lists=%v permitted_lists=%v preconfirm=%v",
 		req.Email, req.Phone, req.FirstName, req.LastName, req.Name, req.Lists, listIDs, req.PreconfirmSubs)
@@ -389,43 +383,41 @@ func (a *App) UpdateSubscriber(re *pbcore.RequestEvent) error {
 
 	// Sanitize and validate the email field.
 	if em, err := a.importer.SanitizeEmail(req.Email); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	} else {
 		req.Email = em
 	}
 	req.Phone = utils.NormalizePhone(req.Phone)
 	if req.Phone != "" && !strHasLen(req.Phone, 1, 64) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	req.Subscriber.NormalizeName()
 	if req.FirstName != "" && !strHasLen(req.FirstName, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+		return apperr.BadRequest(a.i18n.T("subscribers.invalidName"))
 	}
 	if req.LastName != "" && !strHasLen(req.LastName, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+		return apperr.BadRequest(a.i18n.T("subscribers.invalidName"))
 	}
 	if req.Name != "" && !strHasLen(req.Name, 1, stdInputMaxLen) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidName"))
+		return apperr.BadRequest(a.i18n.T("subscribers.invalidName"))
 	}
 
 	// Filter lists against the current user's permitted lists.
 	listIDs, err := a.core.ResolveListIDs(req.Lists, req.ListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeManage, req.ListRecordIDs)
 	listIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	// Update the subscriber in the DB by PocketBase record id from the path.
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return apperr.BadRequest("invalid ID")
 	}
 	out, _, err := a.core.UpdateSubscriberWithLists(recordID, req.Subscriber, listIDs, nil, req.PreconfirmSubs, true, false)
 	if err != nil {
@@ -449,7 +441,7 @@ func (a *App) SubscriberSendOptin(re *pbcore.RequestEvent) error {
 
 	// Trigger the opt-in confirmation e-mail hook.
 	if _, err := a.fnOptinNotify(out, nil); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("subscribers.errorSendingOptin"))
+		return apperr.Internal(a.i18n.T("subscribers.errorSendingOptin"))
 	}
 
 	return okJSON(re, true)
@@ -470,12 +462,12 @@ func (a *App) SubscriberSMSOptOut(re *pbcore.RequestEvent) error {
 	}
 	phone := strings.TrimSpace(sub.Phone)
 	if phone == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "subscriber has no phone to opt out")
+		return apperr.BadRequest("subscriber has no phone to opt out")
 	}
 
 	n, err := a.core.SMSOptOutSubscriberByPhone(phone)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		return apperr.Internal(err.Error())
 	}
 
 	return okJSON(re, map[string]any{
@@ -506,13 +498,11 @@ func (a *App) BlocklistSubscriber(re *pbcore.RequestEvent) error {
 func (a *App) BlocklistSubscribers(re *pbcore.RequestEvent) error {
 	var req subQueryReq
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	recordIDs := uniqueNonEmptyStrings(req.SubscriberRecordIDs)
 	if len(recordIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_ids"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_ids"))
 	}
 
 	// Update the subscribers in the DB.
@@ -532,8 +522,7 @@ func (a *App) ManageSubscriberLists(re *pbcore.RequestEvent) error {
 
 	var req subQueryReq
 	if err := bindJSON(re, &req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	recordIDs := uniqueNonEmptyStrings(req.SubscriberRecordIDs)
@@ -542,33 +531,29 @@ func (a *App) ManageSubscriberLists(re *pbcore.RequestEvent) error {
 	}
 	subIDs, err := a.core.ResolveSubscriberIDs(nil, recordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if len(subIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoIDs"))
+		return apperr.BadRequest(a.i18n.T("subscribers.errorNoIDs"))
 	}
 	targetListIDs, err := a.core.ResolveListIDs(req.TargetListIDs, req.TargetListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if len(targetListIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoListsGiven"))
+		return apperr.BadRequest(a.i18n.T("subscribers.errorNoListsGiven"))
 	}
 
 	// Filter lists against the current user's permitted lists.
 	listRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, req.TargetListRecordIDs)
 	listIDs, err := a.core.ResolveListIDs(nil, listRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	// User doesn't have the required list permissions.
 	if len(listIDs) == 0 {
-		return echo.NewHTTPError(http.StatusForbidden,
-			a.i18n.Ts("globals.messages.permissionDenied", "name", "lists"))
+		return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", "lists"))
 	}
 
 	// Run the action in the DB.
@@ -580,7 +565,7 @@ func (a *App) ManageSubscriberLists(re *pbcore.RequestEvent) error {
 	case "unsubscribe":
 		err = a.core.UnsubscribeLists(subIDs, listIDs, nil)
 	default:
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidAction"))
+		return apperr.BadRequest(a.i18n.T("subscribers.invalidAction"))
 	}
 
 	if err != nil {
@@ -612,8 +597,7 @@ func (a *App) DeleteSubscriber(re *pbcore.RequestEvent) error {
 func (a *App) DeleteSubscribers(re *pbcore.RequestEvent) error {
 	recordIDs := uniqueNonEmptyStrings(re.Request.URL.Query()["subscriber_record_id"])
 	if len(recordIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_id"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_id"))
 	}
 
 	if err := a.core.DeleteSubscribers(recordIDs, nil); err != nil {
@@ -642,22 +626,20 @@ func (a *App) DeleteSubscribersByQuery(re *pbcore.RequestEvent) error {
 		req.Query = ""
 		req.Filters = nil
 	} else if req.Search == "" && req.Query == "" && !hasSubscriberFilters(req.Filters) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "query"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "query"))
 	}
 
 	// Does the user have the subscribers:sql_query permission?
 	if req.Query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
-			return echo.NewHTTPError(http.StatusForbidden,
-				a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
+			return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
 		}
 	}
 
 	// Delete the subscribers from the DB.
 	listIDs, err := a.core.ResolveListIDs(req.ListIDs, req.ListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if err := a.core.DeleteSubscribersByQuery(req.Search, req.Query, req.Filters, listIDs, req.SubscriptionStatus); err != nil {
 		return err
@@ -685,21 +667,19 @@ func (a *App) BlocklistSubscribersByQuery(re *pbcore.RequestEvent) error {
 		req.Query = ""
 		req.Filters = nil
 	} else if req.Search == "" && req.Query == "" && !hasSubscriberFilters(req.Filters) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidFields", "name", "query"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.invalidFields", "name", "query"))
 	}
 	// Does the user have the subscribers:sql_query permission?
 	if req.Query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
-			return echo.NewHTTPError(http.StatusForbidden,
-				a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
+			return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
 		}
 	}
 
 	// Update the subscribers in the DB.
 	listIDs, err := a.core.ResolveListIDs(req.ListIDs, req.ListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if err := a.core.BlocklistSubscribersByQuery(req.Search, req.Query, req.Filters, listIDs, req.SubscriptionStatus); err != nil {
 		return err
@@ -725,19 +705,16 @@ func (a *App) ManageSubscriberListsByQuery(re *pbcore.RequestEvent) error {
 	// Does the user have the subscribers:sql_query permission?
 	if req.Query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
-			return echo.NewHTTPError(http.StatusForbidden,
-				a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
+			return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", auth.PermSubscribersSqlQuery))
 		}
 	}
 
 	resolvedTargetListIDs, err := a.core.ResolveListIDs(req.TargetListIDs, req.TargetListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	if len(resolvedTargetListIDs) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.T("subscribers.errorNoListsGiven"))
+		return apperr.BadRequest(a.i18n.T("subscribers.errorNoListsGiven"))
 	}
 
 	// Filter lists against the current user's permitted lists.
@@ -745,13 +722,11 @@ func (a *App) ManageSubscriberListsByQuery(re *pbcore.RequestEvent) error {
 	targetListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, req.TargetListRecordIDs)
 	sourceListIDs, err := a.core.ResolveListIDs(nil, sourceListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 	targetListIDs, err := a.core.ResolveListIDs(nil, targetListRecordIDs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	// Run the action in the DB.
@@ -764,7 +739,7 @@ func (a *App) ManageSubscriberListsByQuery(re *pbcore.RequestEvent) error {
 	case "unsubscribe":
 		affected, err = a.core.UnsubscribeListsByQuery(req.Search, req.Query, req.Filters, sourceListIDs, targetListIDs, req.SubscriptionStatus)
 	default:
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.invalidAction"))
+		return apperr.BadRequest(a.i18n.T("subscribers.invalidAction"))
 	}
 
 	if err != nil {
@@ -806,8 +781,7 @@ func (a *App) ExportSubscriberData(re *pbcore.RequestEvent) error {
 	_, b, err := a.exportSubscriberData(id, "", a.cfg.Privacy.Exportable)
 	if err != nil {
 		a.log.Printf("error exporting subscriber data: %s", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			a.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
+		return apperr.Internal(a.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
 	// Set headers to force the browser to prompt for download.
@@ -887,7 +861,7 @@ func (a *App) hasSubPerm(u auth.User, subIDs []int) error {
 	if len(recIDs) > 0 {
 		name = fmt.Sprintf("subscriber: %s", strings.Join(recIDs, ", "))
 	}
-	return echo.NewHTTPError(http.StatusForbidden, a.i18n.Ts("globals.messages.permissionDenied", "name", name))
+	return apperr.Forbidden(a.i18n.Ts("globals.messages.permissionDenied", "name", name))
 }
 
 // filterListQueryByPerm filters the list IDs in the query params and returns the list IDs to which the user has access.
@@ -904,16 +878,16 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 		if qp.Has(recordParam) {
 			ids, err := a.core.ResolveListIDs(nil, qp[recordParam])
 			if err != nil {
-				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+				return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 			}
 			recordIDs, err := a.core.ResolveListRecordIDs(ids)
 			if err != nil {
-				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+				return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 			}
 			filteredRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, recordIDs)
 			filtered, err := a.core.ResolveListIDs(nil, filteredRecordIDs)
 			if err != nil {
-				return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+				return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 			}
 			if len(filtered) == 0 && qp.Has(recordParam) {
 				return []int{-1}, nil
@@ -928,16 +902,16 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 	if qp.Has(recordParam) {
 		ids, err := a.core.ResolveListIDs(nil, qp[recordParam])
 		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 		}
 		recordIDs, err := a.core.ResolveListRecordIDs(ids)
 		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 		}
 		filteredRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, recordIDs)
 		listIDs, err = a.core.ResolveListIDs(nil, filteredRecordIDs)
 		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+			return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 		}
 	}
 
@@ -948,7 +922,7 @@ func (a *App) filterListQueryByPerm(param string, qp url.Values, user auth.User)
 			if len(user.GetListIDs) > 0 {
 				listIDs, err = a.core.ResolveListIDs(nil, user.GetListIDs)
 				if err != nil {
-					return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
+					return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidID"))
 				}
 			} else {
 				// User doesn't have access to any lists.

@@ -1,17 +1,16 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/captcha"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
@@ -110,8 +109,7 @@ func (a *App) GetServerConfig(re *pbcore.RequestEvent) error {
 	// Language list.
 	langList, err := getI18nLangList(a.fs)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			fmt.Sprintf("Error loading language list: %v", err))
+		return apperr.Internal(fmt.Sprintf("Error loading language list: %v", err))
 	}
 	out.Langs = langList
 

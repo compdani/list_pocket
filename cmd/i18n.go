@@ -1,16 +1,15 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"regexp"
 	"sort"
 
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/knadh/stuffbin"
-	"github.com/labstack/echo/v4"
 )
 
 type i18nLang struct {
@@ -29,12 +28,12 @@ var reLangCode = regexp.MustCompile(`[^a-zA-Z_0-9\\-]`)
 func (a *App) GetI18nLang(re *pbcore.RequestEvent) error {
 	lang := pathParam(re, "lang")
 	if len(lang) > 6 || reLangCode.MatchString(lang) {
-		return echo.NewHTTPError(http.StatusBadRequest, "Invalid language code.")
+		return apperr.BadRequest("Invalid language code.")
 	}
 
 	i, ok, err := getI18nLang(lang, a.fs)
 	if err != nil && !ok {
-		return echo.NewHTTPError(http.StatusBadRequest, "Unknown language.")
+		return apperr.BadRequest("Unknown language.")
 	}
 
 	return okJSON(re, json.RawMessage(i.JSON()))

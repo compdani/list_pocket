@@ -1,15 +1,12 @@
 package main
 
 import (
-	"html/template"
-	"log"
 	"net/http"
 	"path"
 	"regexp"
 
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
-	"github.com/compdani/list_pocket/internal/i18n"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/router"
@@ -32,7 +29,7 @@ var (
 )
 
 // registerHandlers registers HTTP handlers on the PocketBase router.
-func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *template.Template, cfg *Config, urlCfg *UrlConfig) {
+func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 
 	//Token exchange routes
 	auth.RegisterExchangeRoutes(se)
@@ -109,7 +106,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 			re.Set("override_id", pathParam(re, "first"))
 			return pmRE(a.BlocklistSubscriber, "subscribers:manage")(re)
 		default:
-			return echo.NewHTTPError(http.StatusNotFound, "404 unknown endpoint")
+			return apperr.NotFound("404 unknown endpoint")
 		}
 	}))
 	api.PUT("/subscribers/lists", asHandler(pmRE(a.ManageSubscriberLists, "subscribers:manage")))
@@ -154,7 +151,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 			re.Set("override_id", pathParam(re, "first"))
 			return pmRE(a.PreviewCampaign, "campaigns:get_all", "campaigns:get")(re)
 		default:
-			return echo.NewHTTPError(http.StatusNotFound, "404 unknown endpoint")
+			return apperr.NotFound("404 unknown endpoint")
 		}
 	}))
 	api.POST("/campaigns/{id}/preview/archive", asHandler(pmRE(a.PreviewCampaignArchive, "campaigns:get_all", "campaigns:get")))
@@ -279,33 +276,6 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App, tpl *temp
 	public.GET("/health", asHandler(a.HealthCheck))
 }
 
-// newEchoAdaptor builds the shared Echo instance for shared template rendering.
-// One instance is reused for all requests (renderer + error handler only).
-func newEchoAdaptor(tpl *template.Template, cfg *Config, urlCfg *UrlConfig, logger *log.Logger, lang *i18n.I18n) *echo.Echo {
-	ec := echo.New()
-	ec.HideBanner = true
-	ec.HidePort = true
-	ec.Renderer = &tplRenderer{
-		templates:           tpl,
-		i18n:                lang,
-		SiteName:            cfg.SiteName,
-		RootURL:             urlCfg.RootURL,
-		LogoURL:             urlCfg.LogoURL,
-		FaviconURL:          urlCfg.FaviconURL,
-		AssetVersion:        cfg.AssetVersion,
-		EnablePublicSubPage: cfg.EnablePublicSubPage,
-		EnablePublicArchive: cfg.EnablePublicArchive,
-		IndividualTracking:  cfg.Privacy.IndividualTracking,
-	}
-	ec.HTTPErrorHandler = func(err error, c echo.Context) {
-		if _, ok := err.(*echo.HTTPError); !ok && logger != nil {
-			logger.Println(err.Error())
-		}
-		ec.DefaultHTTPErrorHandler(err, c)
-	}
-	return ec
-}
-
 // AdminPage is the root handler that renders the Javascript admin frontend.
 func serveAdminSPAFallback(a *App) func(e *pbcore.RequestEvent) error {
 	return func(e *pbcore.RequestEvent) error {
@@ -327,7 +297,7 @@ func serveCustomAppearance(name string) func(*pbcore.RequestEvent) error {
 	return func(re *pbcore.RequestEvent) error {
 		app := getApp(re)
 		if app == nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "app unavailable")
+			return apperr.Internal("app unavailable")
 		}
 
 		var (

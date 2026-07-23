@@ -6,13 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -40,12 +39,12 @@ type Auth struct {
 	apiUsers map[string]User
 	sync.RWMutex
 
-	cfg       Config
-	pb        *pocketbase.PocketBase
-	authCol   string
-	cb        *Callbacks
-	log       *log.Logger
-	pbAuth    *PocketBaseAuthService
+	cfg     Config
+	pb      *pocketbase.PocketBase
+	authCol string
+	cb      *Callbacks
+	log     *log.Logger
+	pbAuth  *PocketBaseAuthService
 }
 
 type ClientAuth struct {
@@ -211,25 +210,25 @@ func (o *Auth) findAuthRecordByUsername(username string) (*pbcore.Record, error)
 
 func (o *Auth) LoginUser(username, password string) (User, error) {
 	if o.cb == nil || o.cb.GetUserByUsername == nil {
-		return User{}, echo.NewHTTPError(http.StatusInternalServerError, "user lookup callback missing")
+		return User{}, apperr.Internal("user lookup callback missing")
 	}
 
 	user, err := o.cb.GetUserByUsername(username)
 	if err != nil {
-		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
+		return User{}, apperr.Forbidden("invalid credentials")
 	}
 
 	if user.Type != UserTypeUser || user.Status != UserStatusEnabled || !user.PasswordLogin {
-		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
+		return User{}, apperr.Forbidden("invalid credentials")
 	}
 
 	if err := o.SyncUser(user); err != nil {
-		return User{}, echo.NewHTTPError(http.StatusInternalServerError, "failed syncing auth user")
+		return User{}, apperr.Internal("failed syncing auth user")
 	}
 
 	rec, err := o.pbAuth.AuthenticatePassword(user.Username, password)
 	if err != nil || rec == nil {
-		return User{}, echo.NewHTTPError(http.StatusForbidden, "invalid credentials")
+		return User{}, apperr.Forbidden("invalid credentials")
 	}
 
 	return user, nil
@@ -329,77 +328,9 @@ func (o *Auth) LoadCachedUsersFromPocketBase() (bool, error) {
 	return hasUser, nil
 }
 
-// Middleware is the HTTP middleware used for wrapping HTTP handlers registered on the echo router.
-// It authorizes PocketBase bearer tokens or legacy API key/token pairs and sets the
-// authenticated User{} on the echo context on success.
-func (o *Auth) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		hdr := strings.TrimSpace(c.Request().Header.Get("Authorization"))
-		if hdr == "" {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "missing auth token"))
-			return next(c)
-		}
-
-		// Primary auth path: PocketBase auth token.
-		if strings.HasPrefix(hdr, "Bearer ") {
-			token := strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
-			user, rec, err := o.validatePBToken(token)
-			if err != nil {
-				c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid auth token"))
-				return next(c)
-			}
-			c.Set(UserHTTPCtxKey, user)
-			c.Set(AuthRecordHTTPCtxKey, rec)
-			return next(c)
-		}
-
-		// Backward-compatibility for legacy api_key:token auth header.
-		key, token, err := parseAuthHeader(hdr)
-		if err != nil {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, err.Error()))
-			return next(c)
-		}
-
-		user, ok := o.ValidateAPIToken(key, token)
-		if !ok {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid API credentials"))
-			return next(c)
-		}
-
-		c.Set(UserHTTPCtxKey, user)
-		return next(c)
-	}
-}
-
-// APIMiddleware is a token-only HTTP middleware for API handlers.
+// APIMiddlewareRE is a token-only RequestEvent middleware for API handlers.
 // It validates Authorization Bearer tokens (or access_token query param fallback)
-// and sets authenticated user context. It does not use cookie sessions.
-func (o *Auth) APIMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		hdr := strings.TrimSpace(c.Request().Header.Get("Authorization"))
-		token := ""
-		if strings.HasPrefix(hdr, "Bearer ") {
-			token = strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
-		}
-		if token == "" {
-			token = strings.TrimSpace(c.QueryParam("access_token"))
-		}
-		if token == "" {
-			return echo.NewHTTPError(http.StatusForbidden, "missing auth token")
-		}
-
-		user, rec, err := o.validatePBToken(token)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusForbidden, "invalid auth token")
-		}
-
-		c.Set(UserHTTPCtxKey, user)
-		c.Set(AuthRecordHTTPCtxKey, rec)
-		return next(c)
-	}
-}
-
-// APIMiddlewareRE is the RequestEvent equivalent of APIMiddleware.
+// and sets authenticated user context.
 func (o *Auth) APIMiddlewareRE(next RequestEventHandler) RequestEventHandler {
 	return func(e *pbcore.RequestEvent) error {
 		hdr := strings.TrimSpace(e.Request.Header.Get("Authorization"))
@@ -411,12 +342,12 @@ func (o *Auth) APIMiddlewareRE(next RequestEventHandler) RequestEventHandler {
 			token = strings.TrimSpace(e.Request.URL.Query().Get("access_token"))
 		}
 		if token == "" {
-			return echo.NewHTTPError(http.StatusForbidden, "missing auth token")
+			return apperr.Forbidden("missing auth token")
 		}
 
 		user, rec, err := o.validatePBToken(token)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusForbidden, "invalid auth token")
+			return apperr.Forbidden("invalid auth token")
 		}
 
 		e.Set(UserHTTPCtxKey, user)
@@ -428,17 +359,17 @@ func (o *Auth) APIMiddlewareRE(next RequestEventHandler) RequestEventHandler {
 
 func (o *Auth) validatePBToken(token string) (User, *pbcore.Record, error) {
 	if token == "" {
-		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "empty token")
+		return User{}, nil, apperr.Forbidden("empty token")
 	}
 
 	rec, err := o.pb.FindAuthRecordByToken(token, pbcore.TokenTypeAuth)
 	if err != nil || rec == nil {
-		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "invalid token")
+		return User{}, nil, apperr.Forbidden("invalid token")
 	}
 
 	username := strings.TrimSpace(rec.GetString("username"))
 	if username == "" {
-		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "invalid token user")
+		return User{}, nil, apperr.Forbidden("invalid token user")
 	}
 
 	user := User{
@@ -490,7 +421,7 @@ func (o *Auth) validatePBToken(token string) (User, *pbcore.Record, error) {
 	}
 
 	if user.Status != UserStatusEnabled {
-		return User{}, nil, echo.NewHTTPError(http.StatusForbidden, "disabled user")
+		return User{}, nil, apperr.Forbidden("disabled user")
 	}
 
 	return user, rec, nil
@@ -551,48 +482,15 @@ func normalizeStringArray(raw any) []string {
 	}
 }
 
-// Perm is an HTTP handler middleware that checks if the authenticated user has the required permissions.
-func (o *Auth) Perm(next echo.HandlerFunc, perms ...string) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		u, ok := c.Get(UserHTTPCtxKey).(User)
-		if !ok {
-			return echo.NewHTTPError(http.StatusForbidden, "invalid session")
-		}
-
-		// If the current user is a Super Admin user, do no checks.
-		if ExtractRoleID(c) == SuperAdminRoleID || u.UserRoleID == SuperAdminRoleID {
-			return next(c)
-		}
-
-		// Check if the current handler's permission is in the user's permission map.
-		var (
-			has  = false
-			perm = ""
-		)
-		for _, perm = range perms {
-			if _, ok := u.PermissionsMap[perm]; ok {
-				has = true
-				break
-			}
-		}
-
-		if !has {
-			return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("permission denied: %s", perm))
-		}
-
-		return next(c)
-	}
-}
-
 // RequestEventHandler is a PocketBase-native HTTP handler.
 type RequestEventHandler func(e *pbcore.RequestEvent) error
 
-// PermRE is the RequestEvent equivalent of Perm.
+// PermRE checks whether the authenticated user has any of the required permissions.
 func (o *Auth) PermRE(next RequestEventHandler, perms ...string) RequestEventHandler {
 	return func(e *pbcore.RequestEvent) error {
 		u, ok := e.Get(UserHTTPCtxKey).(User)
 		if !ok {
-			return echo.NewHTTPError(http.StatusForbidden, "invalid session")
+			return apperr.Forbidden("invalid session")
 		}
 
 		if ExtractRoleIDRE(e) == SuperAdminRoleID || u.UserRoleID == SuperAdminRoleID {
@@ -611,29 +509,11 @@ func (o *Auth) PermRE(next RequestEventHandler, perms ...string) RequestEventHan
 		}
 
 		if !has {
-			return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("permission denied: %s", perm))
+			return apperr.Forbidden(fmt.Sprintf("permission denied: %s", perm))
 		}
 
 		return next(e)
 	}
-}
-
-// ExtractRoleID returns the role ID from the auth record in the request context.
-// Falls back to the hydrated auth.User profile when unavailable.
-func ExtractRoleID(c echo.Context) int {
-	if rec, ok := c.Get(AuthRecordHTTPCtxKey).(*pbcore.Record); ok && rec != nil {
-		if id := ExtractRoleIDFromRecord(rec); id > 0 {
-			return id
-		}
-	}
-
-	if u, ok := c.Get(UserHTTPCtxKey).(User); ok {
-		if u.UserRoleID > 0 {
-			return u.UserRoleID
-		}
-	}
-
-	return 0
 }
 
 // ExtractRoleIDRE returns the role ID from a PocketBase RequestEvent.
@@ -674,31 +554,25 @@ func ExtractRoleIDFromRecord(rec *pbcore.Record) int {
 func (o *Auth) IssueClientAuth(u User) (ClientAuth, error) {
 	if err := o.SyncUser(u); err != nil {
 		o.log.Printf("error syncing auth user: %v", err)
-		return ClientAuth{}, echo.NewHTTPError(http.StatusInternalServerError, "error creating auth token")
+		return ClientAuth{}, apperr.Internal("error creating auth token")
 	}
 
 	rec, err := o.pbAuth.FindByUsername(u.Username)
 	if err != nil {
 		o.log.Printf("error fetching auth user record: %v", err)
-		return ClientAuth{}, echo.NewHTTPError(http.StatusInternalServerError, "error creating auth token")
+		return ClientAuth{}, apperr.Internal("error creating auth token")
 	}
 
 	token, err := rec.NewAuthToken()
 	if err != nil {
 		o.log.Printf("error generating auth token: %v", err)
-		return ClientAuth{}, echo.NewHTTPError(http.StatusInternalServerError, "error creating auth token")
+		return ClientAuth{}, apperr.Internal("error creating auth token")
 	}
 
 	return ClientAuth{
 		Token:  token,
 		Record: rec.PublicExport(),
 	}, nil
-}
-
-// GetUser retrieves and returns the User object from an authenticated
-// HTTP handler request.
-func GetUser(c echo.Context) User {
-	return c.Get(UserHTTPCtxKey).(User)
 }
 
 // GetUserRE retrieves the User from a PocketBase RequestEvent.
@@ -729,19 +603,19 @@ func parseAuthHeader(h string) (string, string, error) {
 		// HTTP BasicAuth. This is supported for backwards compatibility.
 		payload, err := base64.StdEncoding.DecodeString(string(strings.Trim(h[len(authBasic):], " ")))
 		if err != nil {
-			return "", "", echo.NewHTTPError(http.StatusBadRequest, "invalid Base64 value in Basic Authorization header")
+			return "", "", apperr.BadRequest("invalid Base64 value in Basic Authorization header")
 		}
 		pair = strings.SplitN(string(payload), delim, 2)
 	} else {
-		return "", "", echo.NewHTTPError(http.StatusBadRequest, "unknown Authorization scheme")
+		return "", "", apperr.BadRequest("unknown Authorization scheme")
 	}
 
 	if len(pair) < 2 {
-		return "", "", echo.NewHTTPError(http.StatusBadRequest, "api_key:token missing")
+		return "", "", apperr.BadRequest("api_key:token missing")
 	}
 
 	if len(pair[0]) == 0 || len(pair[1]) == 0 {
-		return "", "", echo.NewHTTPError(http.StatusBadRequest, "empty `api_key` or `token`")
+		return "", "", apperr.BadRequest("empty `api_key` or `token`")
 	}
 
 	return pair[0], pair[1], nil

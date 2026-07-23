@@ -1,13 +1,14 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/dbx"
 )
 
@@ -791,7 +791,7 @@ func (a *App) getAIBuilderSystemPrompt(editorMode string) string {
 
 func (a *App) CreateAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
+		return apperr.New(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
 
 	var req aiBuilderGenerateReq
@@ -813,7 +813,7 @@ func (a *App) CreateAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 
 	job, err := a.aiBuilder.Submit(req)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 
 	return okJSON(re, job)
@@ -821,37 +821,37 @@ func (a *App) CreateAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 
 func (a *App) GetAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
+		return apperr.New(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
 	jobID := strings.TrimSpace(pathParam(re, "id"))
 	if jobID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return apperr.BadRequest("invalid ID")
 	}
 
 	job, ok := a.aiBuilder.Get(jobID)
 	if !ok {
-		return echo.NewHTTPError(http.StatusNotFound, "job not found")
+		return apperr.NotFound("job not found")
 	}
 	return okJSON(re, job)
 }
 
 func (a *App) StreamAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
+		return apperr.New(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
 
 	jobID := strings.TrimSpace(pathParam(re, "id"))
 	if jobID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return apperr.BadRequest("invalid ID")
 	}
 
 	if _, ok := a.aiBuilder.Get(jobID); !ok {
-		return echo.NewHTTPError(http.StatusNotFound, "job not found")
+		return apperr.NotFound("job not found")
 	}
 
 	res := re.Response
 	req := re.Request
-	res.Header().Set(echo.HeaderContentType, "text/event-stream")
+	res.Header().Set("Content-Type", "text/event-stream")
 	res.Header().Set("Cache-Control", "no-cache")
 	res.Header().Set("Connection", "keep-alive")
 	res.WriteHeader(http.StatusOK)
@@ -917,16 +917,16 @@ func (a *App) StreamAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 
 func (a *App) CancelAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
-		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
+		return apperr.New(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
 	jobID := strings.TrimSpace(pathParam(re, "id"))
 	if jobID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return apperr.BadRequest("invalid ID")
 	}
 
 	job, err := a.aiBuilder.Cancel(jobID)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "job not found")
+		return apperr.NotFound("job not found")
 	}
 	return okJSON(re, job)
 }

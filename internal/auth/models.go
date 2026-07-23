@@ -2,14 +2,13 @@ package auth
 
 import (
 	"encoding/json"
-	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
-var ErrPermDenied = echo.NewHTTPError(http.StatusForbidden, "permission denied")
+var ErrPermDenied = apperr.Forbidden("permission denied")
 
 // PermType indicates a generic permission type which is either get (read) or manage (write).
 type PermType uint8
@@ -20,7 +19,7 @@ const (
 )
 
 const (
-	// UserHTTPCtxKey is the key on which the User profile is set on echo handlers.
+	// UserHTTPCtxKey is the key on which the User profile is set on RequestEvent handlers.
 	UserHTTPCtxKey       = "auth_user"
 	AuthRecordHTTPCtxKey = "auth_record"
 )

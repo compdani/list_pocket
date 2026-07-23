@@ -1,10 +1,11 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/compdani/list_pocket/internal/messenger/quo"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 )
@@ -76,11 +76,11 @@ func (a *App) UpdateTextMessagingSettings(re *pbcore.RequestEvent) error {
 	cur := a.loadTextMessagingSettings()
 	merged := models.MergeTextMessagingUpdate(cur, in)
 	if err := validateTextMessagingSettings(merged); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 	b, err := json.Marshal(merged)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to encode text messaging settings")
+		return apperr.Internal("failed to encode text messaging settings")
 	}
 	if err := a.upsertTypedSettingsRecord(models.ListPocketSettingsTypeTextMessaging, string(b)); err != nil {
 		return err
@@ -129,16 +129,16 @@ func (a *App) TestTextMessagingSettings(re *pbcore.RequestEvent) error {
 	}
 	to := strings.TrimSpace(req.To)
 	if to == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "to is required")
+		return apperr.BadRequest("to is required")
 	}
 	s := a.loadTextMessagingSettings()
 	client, err := quo.NewClientFromSettings(s)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 	body := []byte("ListPocket SMS test message.")
 	if err := client.SendText(re.Request.Context(), to, body); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 	return okJSON(re, map[string]bool{"sent": true})
 }
@@ -215,26 +215,26 @@ func quoParseMessageWebhookEvent(body []byte) (eventType string, msg quoWebhookM
 func (a *App) QuoMessageWebhook(re *pbcore.RequestEvent) error {
 	token := strings.TrimSpace(pathParam(re, "token"))
 	if token == "" {
-		return echo.NewHTTPError(http.StatusNotFound, "not found")
+		return apperr.NotFound("not found")
 	}
 	s := a.loadTextMessagingSettings()
 	if strings.TrimSpace(s.WebhookPath) == "" || s.WebhookPath != token {
-		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+		return apperr.New(http.StatusUnauthorized, "unauthorized")
 	}
 
 	body, err := io.ReadAll(io.LimitReader(re.Request.Body, 1<<20))
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
+		return apperr.BadRequest("invalid body")
 	}
 	if len(body) >= 1<<20 {
-		return echo.NewHTTPError(http.StatusRequestEntityTooLarge, "body too large")
+		return apperr.New(http.StatusRequestEntityTooLarge, "body too large")
 	}
 
 	if sec := strings.TrimSpace(s.WebhookSigningSecret); sec != "" {
 		sig := re.Request.Header.Get(quo.OpenPhoneSignatureHeader())
 		if err := quo.VerifyWebhookSignature(sec, sig, body, 10*time.Minute); err != nil {
 			a.log.Printf("quo webhook: signature: %v", err)
-			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
+			return apperr.New(http.StatusUnauthorized, "unauthorized")
 		}
 	}
 

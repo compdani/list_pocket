@@ -1,10 +1,11 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"html/template"
 	"io"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 const (
@@ -76,7 +76,7 @@ func normalizeTemplateReqBody(body []byte) ([]byte, error) {
 func templateRouteRecordID(re *pbcore.RequestEvent) (string, error) {
 	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
-		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+		return "", apperr.BadRequest("invalid ID")
 	}
 	return recordID, nil
 }
@@ -147,8 +147,7 @@ func (a *App) PreviewTemplateBody(re *pbcore.RequestEvent) error {
 	}
 
 	if (tpl.Type == models.TemplateTypeCampaign || tpl.Type == models.TemplateTypeCampaignSMS) && !regexpTplTag.MatchString(tpl.Body) {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("templates.placeholderHelp", "placeholder", tplTag))
+		return apperr.BadRequest(a.i18n.Ts("templates.placeholderHelp", "placeholder", tplTag))
 	}
 
 	// Render the template.
@@ -183,7 +182,7 @@ func (a *App) CreateTemplate(re *pbcore.RequestEvent) error {
 
 	// Compile the template and validate.
 	if err := o.Compile(funcs); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 
 	// Create the template the in the DB.
@@ -224,7 +223,7 @@ func (a *App) UpdateTemplate(re *pbcore.RequestEvent) error {
 
 	// Compile the template and validate.
 	if err := o.Compile(funcs); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return apperr.BadRequest(err.Error())
 	}
 
 	// Update the template in the DB.
@@ -288,13 +287,11 @@ func (a *App) validateTemplate(o models.Template) error {
 	}
 
 	if (o.Type == models.TemplateTypeCampaign || o.Type == models.TemplateTypeCampaignSMS) && !regexpTplTag.MatchString(o.Body) {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("templates.placeholderHelp", "placeholder", tplTag))
+		return apperr.BadRequest(a.i18n.Ts("templates.placeholderHelp", "placeholder", tplTag))
 	}
 
 	if o.Type == models.TemplateTypeTx && strings.TrimSpace(o.Subject) == "" {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.missingFields", "name", "subject"))
+		return apperr.BadRequest(a.i18n.Ts("globals.messages.missingFields", "name", "subject"))
 	}
 
 	return nil
@@ -317,14 +314,12 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 		}
 
 		if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+			return nil, apperr.BadRequest(a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
 		}
 
 		msg, err := a.manager.NewCampaignMessage(&camp, dummySubscriber)
 		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+			return nil, apperr.BadRequest(a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 		}
 		out = msg.Body()
 	case models.TemplateTypeCampaign, models.TemplateTypeCampaignVisual, models.TemplateTypeCampaignGrapes:
@@ -338,15 +333,13 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 		}
 
 		if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
+			return nil, apperr.BadRequest(a.i18n.Ts("templates.errorCompiling", "error", err.Error()))
 		}
 
 		// Render the message body.
 		msg, err := a.manager.NewCampaignMessage(&camp, dummySubscriber)
 		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("templates.errorRendering", "error", err.Error()))
+			return nil, apperr.BadRequest(a.i18n.Ts("templates.errorRendering", "error", err.Error()))
 		}
 		out = msg.Body()
 	default:
@@ -356,12 +349,12 @@ func (a *App) previewTemplate(tpl models.Template) ([]byte, error) {
 
 		// Compile transactional template.
 		if err := tpl.Compile(models.TxAliasTemplateFuncs(a.manager.GenericTemplateFuncs(), dummySubscriber, &m)); err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return nil, apperr.BadRequest(err.Error())
 		}
 
 		// Render the message.
 		if err := m.Render(dummySubscriber, &tpl); err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return nil, apperr.BadRequest(err.Error())
 		}
 		out = m.Body
 	}

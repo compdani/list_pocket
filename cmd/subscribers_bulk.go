@@ -1,16 +1,15 @@
 package main
 
 import (
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
-	"net/http"
+	"github.com/compdani/list_pocket/internal/apperr"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"
 	corepkg "github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
-	"github.com/labstack/echo/v4"
 )
 
 const bulkContactMaxBatch = 5000
@@ -49,13 +48,13 @@ func (a *App) BulkUpdateSubscribers(re *pbcore.RequestEvent) error {
 		return err
 	}
 	if len(emails) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoIDs"))
+		return apperr.BadRequest(a.i18n.T("subscribers.errorNoIDs"))
 	}
 	if len(emails) > bulkContactMaxBatch {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 	if !bulkContactHasOps(req, false) {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	listRemove, listUpdate, err := a.filterBulkListOps(user, req.ListRemove, req.ListUpdate)
@@ -111,10 +110,10 @@ func (a *App) BulkAddSubscribers(re *pbcore.RequestEvent) error {
 		return err
 	}
 	if len(req.Contacts) == 0 {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoIDs"))
+		return apperr.BadRequest(a.i18n.T("subscribers.errorNoIDs"))
 	}
 	if len(req.Contacts) > bulkContactMaxBatch {
-		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+		return apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
 	contacts, emails, err := a.parseBulkAddContacts(req.Contacts)
@@ -176,7 +175,7 @@ func (a *App) parseBulkUpdateEmails(raw []json.RawMessage) ([]string, error) {
 	for _, item := range raw {
 		var email string
 		if err := json.Unmarshal(item, &email); err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+			return nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 		}
 		email = strings.TrimSpace(email)
 		if email == "" {
@@ -184,7 +183,7 @@ func (a *App) parseBulkUpdateEmails(raw []json.RawMessage) ([]string, error) {
 		}
 		sanitized, err := a.importer.SanitizeEmail(email)
 		if err != nil {
-			return nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return nil, apperr.BadRequest(err.Error())
 		}
 		emails = append(emails, sanitized)
 	}
@@ -198,7 +197,7 @@ func (a *App) parseBulkAddContacts(raw []json.RawMessage) ([]subimporter.SubReq,
 	for _, item := range raw {
 		var contact subimporter.SubReq
 		if err := json.Unmarshal(item, &contact); err != nil {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
+			return nil, nil, apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 		}
 
 		// Accept CSV-style "attributes" alias for attribs.
@@ -212,7 +211,7 @@ func (a *App) parseBulkAddContacts(raw []json.RawMessage) ([]subimporter.SubReq,
 
 		validated, err := a.importer.ValidateFields(contact)
 		if err != nil {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest, err.Error())
+			return nil, nil, apperr.BadRequest(err.Error())
 		}
 		contacts = append(contacts, validated)
 		emails = append(emails, validated.Email)
@@ -228,15 +227,14 @@ func (a *App) filterBulkListOps(user auth.User, listRemove, listUpdate []string)
 	if len(removeIDs) > 0 {
 		filtered := user.FilterListsByPerm(auth.PermTypeManage, removeIDs)
 		if len(filtered) == 0 {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoListsGiven"))
+			return nil, nil, apperr.BadRequest(a.i18n.T("subscribers.errorNoListsGiven"))
 		}
 		resolved, err := a.core.ResolveListIDs(nil, filtered)
 		if err != nil {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return nil, nil, apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 		if len(resolved) == 0 {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoListsGiven"))
+			return nil, nil, apperr.BadRequest(a.i18n.T("subscribers.errorNoListsGiven"))
 		}
 		removeIDs = filtered
 	}
@@ -244,15 +242,14 @@ func (a *App) filterBulkListOps(user auth.User, listRemove, listUpdate []string)
 	if len(updateIDs) > 0 {
 		filtered := user.FilterListsByPerm(auth.PermTypeManage, updateIDs)
 		if len(filtered) == 0 {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoListsGiven"))
+			return nil, nil, apperr.BadRequest(a.i18n.T("subscribers.errorNoListsGiven"))
 		}
 		resolved, err := a.core.ResolveListIDs(nil, filtered)
 		if err != nil {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+			return nil, nil, apperr.BadRequest(a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 		}
 		if len(resolved) == 0 {
-			return nil, nil, echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("subscribers.errorNoListsGiven"))
+			return nil, nil, apperr.BadRequest(a.i18n.T("subscribers.errorNoListsGiven"))
 		}
 		updateIDs = filtered
 	}
