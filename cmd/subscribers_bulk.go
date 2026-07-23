@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -35,11 +36,11 @@ type bulkContactResp struct {
 	ListsUpdated int  `json:"lists_updated,omitempty"`
 }
 
-func (a *App) BulkUpdateSubscribers(c echo.Context) error {
-	user := auth.GetUser(c)
+func (a *App) BulkUpdateSubscribers(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
 
 	var req bulkContactOpsReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -92,21 +93,21 @@ func (a *App) BulkUpdateSubscribers(c echo.Context) error {
 		_ = a.core.RefreshMatViews(true)
 	}
 
-	return c.JSON(http.StatusOK, okResp{bulkContactResp{
+	return okJSON(re, bulkContactResp{
 		OK:           true,
 		Matched:      result.Matched,
 		Skipped:      result.Skipped,
 		TagsUpdated:  result.TagsUpdated,
 		ListsRemoved: result.ListsRemoved,
 		ListsUpdated: result.ListsUpdated,
-	}})
+	})
 }
 
-func (a *App) BulkAddSubscribers(c echo.Context) error {
-	user := auth.GetUser(c)
+func (a *App) BulkAddSubscribers(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
 
 	var req bulkContactOpsReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 	if len(req.Contacts) == 0 {
@@ -158,7 +159,7 @@ func (a *App) BulkAddSubscribers(c echo.Context) error {
 		_ = a.core.RefreshMatViews(true)
 	}
 
-	return c.JSON(http.StatusOK, okResp{bulkContactResp{
+	return okJSON(re, bulkContactResp{
 		OK:           true,
 		Matched:      result.Created + result.Updated,
 		Skipped:      result.Skipped,
@@ -167,7 +168,7 @@ func (a *App) BulkAddSubscribers(c echo.Context) error {
 		TagsUpdated:  result.TagsUpdated,
 		ListsRemoved: result.ListsRemoved,
 		ListsUpdated: result.ListsUpdated,
-	}})
+	})
 }
 
 func (a *App) parseBulkUpdateEmails(raw []json.RawMessage) ([]string, error) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -54,7 +55,7 @@ var (
 )
 
 // GetSettings returns settings from the DB.
-func (a *App) GetSettings(c echo.Context) error {
+func (a *App) GetSettings(re *pbcore.RequestEvent) error {
 	s, err := a.core.GetSettings()
 	if err != nil {
 		return err
@@ -76,14 +77,14 @@ func (a *App) GetSettings(c echo.Context) error {
 	s.BouncePostmark.Password = strings.Repeat(pwdMask, utf8.RuneCountInString(s.BouncePostmark.Password))
 	s.BounceForwardEmail.Key = strings.Repeat(pwdMask, utf8.RuneCountInString(s.BounceForwardEmail.Key))
 	s.SecurityCaptcha.HCaptcha.Secret = strings.Repeat(pwdMask, utf8.RuneCountInString(s.SecurityCaptcha.HCaptcha.Secret))
-	return c.JSON(http.StatusOK, okResp{s})
+	return okJSON(re, s)
 }
 
 // UpdateSettings returns settings from the DB.
-func (a *App) UpdateSettings(c echo.Context) error {
+func (a *App) UpdateSettings(re *pbcore.RequestEvent) error {
 	// Unmarshal and marshal the fields once to sanitize the settings blob.
 	var set models.Settings
-	if err := c.Bind(&set); err != nil {
+	if err := bindJSON(re, &set); err != nil {
 		return err
 	}
 
@@ -282,7 +283,7 @@ func (a *App) UpdateSettings(c echo.Context) error {
 		return err
 	}
 
-	return a.handleSettingsRestart(c)
+	return a.handleSettingsRestart(re)
 }
 
 func (a *App) sanitizeFromAddress(addr string) (string, error) {
@@ -335,15 +336,15 @@ func (a *App) sanitizeSMTPFromEmails(fromAddresses []string, defaultFromEmail st
 }
 
 // UpdateSettingsByKey updates a single setting key-value in the DB.
-func (a *App) UpdateSettingsByKey(c echo.Context) error {
-	key := c.Param("key")
+func (a *App) UpdateSettingsByKey(re *pbcore.RequestEvent) error {
+	key := pathParam(re, "key")
 	if key == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 	}
 
 	// Read the raw JSON body as the value.
 	var b json.RawMessage
-	if err := c.Bind(&b); err != nil {
+	if err := bindJSON(re, &b); err != nil {
 		return err
 	}
 
@@ -352,12 +353,12 @@ func (a *App) UpdateSettingsByKey(c echo.Context) error {
 		return err
 	}
 
-	return a.handleSettingsRestart(c)
+	return a.handleSettingsRestart(re)
 }
 
 // handleSettingsRestart checks for running campaigns and either triggers an
 // immediate app restart or marks the app as needing a restart.
-func (a *App) handleSettingsRestart(c echo.Context) error {
+func (a *App) handleSettingsRestart(re *pbcore.RequestEvent) error {
 	// If there are any active campaigns, don't do an auto reload and
 	// warn the user on the frontend.
 	if a.manager.HasRunningCampaigns() {
@@ -365,9 +366,9 @@ func (a *App) handleSettingsRestart(c echo.Context) error {
 		a.needsRestart = true
 		a.Unlock()
 
-		return c.JSON(http.StatusOK, okResp{struct {
+		return okJSON(re, struct {
 			NeedsRestart bool `json:"needs_restart"`
-		}{true}})
+		}{true})
 	}
 
 	// No running campaigns. Reload the app.
@@ -376,18 +377,18 @@ func (a *App) handleSettingsRestart(c echo.Context) error {
 		a.chReload <- syscall.SIGHUP
 	}()
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // GetLogs returns the log entries stored in the log buffer.
-func (a *App) GetLogs(c echo.Context) error {
-	return c.JSON(http.StatusOK, okResp{a.bufLog.Lines()})
+func (a *App) GetLogs(re *pbcore.RequestEvent) error {
+	return okJSON(re, a.bufLog.Lines())
 }
 
 // TestSMTPSettings returns the log entries stored in the log buffer.
-func (a *App) TestSMTPSettings(c echo.Context) error {
+func (a *App) TestSMTPSettings(re *pbcore.RequestEvent) error {
 	// Copy the raw JSON post body.
-	reqBody, err := io.ReadAll(c.Request().Body)
+	reqBody, err := io.ReadAll(re.Request.Body)
 	if err != nil {
 		a.log.Printf("error reading SMTP test: %v", err)
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
@@ -432,10 +433,10 @@ func (a *App) TestSMTPSettings(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	return c.JSON(http.StatusOK, okResp{a.bufLog.Lines()})
+	return okJSON(re, a.bufLog.Lines())
 }
 
-func (a *App) GetAboutInfo(c echo.Context) error {
+func (a *App) GetAboutInfo(re *pbcore.RequestEvent) error {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 
@@ -443,7 +444,7 @@ func (a *App) GetAboutInfo(c echo.Context) error {
 	out.System.AllocMB = mem.Alloc / 1024 / 1024
 	out.System.OSMB = mem.Sys / 1024 / 1024
 
-	return c.JSON(http.StatusOK, out)
+	return re.JSON(http.StatusOK, out)
 }
 
 type aiBuilderSettingsPayload struct {
@@ -452,18 +453,18 @@ type aiBuilderSettingsPayload struct {
 	AvailableModels []string `json:"availableModels"`
 }
 
-func (a *App) GetAIBuilderSettings(c echo.Context) error {
+func (a *App) GetAIBuilderSettings(re *pbcore.RequestEvent) error {
 	model, timeout, availableModels := a.getAIBuilderSettingsValues()
-	return c.JSON(http.StatusOK, okResp{aiBuilderSettingsPayload{
+	return okJSON(re, aiBuilderSettingsPayload{
 		Model:           model,
 		TimeoutSeconds:  timeout,
 		AvailableModels: availableModels,
-	}})
+	})
 }
 
-func (a *App) UpdateAIBuilderSettings(c echo.Context) error {
+func (a *App) UpdateAIBuilderSettings(re *pbcore.RequestEvent) error {
 	var in aiBuilderSettingsPayload
-	if err := c.Bind(&in); err != nil {
+	if err := bindJSON(re, &in); err != nil {
 		return err
 	}
 
@@ -507,11 +508,11 @@ func (a *App) UpdateAIBuilderSettings(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{aiBuilderSettingsPayload{
+	return okJSON(re, aiBuilderSettingsPayload{
 		Model:           model,
 		TimeoutSeconds:  timeout,
 		AvailableModels: availableModels,
-	}})
+	})
 }
 
 func (a *App) getAIBuilderSettingsValues() (string, int, []string) {

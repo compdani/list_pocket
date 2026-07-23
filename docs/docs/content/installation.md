@@ -18,7 +18,7 @@ Environment variables override `config.toml` when prefixed with `LISTPOCKET_`; s
 
 ## Database and migrations
 
-All application data goes through PocketBase. Schema migrations run when the application starts. The `--install` and `--upgrade` CLI flags exist for compatibility with older listmonk-style automation; in PocketBase mode they only print a message and exit.
+All application data goes through PocketBase. Schema migrations run on `serve`/startup (PocketBase bootstrap). You can also run `listpocket migrate up`. The `--install` and `--upgrade` CLI flags are deprecated no-ops kept for older listmonk-style automation.
 
 ## Relationship to listmonk
 

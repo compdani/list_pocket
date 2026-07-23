@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"net/http"
 	"regexp"
 	"strings"
@@ -50,8 +51,8 @@ func (a *App) userFromReq(req userReq) (auth.User, error) {
 	return u, nil
 }
 
-func userRouteRecordID(c echo.Context) (string, error) {
-	recordID := strings.TrimSpace(c.Param("id"))
+func userRouteRecordID(re *pbcore.RequestEvent) (string, error) {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -60,9 +61,9 @@ func userRouteRecordID(c echo.Context) (string, error) {
 }
 
 // GetUser retrieves a single user by ID.
-func (a *App) GetUser(c echo.Context) error {
+func (a *App) GetUser(re *pbcore.RequestEvent) error {
 	// Get the user from the DB.
-	recordID, err := userRouteRecordID(c)
+	recordID, err := userRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -74,11 +75,11 @@ func (a *App) GetUser(c echo.Context) error {
 	// Blank out the password hash in the response.
 	out.Password = null.String{}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetUsers retrieves all users.
-func (a *App) GetUsers(c echo.Context) error {
+func (a *App) GetUsers(re *pbcore.RequestEvent) error {
 	// Get all users from the DB.
 	out, err := a.core.GetUsers()
 	if err != nil {
@@ -90,13 +91,13 @@ func (a *App) GetUsers(c echo.Context) error {
 		out[n].Password = null.String{}
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // CreateUser handles user creation.
-func (a *App) CreateUser(c echo.Context) error {
+func (a *App) CreateUser(re *pbcore.RequestEvent) error {
 	var req userReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 	u, err := a.userFromReq(req)
@@ -161,14 +162,14 @@ func (a *App) CreateUser(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{user})
+	return okJSON(re, user)
 }
 
 // UpdateUser handles user modification.
-func (a *App) UpdateUser(c echo.Context) error {
+func (a *App) UpdateUser(re *pbcore.RequestEvent) error {
 	// Incoming params.
 	var req userReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 	u, err := a.userFromReq(req)
@@ -189,7 +190,7 @@ func (a *App) UpdateUser(c echo.Context) error {
 	}
 
 	// Get the user ID.
-	recordID, err := userRouteRecordID(c)
+	recordID, err := userRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -261,13 +262,13 @@ func (a *App) UpdateUser(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{user})
+	return okJSON(re, user)
 }
 
 // DeleteUser handles the deletion of a single user by ID.
-func (a *App) DeleteUser(c echo.Context) error {
+func (a *App) DeleteUser(re *pbcore.RequestEvent) error {
 	// Delete the user(s) from the DB.
-	recordID, err := userRouteRecordID(c)
+	recordID, err := userRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -284,12 +285,12 @@ func (a *App) DeleteUser(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteUsers handles user deletion, either a single one (ID in the URI), or a list.
-func (a *App) DeleteUsers(c echo.Context) error {
-	recordIDs := getQueryStrings("record_id", c.QueryParams())
+func (a *App) DeleteUsers(re *pbcore.RequestEvent) error {
+	recordIDs := getQueryStrings("record_id", re.Request.URL.Query())
 	if len(recordIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
@@ -308,29 +309,29 @@ func (a *App) DeleteUsers(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // GetUserProfile fetches the uesr profile for the currently logged in user.
-func (a *App) GetUserProfile(c echo.Context) error {
+func (a *App) GetUserProfile(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Blank out the password hash in the response.
 	user.Password.String = ""
 	user.Password.Valid = false
 
-	return c.JSON(http.StatusOK, okResp{user})
+	return okJSON(re, user)
 }
 
 // UpdateUserProfile update's the current user's profile.
-func (a *App) UpdateUserProfile(c echo.Context) error {
+func (a *App) UpdateUserProfile(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Incoming params.
 	u := auth.User{}
-	if err := c.Bind(&u); err != nil {
+	if err := bindJSON(re, &u); err != nil {
 		return err
 	}
 	u.PasswordLogin = user.PasswordLogin
@@ -364,15 +365,15 @@ func (a *App) UpdateUserProfile(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // EnableTOTP enables TOTP 2FA for a user after verifying the code.
-func (a *App) EnableTOTP(c echo.Context) error {
+func (a *App) EnableTOTP(re *pbcore.RequestEvent) error {
 	var (
-		u      = c.Get(auth.UserHTTPCtxKey).(auth.User)
-		secret = strings.TrimSpace(c.FormValue("secret"))
-		code   = strings.TrimSpace(c.FormValue("code"))
+		u      = auth.GetUserRE(re)
+		secret = strings.TrimSpace(re.Request.FormValue("secret"))
+		code   = strings.TrimSpace(re.Request.FormValue("code"))
 	)
 
 	if secret == "" || code == "" {
@@ -400,14 +401,14 @@ func (a *App) EnableTOTP(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DisableTOTP disables TOTP 2FA for a user after verifying the password.
-func (a *App) DisableTOTP(c echo.Context) error {
+func (a *App) DisableTOTP(re *pbcore.RequestEvent) error {
 	var (
-		u        = c.Get(auth.UserHTTPCtxKey).(auth.User)
-		password = c.FormValue("password")
+		u        = auth.GetUserRE(re)
+		password = re.Request.FormValue("password")
 	)
 
 	// TOTP isn't enabled.
@@ -430,7 +431,7 @@ func (a *App) DisableTOTP(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // refreshAuthCache reloads startup-critical auth state from PocketBase records.

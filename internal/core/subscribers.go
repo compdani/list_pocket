@@ -4,13 +4,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
@@ -325,8 +324,7 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 	uu, err := uuid.NewV4()
 	if err != nil {
 		c.log.Printf("error generating UUID: %v", err)
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUUID", "error", err.Error()))
 	}
 	sub.UUID = uu.String()
 	sub.NormalizeName()
@@ -348,14 +346,12 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
 	}
 
 	collection, err := pb.FindCollectionByNameOrId("subscribers")
 	if err != nil {
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
 	record := pbcore.NewRecord(collection)
@@ -370,27 +366,24 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 
 	if err := pb.Save(record); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") && strings.Contains(strings.ToLower(err.Error()), "email") {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusConflict, c.i18n.T("subscribers.emailExists"))
+			return models.Subscriber{}, false, apperr.Conflict(c.i18n.T("subscribers.emailExists"))
 		}
 		c.log.Printf("error inserting subscriber: %v", err)
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 	subscriberPBID := record.Id
 
 	if len(listIDs) > 0 || len(listUUIDs) > 0 {
 		listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
 		if err != nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+			return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 		}
 		status := subStatus
 		if sub.Status == models.SubscriberStatusBlockListed {
 			status = models.SubscriptionStatusUnsubscribed
 		}
 		if err := c.sqliteSyncSubscriberLists(subscriberPBID, listPBIDs, status, false); err != nil {
-			return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+			return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 		}
 	}
 
@@ -411,41 +404,37 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 	return out, hasOptin, nil
 }
 
-// UpdateSubscriber updates a subscriber's properties.
-func (c *Core) UpdateSubscriber(id int, sub models.Subscriber) (models.Subscriber, error) {
+// UpdateSubscriber updates a subscriber's properties by PocketBase record id.
+func (c *Core) UpdateSubscriber(recordID string, sub models.Subscriber) (models.Subscriber, error) {
 	sub.NormalizeName()
-	out, _, err := c.UpdateSubscriberWithLists(id, sub, nil, nil, false, false, false)
+	out, _, err := c.UpdateSubscriberWithLists(recordID, sub, nil, nil, false, false, false)
 	return out, err
 }
 
-// UpdateSubscriberWithLists updates a subscriber's properties.
+// UpdateSubscriberWithLists updates a subscriber's properties by PocketBase record id.
 // If deleteLists is set to true, all existing subscriptions are deleted and only
 // the ones provided are added or retained.
-func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs []int, listUUIDs []string, preconfirm, deleteLists, assertOptin bool) (models.Subscriber, bool, error) {
+func (c *Core) UpdateSubscriberWithLists(recordID string, sub models.Subscriber, listIDs []int, listUUIDs []string, preconfirm, deleteLists, assertOptin bool) (models.Subscriber, bool, error) {
 	sub.NormalizeName()
 	subStatus := models.SubscriptionStatusUnconfirmed
 	if preconfirm {
 		subStatus = models.SubscriptionStatusConfirmed
 	}
 
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return models.Subscriber{}, false, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
+	}
+
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", "pocketbase is not initialized"))
 	}
 
-	var recID string
-	if err := c.db.Get(&recID, `SELECT id FROM subscribers WHERE rowid = ?`, id); err != nil {
-		c.log.Printf("error updating subscriber: %v", err)
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
-	}
-
-	rec, err := pb.FindRecordById("subscribers", recID)
+	rec, err := pb.FindRecordById("subscribers", recordID)
 	if err != nil {
 		c.log.Printf("error updating subscriber: %v", err)
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
 	rec.Set("email", sub.Email)
@@ -457,27 +446,24 @@ func (c *Core) UpdateSubscriberWithLists(id int, sub models.Subscriber, listIDs 
 	rec.Set("attribs", sub.Attribs)
 	if err := pb.Save(rec); err != nil {
 		c.log.Printf("error updating subscriber: %v", err)
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
 	listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
 	if err != nil {
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
 	status := subStatus
 	if sub.Status == models.SubscriberStatusBlockListed {
 		status = models.SubscriptionStatusUnsubscribed
 	}
-	if err := c.sqliteSyncSubscriberLists(recID, listPBIDs, status, deleteLists); err != nil {
+	if err := c.sqliteSyncSubscriberLists(recordID, listPBIDs, status, deleteLists); err != nil {
 		c.log.Printf("error updating subscriber: %v", err)
-		return models.Subscriber{}, false, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
-	out, err := c.GetSubscriber(id, "", sub.Email)
+	out, err := c.GetSubscriber(0, recordID, "")
 	if err != nil {
 		return models.Subscriber{}, false, err
 	}
@@ -510,8 +496,7 @@ func (c *Core) BlocklistSubscribers(recordIDs []string) error {
 		WHERE id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
 	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
+		return apperr.Internal(c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
 	}
 
 	q = `UPDATE subscriber_lists
@@ -519,8 +504,7 @@ func (c *Core) BlocklistSubscribers(recordIDs []string) error {
 		WHERE subscriber_id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
 	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
+		return apperr.Internal(c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
 	}
 
 	return nil
@@ -531,8 +515,7 @@ func (c *Core) BlocklistSubscribersByQuery(searchStr, queryExp string, filters j
 	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, listIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error blocklisting subscribers: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("subscribers.errorBlocklisting", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("subscribers.errorBlocklisting", "error", pqErrMsg(err)))
 	}
 
 	for i := 0; i < len(ids); i += 400 {
@@ -583,8 +566,7 @@ func (c *Core) DeleteSubscribers(recordIDs []string, uuids []string) error {
 	q := `DELETE FROM subscribers WHERE ` + strings.Join(clauses, " OR ")
 	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error deleting subscribers: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -595,8 +577,7 @@ func (c *Core) DeleteSubscribersByQuery(searchStr, queryExp string, filters json
 	ids, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, listIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscribers: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	for i := 0; i < len(ids); i += 400 {
@@ -630,8 +611,7 @@ func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bo
 		LIMIT 1`, subRecID); err != nil {
 		if err != sql.ErrNoRows {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 		messenger = ""
 	}
@@ -640,8 +620,7 @@ func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bo
 	tx, err := c.db.Beginx()
 	if err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	defer tx.Rollback()
 
@@ -651,8 +630,7 @@ func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bo
 			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id = ?`, subRecID); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
 		var listUpd string
@@ -673,14 +651,12 @@ func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bo
 		}
 		if _, err := tx.Exec(listUpd, subRecID, models.ListTypePublic); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
 		if err := tx.Commit(); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 		return nil
 	}
@@ -703,16 +679,14 @@ func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bo
 	}
 	if err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	_ = res
 
 	if err := tx.Commit(); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -727,8 +701,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 
 	if err := c.db.Get(&subRecID, `SELECT id FROM subscribers WHERE uuid = ? OR id = ?`, subUUID, subUUID); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	if err := c.db.Get(&campRecID, `SELECT id FROM campaigns WHERE uuid = ? OR id = ?`, campUUID, campUUID); err != nil {
@@ -736,23 +709,20 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			return c.unsubscribeSubscriberAllPublicLists(subRecID, blocklist)
 		}
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	var messenger string
 	if err := c.db.Get(&messenger, `SELECT COALESCE(messenger, '') FROM campaigns WHERE id = ?`, campRecID); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	smsChannel := models.IsTextMessenger(messenger)
 
 	tx, err := c.db.Beginx()
 	if err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	defer tx.Rollback()
 
@@ -771,8 +741,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			  AND `+membershipActive+`
 		)`, subRecID, campRecID); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	if blocklist {
@@ -781,8 +750,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			    updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 			WHERE id = ?`, subRecID); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
 		var listUpd string
@@ -801,23 +769,20 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		}
 		if _, err := tx.Exec(listUpd, subRecID); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 
 		if hasCampaignSubscriptions {
 			if _, err := tx.Exec(`INSERT OR IGNORE INTO campaign_unsubscribes (campaign_id, subscriber_id, created, updated)
 				VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))`, campRecID, subRecID); err != nil {
 				c.log.Printf("error recording campaign unsubscribe: %v", err)
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+				return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 			}
 		}
 
 		if err := tx.Commit(); err != nil {
 			c.log.Printf("error unsubscribing: %v", err)
-			return echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 		return nil
 	}
@@ -848,8 +813,7 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 	}
 	if err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	if hasCampaignSubscriptions {
@@ -857,16 +821,14 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 			if _, err := tx.Exec(`INSERT OR IGNORE INTO campaign_unsubscribes (campaign_id, subscriber_id, created, updated)
 				VALUES (?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))`, campRecID, subRecID); err != nil {
 				c.log.Printf("error recording campaign unsubscribe: %v", err)
-				return echo.NewHTTPError(http.StatusInternalServerError,
-					c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+				return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 			}
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		c.log.Printf("error unsubscribing: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -902,8 +864,7 @@ func (c *Core) ConfirmOptionSubscription(subUUID string, listUUIDs []string, met
 		      SELECT id FROM lists WHERE uuid IN (`+sqlitePlaceholders(len(listUUIDs))+`)
 		  )`, execArgs...); err != nil {
 		c.log.Printf("error confirming subscription: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -920,16 +881,14 @@ func (c *Core) DeleteSubscriberBounces(id int, uuid string) error {
 	}
 	if err != nil && err != sql.ErrNoRows {
 		c.log.Printf("error deleting bounces: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
 	}
 	if subRecID == "" {
 		return nil
 	}
 	if _, err := c.db.Exec(`DELETE FROM bounces WHERE subscriber_id = ?`, subRecID); err != nil {
 		c.log.Printf("error deleting bounces: %v", err)
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.bounces}", "error", pqErrMsg(err)))
 	}
 
 	return nil
@@ -948,8 +907,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 		query += `id = ?`
 		args = append(args, uuid)
 	} else {
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
+		return models.SubscriberExportProfile{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
 	}
 	query += ` LIMIT 1`
 
@@ -957,18 +915,15 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 	row := c.db.QueryRowx(query, args...)
 	if err := row.MapScan(prof); err != nil {
 		if err == sql.ErrNoRows {
-			return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
+			return models.SubscriberExportProfile{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
 		}
 		c.log.Printf("error fetching subscriber export data: %v", err)
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
+		return models.SubscriberExportProfile{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
 	sid, ok := prof["id"].(int64)
 	if !ok || sid == 0 {
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
+		return models.SubscriberExportProfile{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
 	}
 
 	var subs []map[string]any
@@ -983,8 +938,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 		LEFT JOIN lists l ON l.id = sl.list_id
 		WHERE sl.subscriber_id = ?`, sid); err != nil {
 		c.log.Printf("error fetching subscriber subscriptions: %v", err)
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
+		return models.SubscriberExportProfile{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
 	var views []map[string]any
@@ -997,8 +951,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 		GROUP BY c.id, c.subject
 		ORDER BY c.id`, sid); err != nil {
 		c.log.Printf("error fetching subscriber campaign views: %v", err)
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
+		return models.SubscriberExportProfile{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
 	var clicks []map[string]any
@@ -1010,8 +963,7 @@ func (c *Core) getSubscriberProfileForExportSQLite(id int, uuid string) (models.
 		GROUP BY l.id, l.url
 		ORDER BY l.id`, sid); err != nil {
 		c.log.Printf("error fetching subscriber link clicks: %v", err)
-		return models.SubscriberExportProfile{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
+		return models.SubscriberExportProfile{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", err.Error()))
 	}
 
 	profJSON, _ := json.Marshal(prof)
@@ -1046,8 +998,7 @@ func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, e
 		WHERE s.rowid = ?
 		ORDER BY l.updated DESC, l.created DESC`, id); err != nil {
 		c.log.Printf("error fetching subscriber campaign sends: %v", err)
-		return models.SubscriberActivity{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
+		return models.SubscriberActivity{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
 	}
 
 	var views []sqliteSubscriberActivityViewRow
@@ -1067,8 +1018,7 @@ func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, e
 		GROUP BY c.id, c.uuid, c.name, c.subject
 		ORDER BY last_viewed_at DESC`, id); err != nil {
 		c.log.Printf("error fetching subscriber activity views: %v", err)
-		return models.SubscriberActivity{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
+		return models.SubscriberActivity{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
 	}
 
 	var clicks []sqliteSubscriberActivityClickRow
@@ -1090,8 +1040,7 @@ func (c *Core) getSubscriberActivitySQLite(id int) (models.SubscriberActivity, e
 		GROUP BY l.id, l.url, c.id, c.uuid, c.name, c.subject
 		ORDER BY last_clicked_at DESC`, id); err != nil {
 		c.log.Printf("error fetching subscriber activity clicks: %v", err)
-		return models.SubscriberActivity{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
+		return models.SubscriberActivity{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "activity", "error", err.Error()))
 	}
 
 	sendsJSON, _ := json.Marshal(sends)
@@ -1110,8 +1059,7 @@ func (c *Core) DeleteOrphanSubscribers() (int, error) {
 	res, err := c.db.Exec(`DELETE FROM subscribers WHERE NOT EXISTS (SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = subscribers.id)`)
 	if err != nil {
 		c.log.Printf("error deleting orphan subscribers: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	n, _ := res.RowsAffected()
@@ -1123,8 +1071,7 @@ func (c *Core) DeleteBlocklistedSubscribers() (int, error) {
 	res, err := c.db.Exec(`DELETE FROM subscribers WHERE status = 'blocklisted'`)
 	if err != nil {
 		c.log.Printf("error deleting blocklisted subscribers: %v", err)
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	n, _ := res.RowsAffected()
@@ -1138,8 +1085,7 @@ func (c *Core) getSubscriberCount(searchStr, queryExp string, filters json.RawMe
 	}
 	total := 0
 	if err := c.db.Get(&total, `SELECT COUNT(*) FROM subscribers WHERE `+whereSQL, args...); err != nil {
-		return 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return total, nil
@@ -1163,33 +1109,28 @@ func (c *Core) getSubscriberSQLite(id int, uuid, email string) (models.Subscribe
 		q += `email = ?`
 		args = append(args, email)
 	default:
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
+		return models.Subscriber{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.subscriber}"))
 	}
 	q += ` LIMIT 1`
 
 	var rows []sqliteSubscriberRow
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		if err == sql.ErrNoRows {
-			return models.Subscriber{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name",
-					fmt.Sprintf("{globals.terms.subscriber} (%d: %s%s)", id, uuid, email)))
+			return models.Subscriber{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name",
+				fmt.Sprintf("{globals.terms.subscriber} (%d: %s%s)", id, uuid, email)))
 		}
 		c.log.Printf("error fetching subscriber: %v", err)
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 	if len(rows) == 0 {
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name",
-				fmt.Sprintf("{globals.terms.subscriber} (%d: %s%s)", id, uuid, email)))
+		return models.Subscriber{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name",
+			fmt.Sprintf("{globals.terms.subscriber} (%d: %s%s)", id, uuid, email)))
 	}
 
 	subs := sqliteSubscriberRowsToModels(rows)
 	if err := c.loadSubscriberListsSQLite(subs); err != nil {
 		c.log.Printf("error loading subscriber lists: %v", err)
-		return models.Subscriber{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		return models.Subscriber{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 	}
 
 	return subs[0], nil
@@ -1234,8 +1175,7 @@ func (c *Core) hasSubscriberListsSQLite(subIDs, listIDs []int) (map[int]bool, er
 	}{}
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscriber: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 
 	for _, r := range rows {
@@ -1246,7 +1186,7 @@ func (c *Core) hasSubscriberListsSQLite(subIDs, listIDs []int) (map[int]bool, er
 
 func (c *Core) getSubscribersByEmailSQLite(emails []string) (models.Subscribers, error) {
 	if len(emails) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+		return nil, apperr.BadRequest(c.i18n.T("campaigns.noKnownSubsToTest"))
 	}
 
 	args := make([]any, 0, len(emails))
@@ -1258,25 +1198,23 @@ func (c *Core) getSubscribersByEmailSQLite(emails []string) (models.Subscribers,
 	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(emails)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscriber: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 	if len(rows) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+		return nil, apperr.BadRequest(c.i18n.T("campaigns.noKnownSubsToTest"))
 	}
 	out := sqliteSubscriberRowsToModels(rows)
 
 	if err := c.loadSubscriberListsSQLite(out); err != nil {
 		c.log.Printf("error loading subscriber lists: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 	}
 	return out, nil
 }
 
 func (c *Core) getSubscribersByNormalizedPhonesSQLite(digits []string) (models.Subscribers, error) {
 	if len(digits) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+		return nil, apperr.BadRequest(c.i18n.T("campaigns.noKnownSubsToTest"))
 	}
 	phoneExpr := `replace(replace(replace(replace(replace(replace(COALESCE(phone, ''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')`
 	args := make([]any, 0, len(digits))
@@ -1287,23 +1225,21 @@ func (c *Core) getSubscribersByNormalizedPhonesSQLite(digits []string) (models.S
 		args = append(args, d)
 	}
 	if len(args) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+		return nil, apperr.BadRequest(c.i18n.T("campaigns.noKnownSubsToTest"))
 	}
 	var rows []sqliteSubscriberRow
 	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE ` + phoneExpr + ` IN (` + sqlitePlaceholders(len(args)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscriber: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscriber}", "error", pqErrMsg(err)))
 	}
 	if len(rows) == 0 {
-		return nil, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("campaigns.noKnownSubsToTest"))
+		return nil, apperr.BadRequest(c.i18n.T("campaigns.noKnownSubsToTest"))
 	}
 	out := sqliteSubscriberRowsToModels(rows)
 	if err := c.loadSubscriberListsSQLite(out); err != nil {
 		c.log.Printf("error loading subscriber lists: %v", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
 	}
 	return out, nil
 }
@@ -1333,8 +1269,7 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, filters json.R
 	total := 0
 	if err := c.db.Get(&total, `SELECT COUNT(*) FROM subscribers WHERE `+whereSQL, args...); err != nil {
 		c.log.Printf("error getting subscriber count: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	if total == 0 {
 		return models.Subscribers{}, 0, nil
@@ -1355,14 +1290,12 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, filters json.R
 	c.log.Printf("query subscribers sqlite: where=%q args=%v total=%d order_by=%q order=%q", whereSQL, args, total, sortCol, order)
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error querying subscribers: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 	out := sqliteSubscriberRowsToModels(rows)
 	if err := c.loadSubscriberListsSQLite(out); err != nil {
 		c.log.Printf("error fetching subscriber lists: %v", err)
-		return nil, 0, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 	}
 
 	return out, total, nil
@@ -1526,8 +1459,7 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, filters json.Raw
 		var rows []sqliteSubscriberRow
 		if err := c.db.Select(&rows, q, args...); err != nil {
 			c.log.Printf("error exporting subscribers by query: %v", err)
-			return nil, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
 		}
 		if len(rows) == 0 {
 			return nil, nil

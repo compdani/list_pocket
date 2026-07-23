@@ -1,9 +1,9 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"database/sql"
-	"fmt"
 	"html/template"
 	"image"
 	"image/png"
@@ -27,30 +27,31 @@ const (
 	tplMessage = "message"
 )
 
-func publicCampKey(c echo.Context) string {
-	if v := strings.TrimSpace(c.Param("campUUID")); v != "" {
+func publicCampKey(re *pbcore.RequestEvent) string {
+	if v := strings.TrimSpace(pathParam(re, "campUUID")); v != "" {
 		return v
 	}
-	return strings.TrimSpace(c.Param("campID"))
+	return strings.TrimSpace(pathParam(re, "campID"))
 }
 
-func publicSubKey(c echo.Context) string {
-	if v := strings.TrimSpace(c.Param("subUUID")); v != "" {
+func publicSubKey(re *pbcore.RequestEvent) string {
+	if v := strings.TrimSpace(pathParam(re, "subUUID")); v != "" {
 		return v
 	}
-	return strings.TrimSpace(c.Param("subID"))
+	return strings.TrimSpace(pathParam(re, "subID"))
 }
 
-func publicLinkKey(c echo.Context) string {
-	if v := strings.TrimSpace(c.Param("linkUUID")); v != "" {
+func publicLinkKey(re *pbcore.RequestEvent) string {
+	if v := strings.TrimSpace(pathParam(re, "linkUUID")); v != "" {
 		return v
 	}
-	return strings.TrimSpace(c.Param("linkID"))
+	return strings.TrimSpace(pathParam(re, "linkID"))
 }
 
 // tplRenderer wraps a template.tplRenderer for echo.
 type tplRenderer struct {
 	templates           *template.Template
+	i18n                *i18n.I18n
 	SiteName            string
 	RootURL             string
 	LogoURL             string
@@ -125,24 +126,25 @@ var (
 	pixelPNG = drawTransparentImage(3, 14)
 )
 
-func trackingOpenEvent(c echo.Context) models.OpenEvent {
-	ipAddress := strings.TrimSpace(c.Request().Header.Get("X-Forwarded-For"))
+func trackingOpenEvent(re *pbcore.RequestEvent) models.OpenEvent {
+	ipAddress := strings.TrimSpace(re.Request.Header.Get("X-Forwarded-For"))
 	if ipAddress != "" {
 		ipAddress = strings.TrimSpace(strings.Split(ipAddress, ",")[0])
 	}
 	if ipAddress == "" {
-		ipAddress = strings.TrimSpace(c.RealIP())
+		ipAddress = strings.TrimSpace(clientIP(re))
 	}
 
 	return models.OpenEvent{
 		IPAddress: ipAddress,
-		UserAgent: strings.TrimSpace(c.Request().UserAgent()),
+		UserAgent: strings.TrimSpace(re.Request.UserAgent()),
 		OpenedAt:  time.Now().UTC(),
 	}
 }
 
-// Render executes and renders a template for echo.
+// Render executes and renders a template for echo / RequestEvent helpers.
 func (t *tplRenderer) Render(w io.Writer, name string, data any, c echo.Context) error {
+	lang := t.i18n
 	return t.templates.ExecuteTemplate(w, name, tplData{
 		SiteName:            t.SiteName,
 		RootURL:             t.RootURL,
@@ -153,13 +155,13 @@ func (t *tplRenderer) Render(w io.Writer, name string, data any, c echo.Context)
 		EnablePublicArchive: t.EnablePublicArchive,
 		IndividualTracking:  t.IndividualTracking,
 		Data:                data,
-		L:                   c.Get("app").(*App).i18n,
+		L:                   lang,
 	})
 }
 
 // GetPublicLists returns the list of public lists with minimal fields
 // required to submit a subscription.
-func (a *App) GetPublicLists(c echo.Context) error {
+func (a *App) GetPublicLists(re *pbcore.RequestEvent) error {
 	// Get all public lists.
 	lists, err := a.core.GetLists(models.ListTypePublic, models.ListStatusActive, true, nil)
 	if err != nil {
@@ -179,14 +181,14 @@ func (a *App) GetPublicLists(c echo.Context) error {
 		})
 	}
 
-	return c.JSON(http.StatusOK, out)
+	return re.JSON(http.StatusOK, out)
 }
 
 // ViewCampaignMessage renders the HTML view of a campaign message.
 // This is the view the {{ MessageURL }} template tag links to in e-mail campaigns.
-func (a *App) ViewCampaignMessage(c echo.Context) error {
+func (a *App) ViewCampaignMessage(re *pbcore.RequestEvent) error {
 	// Get the campaign.
-	campKey := publicCampKey(c)
+	campKey := publicCampKey(re)
 	var camp models.Campaign
 	var err error
 	if models.IsRFC4122UUID(campKey) {
@@ -195,34 +197,32 @@ func (a *App) ViewCampaignMessage(c echo.Context) error {
 		camp, err = a.core.GetCampaign(campKey, "", "")
 	}
 	if err != nil {
-		if er, ok := err.(*echo.HTTPError); ok {
-			if er.Code == http.StatusBadRequest {
-				return c.Render(http.StatusNotFound, tplMessage,
-					makeMsgTpl(a.i18n.T("public.notFoundTitle"), "", a.i18n.T("public.campaignNotFound")))
-			}
+		if isHTTPStatus(err, http.StatusBadRequest) {
+			return renderTpl(re, http.StatusNotFound, tplMessage,
+				makeMsgTpl(a.i18n.T("public.notFoundTitle"), "", a.i18n.T("public.campaignNotFound")))
 		}
 
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
 	// Get the subscriber.
-	subKey := publicSubKey(c)
+	subKey := publicSubKey(re)
 	sub, err := a.core.GetSubscriber(0, subKey, "")
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return c.Render(http.StatusNotFound, tplMessage,
+			return renderTpl(re, http.StatusNotFound, tplMessage,
 				makeMsgTpl(a.i18n.T("public.notFoundTitle"), "", a.i18n.T("public.errorFetchingEmail")))
 		}
 
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
 	// Compile the template.
 	if err := camp.CompileTemplate(a.manager.TemplateFuncs(&camp)); err != nil {
 		a.log.Printf("error compiling template: %v", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
@@ -230,27 +230,27 @@ func (a *App) ViewCampaignMessage(c echo.Context) error {
 	msg, err := a.manager.NewCampaignMessage(&camp, sub)
 	if err != nil {
 		a.log.Printf("error rendering message: %v", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
-	return c.HTML(http.StatusOK, string(msg.Body()))
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", msg.Body())
 }
 
 // SubscriptionPage renders the subscription management page and handles unsubscriptions.
 // This is the view that {{ UnsubscribeURL }} in campaigns link to.
-func (a *App) SubscriptionPage(c echo.Context) error {
-	subUUID := publicSubKey(c)
+func (a *App) SubscriptionPage(re *pbcore.RequestEvent) error {
+	subUUID := publicSubKey(re)
 	// Prefer query string (?manage=true) so the link from the unsubscribe page always works.
-	showManage, _ := strconv.ParseBool(c.QueryParam("manage"))
+	showManage, _ := strconv.ParseBool(queryParam(re, "manage"))
 	if !showManage {
-		showManage, _ = strconv.ParseBool(c.FormValue("manage"))
+		showManage, _ = strconv.ParseBool(re.Request.FormValue("manage"))
 	}
 
 	// Get the subscriber from the DB.
 	s, err := a.core.GetSubscriber(0, subUUID, "")
 	if err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorProcessingRequest")))
 	}
 
@@ -267,7 +267,7 @@ func (a *App) SubscriptionPage(c echo.Context) error {
 
 	// If the subscriber is blocklisted, throw an error.
 	if s.Status == models.SubscriberStatusBlockListed {
-		return c.Render(http.StatusOK, tplMessage, makeMsgTpl(a.i18n.T("public.noSubTitle"), "", a.i18n.Ts("public.blocklisted")))
+		return renderTpl(re, http.StatusOK, tplMessage, makeMsgTpl(a.i18n.T("public.noSubTitle"), "", a.i18n.Ts("public.blocklisted")))
 	}
 
 	// Only show preference management if it's enabled in settings.
@@ -291,13 +291,13 @@ func (a *App) SubscriptionPage(c echo.Context) error {
 		}
 	}
 
-	return c.Render(http.StatusOK, "subscription", out)
+	return renderTpl(re, http.StatusOK, "subscription", out)
 }
 
 // SubscriptionPrefs renders the subscription management page and
 // s unsubscriptions. This is the view that {{ UnsubscribeURL }} in
 // campaigns link to.
-func (a *App) SubscriptionPrefs(c echo.Context) error {
+func (a *App) SubscriptionPrefs(re *pbcore.RequestEvent) error {
 	// Read the form.
 	var req struct {
 		Name      string   `form:"name" json:"name"`
@@ -308,28 +308,28 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 		Blocklist bool     `form:"blocklist" json:"blocklist"`
 		Manage    bool     `form:"manage" json:"manage"`
 	}
-	if err := c.Bind(&req); err != nil {
-		return c.Render(http.StatusBadRequest, tplMessage,
+	if err := bindJSON(re, &req); err != nil {
+		return renderTpl(re, http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("globals.messages.invalidData")))
 	}
 
 	// Simple unsubscribe.
-	campUUID := publicCampKey(c)
-	subUUID := publicSubKey(c)
+	campUUID := publicCampKey(re)
+	subUUID := publicSubKey(re)
 	blocklist := a.cfg.Privacy.AllowBlocklist && req.Blocklist
 	if !req.Manage || blocklist {
 		if err := a.core.UnsubscribeByCampaign(subUUID, campUUID, blocklist); err != nil {
-			return c.Render(http.StatusInternalServerError, tplMessage,
+			return renderTpl(re, http.StatusInternalServerError, tplMessage,
 				makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.errorProcessingRequest")))
 		}
 
-		return c.Render(http.StatusOK, tplMessage,
+		return renderTpl(re, http.StatusOK, tplMessage,
 			makeMsgTpl(a.i18n.T("public.unsubbedTitle"), "", a.i18n.T("public.unsubbedInfo")))
 	}
 
 	// Is preference management enabled?
 	if !a.cfg.Privacy.AllowPreferences {
-		return c.Render(http.StatusBadRequest, tplMessage,
+		return renderTpl(re, http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.invalidFeature")))
 	}
 
@@ -343,18 +343,18 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	subUpdate.NormalizeName()
 	subUpdate.Phone = utils.NormalizePhone(subUpdate.Phone)
 	if strings.TrimSpace(subUpdate.FirstName) == "" || strings.TrimSpace(subUpdate.LastName) == "" || len(subUpdate.Name) > 256 {
-		return c.Render(http.StatusBadRequest, tplMessage,
+		return renderTpl(re, http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("subscribers.invalidName")))
 	}
 	if subUpdate.Phone != "" && len(strings.TrimSpace(subUpdate.Phone)) > 64 {
-		return c.Render(http.StatusBadRequest, tplMessage,
+		return renderTpl(re, http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("globals.messages.invalidData")))
 	}
 
 	// Get the subscriber from the DB.
 	sub, err := a.core.GetSubscriber(0, subUUID, "")
 	if err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("globals.messages.pFound",
 				"name", a.i18n.T("globals.terms.subscriber"))))
 	}
@@ -364,8 +364,8 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 	sub.Phone = subUpdate.Phone
 
 	// Update the subscriber properties in the DB.
-	if _, err := a.core.UpdateSubscriber(sub.ID, sub); err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+	if _, err := a.core.UpdateSubscriber(sub.RecordID, sub); err != nil {
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.errorProcessingRequest")))
 	}
 
@@ -395,23 +395,23 @@ func (a *App) SubscriptionPrefs(c echo.Context) error {
 
 	// Unsubscribe from lists.
 	if err := a.core.UnsubscribeLists([]int{sub.ID}, nil, unsubUUIDs); err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.errorProcessingRequest")))
 
 	}
 
-	return c.Render(http.StatusOK, tplMessage,
+	return renderTpl(re, http.StatusOK, tplMessage,
 		makeMsgTpl(a.i18n.T("globals.messages.done"), "", a.i18n.T("public.prefsSaved")))
 }
 
 // OptinPage renders the double opt-in confirmation page that subscribers
 // see when they click on the "Confirm subscription" button in double-optin
 // notifications.
-func (a *App) OptinPage(c echo.Context) error {
-	subUUID := publicSubKey(c)
-	confirm, _ := strconv.ParseBool(c.FormValue("confirm"))
+func (a *App) OptinPage(re *pbcore.RequestEvent) error {
+	subUUID := publicSubKey(re)
+	confirm, _ := strconv.ParseBool(re.Request.FormValue("confirm"))
 	var req optinReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -419,7 +419,7 @@ func (a *App) OptinPage(c echo.Context) error {
 	if len(req.ListUUIDs) > 0 {
 		for _, l := range req.ListUUIDs {
 			if !reUUID.MatchString(l) {
-				return c.Render(http.StatusBadRequest, tplMessage,
+				return renderTpl(re, http.StatusBadRequest, tplMessage,
 					makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("globals.messages.invalidUUID")))
 			}
 		}
@@ -428,13 +428,13 @@ func (a *App) OptinPage(c echo.Context) error {
 	// Get the list of subscription lists where the subscriber hasn't confirmed.
 	lists, err := a.core.GetSubscriberLists(0, subUUID, nil, req.ListUUIDs, models.SubscriptionStatusUnconfirmed, "")
 	if err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingLists")))
 	}
 
 	// There are no lists to confirm.
 	if len(lists) == 0 {
-		return c.Render(http.StatusOK, tplMessage,
+		return renderTpl(re, http.StatusOK, tplMessage,
 			makeMsgTpl(a.i18n.T("public.noSubTitle"), "", a.i18n.Ts("public.noSubInfo")))
 	}
 
@@ -442,9 +442,9 @@ func (a *App) OptinPage(c echo.Context) error {
 	if confirm {
 		meta := models.JSON{}
 		if a.cfg.Privacy.RecordOptinIP {
-			if h := c.Request().Header.Get("X-Forwarded-For"); h != "" {
+			if h := re.Request.Header.Get("X-Forwarded-For"); h != "" {
 				meta["optin_ip"] = h
-			} else if h := c.Request().RemoteAddr; h != "" {
+			} else if h := re.Request.RemoteAddr; h != "" {
 				meta["optin_ip"] = strings.Split(h, ":")[0]
 			}
 		}
@@ -452,11 +452,11 @@ func (a *App) OptinPage(c echo.Context) error {
 		// Confirm subscriptions in the DB.
 		if err := a.core.ConfirmOptionSubscription(subUUID, req.ListUUIDs, meta); err != nil {
 			a.log.Printf("error unsubscribing: %v", err)
-			return c.Render(http.StatusInternalServerError, tplMessage,
+			return renderTpl(re, http.StatusInternalServerError, tplMessage,
 				makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorProcessingRequest")))
 		}
 
-		return c.Render(http.StatusOK, tplMessage,
+		return renderTpl(re, http.StatusOK, tplMessage,
 			makeMsgTpl(a.i18n.T("public.subConfirmedTitle"), "", a.i18n.Ts("public.subConfirmed")))
 	}
 
@@ -465,27 +465,27 @@ func (a *App) OptinPage(c echo.Context) error {
 	out.SubUUID = subUUID
 	out.Title = a.i18n.T("public.confirmOptinSubTitle")
 
-	return c.Render(http.StatusOK, "optin", out)
+	return renderTpl(re, http.StatusOK, "optin", out)
 }
 
 // SubscriptionFormPage handles subscription requests coming from public
 // HTML subscription forms.
-func (a *App) SubscriptionFormPage(c echo.Context) error {
+func (a *App) SubscriptionFormPage(re *pbcore.RequestEvent) error {
 	if !a.cfg.EnablePublicSubPage {
-		return c.Render(http.StatusNotFound, tplMessage,
+		return renderTpl(re, http.StatusNotFound, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.invalidFeature")))
 	}
 
 	// Get all public lists from the DB.
 	lists, err := a.core.GetLists(models.ListTypePublic, models.ListStatusActive, true, nil)
 	if err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingLists")))
 	}
 
 	// There are no public lists available for subscription.
 	if len(lists) == 0 {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.noListsAvailable")))
 	}
 
@@ -504,19 +504,19 @@ func (a *App) SubscriptionFormPage(c echo.Context) error {
 		out.Captcha.Key = a.cfg.Security.Captcha.HCaptcha.Key
 	}
 
-	return c.Render(http.StatusOK, "subscription-form", out)
+	return renderTpl(re, http.StatusOK, "subscription-form", out)
 }
 
 // SubscriptionForm handles subscription requests coming from public
 // HTML subscription forms.
-func (a *App) SubscriptionForm(c echo.Context) error {
+func (a *App) SubscriptionForm(re *pbcore.RequestEvent) error {
 	if !a.cfg.EnablePublicSubPage {
 		return echo.NewHTTPError(http.StatusNotFound, a.i18n.T("public.invalidFeature"))
 
 	}
 
 	// If there's a nonce value, a bot could've filled the form.
-	if c.FormValue("nonce") != "" {
+	if re.Request.FormValue("nonce") != "" {
 		return echo.NewHTTPError(http.StatusBadGateway, a.i18n.T("public.invalidFeature"))
 	}
 
@@ -527,16 +527,16 @@ func (a *App) SubscriptionForm(c echo.Context) error {
 		// Get the appropriate captcha response field based on provider.
 		switch a.captcha.GetProvider() {
 		case captcha.ProviderHCaptcha:
-			val = c.FormValue("h-captcha-response")
+			val = re.Request.FormValue("h-captcha-response")
 		case captcha.ProviderAltcha:
-			val = c.FormValue("altcha")
+			val = re.Request.FormValue("altcha")
 		default:
-			return c.Render(http.StatusBadRequest, tplMessage,
+			return renderTpl(re, http.StatusBadRequest, tplMessage,
 				makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.invalidCaptcha")))
 		}
 
 		if val == "" {
-			return c.Render(http.StatusBadRequest, tplMessage,
+			return renderTpl(re, http.StatusBadRequest, tplMessage,
 				makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.invalidCaptcha")))
 		}
 
@@ -546,19 +546,17 @@ func (a *App) SubscriptionForm(c echo.Context) error {
 		}
 
 		if !ok {
-			return c.Render(http.StatusBadRequest, tplMessage,
+			return renderTpl(re, http.StatusBadRequest, tplMessage,
 				makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.T("public.invalidCaptcha")))
 		}
 	}
 
-	hasOptin, err := a.processSubForm(c)
+	hasOptin, err := a.processSubForm(re)
 	if err != nil {
-		e, ok := err.(*echo.HTTPError)
-		if !ok {
-			return err
+		if status, msg, ok := asHTTPError(err); ok {
+			return renderTpl(re, status, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", msg))
 		}
-
-		return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", fmt.Sprintf("%s", e.Message)))
+		return err
 	}
 
 	// If there were double optin lists, show the opt-in pending message instead of
@@ -568,142 +566,154 @@ func (a *App) SubscriptionForm(c echo.Context) error {
 		msg = "public.subOptinPending"
 	}
 
-	return c.Render(http.StatusOK, tplMessage, makeMsgTpl(a.i18n.T("public.subTitle"), "", a.i18n.Ts(msg)))
+	return renderTpl(re, http.StatusOK, tplMessage, makeMsgTpl(a.i18n.T("public.subTitle"), "", a.i18n.Ts(msg)))
 }
 
 // PublicSubscription handles subscription requests coming from public
 // API calls.
-func (a *App) PublicSubscription(c echo.Context) error {
+func (a *App) PublicSubscription(re *pbcore.RequestEvent) error {
 	if !a.cfg.EnablePublicSubPage {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.invalidFeature"))
 	}
 
-	hasOptin, err := a.processSubForm(c)
+	hasOptin, err := a.processSubForm(re)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{struct {
+	return okJSON(re, struct {
 		HasOptin bool `json:"has_optin"`
-	}{hasOptin}})
+	}{hasOptin})
 }
 
 // LinkRedirect redirects a link UUID to its original underlying link
 // after recording the link click for a particular subscriber in the particular
 // campaign. These links are generated by {{ TrackLink }} tags in campaigns.
-func (a *App) LinkRedirect(c echo.Context) error {
-	linkKey := publicLinkKey(c)
-	campKey := publicCampKey(c)
+func (a *App) LinkRedirect(re *pbcore.RequestEvent) error {
+	linkKey := publicLinkKey(re)
+	campKey := publicCampKey(re)
 
 	// If tracking is globally disabled, resolve the URL without recording a click.
 	if a.cfg.Privacy.DisableTracking {
 		url, err := a.core.GetLinkURL(linkKey)
 		if err != nil {
-			e := err.(*echo.HTTPError)
-			return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", e.Error()))
+			status, msg, ok := asHTTPError(err)
+			if !ok {
+				return err
+			}
+			return renderTpl(re, status, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", msg))
 		}
-		return c.Redirect(http.StatusTemporaryRedirect, url)
+		return re.Redirect(http.StatusTemporaryRedirect, url)
 	}
 
 	// If individual tracking is disabled, do not record the subscriber ID.
-	subKey := publicSubKey(c)
+	subKey := publicSubKey(re)
 	if !a.cfg.Privacy.IndividualTracking {
 		subKey = ""
 	}
 
 	url, err := a.core.RegisterCampaignLinkClick(linkKey, campKey, subKey)
 	if err != nil {
-		e := err.(*echo.HTTPError)
-		return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", e.Error()))
+		status, msg, ok := asHTTPError(err)
+		if !ok {
+			return err
+		}
+		return renderTpl(re, status, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", msg))
 	}
 
-	return c.Redirect(http.StatusTemporaryRedirect, url)
+	return re.Redirect(http.StatusTemporaryRedirect, url)
 }
 
 // RegisterCampaignView registers a campaign view which comes in
 // the form of an pixel image request. Regardless of errors, this handler
 // should always render the pixel image bytes. The pixel URL is generated by
 // the {{ TrackView }} template tag in campaigns.
-func (a *App) RegisterCampaignView(c echo.Context) error {
+func (a *App) RegisterCampaignView(re *pbcore.RequestEvent) error {
 	// If tracking is globally disabled, return the pixel without recording.
 	if a.cfg.Privacy.DisableTracking {
-		c.Response().Header().Set("Cache-Control", "no-cache")
-		return c.Blob(http.StatusOK, "image/png", pixelPNG)
+		re.Response.Header().Set("Cache-Control", "no-cache")
+		return writeBlob(re, http.StatusOK, "image/png", pixelPNG)
 	}
 
 	// If individual tracking is disabled, do not record the subscriber ID.
-	subKey := publicSubKey(c)
+	subKey := publicSubKey(re)
 	if !a.cfg.Privacy.IndividualTracking {
 		subKey = ""
 	}
 
 	// Exclude dummy hits from template previews.
-	campKey := publicCampKey(c)
+	campKey := publicCampKey(re)
 	if campKey != dummyUUID && campKey != models.PreviewTrackingRecordID {
-		if err := a.core.RegisterCampaignView(campKey, subKey, trackingOpenEvent(c)); err != nil {
+		if err := a.core.RegisterCampaignView(campKey, subKey, trackingOpenEvent(re)); err != nil {
 			a.log.Printf("error registering campaign view: %s", err)
 		}
 	}
 
-	c.Response().Header().Set("Cache-Control", "no-cache")
-	return c.Blob(http.StatusOK, "image/png", pixelPNG)
+	re.Response.Header().Set("Cache-Control", "no-cache")
+	return writeBlob(re, http.StatusOK, "image/png", pixelPNG)
 }
 
-func (a *App) TxLinkRedirect(c echo.Context) error {
-	linkUUID := c.Param("linkUUID")
-	msgUUID := c.Param("msgUUID")
+func (a *App) TxLinkRedirect(re *pbcore.RequestEvent) error {
+	linkUUID := pathParam(re, "linkUUID")
+	msgUUID := pathParam(re, "msgUUID")
 
 	if a.cfg.Privacy.DisableTracking {
 		url, err := a.core.GetLinkURL(linkUUID)
 		if err != nil {
-			e := err.(*echo.HTTPError)
-			return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", e.Error()))
+			status, msg, ok := asHTTPError(err)
+			if !ok {
+				return err
+			}
+			return renderTpl(re, status, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", msg))
 		}
-		return c.Redirect(http.StatusTemporaryRedirect, url)
+		return re.Redirect(http.StatusTemporaryRedirect, url)
 	}
 
 	url, err := a.core.RegisterTransactionalLinkClick(linkUUID, msgUUID)
 	if err != nil {
-		e := err.(*echo.HTTPError)
-		return c.Render(e.Code, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", e.Error()))
+		status, msg, ok := asHTTPError(err)
+		if !ok {
+			return err
+		}
+		return renderTpl(re, status, tplMessage, makeMsgTpl(a.i18n.T("public.errorTitle"), "", msg))
 	}
 
-	return c.Redirect(http.StatusTemporaryRedirect, url)
+	return re.Redirect(http.StatusTemporaryRedirect, url)
 }
 
-func (a *App) RegisterTxMessageView(c echo.Context) error {
+func (a *App) RegisterTxMessageView(re *pbcore.RequestEvent) error {
 	if a.cfg.Privacy.DisableTracking {
-		c.Response().Header().Set("Cache-Control", "no-cache")
-		return c.Blob(http.StatusOK, "image/png", pixelPNG)
+		re.Response.Header().Set("Cache-Control", "no-cache")
+		return writeBlob(re, http.StatusOK, "image/png", pixelPNG)
 	}
 
-	if err := a.core.RegisterTransactionalMessageView(c.Param("msgUUID"), trackingOpenEvent(c)); err != nil {
+	if err := a.core.RegisterTransactionalMessageView(pathParam(re, "msgUUID"), trackingOpenEvent(re)); err != nil {
 		a.log.Printf("error registering transactional message view: %s", err)
 	}
 
-	c.Response().Header().Set("Cache-Control", "no-cache")
-	return c.Blob(http.StatusOK, "image/png", pixelPNG)
+	re.Response.Header().Set("Cache-Control", "no-cache")
+	return writeBlob(re, http.StatusOK, "image/png", pixelPNG)
 }
 
 // SelfExportSubscriberData pulls the subscriber's profile, list subscriptions,
 // campaign views and clicks and produces a JSON report that is then e-mailed
 // to the subscriber. This is a privacy feature and the data that's exported
 // is dependent on the configuration.
-func (a *App) SelfExportSubscriberData(c echo.Context) error {
+func (a *App) SelfExportSubscriberData(re *pbcore.RequestEvent) error {
 	// Is export allowed?
 	if !a.cfg.Privacy.AllowExport {
-		return c.Render(http.StatusBadRequest, tplMessage,
+		return renderTpl(re, http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.invalidFeature")))
 	}
 
 	// Get the subscriber's data. A single query that gets the profile,
 	// list subscriptions, campaign views, and link clicks. Names of
 	// private lists are replaced with "Private list".
-	subKey := publicSubKey(c)
+	subKey := publicSubKey(re)
 	data, b, err := a.exportSubscriberData(0, subKey, a.cfg.Privacy.Exportable)
 	if err != nil {
 		a.log.Printf("error exporting subscriber data: %s", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorProcessingRequest")))
 	}
 
@@ -711,7 +721,7 @@ func (a *App) SelfExportSubscriberData(c echo.Context) error {
 	var msg bytes.Buffer
 	if err := notifs.Tpls.ExecuteTemplate(&msg, notifs.TplSubscriberData, data); err != nil {
 		a.log.Printf("error compiling notification template '%s': %v", notifs.TplSubscriberData, err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorProcessingRequest")))
 	}
 
@@ -734,25 +744,25 @@ func (a *App) SelfExportSubscriberData(c echo.Context) error {
 		},
 	}); err != nil {
 		a.log.Printf("error e-mailing subscriber profile: %s", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorProcessingRequest")))
 	}
 
-	return c.Render(http.StatusOK, tplMessage,
+	return renderTpl(re, http.StatusOK, tplMessage,
 		makeMsgTpl(a.i18n.T("public.dataSentTitle"), "", a.i18n.T("public.dataSent")))
 }
 
 // WipeSubscriberData allows a subscriber to delete their data. The
 // profile and subscriptions are deleted, while the campaign_views and link
 // clicks remain as orphan data unconnected to any subscriber.
-func (a *App) WipeSubscriberData(c echo.Context) error {
+func (a *App) WipeSubscriberData(re *pbcore.RequestEvent) error {
 	// Is wiping allowed?
 	if !a.cfg.Privacy.AllowWipe {
-		return c.Render(http.StatusBadRequest, tplMessage,
+		return renderTpl(re, http.StatusBadRequest, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.invalidFeature")))
 	}
 
-	subKey := publicSubKey(c)
+	subKey := publicSubKey(re)
 	var err error
 	if models.IsRFC4122UUID(subKey) {
 		err = a.core.DeleteSubscribers(nil, []string{subKey})
@@ -761,16 +771,16 @@ func (a *App) WipeSubscriberData(c echo.Context) error {
 	}
 	if err != nil {
 		a.log.Printf("error wiping subscriber data: %s", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorProcessingRequest")))
 	}
 
-	return c.Render(http.StatusOK, tplMessage,
+	return renderTpl(re, http.StatusOK, tplMessage,
 		makeMsgTpl(a.i18n.T("public.dataRemovedTitle"), "", a.i18n.T("public.dataRemoved")))
 }
 
 // AltchaChallenge generates a challenge for Altcha captcha.
-func (a *App) AltchaChallenge(c echo.Context) error {
+func (a *App) AltchaChallenge(re *pbcore.RequestEvent) error {
 	// Check if Altcha is enabled.
 	if !a.captcha.IsEnabled() || a.captcha.GetProvider() != captcha.ProviderAltcha {
 		return echo.NewHTTPError(http.StatusNotFound, "captcha not enabled")
@@ -784,8 +794,8 @@ func (a *App) AltchaChallenge(c echo.Context) error {
 	}
 
 	// Return the challenge as JSON.
-	c.Response().Header().Set("Content-Type", "application/json")
-	return c.String(http.StatusOK, out)
+	re.Response.Header().Set("Content-Type", "application/json")
+	return writeBlob(re, http.StatusOK, "application/json", []byte(out))
 }
 
 // drawTransparentImage draws a transparent PNG of given dimensions
@@ -803,7 +813,7 @@ func drawTransparentImage(h, w int) []byte {
 // processSubForm processes an incoming form/public API subscription request.
 // The bool indicates whether there was subscription to an optin list so that
 // an appropriate message can be shown.
-func (a *App) processSubForm(c echo.Context) (bool, error) {
+func (a *App) processSubForm(re *pbcore.RequestEvent) (bool, error) {
 	// Get and validate fields.
 	var req struct {
 		Name          string   `form:"name" json:"name"`
@@ -813,7 +823,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		Email         string   `form:"email" json:"email"`
 		FormListUUIDs []string `form:"l" json:"list_uuids"`
 	}
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return false, err
 	}
 
@@ -856,7 +866,10 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	// Fetch the list types and ensure that they are not private.
 	listTypes, err := a.core.GetListTypes(nil, req.FormListUUIDs)
 	if err != nil {
-		return false, echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("%s", err.(*echo.HTTPError).Message))
+		if _, msg, ok := asHTTPError(err); ok {
+			return false, echo.NewHTTPError(http.StatusInternalServerError, msg)
+		}
+		return false, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorProcessingRequest"))
 	}
 
 	for _, t := range listTypes {
@@ -882,7 +895,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	var lastErr = err
 
 	// Subscriber already exists. Update subscriptions in the DB.
-	if e, ok := err.(*echo.HTTPError); ok && e.Code == http.StatusConflict {
+	if isHTTPStatus(err, http.StatusConflict) {
 		// Get the subscriber from the DB by their email.
 		sub, err := a.core.GetSubscriber(0, "", req.Email)
 		if err != nil {
@@ -890,7 +903,7 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 		}
 
 		// Update the subscriber's subscriptions in the DB.
-		_, hasOptin, err := a.core.UpdateSubscriberWithLists(sub.ID, sub, nil, listUUIDs, false, false, true)
+		_, hasOptin, err := a.core.UpdateSubscriberWithLists(sub.RecordID, sub, nil, listUUIDs, false, false, true)
 		if err == nil {
 			return hasOptin, nil
 		}
@@ -898,8 +911,8 @@ func (a *App) processSubForm(c echo.Context) (bool, error) {
 	}
 
 	// Something else went wrong.
-	if e, ok := lastErr.(*echo.HTTPError); ok {
-		return false, echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("%s", e.Message))
+	if _, msg, ok := asHTTPError(lastErr); ok {
+		return false, echo.NewHTTPError(http.StatusBadRequest, msg)
 	}
 	return false, echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("public.errorProcessingRequest"))
 }

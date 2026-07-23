@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/base64"
 	"fmt"
@@ -74,12 +75,12 @@ type twofaChallengeResp struct {
 	Next   string `json:"next"`
 }
 
-func getRequestedNextURI(c echo.Context) string {
-	if c.Request().Method == http.MethodGet {
-		return utils.SanitizeURI(c.QueryParam("next"))
+func getRequestedNextURI(re *pbcore.RequestEvent) string {
+	if re.Request.Method == http.MethodGet {
+		return utils.SanitizeURI(queryParam(re, "next"))
 	}
 
-	return utils.SanitizeURI(c.FormValue("next"))
+	return utils.SanitizeURI(re.Request.FormValue("next"))
 }
 
 func adminRedirectPath(next string) string {
@@ -100,37 +101,37 @@ func (a *App) isSetupRequired() bool {
 }
 
 // LoginSetupPage renders the first time user login page and handles the login form.
-func (a *App) LoginSetupPage(c echo.Context) error {
+func (a *App) LoginSetupPage(re *pbcore.RequestEvent) error {
 	if !a.isSetupRequired() {
-		return c.Redirect(http.StatusFound, path.Join(uriAdmin, "/login"))
+		return re.Redirect(http.StatusFound, path.Join(uriAdmin, "/login"))
 	}
 
 	// Process POST login request.
 	var loginErr error
-	if c.Request().Method == http.MethodPost {
-		loginErr = a.doFirstTimeSetup(c)
+	if re.Request.Method == http.MethodPost {
+		loginErr = a.doFirstTimeSetup(re)
 		if loginErr == nil {
 			a.Lock()
 			a.needsUserSetup = false
 			a.Unlock()
-			return c.Redirect(http.StatusFound, path.Join(uriAdmin, "/login"))
+			return re.Redirect(http.StatusFound, path.Join(uriAdmin, "/login"))
 		}
 	}
 
 	// Render the page, with or without POST.
-	return a.renderLoginSetupPage(c, loginErr)
+	return a.renderLoginSetupPage(re, loginErr)
 }
 
 // Logout logs a user out.
-func (a *App) Logout(c echo.Context) error {
+func (a *App) Logout(re *pbcore.RequestEvent) error {
 	// API auth is token-based via PocketBase. Logout is handled by clearing
 	// the token on the client and does not depend on server-side sessions.
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // renderLoginSetupPage renders the first time user setup page.
-func (a *App) renderLoginSetupPage(c echo.Context, loginErr error) error {
-	next := getRequestedNextURI(c)
+func (a *App) renderLoginSetupPage(re *pbcore.RequestEvent, loginErr error) error {
+	next := getRequestedNextURI(re)
 	if next == "/" {
 		next = uriAdmin
 	}
@@ -149,13 +150,13 @@ func (a *App) renderLoginSetupPage(c echo.Context, loginErr error) error {
 		}
 	}
 
-	return c.Render(http.StatusOK, "admin-login-setup", out)
+	return renderTpl(re, http.StatusOK, "admin-login-setup", out)
 }
 
 // AuthLogin authenticates a user and returns a JSON response for the Vue app.
-func (a *App) AuthLogin(c echo.Context) error {
+func (a *App) AuthLogin(re *pbcore.RequestEvent) error {
 	var req loginReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
 	}
 
@@ -198,23 +199,23 @@ func (a *App) AuthLogin(c echo.Context) error {
 		// Set the token.
 		tmptokens.Set(token, twofaTokenTTL, user.RecordID)
 
-		return c.JSON(http.StatusOK, okResp{twofaChallengeResp{
+		return okJSON(re, twofaChallengeResp{
 			Status: "twofa_required",
 			Token:  token,
 			Next:   adminRedirectPath(next),
-		}})
+		})
 	}
 
-	return a.writeClientAuth(c, user, next)
+	return a.writeClientAuth(re, user, next)
 }
 
 // doFirstTimeSetup sets a user up for the first time.
-func (a *App) doFirstTimeSetup(c echo.Context) error {
+func (a *App) doFirstTimeSetup(re *pbcore.RequestEvent) error {
 	var (
-		email     = strings.TrimSpace(c.FormValue("email"))
-		username  = strings.TrimSpace(c.FormValue("username"))
-		password  = strings.TrimSpace(c.FormValue("password"))
-		password2 = strings.TrimSpace(c.FormValue("password2"))
+		email     = strings.TrimSpace(re.Request.FormValue("email"))
+		username  = strings.TrimSpace(re.Request.FormValue("username"))
+		password  = strings.TrimSpace(re.Request.FormValue("password"))
+		password2 = strings.TrimSpace(re.Request.FormValue("password2"))
 	)
 	a.log.Printf("first-time setup: starting for username=%q email=%q", username, email)
 	if !utils.ValidateEmail(email) {
@@ -293,9 +294,9 @@ func (a *App) doFirstTimeSetup(c echo.Context) error {
 }
 
 // AuthForgotPassword starts the reset password flow.
-func (a *App) AuthForgotPassword(c echo.Context) error {
+func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 	var req forgotPasswordReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
 	}
 
@@ -304,18 +305,18 @@ func (a *App) AuthForgotPassword(c echo.Context) error {
 
 	// Validate email format.
 	if !utils.ValidateEmail(email) {
-		return c.JSON(http.StatusOK, success)
+		return re.JSON(http.StatusOK, success)
 	}
 
 	// Get the user by email.
 	user, err := a.core.GetUser("", "", email)
 	if err != nil {
-		return c.JSON(http.StatusOK, success)
+		return re.JSON(http.StatusOK, success)
 	}
 
 	// If the password login is disabled, do not proceed, but show success message to prevent email enumeration.
 	if !user.PasswordLogin {
-		return c.JSON(http.StatusOK, success)
+		return re.JSON(http.StatusOK, success)
 	}
 
 	// Generate a random token.
@@ -360,13 +361,13 @@ func (a *App) AuthForgotPassword(c echo.Context) error {
 	}
 
 	// Show the success e-mail nonetheless to prevent e-mail enumeration.
-	return c.JSON(http.StatusOK, success)
+	return re.JSON(http.StatusOK, success)
 }
 
 // AuthResetPassword validates a reset token and signs the user in with the new password.
-func (a *App) AuthResetPassword(c echo.Context) error {
+func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 	var req resetPasswordReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
 	}
 
@@ -411,13 +412,13 @@ func (a *App) AuthResetPassword(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
 	}
 
-	return a.writeClientAuth(c, user, uriAdmin)
+	return a.writeClientAuth(re, user, uriAdmin)
 }
 
 // AuthVerifyTwoFA completes a TOTP challenge and returns PocketBase auth payload.
-func (a *App) AuthVerifyTwoFA(c echo.Context) error {
+func (a *App) AuthVerifyTwoFA(re *pbcore.RequestEvent) error {
 	var req twofaVerifyReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidJSON"))
 	}
 
@@ -460,10 +461,10 @@ func (a *App) AuthVerifyTwoFA(c echo.Context) error {
 	// Invalidate the token.
 	tmptokens.Delete(token)
 
-	return a.writeClientAuth(c, user, next)
+	return a.writeClientAuth(re, user, next)
 }
 
-func (a *App) writeClientAuth(c echo.Context, user auth.User, next string) error {
+func (a *App) writeClientAuth(re *pbcore.RequestEvent, user auth.User, next string) error {
 	next = adminRedirectPath(next)
 
 	clientAuth, err := a.auth.IssueClientAuth(user)
@@ -474,17 +475,17 @@ func (a *App) writeClientAuth(c echo.Context, user auth.User, next string) error
 	user.Password = null.String{}
 	clientAuth.Record["profile"] = user
 
-	return c.JSON(http.StatusOK, okResp{clientAuthResp{
+	return okJSON(re, clientAuthResp{
 		Status: "authenticated",
 		Next:   next,
 		Token:  clientAuth.Token,
 		Record: clientAuth.Record,
-	}})
+	})
 }
 
 // GenerateTOTPQR generates a TOTP QR code for a user to scan with their authenticator app.
-func (a *App) GenerateTOTPQR(c echo.Context) error {
-	u := c.Get(auth.UserHTTPCtxKey).(auth.User)
+func (a *App) GenerateTOTPQR(re *pbcore.RequestEvent) error {
+	u := re.Get(auth.UserHTTPCtxKey).(auth.User)
 
 	// If TOTP is already enabled, don't generate a new key.
 	if u.TwofaType == models.TwofaTypeTOTP {
@@ -515,11 +516,11 @@ func (a *App) GenerateTOTPQR(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("globals.messages.internalError"))
 	}
 
-	return c.JSON(http.StatusOK, okResp{struct {
+	return okJSON(re, struct {
 		Secret string `json:"secret"`
 		QR     string `json:"qr"`
 	}{
 		Secret: key.Secret(),
 		QR:     base64.StdEncoding.EncodeToString(buf.Bytes()),
-	}})
+	})
 }

@@ -14,10 +14,11 @@ Allows sending transactional messages to one or more subscribers via a preconfig
 
 | Name              | Type       | Required | Description                                                                |
 | :---------------- | :--------- | :------- | :------------------------------------------------------------------------- |
-| subscriber_email  | string     |          | Email of the subscriber. Can substitute with `subscriber_id`.              |
-| subscriber_id     | number     |          | Subscriber's ID can substitute with `subscriber_email`.                    |
+| subscriber_email  | string     |          | Email of the subscriber. Can substitute with `subscriber_record_ids` / deprecated `subscriber_id`.              |
+| subscriber_id     | number     |          | Deprecated integer rowid. Prefer `subscriber_record_ids`.                    |
 | subscriber_emails | string\[\] |          | Multiple subscriber emails as alternative to `subscriber_email`.           |
-| subscriber_ids    | number\[\] |          | Multiple subscriber IDs as an alternative to `subscriber_id`.              |
+| subscriber_ids    | number\[\] |          | Deprecated integer rowids. Prefer `subscriber_record_ids`.              |
+| subscriber_record_ids | string\[\] |          | PocketBase subscriber record IDs (preferred over `subscriber_ids`).              |
 | subscriber_mode   | string     |          | Subscriber lookup mode: `default`, `fallback`, or `external`               |
 | template_id       | number     | Yes      | ID of the transactional template to be used for the message.               |
 | from_email        | string     |          | Optional sender email.                                                     |
@@ -34,7 +35,7 @@ The `subscriber_mode` parameter controls how the recipients (subscribers or non-
 
 | Mode       | Description                                                                                                                                                                                                                                                                    |
 | :--------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `default`  | Recipients must exist as subscribers in the database. Pass either `subscriber_emails` or `subscriber_ids`.                                                                                                                                                                     |
+| `default`  | Recipients must exist as subscribers in the database. Pass either `subscriber_emails` or `subscriber_record_ids` (or deprecated `subscriber_ids`).                                                                                                                                                                     |
 | `fallback` | Only accepts `subscriber_emails` and looks up subscribers in the database. If not found, sends the message to the e-mail anyway. In the template, apart from `{{ .Subscriber.Email }}`, other subscriber fields such as `.Name`. will be empty. Use `{{ Tx.Data.* }}` instead. |
 | `external` | Sends to the given `subscriber_emails` without subscriber lookup in the database. In the template, apart from `{{ .Subscriber.Email }}`, other subscriber fields such as `.Name`. will be empty. Use `{{ Tx.Data.* }}` instead.                                                |
 

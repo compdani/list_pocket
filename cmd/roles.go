@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"fmt"
 	"net/http"
 	"strings"
@@ -9,8 +10,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func roleRouteRecordID(c echo.Context) (string, error) {
-	recordID := strings.TrimSpace(c.Param("id"))
+func roleRouteRecordID(re *pbcore.RequestEvent) (string, error) {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -18,31 +19,31 @@ func roleRouteRecordID(c echo.Context) (string, error) {
 }
 
 // GetUserRoles retrieves roles.
-func (a *App) GetUserRoles(c echo.Context) error {
+func (a *App) GetUserRoles(re *pbcore.RequestEvent) error {
 	// Get all roles.
 	out, err := a.core.GetRoles()
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GeListRoles retrieves roles.
-func (a *App) GeListRoles(c echo.Context) error {
+func (a *App) GeListRoles(re *pbcore.RequestEvent) error {
 	// Get all roles.
 	out, err := a.core.GetListRoles()
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // CreateUserRole handles role creation.
-func (a *App) CreateUserRole(c echo.Context) error {
+func (a *App) CreateUserRole(re *pbcore.RequestEvent) error {
 	var r auth.Role
-	if err := c.Bind(&r); err != nil {
+	if err := bindJSON(re, &r); err != nil {
 		return err
 	}
 	if err := a.validateUserRole(r); err != nil {
@@ -55,13 +56,13 @@ func (a *App) CreateUserRole(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // CreateListRole handles role creation.
-func (a *App) CreateListRole(c echo.Context) error {
+func (a *App) CreateListRole(re *pbcore.RequestEvent) error {
 	var r auth.ListRole
-	if err := c.Bind(&r); err != nil {
+	if err := bindJSON(re, &r); err != nil {
 		return err
 	}
 	if err := a.validateListRole(r); err != nil {
@@ -74,12 +75,12 @@ func (a *App) CreateListRole(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateUserRole handles role modification.
-func (a *App) UpdateUserRole(c echo.Context) error {
-	recordID, err := roleRouteRecordID(c)
+func (a *App) UpdateUserRole(re *pbcore.RequestEvent) error {
+	recordID, err := roleRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -95,7 +96,7 @@ func (a *App) UpdateUserRole(c echo.Context) error {
 
 	// Incoming params.
 	var r auth.Role
-	if err := c.Bind(&r); err != nil {
+	if err := bindJSON(re, &r); err != nil {
 		return err
 	}
 	if err := a.validateUserRole(r); err != nil {
@@ -116,12 +117,12 @@ func (a *App) UpdateUserRole(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateListRole handles role modification.
-func (a *App) UpdateListRole(c echo.Context) error {
-	recordID, err := roleRouteRecordID(c)
+func (a *App) UpdateListRole(re *pbcore.RequestEvent) error {
+	recordID, err := roleRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -137,7 +138,7 @@ func (a *App) UpdateListRole(c echo.Context) error {
 
 	// Incoming params.
 	var r auth.ListRole
-	if err := c.Bind(&r); err != nil {
+	if err := bindJSON(re, &r); err != nil {
 		return err
 	}
 
@@ -159,12 +160,12 @@ func (a *App) UpdateListRole(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // DeleteRole handles (user|list) role deletion.
-func (a *App) DeleteRole(c echo.Context) error {
-	recordID, err := roleRouteRecordID(c)
+func (a *App) DeleteRole(re *pbcore.RequestEvent) error {
+	recordID, err := roleRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -188,7 +189,7 @@ func (a *App) DeleteRole(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 func (a *App) validateUserRole(r auth.Role) error {

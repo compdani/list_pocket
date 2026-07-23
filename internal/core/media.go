@@ -14,7 +14,8 @@ import (
 )
 
 type sqliteMediaRow struct {
-	ID          int    `db:"id"`
+	ID          string `db:"id"`
+	RowID       int    `db:"row_id"`
 	UUID        string `db:"uuid"`
 	Filename    string `db:"filename"`
 	ContentType string `db:"content_type"`
@@ -33,6 +34,7 @@ func sqliteMediaRowToModel(row sqliteMediaRow) media.Media {
 
 	return media.Media{
 		ID:          row.ID,
+		RowID:       row.RowID,
 		UUID:        row.UUID,
 		Filename:    row.Filename,
 		ContentType: row.ContentType,
@@ -44,13 +46,10 @@ func sqliteMediaRowToModel(row sqliteMediaRow) media.Media {
 	}
 }
 
-// QueryMedia returns media entries optionally filtered by a query string.
-func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, limit int) ([]media.Media, int, error) {
-	rows := []sqliteMediaRow{}
-	q := `
+const sqliteMediaSelect = `
 			SELECT
-				COUNT(*) OVER () AS total,
-				rowid AS id,
+				id,
+				rowid AS row_id,
 				uuid,
 				filename,
 				content_type,
@@ -58,6 +57,13 @@ func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, 
 				created AS created_at,
 				provider,
 				meta
+`
+
+// QueryMedia returns media entries optionally filtered by a query string.
+func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, limit int) ([]media.Media, int, error) {
+	rows := []sqliteMediaRow{}
+	q := sqliteMediaSelect + `,
+				COUNT(*) OVER () AS total
 			FROM media
 			WHERE provider = ?
 		`
@@ -91,26 +97,17 @@ func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, 
 	return out, total, nil
 }
 
-// GetMedia returns a media item.
-func (c *Core) GetMedia(id int, uuid, fileName string, s media.Store) (media.Media, error) {
-	q := `
-			SELECT
-				rowid AS id,
-				uuid,
-				filename,
-				content_type,
-				thumb,
-				created AS created_at,
-				provider,
-				meta,
+// GetMedia returns a media item by PocketBase record id, uuid, or filename.
+func (c *Core) GetMedia(recordID, uuid, fileName string, s media.Store) (media.Media, error) {
+	q := sqliteMediaSelect + `,
 				0 AS total
 			FROM media
 			WHERE `
 	args := []any{}
 	switch {
-	case id > 0:
-		q += `rowid = ?`
-		args = append(args, id)
+	case strings.TrimSpace(recordID) != "":
+		q += `id = ?`
+		args = append(args, strings.TrimSpace(recordID))
 	case uuid != "":
 		q += `uuid = ?`
 		args = append(args, uuid)
@@ -122,6 +119,34 @@ func (c *Core) GetMedia(id int, uuid, fileName string, s media.Store) (media.Med
 
 	var row sqliteMediaRow
 	if err := c.db.Get(&row, q, args...); err != nil {
+		if err == sql.ErrNoRows {
+			return media.Media{}, ErrNotFound
+		}
+		return media.Media{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+	}
+
+	out := sqliteMediaRowToModel(row)
+	out.URL = s.GetURL(out.Filename)
+	if out.Thumb != "" {
+		out.ThumbURL = null.String{Valid: true, String: s.GetURL(out.Thumb)}
+	}
+	return out, nil
+}
+
+// GetMediaByRowID returns a media item by SQLite rowid (send-loop / attachments).
+func (c *Core) GetMediaByRowID(rowID int, s media.Store) (media.Media, error) {
+	if rowID < 1 {
+		return media.Media{}, ErrNotFound
+	}
+	q := sqliteMediaSelect + `,
+				0 AS total
+			FROM media
+			WHERE rowid = ?
+			LIMIT 1`
+
+	var row sqliteMediaRow
+	if err := c.db.Get(&row, q, rowID); err != nil {
 		if err == sql.ErrNoRows {
 			return media.Media{}, ErrNotFound
 		}
@@ -154,21 +179,84 @@ func (c *Core) InsertMedia(fileName, thumbName, contentType string, meta models.
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
 
-	return c.GetMedia(0, uu.String(), "", s)
+	return c.GetMedia("", uu.String(), "", s)
 }
 
-// DeleteMedia deletes a given media item and returns the filename of the deleted item.
-func (c *Core) DeleteMedia(id int) (string, error) {
+// DeleteMedia deletes a given media item by PocketBase record id and returns the filename.
+func (c *Core) DeleteMedia(recordID string) (string, error) {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest,
+			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.media}"))
+	}
+
 	var fname string
-	if err := c.db.Get(&fname, `SELECT filename FROM media WHERE rowid = ?`, id); err != nil {
+	if err := c.db.Get(&fname, `SELECT filename FROM media WHERE id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting uploaded file from db: %v", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
-	if _, err := c.db.Exec(`DELETE FROM media WHERE rowid = ?`, id); err != nil {
+	if _, err := c.db.Exec(`DELETE FROM media WHERE id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting uploaded file from db: %v", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
 	}
 	return fname, nil
+}
+
+// ResolveMediaRecordIDs resolves deprecated int rowids and/or record ids to media record ids.
+func (c *Core) ResolveMediaRecordIDs(mediaIDs []int, mediaRecordIDs []string) ([]string, error) {
+	out := make([]string, 0, len(mediaIDs)+len(mediaRecordIDs))
+	seen := map[string]struct{}{}
+
+	for _, id := range mediaRecordIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	if len(mediaIDs) == 0 {
+		return out, nil
+	}
+
+	query := `SELECT id FROM media WHERE rowid IN (` + sqlitePlaceholders(len(mediaIDs)) + `)`
+	args := make([]any, 0, len(mediaIDs))
+	for _, id := range mediaIDs {
+		args = append(args, id)
+	}
+	var resolved []string
+	if err := c.db.Select(&resolved, query, args...); err != nil {
+		return nil, err
+	}
+	for _, id := range resolved {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+// ResolveMediaRowIDs resolves media record ids to SQLite rowids (for MediaIDs send-loop fields).
+func (c *Core) ResolveMediaRowIDs(mediaRecordIDs []string) ([]int64, error) {
+	if len(mediaRecordIDs) == 0 {
+		return nil, nil
+	}
+	query := `SELECT rowid FROM media WHERE id IN (` + sqlitePlaceholders(len(mediaRecordIDs)) + `)`
+	args := make([]any, 0, len(mediaRecordIDs))
+	for _, id := range mediaRecordIDs {
+		args = append(args, id)
+	}
+	var out []int64
+	if err := c.db.Select(&out, query, args...); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

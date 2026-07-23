@@ -9,7 +9,10 @@ import (
 
 // Media represents an uploaded object.
 type Media struct {
-	ID          int         `db:"id" json:"id"`
+	// ID is the PocketBase record id (API edge).
+	ID string `db:"id" json:"id"`
+	// RowID is the SQLite rowid used by hot-path send loops.
+	RowID       int         `db:"row_id" json:"-"`
 	UUID        string      `db:"uuid" json:"uuid"`
 	Filename    string      `db:"filename" json:"filename"`
 	ContentType string      `db:"content_type" json:"content_type"`

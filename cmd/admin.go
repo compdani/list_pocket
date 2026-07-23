@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -48,7 +49,7 @@ type smtpSenderConfig struct {
 }
 
 // GetServerConfig returns general server config.
-func (a *App) GetServerConfig(c echo.Context) error {
+func (a *App) GetServerConfig(re *pbcore.RequestEvent) error {
 	out := serverConfig{
 		RootURL:       a.urlCfg.RootURL,
 		FromEmail:     a.cfg.FromEmail,
@@ -139,12 +140,12 @@ func (a *App) GetServerConfig(c echo.Context) error {
 	a.Unlock()
 	out.Version = versionString
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetDashboardCharts returns chart data points to render ont he dashboard.
-func (a *App) GetDashboardCharts(c echo.Context) error {
-	tz := c.QueryParam("tz")
+func (a *App) GetDashboardCharts(re *pbcore.RequestEvent) error {
+	tz := queryParam(re, "tz")
 
 	// Get the chart data from the DB.
 	out, err := a.core.GetDashboardCharts(tz)
@@ -152,22 +153,22 @@ func (a *App) GetDashboardCharts(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetDashboardCounts returns stats counts to show on the dashboard.
-func (a *App) GetDashboardCounts(c echo.Context) error {
+func (a *App) GetDashboardCounts(re *pbcore.RequestEvent) error {
 	// Get the chart data from the DB.
 	out, err := a.core.GetDashboardCounts()
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // ReloadApp sends a reload signal to the app, causing a full restart.
-func (a *App) ReloadApp(c echo.Context) error {
+func (a *App) ReloadApp(re *pbcore.RequestEvent) error {
 	go func() {
 		<-time.After(time.Millisecond * 500)
 
@@ -175,5 +176,5 @@ func (a *App) ReloadApp(c echo.Context) error {
 		a.chReload <- syscall.SIGHUP
 	}()
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }

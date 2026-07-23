@@ -1,6 +1,6 @@
 // package core is the collection of re-usable functions that primarily provides data (DB / CRUD) operations
 // to the app. For instance, creating and mutating objects like lists, subscribers etc.
-// All such methods return an echo.HTTPError{} (which implements error.error) that can be directly returned
+// All such methods return an *apperr.Error (which implements error) that can be directly returned
 // as a response to HTTP handlers without further processing.
 package core
 
@@ -8,16 +8,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
-	"net/http"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/labstack/echo/v4"
 )
 
 const (
@@ -67,7 +66,7 @@ type Opt struct {
 }
 
 var (
-	ErrNotFound = echo.NewHTTPError(http.StatusNotFound, "not found")
+	ErrNotFound = apperr.NotFound("not found")
 )
 
 var (

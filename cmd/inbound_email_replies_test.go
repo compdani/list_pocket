@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 func TestNormalizeSESInboundEmail_Base64MIME(t *testing.T) {
@@ -251,18 +252,18 @@ func TestLogInboundEmailWebhookRequestDoesNotLogBody(t *testing.T) {
 
 	var logs bytes.Buffer
 	app := &App{log: log.New(&logs, "", 0)}
-	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/ses", strings.NewReader(""))
 	req.Header.Set(echo.HeaderContentType, "text/plain; charset=UTF-8")
 	req.Header.Set("X-Amz-Sns-Message-Type", "Notification")
 	req.Header.Set("X-Amz-Sns-Topic-Arn", "arn:aws:sns:us-east-1:123456789012:ses-received")
 	req.Header.Set("X-Amz-Sns-Message-Id", "sns-message-id")
 	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/webhooks/ses")
+	re := &pbcore.RequestEvent{}
+	re.Request = req
+	re.Response = rec
 
 	body := []byte(`{"Type":"Notification","Message":"{\"notificationType\":\"Received\",\"content\":\"secret-body\"}"}`)
-	app.logInboundEmailWebhookRequest(c, body)
+	app.logInboundEmailWebhookRequest(re, body)
 
 	line := logs.String()
 	if strings.Contains(line, "body=") || strings.Contains(line, "secret-body") {

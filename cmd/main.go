@@ -18,6 +18,7 @@ import (
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/bounce"
 	"github.com/compdani/list_pocket/internal/buflog"
+	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/internal/captcha"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/events"
@@ -35,7 +36,9 @@ import (
 	"github.com/knadh/koanf/v2"
 	"github.com/knadh/paginator"
 	"github.com/knadh/stuffbin"
+	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase"
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 )
 
@@ -62,6 +65,7 @@ type App struct {
 	bufLog     *buflog.BufLog
 	pb         *pocketbase.PocketBase
 	tpl        *template.Template
+	echo       *echo.Echo
 
 	about         about
 	fnOptinNotify func(models.Subscriber, []int) (int, error)
@@ -136,7 +140,7 @@ func init() {
 			lo.Println(err)
 			os.Exit(1)
 		}
-		lo.Printf("generated %s. Edit and run --install", path)
+		lo.Printf("generated %s. Edit the file and run the app (migrations apply on serve).", path)
 		os.Exit(0)
 	}
 
@@ -159,72 +163,134 @@ func init() {
 		lo.Fatalf("error loading config from env: %v", err)
 	}
 
-	// Initialize PocketBase.
+	// Deprecated listmonk installer flags: migrations run via PocketBase serve/startup.
+	if ko.Bool("install") {
+		lo.Printf("--install is deprecated: app migrations run automatically on serve/startup")
+		os.Exit(0)
+	}
+	if ko.Bool("upgrade") {
+		lo.Printf("--upgrade is deprecated: app migrations run automatically on serve/startup")
+		os.Exit(0)
+	}
+
+	// Create PocketBase (bootstrap happens in pb.Start()).
 	pb = initPocketBase()
 	migratecmd.MustRegister(pb, pb.RootCmd, migratecmd.Config{
-		// enable auto creation of migration files when making collection changes in the Dashboard
-		// (the IsProbablyGoRun check is to enable it only during development)
 		Automigrate: false, // disable automigrate to prevent accidental migration file creation in production
 	})
 
-	db = initDB()
-
-	// Initialize the embedded filesystem with static assets.
+	// Initialize the embedded filesystem with static assets (no DB required).
 	fs = initFS(appDir, frontendDir, ko.String("static-dir"), ko.String("i18n-dir"))
-
-	// Installer mode? This runs before settings are loaded from the DB
-	// as the installer needs to work on an empty DB.
-	if ko.Bool("install") {
-		lo.Printf("PocketBase mode: app migrations are applied automatically on startup; skipping --install")
-		os.Exit(0)
-	}
-
-	if ko.Bool("upgrade") {
-		lo.Printf("PocketBase mode: app migrations are applied automatically on startup; skipping --upgrade")
-		os.Exit(0)
-	}
-
-	initSettings(ko)
 }
 
 func main() {
 	var (
-		// Initialize static global config.
-		cfg = initConstConfig(ko)
-
-		// Initialize static URL config.
-		urlCfg = initUrlConfig(ko)
-
-		// Initialize i18n language map.
-		i18n = initI18n(ko.MustString("app.lang"), fs)
-
-		// Initialize the media store.
-		media = initMediaStore(ko)
-
-		fbOptinNotify = makeOptinNotifyHook(ko.Bool("privacy.unsubscribe_header"), urlCfg, db, i18n)
-
-		// Crud core.
-		core = initCore(fbOptinNotify, db, i18n, ko)
-
-		// Auth module.
-		authn = initAuth(core, pb, ko)
-
-		// Initialize all messengers, SMTP and postback.
-		msgrs = append(initSMTPMessengers(), initPostbackMessengers(ko)...)
-
-		// Campaign manager.
-		mgr = initCampaignManager(msgrs, db, urlCfg, core, media, i18n, ko)
-
-		// Bulk importer.
-		importer = initImporter(db, core, i18n, ko)
-
-		// Initialize the webhook/POP3 bounce processor.
-		bounce *bounce.Manager
-
-		emailMsgr *email.Emailer
-
-		chReload = make(chan os.Signal, 1)
+		app   *App
+		appMu sync.Mutex
 	)
+
+	pb.OnBootstrap().BindFunc(func(e *pbcore.BootstrapEvent) error {
+		if err := e.Next(); err != nil {
+			return err
+		}
+
+		// App migrations must run before settings/DB-dependent wiring.
+		// apis.Serve also runs migrations; a second pass is a no-op for applied ones.
+		if err := pb.RunAppMigrations(); err != nil {
+			return fmt.Errorf("run app migrations: %w", err)
+		}
+
+		db = initDB()
+		initSettings(ko)
+		return nil
+	})
+
+	campaignledger.RegisterHooks(pb)
+
+	workflow.Register(pb, workflow.Config{
+		FrontendDir: "../frontend/dist",
+		SendTransactional: func(ctx context.Context, req workflow.ExecutorTransactionalEmailRequest) (workflow.ExecutorTransactionalEmailResult, error) {
+			_ = ctx
+			appMu.Lock()
+			a := app
+			appMu.Unlock()
+			if a == nil {
+				return workflow.ExecutorTransactionalEmailResult{}, fmt.Errorf("app not ready")
+			}
+			record, err := a.newTransactionalSender().Send(txRequestFromWorkflow(req))
+			if err != nil {
+				return workflow.ExecutorTransactionalEmailResult{}, err
+			}
+			return workflow.ExecutorTransactionalEmailResult{
+				RecordID:        record.RecordID,
+				UUID:            record.UUID,
+				SubscriberID:    record.SubscriberID,
+				SubscriberEmail: record.SubscriberEmail,
+				TemplateID:      record.TemplateID,
+				TemplateName:    record.TemplateName,
+				Status:          record.Status,
+				Subject:         record.Subject,
+			}, nil
+		},
+	})
+
+	chReload := make(chan os.Signal, 1)
+	signal.Notify(chReload, syscall.SIGHUP)
+	startSIGHUPReload(chReload, func() {
+		appMu.Lock()
+		a := app
+		appMu.Unlock()
+		shutdownApp(a)
+		if pb != nil {
+			_ = pb.ResetBootstrapState()
+		}
+		if db != nil {
+			_ = db.Close()
+		}
+	})
+
+	pb.OnServe().BindFunc(func(se *pbcore.ServeEvent) error {
+		appMu.Lock()
+		if app == nil {
+			app = wireApp(chReload)
+		}
+		a := app
+		appMu.Unlock()
+
+		registerServeRoutes(se, a)
+		return se.Next()
+	})
+
+	pb.OnTerminate().BindFunc(func(e *pbcore.TerminateEvent) error {
+		appMu.Lock()
+		a := app
+		appMu.Unlock()
+		shutdownApp(a)
+		return e.Next()
+	})
+
+	ensureDefaultServeArgs()
+
+	if err := pb.Start(); err != nil {
+		lo.Fatalf("error starting pocketbase: %v", err)
+	}
+}
+
+// wireApp constructs the application services after PocketBase bootstrap/settings load.
+func wireApp(chReload chan os.Signal) *App {
+	cfg := initConstConfig(ko)
+	urlCfg := initUrlConfig(ko)
+	i18n := initI18n(ko.MustString("app.lang"), fs)
+	mediaStore := initMediaStore(ko)
+	fbOptinNotify := makeOptinNotifyHook(ko.Bool("privacy.unsubscribe_header"), urlCfg, db, i18n)
+	coreSvc := initCore(fbOptinNotify, db, i18n, ko)
+	authn := initAuth(coreSvc, pb, ko)
+	msgrs := append(initSMTPMessengers(), initPostbackMessengers(ko)...)
+	mgr := initCampaignManager(msgrs, db, urlCfg, coreSvc, mediaStore, i18n, ko)
+	importer := initImporter(db, coreSvc, i18n, ko)
+
+	var bounceMgr *bounce.Manager
+	var emailMsgr *email.Emailer
 
 	mgr.SetSMSRateLimits(func() models.TextMessagingSendLimits {
 		return loadTextMessagingSettingsFromPB(pb).SendLimits
@@ -241,36 +307,25 @@ func main() {
 		}
 	}
 
-	// Initialize the bounce manager that processes bounces from webhooks and
-	// POP3 mailbox scanning.
 	if ko.Bool("bounce.enabled") {
-		bounce = initBounceManager(core.RecordBounce, lo, ko)
+		bounceMgr = initBounceManager(coreSvc.RecordBounce, lo, ko)
 	}
 
-	// Assign the default `email` messenger to the app.
 	for _, m := range msgrs {
 		if m.Name() == "email" {
 			emailMsgr = m.(*email.Emailer)
 		}
 	}
 
-	// Initialize the global admin/sub e-mail notifier.
 	initNotifs(fs, i18n, emailMsgr, urlCfg, ko)
+	initTxTemplates(mgr, coreSvc)
 
-	// Initialize and cache tx templates in memory.
-	initTxTemplates(mgr, core)
-
-	// Initialize the bounce manager that processes bounces from webhooks and
-	// POP3 mailbox scanning.
-	if ko.Bool("bounce.enabled") {
-		go bounce.Run()
+	if ko.Bool("bounce.enabled") && bounceMgr != nil {
+		go bounceMgr.Run()
 	}
 
-	// Start cronjobs.
-	initCron(pb, core, db, mgr)
+	initCron(pb, coreSvc, db, mgr)
 
-	// Start the campaign manager workers. The campaign batches (fetch from DB, push out
-	// messages) get processed at the specified interval.
 	if ko.Bool("passive") {
 		lo.Println("running in passive mode. won't process campaigns or workflow runs.")
 	} else {
@@ -278,30 +333,31 @@ func main() {
 		go mgr.Run()
 	}
 
-	if err := ensureSuperAdminRolePermissions(core, cfg); err != nil {
+	if err := ensureSuperAdminRolePermissions(coreSvc, cfg); err != nil {
 		lo.Fatalf("error ensuring super admin permissions: %v", err)
 	}
 
-	// Sync user/auth records and determine first-time setup state.
 	hasUser, err := refreshAuthCache(authn)
 	if err != nil {
 		lo.Fatalf("error caching users: %v", err)
 	}
-	// =========================================================================
-	// Initialize the App{} with all the global shared components, controllers and fields.
+
+	tpl := parsePublicTemplates(i18n, urlCfg, fs)
+	echoAdaptor := newEchoAdaptor(tpl, cfg, urlCfg, lo, i18n)
+
 	app := &App{
 		cfg:        cfg,
 		urlCfg:     urlCfg,
 		fs:         fs,
 		db:         db,
-		core:       core,
+		core:       coreSvc,
 		manager:    mgr,
 		messengers: msgrs,
 		emailMsgr:  emailMsgr,
 		importer:   importer,
 		auth:       authn,
-		media:      media,
-		bounce:     bounce,
+		media:      mediaStore,
+		bounce:     bounceMgr,
 		captcha:    initCaptcha(),
 		i18n:       i18n,
 		log:        lo,
@@ -309,6 +365,8 @@ func main() {
 		aiBuilder:  newAIBuilderService(newAIBuilderProvider(), lo),
 		bufLog:     bufLog,
 		pb:         pb,
+		tpl:        tpl,
+		echo:       echoAdaptor,
 
 		pg: paginator.New(paginator.Opt{
 			DefaultPerPage: 20,
@@ -323,49 +381,27 @@ func main() {
 		about:         initAbout(db),
 		chReload:      chReload,
 
-		// First time installation with no user records in the DB.
 		needsUserSetup: !hasUser,
 	}
 	evStream.SetPublishHook(app.publishRealtimeEvent)
 
-	// Star the update checker.
 	if ko.Bool("app.check_updates") {
 		go app.checkUpdates(versionString, time.Hour*24)
 	}
 
-	// Start the app server.
-	srv := initHTTPServer(cfg, urlCfg, i18n, fs, app)
+	return app
+}
 
-	// =========================================================================
-	// Wait for the reload signal with a callback to gracefully shut down resources.
-	// The `wait` channel is passed to awaitReload to wait for the callback to finish
-	// within N seconds, or do a force reload.
-	signal.Notify(chReload, syscall.SIGHUP)
-
-	closerWait := make(chan bool)
-	<-awaitReload(chReload, closerWait, func() {
-		// Stop the HTTP server.
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		srv.Shutdown(ctx)
-		if app.pb != nil {
-			_ = app.pb.ResetBootstrapState()
-		}
-
-		// Close the campaign manager.
-		mgr.Close()
-
-		// Close the DB pool.
-		db.Close()
-
-		// Close the messenger pool.
-		for _, m := range app.messengers {
-			m.Close()
-		}
-
-		// Signal the close.
-		closerWait <- true
-	})
+func shutdownApp(app *App) {
+	if app == nil {
+		return
+	}
+	if app.manager != nil {
+		app.manager.Close()
+	}
+	for _, m := range app.messengers {
+		m.Close()
+	}
 }
 
 func ensureSuperAdminRolePermissions(core *core.Core, cfg *Config) error {

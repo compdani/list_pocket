@@ -14,7 +14,7 @@ If you run under systemd or another supervisor, use the usual `stop` / `start` c
 
 ## CLI flags `--install` and `--upgrade`
 
-These flags are kept for compatibility with older listmonk automation. In List Pocket’s PocketBase mode they do not apply SQL migrations themselves; migrations run when the app starts. Prefer backing up `pb_data` and restarting with a new binary.
+These flags are deprecated no-ops kept for compatibility with older listmonk automation. Migrations run on `serve`/startup (or via `listpocket migrate up`). Prefer backing up `pb_data` and restarting with a new binary.
 
 ## Coming from upstream listmonk
 
