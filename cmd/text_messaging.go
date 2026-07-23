@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"context"
 	"encoding/json"
 	"errors"
@@ -58,18 +59,18 @@ func (a *App) ensureQuoMessengerRegistered() {
 	a.messengers = append(a.messengers, qm)
 }
 
-func (a *App) GetTextMessagingSettings(c echo.Context) error {
+func (a *App) GetTextMessagingSettings(re *pbcore.RequestEvent) error {
 	s := a.loadTextMessagingSettings()
 	root := strings.TrimSpace(a.urlCfg.RootURL)
 	if root == "" && a.cfg != nil {
 		root = strings.TrimSpace(a.cfg.SiteName)
 	}
-	return c.JSON(http.StatusOK, okResp{s.ToResponse(root)})
+	return okJSON(re, s.ToResponse(root))
 }
 
-func (a *App) UpdateTextMessagingSettings(c echo.Context) error {
+func (a *App) UpdateTextMessagingSettings(re *pbcore.RequestEvent) error {
 	var in models.TextMessagingSettings
-	if err := c.Bind(&in); err != nil {
+	if err := bindJSON(re, &in); err != nil {
 		return err
 	}
 	cur := a.loadTextMessagingSettings()
@@ -86,7 +87,7 @@ func (a *App) UpdateTextMessagingSettings(c echo.Context) error {
 	}
 	a.ensureQuoMessengerRegistered()
 	root := strings.TrimSpace(a.urlCfg.RootURL)
-	return c.JSON(http.StatusOK, okResp{merged.ToResponse(root)})
+	return okJSON(re, merged.ToResponse(root))
 }
 
 func validateTextMessagingSettings(s models.TextMessagingSettings) error {
@@ -121,9 +122,9 @@ type textMessagingTestRequest struct {
 	To string `json:"to"`
 }
 
-func (a *App) TestTextMessagingSettings(c echo.Context) error {
+func (a *App) TestTextMessagingSettings(re *pbcore.RequestEvent) error {
 	var req textMessagingTestRequest
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 	to := strings.TrimSpace(req.To)
@@ -136,10 +137,10 @@ func (a *App) TestTextMessagingSettings(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	body := []byte("ListPocket SMS test message.")
-	if err := client.SendText(c.Request().Context(), to, body); err != nil {
+	if err := client.SendText(re.Request.Context(), to, body); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
-	return c.JSON(http.StatusOK, okResp{Data: map[string]bool{"sent": true}})
+	return okJSON(re, map[string]bool{"sent": true})
 }
 
 // quoWebhookMessagePayload is data.object for message webhooks. Quo v3 uses "body"; v4 docs use "text".
@@ -211,8 +212,8 @@ func quoParseMessageWebhookEvent(body []byte) (eventType string, msg quoWebhookM
 }
 
 // QuoMessageWebhook handles POST /webhooks/quo/:token for inbound message events (STOP, etc.).
-func (a *App) QuoMessageWebhook(c echo.Context) error {
-	token := strings.TrimSpace(c.Param("token"))
+func (a *App) QuoMessageWebhook(re *pbcore.RequestEvent) error {
+	token := strings.TrimSpace(pathParam(re, "token"))
 	if token == "" {
 		return echo.NewHTTPError(http.StatusNotFound, "not found")
 	}
@@ -221,7 +222,7 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
 
-	body, err := io.ReadAll(io.LimitReader(c.Request().Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(re.Request.Body, 1<<20))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid body")
 	}
@@ -230,7 +231,7 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 	}
 
 	if sec := strings.TrimSpace(s.WebhookSigningSecret); sec != "" {
-		sig := c.Request().Header.Get(quo.OpenPhoneSignatureHeader())
+		sig := re.Request.Header.Get(quo.OpenPhoneSignatureHeader())
 		if err := quo.VerifyWebhookSignature(sec, sig, body, 10*time.Minute); err != nil {
 			a.log.Printf("quo webhook: signature: %v", err)
 			return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
@@ -240,18 +241,18 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 	eventType, obj, err := quoParseMessageWebhookEvent(body)
 	if err != nil {
 		a.log.Printf("quo webhook: invalid json: %v", err)
-		return c.NoContent(http.StatusOK)
+		return re.NoContent(http.StatusOK)
 	}
 	if eventType != "message.received" {
-		return c.NoContent(http.StatusOK)
+		return re.NoContent(http.StatusOK)
 	}
 	if strings.ToLower(strings.TrimSpace(obj.Direction)) != "incoming" {
-		return c.NoContent(http.StatusOK)
+		return re.NoContent(http.StatusOK)
 	}
 	textBody := obj.mergedText()
 	if strings.TrimSpace(textBody) == "" && strings.TrimSpace(obj.ID) != "" {
 		if cl, err := quo.NewClientFromSettings(s); err == nil {
-			ctx, cancel := context.WithTimeout(c.Request().Context(), 8*time.Second)
+			ctx, cancel := context.WithTimeout(re.Request.Context(), 8*time.Second)
 			t, err := cl.GetMessageText(ctx, obj.ID)
 			cancel()
 			if err == nil {
@@ -262,7 +263,7 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 	from := strings.TrimSpace(obj.From)
 	if from == "" {
 		a.log.Printf("quo webhook: message.received with empty from; id=%q status=%q text=%q", obj.ID, obj.Status, quoTrimForLog(textBody))
-		return c.NoContent(http.StatusOK)
+		return re.NoContent(http.StatusOK)
 	}
 
 	isStop := quoIsStopKeyword(textBody)
@@ -270,7 +271,7 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 	if err := json.Unmarshal(body, &rawPayload); err != nil {
 		a.log.Printf("quo webhook: raw payload decode warning: %v", err)
 	}
-	if _, err := a.core.CreateInboundSMSEvent(c.Request().Context(), &models.InboundSMSEvent{
+	if _, err := a.core.CreateInboundSMSEvent(re.Request.Context(), &models.InboundSMSEvent{
 		PhoneNumber:   from,
 		ProviderID:    models.CampaignMessengerQuo,
 		ProviderMsgID: strings.TrimSpace(obj.ID),
@@ -289,12 +290,12 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 		// people out (e.g. the reply was "stop texting me please" but our keyword
 		// matcher didn't recognize it for some reason).
 		a.log.Printf("quo webhook: inbound message (no stop keyword) from=%q id=%q status=%q text=%q", from, obj.ID, obj.Status, quoTrimForLog(textBody))
-		return c.NoContent(http.StatusOK)
+		return re.NoContent(http.StatusOK)
 	}
 	n, err := a.core.SMSOptOutSubscriberByPhone(from)
 	if err != nil {
 		a.log.Printf("quo webhook STOP: from=%q status=%q err=%v", from, obj.Status, err)
-		return c.NoContent(http.StatusOK)
+		return re.NoContent(http.StatusOK)
 	}
 	if n > 0 {
 		a.log.Printf("quo webhook: SMS opt-out for phone %q (%d rows) status=%q text=%q", from, n, obj.Status, quoTrimForLog(textBody))
@@ -304,7 +305,7 @@ func (a *App) QuoMessageWebhook(c echo.Context) error {
 		// with a local-format number and Quo sent E.164 (or vice-versa).
 		a.log.Printf("quo webhook: STOP from %q matched keyword %q but no subscriber rows updated; status=%q check phone format in subscribers table", from, quoTrimForLog(textBody), obj.Status)
 	}
-	return c.NoContent(http.StatusOK)
+	return re.NoContent(http.StatusOK)
 }
 
 // quoStopKeywordLeadWordLimit is how many leading whitespace-separated tokens we

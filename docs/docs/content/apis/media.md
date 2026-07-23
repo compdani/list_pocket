@@ -26,7 +26,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/media' \
 {
     "data": [
         {
-            "id": 1,
+            "id": "abc123xyz",
             "uuid": "ec7b45ce-1408-4e5c-924e-965326a20287",
             "filename": "Media file",
             "created_at": "2020-04-08T22:43:45.080058+01:00",
@@ -46,12 +46,12 @@ Retrieve a specific media.
 
 | Name          | Type      | Required | Description      |
 |:--------------|:----------|:---------|:-----------------|
-| id            | Number    | Yes      | Media ID.        |
+| id            | string    | Yes      | PocketBase record ID of the media.        |
 
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' 'http://localhost:9000/api/media/7' 
+curl -u 'api_username:access_token' 'http://localhost:9000/api/media/media7xyz01' 
 ```
 
 ##### Example Response
@@ -60,7 +60,7 @@ curl -u 'api_username:access_token' 'http://localhost:9000/api/media/7'
 {
   "data": 
     {
-        "id": 7,
+        "id": "media7xyz01",
         "uuid": "62e32e97-d6ca-4441-923f-b62607000dd1",
         "filename": "ResumeB.pdf",
         "content_type": "application/pdf",
@@ -97,7 +97,7 @@ curl -u "api_user:token" -X POST 'http://localhost:9000/api/media' \
 ```json
 {
     "data": {
-        "id": 1,
+        "id": "abc123xyz",
         "uuid": "ec7b45ce-1408-4e5c-924e-965326a20287",
         "filename": "Media file",
         "created_at": "2020-04-08T22:43:45.080058+01:00",
@@ -117,12 +117,12 @@ Delete an uploaded media file.
 
 | Field    | Type      | Required | Description             |
 |----------|-----------|----------|-------------------------|
-| id | number    | Yes      | ID of media file to delete |
+| id | string    | Yes      | PocketBase record ID of media file to delete |
 
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/media/1'
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/media/abc123xyz'
 ```
 
 ##### Example Response

@@ -47,14 +47,14 @@ Retrieve all campaigns.
     "data": {
         "results": [
             {
-                "id": 1,
+                "id": "camp1xyz01",
                 "created_at": "2020-03-14T17:36:41.29451+01:00",
                 "updated_at": "2020-03-14T17:36:41.29451+01:00",
                 "views": 0,
                 "clicks": 0,
                 "lists": [
                     {
-                        "id": 1,
+                        "id": "camp1xyz01",
                         "name": "Default list"
                     }
                 ],
@@ -74,7 +74,7 @@ Retrieve all campaigns.
                 "tags": [
                     "test-campaign"
                 ],
-                "template_id": 1,
+                "template_id": "tpl1xyz001",
                 "messenger": "email"
             }
         ],
@@ -96,13 +96,13 @@ Retrieve a specific campaign.
 
 | Name        | Type    | Required | Description                                              |
 | :---------- | :------ | :------- | :------------------------------------------------------- |
-| id | number  | Yes      | Campaign ID.                                             |
+| id | string  | Yes      | PocketBase campaign record ID.                                             |
 | no_body     | boolean |          | When set to true, returns response without body content. |
 
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/1'
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/camp1xyz01'
 ```
 
 ##### Example Response
@@ -110,14 +110,14 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/1'
 ```json
 {
     "data": {
-        "id": 1,
+        "id": "camp1xyz01",
         "created_at": "2020-03-14T17:36:41.29451+01:00",
         "updated_at": "2020-03-14T17:36:41.29451+01:00",
         "views": 0,
         "clicks": 0,
         "lists": [
             {
-                "id": 1,
+                "id": "camp1xyz01",
                 "name": "Default list"
             }
         ],
@@ -137,7 +137,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/1'
         "tags": [
             "test-campaign"
         ],
-        "template_id": 1,
+        "template_id": "tpl1xyz001",
         "messenger": "email"
     }
 }
@@ -153,7 +153,7 @@ Preview a specific campaign.
 
 | Name        | Type   | Required | Description             |
 | :---------- | :----- | :------- | :---------------------- |
-| id | number | Yes      | Campaign ID to preview. |
+| id | string | Yes      | Campaign ID to preview. |
 
 ##### Example Request
 
@@ -178,12 +178,12 @@ Retrieve stats of specified campaigns.
 
 | Name        | Type   | Required | Description                    |
 | :---------- | :----- | :------- | :----------------------------- |
-| id | number | Yes      | Campaign IDs to get stats for. |
+| id | string | Yes      | Campaign IDs to get stats for. |
 
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/running/stats?campaign_id=1'
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/running/stats?campaign_id=camp1xyz01'
 ```
 
 ##### Example Response
@@ -204,7 +204,7 @@ Retrieve stats of specified campaigns.
 
 | Name | Type       | Required | Description                                   |
 | :--- | :--------- | :------- | :-------------------------------------------- |
-| id   | number\[\] | Yes      | Campaign IDs to get stats for.                |
+| id   | string\[\] | Yes      | Campaign record IDs to get stats for.                |
 | type | string     | Yes      | Analytics type: views, links, clicks, bounces |
 | from | string     | Yes      | Start value of date range.                    |
 | to   | string     | Yes      | End value of date range.                      |
@@ -213,7 +213,7 @@ Retrieve stats of specified campaigns.
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/analytics/views?id=1&from=2024-08-04&to=2024-08-12'
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/analytics/views?id=camp1xyz01&from=2024-08-04&to=2024-08-12'
 ```
 
 ##### Example Response
@@ -222,27 +222,27 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/analytics/v
 {
   "data": [
     {
-      "campaign_id": 1,
+      "campaign_id": "camp1xyz01",
       "count": 10,
       "timestamp": "2024-08-04T00:00:00Z"
     },
     {
-      "campaign_id": 1,
+      "campaign_id": "camp1xyz01",
       "count": 14,
       "timestamp": "2024-08-08T00:00:00Z"
     },
     {
-      "campaign_id": 1,
+      "campaign_id": "camp1xyz01",
       "count": 20,
       "timestamp": "2024-08-09T00:00:00Z"
     },
     {
-      "campaign_id": 1,
+      "campaign_id": "camp1xyz01",
       "count": 21,
       "timestamp": "2024-08-10T00:00:00Z"
     },
     {
-      "campaign_id": 1,
+      "campaign_id": "camp1xyz01",
       "count": 21,
       "timestamp": "2024-08-11T00:00:00Z"
     }
@@ -253,7 +253,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/analytics/v
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/analytics/links?id=1&from=2024-08-04T18%3A30%3A00.624Z&to=2024-08-12T18%3A29%3A00.624Z'
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/campaigns/analytics/links?id=camp1xyz01&from=2024-08-04T18%3A30%3A00.624Z&to=2024-08-12T18%3A29%3A00.624Z'
 ```
 
 ##### Example Response
@@ -293,7 +293,7 @@ Create a new campaign.
 | :----------- | :--------- | :------- | :--------------------------------------------------------------------------------------------------------------------- |
 | name         | string     | Yes      | Campaign name.                                                                                                         |
 | subject      | string     | Yes      | Campaign email subject.                                                                                                |
-| lists        | number\[\] | Yes      | List IDs to send campaign to.                                                                                          |
+| list_record_ids | string\[\] | Yes      | List record IDs to send campaign to.                                                                                          |
 | from_email   | string     |          | 'From' email in campaign emails. Defaults to value from settings if not provided.                                      |
 | type         | string     | Yes      | Campaign type: 'regular' or 'optin'.                                                                                   |
 | content_type | string     | Yes      | Content type: 'richtext', 'html', 'markdown', 'plain', 'visual'.                                                       |
@@ -310,7 +310,7 @@ Create a new campaign.
 ##### Example request
 
 ```shell
-curl -u "api_user:token" 'http://localhost:9000/api/campaigns' -X POST -H 'Content-Type: application/json;charset=utf-8' --data-raw '{"name":"Test campaign","subject":"Hello, world","lists":[1],"from_email":"listpocket <noreply@listpocket.yoursite.com>","content_type":"richtext","messenger":"email","type":"regular","tags":["test"],"template_id":1}'
+curl -u "api_user:token" 'http://localhost:9000/api/campaigns' -X POST -H 'Content-Type: application/json;charset=utf-8' --data-raw '{"name":"Test campaign","subject":"Hello, world","lists":[],"list_record_ids":["list1xyz01"],"from_email":"listpocket <noreply@listpocket.yoursite.com>","content_type":"richtext","messenger":"email","type":"regular","tags":["test"],"template_id":1}'
 ```
 
 ##### Example response
@@ -318,14 +318,14 @@ curl -u "api_user:token" 'http://localhost:9000/api/campaigns' -X POST -H 'Conte
 ```json
 {
     "data": {
-        "id": 1,
+        "id": "camp1xyz01",
         "created_at": "2021-12-27T11:50:23.333485Z",
         "updated_at": "2021-12-27T11:50:23.333485Z",
         "views": 0,
         "clicks": 0,
         "bounces": 0,
         "lists": [{
-            "id": 1,
+            "id": "camp1xyz01",
             "name": "Default list"
         }],
         "started_at": null,
@@ -343,7 +343,7 @@ curl -u "api_user:token" 'http://localhost:9000/api/campaigns' -X POST -H 'Conte
         "status": "draft",
         "content_type": "richtext",
         "tags": ["test"],
-        "template_id": 1,
+        "template_id": "tpl1xyz001",
         "messenger": "email",
         "headers": {},
         "attribs": {}
@@ -391,7 +391,7 @@ Change status of a campaign.
 
 | Name        | Type   | Required | Description                                                             |
 | :---------- | :----- | :------- | :---------------------------------------------------------------------- |
-| id | number | Yes      | Campaign ID to change status.                                           |
+| id | string | Yes      | Campaign ID to change status.                                           |
 | status      | string | Yes      | New status for campaign: 'scheduled', 'running', 'paused', 'cancelled'. |
 
 ##### Note
@@ -414,14 +414,14 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/campaigns/1/status' \
 ```json
 {
     "data": {
-        "id": 1,
+        "id": "camp1xyz01",
         "created_at": "2020-03-14T17:36:41.29451+01:00",
         "updated_at": "2020-04-08T19:35:17.331867+01:00",
         "views": 0,
         "clicks": 0,
         "lists": [
             {
-                "id": 1,
+                "id": "camp1xyz01",
                 "name": "Default list"
             }
         ],
@@ -440,7 +440,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/campaigns/1/status' \
         "tags": [
             "test-campaign"
         ],
-        "template_id": 1,
+        "template_id": "tpl1xyz001",
         "messenger": "email"
     }
 }
@@ -456,7 +456,7 @@ Publish campaign to public archive.
 
 | Name                | Type        | Required | Description                                                               |
 | :------------------ | :---------- | :------- | :------------------------------------------------------------------------ |
-| id                  | number      | Yes      | Campaign ID to publish to public archive.                                 |
+| id                  | string      | Yes      | Campaign record ID to publish to public archive.                                 |
 | archive             | bool        | Yes      | State of the public archive.                                              |
 | archive_template_id | number      | No       | Archive template id. Defaults to 0.                                       |
 | archive_meta        | JSON string | No       | Optional Metadata to use in campaign message or template.Eg: name, email. |
@@ -495,7 +495,7 @@ Delete a campaign.
 
 | Name        | Type   | Required | Description            |
 | :---------- | :----- | :------- | :--------------------- |
-| id | number | Yes      | Campaign ID to delete. |
+| id | string | Yes      | Campaign ID to delete. |
 
 ##### Example Request
 
@@ -521,13 +521,13 @@ Delete multiple campaigns by IDs or by a search query.
 
 | Name  | Type       | Required                      | Description                                                                 |
 | :---- | :--------- | :---------------------------- | :-------------------------------------------------------------------------- |
-| id    | number\[\] | Yes (if `query` not provided) | Onr or more campaign IDs to delete.                                         |
+| id    | string\[\] | Yes (if `query` not provided) | One or more campaign record IDs to delete.                                         |
 | query | string     | Yes (if `id` not provided)    | Fulltext search query to filter campaigns for deletion (same as GET query). |
 
 ##### Example Request (by IDs)
 
 ```shell
-curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/campaigns?id=10&id=11&id=12'
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/campaigns?id=camp10xyz0&id=camp11xyz0&id=camp12xyz0'
 ```
 
 ##### Example Request (by search query)

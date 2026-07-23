@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,8 +11,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (a *App) resolveListRouteID(c echo.Context) (string, error) {
-	recordID := strings.TrimSpace(c.Param("id"))
+func (a *App) resolveListRouteID(re *pbcore.RequestEvent) (string, error) {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -29,9 +30,9 @@ func (a *App) resolveListRequestIDs(recordIDs []string) ([]int, error) {
 }
 
 // GetLists retrieves lists with additional metadata like subscriber counts.
-func (a *App) GetLists(c echo.Context) error {
+func (a *App) GetLists(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Get the list IDs (or blanket permission) the user has access to.
 	hasAllPerm, permittedRecordIDs := user.GetPermittedLists(auth.PermTypeGet)
@@ -41,15 +42,15 @@ func (a *App) GetLists(c echo.Context) error {
 	}
 
 	// Minimal query simply returns the list of all lists without JOIN subscriber counts. This is fast.
-	minimal, _ := strconv.ParseBool(c.FormValue("minimal"))
+	minimal, _ := strconv.ParseBool(re.Request.FormValue("minimal"))
 	if minimal {
-		status := c.FormValue("status")
+		status := re.Request.FormValue("status")
 		res, err := a.core.GetLists("", status, hasAllPerm, permittedIDs)
 		if err != nil {
 			return err
 		}
 		if len(res) == 0 {
-			return c.JSON(http.StatusOK, okResp{[]struct{}{}})
+			return okJSON(re, []struct{}{})
 		}
 
 		// Meta.
@@ -61,20 +62,20 @@ func (a *App) GetLists(c echo.Context) error {
 			PerPage: total,
 		}
 
-		return c.JSON(http.StatusOK, okResp{out})
+		return okJSON(re, out)
 	}
 
 	// Full list query.
 	var (
-		query   = strings.TrimSpace(c.FormValue("query"))
-		tags    = c.QueryParams()["tag"]
-		orderBy = c.FormValue("order_by")
-		typ     = c.FormValue("type")
-		optin   = c.FormValue("optin")
-		status  = c.FormValue("status")
-		order   = c.FormValue("order")
+		query   = strings.TrimSpace(re.Request.FormValue("query"))
+		tags    = re.Request.URL.Query()["tag"]
+		orderBy = re.Request.FormValue("order_by")
+		typ     = re.Request.FormValue("type")
+		optin   = re.Request.FormValue("optin")
+		status  = re.Request.FormValue("status")
+		order   = re.Request.FormValue("order")
 
-		pg = a.pg.NewFromURL(c.Request().URL.Query())
+		pg = a.pg.NewFromURL(re.Request.URL.Query())
 	)
 	res, total, err := a.core.QueryLists(query, typ, optin, status, tags, orderBy, order, hasAllPerm, permittedIDs, pg.Offset, pg.Limit)
 	if err != nil {
@@ -89,17 +90,17 @@ func (a *App) GetLists(c echo.Context) error {
 		PerPage: pg.PerPage,
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetList retrieves a single list by id.
 // It's permission checked by the listPerm middleware.
-func (a *App) GetList(c echo.Context) error {
+func (a *App) GetList(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Check if the user has access to the list.
-	recordID, err := a.resolveListRouteID(c)
+	recordID, err := a.resolveListRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -113,13 +114,13 @@ func (a *App) GetList(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // CreateList handles list creation.
-func (a *App) CreateList(c echo.Context) error {
+func (a *App) CreateList(re *pbcore.RequestEvent) error {
 	l := models.List{}
-	if err := c.Bind(&l); err != nil {
+	if err := bindJSON(re, &l); err != nil {
 		return err
 	}
 
@@ -133,17 +134,17 @@ func (a *App) CreateList(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateList handles list modification.
 // It's permission checked by the listPerm middleware.
-func (a *App) UpdateList(c echo.Context) error {
+func (a *App) UpdateList(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Check if the user has access to the list.
-	recordID, err := a.resolveListRouteID(c)
+	recordID, err := a.resolveListRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -153,7 +154,7 @@ func (a *App) UpdateList(c echo.Context) error {
 
 	// Incoming params.
 	var l models.List
-	if err := c.Bind(&l); err != nil {
+	if err := bindJSON(re, &l); err != nil {
 		return err
 	}
 
@@ -168,17 +169,17 @@ func (a *App) UpdateList(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // DeleteList deletes a single list by ID.
-func (a *App) DeleteList(c echo.Context) error {
-	recordID, err := a.resolveListRouteID(c)
+func (a *App) DeleteList(re *pbcore.RequestEvent) error {
+	recordID, err := a.resolveListRouteID(re)
 	if err != nil {
 		return err
 	}
 	// Check if the user has manage permission for the list.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 	if err := user.HasListPerm(auth.PermTypeManage, recordID); err != nil {
 		return err
 	}
@@ -189,12 +190,12 @@ func (a *App) DeleteList(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteLists deletes multiple lists by IDs or by query.
-func (a *App) DeleteLists(c echo.Context) error {
-	user := auth.GetUser(c)
+func (a *App) DeleteLists(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
 
 	var (
 		recordIDs []string
@@ -202,11 +203,11 @@ func (a *App) DeleteLists(c echo.Context) error {
 		all       bool
 	)
 
-	if len(c.Request().URL.Query()["record_id"]) > 0 {
-		recordIDs = getQueryStrings("record_id", c.Request().URL.Query())
+	if len(re.Request.URL.Query()["record_id"]) > 0 {
+		recordIDs = getQueryStrings("record_id", re.Request.URL.Query())
 	} else {
-		query = strings.TrimSpace(c.FormValue("query"))
-		all = c.FormValue("all") == "true"
+		query = strings.TrimSpace(re.Request.FormValue("query"))
+		all = re.Request.FormValue("all") == "true"
 	}
 
 	// Validate that either IDs or query is provided.
@@ -240,5 +241,5 @@ func (a *App) DeleteLists(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }

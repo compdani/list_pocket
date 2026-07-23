@@ -51,7 +51,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?status=archived
     "data": {
         "results": [
             {
-                "id": 1,
+                "id": "abc123xyz",
                 "created_at": "2020-02-10T23:07:16.194843+01:00",
                 "updated_at": "2020-03-06T22:32:01.118327+01:00",
                 "uuid": "ce13e971-c2ed-4069-bd0c-240e9a9f56f9",
@@ -65,7 +65,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists?status=archived
                 "subscriber_count": 2
             },
             {
-                "id": 2,
+                "id": "def456uvw",
                 "created_at": "2020-03-04T21:12:09.555013+01:00",
                 "updated_at": "2020-03-06T22:34:46.405031+01:00",
                 "uuid": "f20a2308-dfb5-4420-a56d-ecf0618a102d",
@@ -118,12 +118,12 @@ Retrieve a specific list.
 
 | Name    | Type   | Required | Description                 |
 | :------ | :----- | :------- | :-------------------------- |
-| id | number | Yes      | ID of the list to retrieve. |
+| id | string | Yes      | ID of the list to retrieve. |
 
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists/5'
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists/ghi789rst'
 ```
 
 ##### Example Response
@@ -131,7 +131,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/lists/5'
 ```json
 {
     "data": {
-        "id": 5,
+        "id": "ghi789rst",
         "created_at": "2020-03-07T06:31:06.072483+01:00",
         "updated_at": "2020-03-07T06:31:06.072483+01:00",
         "uuid": "1bb246ab-7417-4cef-bddc-8fc8fc941d3a",
@@ -173,7 +173,7 @@ curl -u "api_user:token" -X POST 'http://localhost:9000/api/lists'
 ```json
 {
     "data": {
-        "id": 5,
+        "id": "ghi789rst",
         "created_at": "2020-03-07T06:31:06.072483+01:00",
         "updated_at": "2020-03-07T06:31:06.072483+01:00",
         "uuid": "1bb246ab-7417-4cef-bddc-8fc8fc941d3a",
@@ -198,7 +198,7 @@ Update a list.
 
 | Name        | Type       | Required | Description                                    |
 | :---------- | :--------- | :------- | :--------------------------------------------- |
-| id          | number     | Yes      | ID of the list to update.                      |
+| id          | string     | Yes      | ID of the list to update.                      |
 | name        | string     |          | New name for the list.                         |
 | type        | string     |          | Type of list. Options: private, public.        |
 | optin       | string     |          | Opt-in type. Options: single, double.          |
@@ -209,7 +209,7 @@ Update a list.
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X PUT 'http://localhost:9000/api/lists/5' \
+curl -u "api_user:token" -X PUT 'http://localhost:9000/api/lists/ghi789rst' \
 --form 'name=modified test list' \
 --form 'type=private'
 ```
@@ -219,7 +219,7 @@ curl -u "api_user:token" -X PUT 'http://localhost:9000/api/lists/5' \
 ```json
 {
     "data": {
-        "id": 5,
+        "id": "ghi789rst",
         "created_at": "2020-03-07T06:31:06.072483+01:00",
         "updated_at": "2020-03-07T06:52:15.208075+01:00",
         "uuid": "1bb246ab-7417-4cef-bddc-8fc8fc941d3a",
@@ -244,12 +244,12 @@ Delete a specific list.
 
 | Name    | Type   | Required | Description               |
 | :------ | :----- | :------- | :------------------------ |
-| id | Number | Yes      | ID of the list to delete. |
+| id | string | Yes      | ID of the list to delete. |
 
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/lists/1'
+curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/lists/abc123xyz'
 ```
 
 ##### Example Response
@@ -272,13 +272,13 @@ Delete multiple lists by IDs or by a search query.
 
 | Name  | Type       | Required                      | Description                                                        |
 | :---- | :--------- | :---------------------------- | :----------------------------------------------------------------- |
-| id    | number\[\] | Yes (if `query` not provided) | One or more list IDs to delete.                                    |
+| id    | string\[\] | Yes (if `query` not provided) | One or more list IDs to delete.                                    |
 | query | string     | Yes (if `id` not provided)    | Search query to filter lists for deletion (same as the GET query). |
 
 ##### Example Request (by IDs)
 
 ```shell
-curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/lists?id=10&id=11&id=12'
+curl -u "api_user:token" -X DELETE 'http://localhost:9000/api/lists?id=abc123xyz&id=def456uvw&id=ghi789rst'
 ```
 
 ##### Example Request (by search query)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,9 @@ type campReq struct {
 	ListIDs       []int    `json:"lists"`
 	ListRecordIDs []string `json:"list_record_ids"`
 
-	MediaIDs []int `json:"media"`
+	// MediaIDs are deprecated integer rowids. Prefer MediaRecordIDs.
+	MediaIDs       []int    `json:"media"`
+	MediaRecordIDs []string `json:"media_record_ids"`
 
 	DripEnabled bool                `json:"drip_enabled"`
 	Batching    campaignBatchingReq `json:"batching"`
@@ -57,8 +60,8 @@ var (
 	reSlug        = regexp.MustCompile(`[^\p{L}\p{M}\p{N}]`)
 )
 
-func (a *App) resolveCampaignRouteID(c echo.Context) (string, error) {
-	recordID := strings.TrimSpace(c.Param("id"))
+func (a *App) resolveCampaignRouteID(re *pbcore.RequestEvent) (string, error) {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -66,8 +69,8 @@ func (a *App) resolveCampaignRouteID(c echo.Context) (string, error) {
 	return recordID, nil
 }
 
-func bindCampaignReq(c echo.Context, out *campReq) error {
-	body, err := io.ReadAll(c.Request().Body)
+func bindCampaignReq(re *pbcore.RequestEvent, out *campReq) error {
+	body, err := io.ReadAll(re.Request.Body)
 	if err != nil {
 		return err
 	}
@@ -101,6 +104,11 @@ func normalizeCampaignReqBody(body []byte) ([]byte, error) {
 		}
 	}
 
+	mediaRecordIDs := []string{}
+	if raw, ok := payload["media_record_ids"]; ok {
+		_ = json.Unmarshal(raw, &mediaRecordIDs)
+	}
+
 	if raw, ok := payload["media"]; ok {
 		var vals []any
 		if err := json.Unmarshal(raw, &vals); err != nil {
@@ -113,11 +121,15 @@ func normalizeCampaignReqBody(body []byte) ([]byte, error) {
 			case float64:
 				mediaIDs = append(mediaIDs, int(n))
 			case string:
-				id, err := strconv.Atoi(strings.TrimSpace(n))
-				if err != nil {
-					return nil, err
+				s := strings.TrimSpace(n)
+				if s == "" {
+					continue
 				}
-				mediaIDs = append(mediaIDs, id)
+				if id, err := strconv.Atoi(s); err == nil {
+					mediaIDs = append(mediaIDs, id)
+				} else {
+					mediaRecordIDs = append(mediaRecordIDs, s)
+				}
 			}
 		}
 
@@ -126,6 +138,14 @@ func normalizeCampaignReqBody(body []byte) ([]byte, error) {
 			return nil, err
 		}
 		payload["media"] = encoded
+	}
+
+	if len(mediaRecordIDs) > 0 {
+		encoded, err := json.Marshal(mediaRecordIDs)
+		if err != nil {
+			return nil, err
+		}
+		payload["media_record_ids"] = encoded
 	}
 
 	return json.Marshal(payload)
@@ -159,9 +179,9 @@ func campaignListRecordIDs(raw any) []string {
 }
 
 // GetCampaigns handles retrieval of campaigns.
-func (a *App) GetCampaigns(c echo.Context) error {
+func (a *App) GetCampaigns(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	var (
 		hasAllPerm     = user.HasPerm(auth.PermCampaignsGetAll)
@@ -182,14 +202,14 @@ func (a *App) GetCampaigns(c echo.Context) error {
 	}
 
 	var (
-		pg = a.pg.NewFromURL(c.Request().URL.Query())
+		pg = a.pg.NewFromURL(re.Request.URL.Query())
 
-		status    = c.QueryParams()["status"]
-		tags      = c.QueryParams()["tag"]
-		query     = strings.TrimSpace(c.FormValue("query"))
-		orderBy   = c.FormValue("order_by")
-		order     = c.FormValue("order")
-		noBody, _ = strconv.ParseBool(c.QueryParam("no_body"))
+		status    = re.Request.URL.Query()["status"]
+		tags      = re.Request.URL.Query()["tag"]
+		query     = strings.TrimSpace(re.Request.FormValue("query"))
+		orderBy   = re.Request.FormValue("order_by")
+		order     = re.Request.FormValue("order")
+		noBody, _ = strconv.ParseBool(queryParam(re, "no_body"))
 	)
 
 	// Query and retrieve campaigns from the DB.
@@ -208,7 +228,7 @@ func (a *App) GetCampaigns(c echo.Context) error {
 
 	// Paginate the response.
 	if len(res) == 0 {
-		return c.JSON(http.StatusOK, okResp{models.PageResults{Results: []models.Campaign{}}})
+		return okJSON(re, models.PageResults{Results: []models.Campaign{}})
 	}
 
 	out := models.PageResults{
@@ -219,19 +239,19 @@ func (a *App) GetCampaigns(c echo.Context) error {
 		PerPage: pg.PerPage,
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetCampaign handles retrieval of campaigns.
-func (a *App) GetCampaign(c echo.Context) error {
+func (a *App) GetCampaign(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, re); err != nil {
 		return err
 	}
 
@@ -242,31 +262,31 @@ func (a *App) GetCampaign(c echo.Context) error {
 	}
 
 	// Blank out the body if requested.
-	noBody, _ := strconv.ParseBool(c.QueryParam("no_body"))
+	noBody, _ := strconv.ParseBool(queryParam(re, "no_body"))
 	if noBody {
 		out.Body = ""
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // PreviewCampaign renders the HTML preview of a campaign body.
-func (a *App) PreviewCampaign(c echo.Context) error {
+func (a *App) PreviewCampaign(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, re); err != nil {
 		return err
 	}
 
 	var (
-		isPost      = c.Request().Method == http.MethodPost
-		contentType = c.FormValue("content_type")
-		tplID       = strings.TrimSpace(c.FormValue("template_id"))
+		isPost      = re.Request.Method == http.MethodPost
+		contentType = re.Request.FormValue("content_type")
+		tplID       = strings.TrimSpace(re.Request.FormValue("template_id"))
 	)
 	// For visual content, template ID for previewing is irrelevant.
 	if contentType == models.CampaignContentTypeVisual {
@@ -282,8 +302,8 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 	// There's a body in the request to preview instead of the body in the DB.
 	if isPost {
 		camp.ContentType = contentType
-		camp.Body = c.FormValue("body")
-		preheader := c.FormValue("preheader")
+		camp.Body = re.Request.FormValue("body")
+		preheader := re.Request.FormValue("preheader")
 		if camp.Attribs == nil {
 			camp.Attribs = models.JSON{}
 		}
@@ -318,38 +338,38 @@ func (a *App) PreviewCampaign(c echo.Context) error {
 
 	// Plaintext headers for plain body.
 	if camp.ContentType == models.CampaignContentTypePlain {
-		return c.String(http.StatusOK, string(msg.Body()))
+		return writeBlob(re, http.StatusOK, "text/plain; charset=utf-8", msg.Body())
 	}
 
-	return c.HTML(http.StatusOK, string(msg.Body()))
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", msg.Body())
 }
 
 // PreviewCampaignArchive renders the public campaign archives page.
-func (a *App) PreviewCampaignArchive(c echo.Context) error {
+func (a *App) PreviewCampaignArchive(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeGet, recordID, re); err != nil {
 		return err
 	}
 
 	// Fetch the campaign body from the DB.
-	tplID := strings.TrimSpace(c.FormValue("template_id"))
+	tplID := strings.TrimSpace(re.Request.FormValue("template_id"))
 	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err
 	}
 
-	camp.ArchiveMeta = json.RawMessage([]byte(c.FormValue("archive_meta")))
+	camp.ArchiveMeta = json.RawMessage([]byte(re.Request.FormValue("archive_meta")))
 
 	// "Compile" the campaign template with appropriate data.
 	res, err := a.compileArchiveCampaigns([]models.Campaign{camp})
 	if err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
@@ -358,17 +378,17 @@ func (a *App) PreviewCampaignArchive(c echo.Context) error {
 	msg, err := a.manager.NewCampaignMessage(out, res[0].Subscriber)
 	if err != nil {
 		a.log.Printf("error rendering campaign: %v", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
-	return c.HTML(http.StatusOK, string(msg.Body()))
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", msg.Body())
 }
 
 // CampaignContent handles campaign content (body) format conversions.
-func (a *App) CampaignContent(c echo.Context) error {
+func (a *App) CampaignContent(re *pbcore.RequestEvent) error {
 	var camp campContentReq
-	if err := c.Bind(&camp); err != nil {
+	if err := bindJSON(re, &camp); err != nil {
 		return err
 	}
 
@@ -378,21 +398,21 @@ func (a *App) CampaignContent(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // CreateCampaign handles campaign creation.
 // Newly created campaigns are always drafts.
-func (a *App) CreateCampaign(c echo.Context) error {
+func (a *App) CreateCampaign(re *pbcore.RequestEvent) error {
 	var o campReq
-	if err := bindCampaignReq(c, &o); err != nil {
+	if err := bindCampaignReq(re, &o); err != nil {
 		return err
 	}
-	a.log.Printf("create campaign: received name=%q type=%q content_type=%q list_ids=%v media_ids=%v messenger=%q archive=%v template_id_valid=%v archive_template_id_valid=%v",
-		o.Name, o.Type, o.ContentType, o.ListIDs, o.MediaIDs, o.Messenger, o.Archive, o.TemplateID.Valid, o.ArchiveTemplateID.Valid)
+	a.log.Printf("create campaign: received name=%q type=%q content_type=%q list_ids=%v media_ids=%v media_record_ids=%v messenger=%q archive=%v template_id_valid=%v archive_template_id_valid=%v",
+		o.Name, o.Type, o.ContentType, o.ListIDs, o.MediaIDs, o.MediaRecordIDs, o.Messenger, o.Archive, o.TemplateID.Valid, o.ArchiveTemplateID.Valid)
 
 	// Filter lists against the current user's permitted lists.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListRecordIDs)
 	resolvedListIDs, err := a.core.ResolveListIDs(nil, filteredListRecordIDs)
 	if err != nil {
@@ -401,6 +421,12 @@ func (a *App) CreateCampaign(c echo.Context) error {
 	}
 	o.ListIDs = resolvedListIDs
 	a.log.Printf("create campaign: filtered lists username=%q role_id=%d permitted_list_ids=%v", user.Username, user.UserRoleID, o.ListIDs)
+
+	mediaRecordIDs, err := a.core.ResolveMediaRecordIDs(o.MediaIDs, o.MediaRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
 
 	// If the campaign's 'opt-in', prepare a default message.
 	switch o.Type {
@@ -432,7 +458,7 @@ func (a *App) CreateCampaign(c echo.Context) error {
 		o.ArchiveTemplateID = o.TemplateID
 	}
 
-	out, err := a.core.CreateCampaign(o.Campaign, o.ListIDs, o.MediaIDs)
+	out, err := a.core.CreateCampaign(o.Campaign, o.ListIDs, mediaRecordIDs)
 	if err != nil {
 		a.log.Printf("create campaign: core create failed name=%q error=%v", o.Name, err)
 		return err
@@ -443,20 +469,20 @@ func (a *App) CreateCampaign(c echo.Context) error {
 	}
 	a.log.Printf("create campaign: success name=%q campaign_record_id=%q uuid=%q", out.Name, out.RecordID, out.UUID)
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateCampaign handles campaign modification.
 // Campaigns that are done cannot be modified.
-func (a *App) UpdateCampaign(c echo.Context) error {
+func (a *App) UpdateCampaign(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
@@ -466,7 +492,7 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 		return err
 	}
 	existingDripMeta := parseCampaignDripMetadata(cm.Attribs)
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	if !canEditCampaign(cm.Status) {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("campaigns.cantUpdate"))
@@ -481,14 +507,20 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 	// This allows updating of values that have been sent whereas fields
 	// that are not in the request retain the old values.
 	o := campReq{Campaign: cm}
-	if err := bindCampaignReq(c, &o); err != nil {
+	if err := bindCampaignReq(re, &o); err != nil {
 		return err
 	}
-	a.log.Printf("update campaign: received record_id=%q name=%q status=%q content_type=%q list_ids=%v media_ids=%v archive=%v",
-		recordID, o.Name, cm.Status, o.ContentType, o.ListIDs, o.MediaIDs, o.Archive)
+	a.log.Printf("update campaign: received record_id=%q name=%q status=%q content_type=%q list_ids=%v media_ids=%v media_record_ids=%v archive=%v",
+		recordID, o.Name, cm.Status, o.ContentType, o.ListIDs, o.MediaIDs, o.MediaRecordIDs, o.Archive)
 
 	filteredListRecordIDs := user.FilterListsByPerm(auth.PermTypeGet|auth.PermTypeManage, o.ListRecordIDs)
 	o.ListIDs, err = a.core.ResolveListIDs(nil, filteredListRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+
+	mediaRecordIDs, err := a.core.ResolveMediaRecordIDs(o.MediaIDs, o.MediaRecordIDs)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
@@ -500,7 +532,7 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 		o = c
 	}
 
-	out, err := a.core.UpdateCampaign(recordID, o.Campaign, o.ListIDs, o.MediaIDs)
+	out, err := a.core.UpdateCampaign(recordID, o.Campaign, o.ListIDs, mediaRecordIDs)
 	if err != nil {
 		return err
 	}
@@ -509,26 +541,26 @@ func (a *App) UpdateCampaign(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateCampaignStatus handles campaign status modification.
-func (a *App) UpdateCampaignStatus(c echo.Context) error {
+func (a *App) UpdateCampaignStatus(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
 	req := struct {
 		Status string `json:"status"`
 	}{}
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -547,7 +579,7 @@ func (a *App) UpdateCampaignStatus(c echo.Context) error {
 		a.manager.StopCampaign(out.ID)
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // ResolveCampaignLedgerInflight handles admin cleanup of `campaign_send_ledger` rows that
@@ -559,20 +591,20 @@ func (a *App) UpdateCampaignStatus(c echo.Context) error {
 //
 // Rejects while the campaign is scheduled or running since the manager pipe owns the
 // ledger lifecycle in those states.
-func (a *App) ResolveCampaignLedgerInflight(c echo.Context) error {
-	recordID, err := a.resolveCampaignRouteID(c)
+func (a *App) ResolveCampaignLedgerInflight(re *pbcore.RequestEvent) error {
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
 	req := struct {
 		Action string `json:"action"`
 	}{}
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 	req.Action = strings.TrimSpace(req.Action)
@@ -586,18 +618,18 @@ func (a *App) ResolveCampaignLedgerInflight(c echo.Context) error {
 	a.log.Printf("resolve campaign ledger inflight: success record_id=%q action=%q affected=%d to_send=%d sent=%d",
 		recordID, out.Action, out.Affected, out.ToSend, out.Sent)
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetCampaignRecover previews how many currently eligible recipients are missing
 // from the send ledger before recovering a paused or finished campaign.
-func (a *App) GetCampaignRecover(c echo.Context) error {
-	recordID, err := a.resolveCampaignRouteID(c)
+func (a *App) GetCampaignRecover(re *pbcore.RequestEvent) error {
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
@@ -605,17 +637,17 @@ func (a *App) GetCampaignRecover(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // RecoverCampaign fills missing campaign_send_ledger rows and starts the campaign.
-func (a *App) RecoverCampaign(c echo.Context) error {
-	recordID, err := a.resolveCampaignRouteID(c)
+func (a *App) RecoverCampaign(re *pbcore.RequestEvent) error {
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
@@ -628,18 +660,18 @@ func (a *App) RecoverCampaign(c echo.Context) error {
 	a.log.Printf("recover campaign: success record_id=%q inserted=%d reset_inflight=%d missing=%d status=%q",
 		recordID, out.Inserted, out.ResetInflight, out.Missing, out.Status)
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateCampaignArchive handles campaign status modification.
-func (a *App) UpdateCampaignArchive(c echo.Context) error {
-	recordID, err := a.resolveCampaignRouteID(c)
+func (a *App) UpdateCampaignArchive(re *pbcore.RequestEvent) error {
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
@@ -649,7 +681,7 @@ func (a *App) UpdateCampaignArchive(c echo.Context) error {
 		Meta        models.JSON `json:"archive_meta"`
 		ArchiveSlug string      `json:"archive_slug"`
 	}{}
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -665,20 +697,20 @@ func (a *App) UpdateCampaignArchive(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{req})
+	return okJSON(re, req)
 }
 
 // DeleteCampaign handles campaign deletion.
 // Only scheduled campaigns that have not started yet can be deleted.
-func (a *App) DeleteCampaign(c echo.Context) error {
+func (a *App) DeleteCampaign(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
@@ -687,13 +719,13 @@ func (a *App) DeleteCampaign(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteCampaigns deletes multiple campaigns by IDs or by query.
-func (a *App) DeleteCampaigns(c echo.Context) error {
+func (a *App) DeleteCampaigns(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	var (
 		hasAllPerm     = user.HasPerm(auth.PermCampaignsManageAll)
@@ -720,12 +752,12 @@ func (a *App) DeleteCampaigns(c echo.Context) error {
 	)
 
 	// Check for IDs in query params.
-	if len(c.Request().URL.Query()["record_id"]) > 0 {
-		recordIDs = getQueryStrings("record_id", c.Request().URL.Query())
+	if len(re.Request.URL.Query()["record_id"]) > 0 {
+		recordIDs = getQueryStrings("record_id", re.Request.URL.Query())
 	} else {
 		// Check for query param.
-		query = strings.TrimSpace(c.FormValue("query"))
-		all = c.FormValue("all") == "true"
+		query = strings.TrimSpace(re.Request.FormValue("query"))
+		all = re.Request.FormValue("all") == "true"
 	}
 
 	// Validate that either IDs or query is provided.
@@ -739,11 +771,11 @@ func (a *App) DeleteCampaigns(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // GetRunningCampaignStats returns stats of a given set of campaign IDs.
-func (a *App) GetRunningCampaignStats(c echo.Context) error {
+func (a *App) GetRunningCampaignStats(re *pbcore.RequestEvent) error {
 	// Get the running campaign stats from the DB.
 	out, err := a.core.GetRunningCampaignStats()
 	if err != nil {
@@ -751,7 +783,7 @@ func (a *App) GetRunningCampaignStats(c echo.Context) error {
 	}
 
 	if len(out) == 0 {
-		return c.JSON(http.StatusOK, okResp{[]struct{}{}})
+		return okJSON(re, []struct{}{})
 	}
 
 	// Compute rate.
@@ -772,26 +804,26 @@ func (a *App) GetRunningCampaignStats(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // TestCampaign handles the sending of a campaign message to
 // arbitrary subscribers for testing.
-func (a *App) TestCampaign(c echo.Context) error {
+func (a *App) TestCampaign(re *pbcore.RequestEvent) error {
 	// Get the campaign ID.
-	recordID, err := a.resolveCampaignRouteID(c)
+	recordID, err := a.resolveCampaignRouteID(re)
 	if err != nil {
 		return err
 	}
 
 	// Check if the user has access to the campaign.
-	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, c); err != nil {
+	if err := a.checkCampaignPerm(auth.PermTypeManage, recordID, re); err != nil {
 		return err
 	}
 
 	// Get and validate fields.
 	var req campReq
-	if err := bindCampaignReq(c, &req); err != nil {
+	if err := bindCampaignReq(re, &req); err != nil {
 		return err
 	}
 
@@ -843,7 +875,7 @@ func (a *App) TestCampaign(c echo.Context) error {
 	}
 
 	// Get the campaign from the DB for previewing.
-	tplID := strings.TrimSpace(c.FormValue("template_id"))
+	tplID := strings.TrimSpace(re.Request.FormValue("template_id"))
 	camp, err := a.core.GetCampaignForPreview(recordID, tplID)
 	if err != nil {
 		return err
@@ -868,11 +900,17 @@ func (a *App) TestCampaign(c echo.Context) error {
 		camp.Attribs = req.Attribs
 	}
 	camp.TemplateID = req.TemplateID
-	for _, id := range req.MediaIDs {
-		if id > 0 {
-			camp.MediaIDs = append(camp.MediaIDs, int64(id))
-		}
+	mediaRecordIDs, err := a.core.ResolveMediaRecordIDs(req.MediaIDs, req.MediaRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
+	mediaRowIDs, err := a.core.ResolveMediaRowIDs(mediaRecordIDs)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+	camp.MediaIDs = mediaRowIDs
 
 	// Send the test messages.
 	for _, s := range subs {
@@ -885,13 +923,13 @@ func (a *App) TestCampaign(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // GetCampaignViewAnalytics retrieves view counts for a campaign.
-func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
-	rawIDs := getQueryStrings("id", c.Request().URL.Query())
-	campaignIDs := make([]int, 0, len(rawIDs))
+func (a *App) GetCampaignViewAnalytics(re *pbcore.RequestEvent) error {
+	rawIDs := getQueryStrings("id", re.Request.URL.Query())
+	legacyIDs := make([]int, 0, len(rawIDs))
 	recordIDs := make([]string, 0, len(rawIDs))
 	for _, rawID := range rawIDs {
 		rawID = strings.TrimSpace(rawID)
@@ -899,33 +937,37 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 			continue
 		}
 
-		if id, err := strconv.Atoi(rawID); err == nil {
-			campaignIDs = append(campaignIDs, id)
+		// Prefer record ids. Numeric values are treated as deprecated rowids.
+		if id, err := strconv.Atoi(rawID); err == nil && strconv.Itoa(id) == rawID {
+			legacyIDs = append(legacyIDs, id)
 			continue
 		}
 
 		recordIDs = append(recordIDs, rawID)
 	}
 
-	ids, err := a.core.ResolveCampaignIDs(campaignIDs, recordIDs)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest,
-			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	if len(legacyIDs) > 0 {
+		resolved, err := a.core.ResolveCampaignRecordIDs(legacyIDs)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+		}
+		recordIDs = append(recordIDs, resolved...)
 	}
 
-	if len(ids) == 0 {
+	if len(recordIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.missingFields", "name", "`id`"))
 	}
 
 	var (
-		typ  = c.Param("type")
-		from = c.QueryParams().Get("from")
-		to   = c.QueryParams().Get("to")
-		tz   = c.QueryParams().Get("tz")
+		typ  = pathParam(re, "type")
+		from = re.Request.URL.Query().Get("from")
+		to   = re.Request.URL.Query().Get("to")
+		tz   = re.Request.URL.Query().Get("tz")
 	)
 	if typ == "" {
-		path := strings.Trim(c.Request().URL.Path, "/")
+		path := strings.Trim(re.Request.URL.Path, "/")
 		parts := strings.Split(path, "/")
 		if len(parts) > 0 {
 			typ = parts[len(parts)-1]
@@ -937,21 +979,21 @@ func (a *App) GetCampaignViewAnalytics(c echo.Context) error {
 
 	// Campaign link stats.
 	if typ == "links" {
-		out, err := a.core.GetCampaignAnalyticsLinks(ids, typ, from, to, tz)
+		out, err := a.core.GetCampaignAnalyticsLinks(recordIDs, typ, from, to, tz)
 		if err != nil {
 			return err
 		}
 
-		return c.JSON(http.StatusOK, okResp{out})
+		return okJSON(re, out)
 	}
 
 	// Get the analytics numbers from the DB for the campaigns.
-	out, err := a.core.GetCampaignAnalyticsCounts(ids, typ, from, to, tz)
+	out, err := a.core.GetCampaignAnalyticsCounts(recordIDs, typ, from, to, tz)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // sendTestMessage takes a campaign and a subscriber and sends out a sample campaign message.
@@ -1226,9 +1268,9 @@ func (a *App) makeOptinCampaignMessage(o campReq) (campReq, error) {
 // checkCampaignPerm checks if the user has get or manage access to the given campaign.
 // Either the user has blanket get_all/manage_all permissions, or the campaign
 // belongs to lists that the user has access to.
-func (a *App) checkCampaignPerm(types auth.PermType, recordID string, c echo.Context) error {
+func (a *App) checkCampaignPerm(types auth.PermType, recordID string, re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	perm := auth.PermCampaignsGet
 	if types&auth.PermTypeGet != 0 {

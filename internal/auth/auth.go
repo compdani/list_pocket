@@ -385,19 +385,44 @@ func (o *Auth) APIMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			token = strings.TrimSpace(c.QueryParam("access_token"))
 		}
 		if token == "" {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "missing auth token"))
-			return next(c)
+			return echo.NewHTTPError(http.StatusForbidden, "missing auth token")
 		}
 
 		user, rec, err := o.validatePBToken(token)
 		if err != nil {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid auth token"))
-			return next(c)
+			return echo.NewHTTPError(http.StatusForbidden, "invalid auth token")
 		}
 
 		c.Set(UserHTTPCtxKey, user)
 		c.Set(AuthRecordHTTPCtxKey, rec)
 		return next(c)
+	}
+}
+
+// APIMiddlewareRE is the RequestEvent equivalent of APIMiddleware.
+func (o *Auth) APIMiddlewareRE(next RequestEventHandler) RequestEventHandler {
+	return func(e *pbcore.RequestEvent) error {
+		hdr := strings.TrimSpace(e.Request.Header.Get("Authorization"))
+		token := ""
+		if strings.HasPrefix(hdr, "Bearer ") {
+			token = strings.TrimSpace(strings.TrimPrefix(hdr, "Bearer "))
+		}
+		if token == "" {
+			token = strings.TrimSpace(e.Request.URL.Query().Get("access_token"))
+		}
+		if token == "" {
+			return echo.NewHTTPError(http.StatusForbidden, "missing auth token")
+		}
+
+		user, rec, err := o.validatePBToken(token)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusForbidden, "invalid auth token")
+		}
+
+		e.Set(UserHTTPCtxKey, user)
+		e.Set(AuthRecordHTTPCtxKey, rec)
+		e.Auth = rec
+		return next(e)
 	}
 }
 
@@ -531,8 +556,7 @@ func (o *Auth) Perm(next echo.HandlerFunc, perms ...string) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		u, ok := c.Get(UserHTTPCtxKey).(User)
 		if !ok {
-			c.Set(UserHTTPCtxKey, echo.NewHTTPError(http.StatusForbidden, "invalid session"))
-			return next(c)
+			return echo.NewHTTPError(http.StatusForbidden, "invalid session")
 		}
 
 		// If the current user is a Super Admin user, do no checks.
@@ -560,6 +584,40 @@ func (o *Auth) Perm(next echo.HandlerFunc, perms ...string) echo.HandlerFunc {
 	}
 }
 
+// RequestEventHandler is a PocketBase-native HTTP handler.
+type RequestEventHandler func(e *pbcore.RequestEvent) error
+
+// PermRE is the RequestEvent equivalent of Perm.
+func (o *Auth) PermRE(next RequestEventHandler, perms ...string) RequestEventHandler {
+	return func(e *pbcore.RequestEvent) error {
+		u, ok := e.Get(UserHTTPCtxKey).(User)
+		if !ok {
+			return echo.NewHTTPError(http.StatusForbidden, "invalid session")
+		}
+
+		if ExtractRoleIDRE(e) == SuperAdminRoleID || u.UserRoleID == SuperAdminRoleID {
+			return next(e)
+		}
+
+		var (
+			has  = false
+			perm = ""
+		)
+		for _, perm = range perms {
+			if _, ok := u.PermissionsMap[perm]; ok {
+				has = true
+				break
+			}
+		}
+
+		if !has {
+			return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("permission denied: %s", perm))
+		}
+
+		return next(e)
+	}
+}
+
 // ExtractRoleID returns the role ID from the auth record in the request context.
 // Falls back to the hydrated auth.User profile when unavailable.
 func ExtractRoleID(c echo.Context) int {
@@ -575,6 +633,27 @@ func ExtractRoleID(c echo.Context) int {
 		}
 	}
 
+	return 0
+}
+
+// ExtractRoleIDRE returns the role ID from a PocketBase RequestEvent.
+func ExtractRoleIDRE(e *pbcore.RequestEvent) int {
+	if e == nil {
+		return 0
+	}
+	if e.Auth != nil {
+		if id := ExtractRoleIDFromRecord(e.Auth); id > 0 {
+			return id
+		}
+	}
+	if rec, ok := e.Get(AuthRecordHTTPCtxKey).(*pbcore.Record); ok && rec != nil {
+		if id := ExtractRoleIDFromRecord(rec); id > 0 {
+			return id
+		}
+	}
+	if u, ok := e.Get(UserHTTPCtxKey).(User); ok && u.UserRoleID > 0 {
+		return u.UserRoleID
+	}
 	return 0
 }
 
@@ -620,6 +699,17 @@ func (o *Auth) IssueClientAuth(u User) (ClientAuth, error) {
 // HTTP handler request.
 func GetUser(c echo.Context) User {
 	return c.Get(UserHTTPCtxKey).(User)
+}
+
+// GetUserRE retrieves the User from a PocketBase RequestEvent.
+func GetUserRE(e *pbcore.RequestEvent) User {
+	return e.Get(UserHTTPCtxKey).(User)
+}
+
+// TryGetUserRE retrieves the User from a RequestEvent if present.
+func TryGetUserRE(e *pbcore.RequestEvent) (User, bool) {
+	u, ok := e.Get(UserHTTPCtxKey).(User)
+	return u, ok
 }
 
 // parseAuthHeader parses the Authorization header and returns the api_key and access_token.

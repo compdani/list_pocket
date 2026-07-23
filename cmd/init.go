@@ -38,7 +38,6 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/internal/subimporter"
-	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
 	koanfmaps "github.com/knadh/koanf/maps"
@@ -48,7 +47,6 @@ import (
 	"github.com/knadh/koanf/providers/posflag"
 	"github.com/knadh/koanf/v2"
 	"github.com/knadh/stuffbin"
-	"github.com/labstack/echo/v4"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -144,6 +142,7 @@ type Config struct {
 // initFlags initializes the commandline flags into the Koanf instance.
 func initFlags(ko *koanf.Koanf) {
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
+	f.ParseErrorsWhitelist.UnknownFlags = true
 	f.Usage = func() {
 		// Register --help handler.
 		fmt.Println(f.FlagUsages())
@@ -153,19 +152,20 @@ func initFlags(ko *koanf.Koanf) {
 	// Register the commandline flags.
 	f.StringSlice("config", []string{"config.toml"},
 		"path to one or more config files (will be merged in order)")
-	f.Bool("install", false, "setup database (first time)")
-	f.Bool("idempotent", false, "make --install run only if the database isn't already setup")
-	f.Bool("upgrade", false, "upgrade database to the current version")
+	f.Bool("install", false, "deprecated: migrations run automatically on serve/startup")
+	f.Bool("idempotent", false, "deprecated: kept for listmonk automation compatibility")
+	f.Bool("upgrade", false, "deprecated: migrations run automatically on serve/startup")
 	f.Bool("version", false, "show current version of the build")
 	f.Bool("new-config", false, "generate sample config file (at path given in --config)")
 	f.String("static-dir", "", "(optional) path to directory with static files")
 	f.String("i18n-dir", "", "(optional) path to directory with i18n language files")
-	f.Bool("yes", false, "assume 'yes' to prompts during --install/upgrade")
+	f.Bool("yes", false, "deprecated: kept for listmonk automation compatibility")
 	f.Bool("passive", false, "run in passive mode where campaigns are not processed")
 	args := os.Args[1:]
+	// Strip PocketBase subcommands so listmonk-style flags still parse cleanly.
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		switch args[0] {
-		case "serve", "start":
+		case "serve", "start", "migrate", "superuser":
 			args = args[1:]
 		}
 	}
@@ -177,6 +177,101 @@ func initFlags(ko *koanf.Koanf) {
 	if err := ko.Load(posflag.Provider(f, ".", ko), nil); err != nil {
 		lo.Fatalf("error loading config: %v", err)
 	}
+}
+
+// ensureDefaultServeArgs makes `serve` the default PocketBase command and bridges
+// config.toml app.address into PocketBase's --http flag when missing.
+func ensureDefaultServeArgs() {
+	args := append([]string(nil), os.Args[1:]...)
+	for i, a := range args {
+		if a == "start" {
+			args[i] = "serve"
+		}
+	}
+
+	httpAddr := strings.TrimSpace(ko.String("app.address"))
+	cmdIdx, cmd := findPocketBaseCommand(args)
+	switch cmd {
+	case "serve":
+		if httpAddr != "" && !hasCLIFlag(args, "http") {
+			args = insertCLIArgs(args, cmdIdx+1, "--http="+httpAddr)
+		}
+		os.Args = append([]string{os.Args[0]}, args...)
+		return
+	case "migrate", "superuser":
+		os.Args = append([]string{os.Args[0]}, args...)
+		return
+	}
+
+	insert := []string{"serve"}
+	if httpAddr != "" && !hasCLIFlag(args, "http") {
+		insert = append(insert, "--http="+httpAddr)
+	}
+	os.Args = append([]string{os.Args[0]}, append(insert, args...)...)
+}
+
+// flags that take a separate argv value (not --flag=value).
+var cliFlagsWithValue = map[string]bool{
+	"--config": true, "--static-dir": true, "--i18n-dir": true,
+	"--http": true, "--https": true, "--dir": true, "--encryptionEnv": true,
+	"--queryTimeout": true, "--origins": true,
+	"-c": true,
+}
+
+func findPocketBaseCommand(args []string) (int, string) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			if i+1 < len(args) {
+				return classifyPBCommand(i+1, args[i+1])
+			}
+			return -1, ""
+		}
+		if strings.HasPrefix(a, "-") {
+			if strings.Contains(a, "=") {
+				continue
+			}
+			if cliFlagsWithValue[a] {
+				i++ // skip value
+			}
+			continue
+		}
+		return classifyPBCommand(i, a)
+	}
+	return -1, ""
+}
+
+func classifyPBCommand(idx int, name string) (int, string) {
+	switch name {
+	case "serve", "migrate", "superuser":
+		return idx, name
+	default:
+		return -1, ""
+	}
+}
+
+func hasCLIFlag(args []string, name string) bool {
+	long := "--" + name
+	for _, a := range args {
+		if a == long || strings.HasPrefix(a, long+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+func insertCLIArgs(args []string, idx int, values ...string) []string {
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(args) {
+		idx = len(args)
+	}
+	out := make([]string, 0, len(args)+len(values))
+	out = append(out, args[:idx]...)
+	out = append(out, values...)
+	out = append(out, args[idx:]...)
+	return out
 }
 
 // initConfigFiles loads the given config files into the koanf instance.
@@ -550,20 +645,12 @@ func makeDefaultPBSettings(ko *koanf.Koanf) ([]byte, error) {
 }
 
 func initPocketBase() *pocketbase.PocketBase {
-	pb := pocketbase.NewWithConfig(pocketbase.Config{
+	// PocketBase is created here but bootstrapped later via pb.Start()/Execute(),
+	// matching the normal embedded-PocketBase lifecycle.
+	return pocketbase.NewWithConfig(pocketbase.Config{
 		HideStartBanner: true,
 		DefaultDataDir:  "pb_data",
 	})
-
-	if err := pb.Bootstrap(); err != nil {
-		lo.Fatalf("error bootstrapping pocketbase: %v", err)
-	}
-
-	if err := pb.RunAppMigrations(); err != nil {
-		lo.Fatalf("error running pocketbase app migrations: %v", err)
-	}
-
-	return pb
 }
 
 func getPBSettings(pb *pocketbase.PocketBase) (types.JSONText, bool, error) {
@@ -1150,91 +1237,48 @@ func initAbout(db *pbdb.DB) about {
 
 }
 
-// initHTTPServer sets up and runs the app's main HTTP server.
-func initHTTPServer(cfg *Config, urlCfg *UrlConfig, i *i18n.I18n, fs stuffbin.FileSystem, app *App) *echo.Echo {
-	// Parse templates for public pages.
+// registerServeRoutes registers listpocket HTTP routes on a PocketBase ServeEvent.
+func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
+	cfg := app.cfg
+	urlCfg := app.urlCfg
+	tpl := app.tpl
+
+	se.Router.BindFunc(func(e *pbcore.RequestEvent) error {
+		e.Set("app", app)
+		return e.Next()
+	})
+
+	registerDocsRoutes(se, ko)
+
+	se.Router.GET("/public/static/{path...}", apis.Static(stuffbinSubFS{base: app.fs, root: "/public/static"}, false))
+	se.Router.GET("/admin/static/{path...}", apis.Static(stuffbinSubFS{base: app.fs, root: "/admin/static"}, false))
+
+	var (
+		uploadProvider = ko.String("upload.provider")
+		uploadFsURI    = ko.String("upload.filesystem.upload_uri")
+		publicURL      = ko.String("upload.s3.public_url")
+	)
+	switch {
+	case uploadProvider == "filesystem" && uploadFsURI != "":
+		staticPath := ko.String("upload.filesystem.upload_path")
+		se.Router.GET(path.Join(uploadFsURI, "{filepath...}"), func(e *pbcore.RequestEvent) error {
+			http.StripPrefix(uploadFsURI, http.FileServer(http.Dir(staticPath))).ServeHTTP(e.Response, e.Request)
+			return nil
+		})
+	case uploadProvider == "s3" && strings.HasPrefix(publicURL, "/"):
+		se.Router.GET(path.Join(publicURL, "{filepath}"), asHandler(app.ServeS3Media))
+	}
+
+	registerHandlers(se.Router, app, tpl, cfg, urlCfg)
+}
+
+// parsePublicTemplates parses public HTML templates used by Echo-backed handlers.
+func parsePublicTemplates(i *i18n.I18n, urlCfg *UrlConfig, fs stuffbin.FileSystem) *template.Template {
 	tpl, err := stuffbin.ParseTemplatesGlob(initTplFuncs(i, urlCfg), fs, "/public/templates/*.html")
 	if err != nil {
 		lo.Fatalf("error parsing public templates: %v", err)
 	}
-
-	app.tpl = tpl
-
-	campaignledger.RegisterHooks(pb)
-
-	workflow.Register(pb, workflow.Config{
-		FrontendDir: "../frontend/dist",
-		SendTransactional: func(ctx context.Context, req workflow.ExecutorTransactionalEmailRequest) (workflow.ExecutorTransactionalEmailResult, error) {
-			record, err := app.newTransactionalSender().Send(txRequestFromWorkflow(req))
-			if err != nil {
-				return workflow.ExecutorTransactionalEmailResult{}, err
-			}
-			return workflow.ExecutorTransactionalEmailResult{
-				RecordID:        record.RecordID,
-				UUID:            record.UUID,
-				SubscriberID:    record.SubscriberID,
-				SubscriberEmail: record.SubscriberEmail,
-				TemplateID:      record.TemplateID,
-				TemplateName:    record.TemplateName,
-				Status:          record.Status,
-				Subject:         record.Subject,
-			}, nil
-		},
-	})
-
-	// Register all routes using PocketBase's router.
-	pb.OnServe().BindFunc(func(se *pbcore.ServeEvent) error {
-		// Inject app into request context middleware.
-		se.Router.BindFunc(func(e *pbcore.RequestEvent) error {
-			e.Set("app", app)
-			return e.Next()
-		})
-
-		registerDocsRoutes(se, ko)
-
-		// Public (subscriber) facing static files.
-		se.Router.GET("/public/static/{path...}", apis.Static(stuffbinSubFS{base: fs, root: "/public/static"}, false))
-
-		// Admin (frontend) facing static files.
-		se.Router.GET("/admin/static/{path...}", apis.Static(stuffbinSubFS{base: fs, root: "/admin/static"}, false))
-
-		// Public (subscriber) facing media upload files.
-		var (
-			uploadProvider = ko.String("upload.provider")
-			uploadFsURI    = ko.String("upload.filesystem.upload_uri")
-			publicURL      = ko.String("upload.s3.public_url")
-		)
-		switch {
-		case uploadProvider == "filesystem" && uploadFsURI != "":
-			staticPath := ko.String("upload.filesystem.upload_path")
-			se.Router.GET(path.Join(uploadFsURI, "{filepath...}"), func(e *pbcore.RequestEvent) error {
-				http.StripPrefix(uploadFsURI, http.FileServer(http.Dir(staticPath))).ServeHTTP(e.Response, e.Request)
-				return nil
-			})
-		case uploadProvider == "s3" && strings.HasPrefix(publicURL, "/"):
-			se.Router.GET(path.Join(publicURL, "{filepath}"), wrapEcho(app, tpl, cfg, urlCfg, []string{"filepath"}, app.ServeS3Media))
-		}
-
-		// Register all HTTP handlers.
-		registerHandlers(se.Router, app, tpl, cfg, urlCfg)
-
-		return se.Next()
-	})
-
-	go func() {
-		if err := apis.Serve(pb, apis.ServeConfig{HttpAddr: ko.String("app.address")}); err != nil {
-			if errors.Is(err, http.ErrServerClosed) || errors.Is(err, context.Canceled) {
-				lo.Println("HTTP server shut down")
-			} else {
-				lo.Fatalf("error starting pocketbase HTTP server: %v", err)
-			}
-		}
-	}()
-
-	app.pb = pb
-
-	// Return a dummy Echo instance for compatibility with shutdown code.
-	return echo.New()
+	return tpl
 }
 
 // initCaptcha initializes the captcha service.
@@ -1338,12 +1382,11 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 
 }
 
-// awaitReload waits for a SIGHUP signal to reload the app. Every setting change on the UI causes a reload.
-func awaitReload(sigChan chan os.Signal, closerWait chan bool, closer func()) chan bool {
-	// The blocking signal handler that main() waits on.
-	out := make(chan bool)
+// startSIGHUPReload watches for SIGHUP and respawns the process after cleanup.
+// Settings changes and /mailapi/admin/reload send on the same channel.
+func startSIGHUPReload(sigChan chan os.Signal, closer func()) {
+	closerWait := make(chan bool, 1)
 
-	// Respawn a new process and exit the running one.
 	respawn := func() {
 		if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
 			lo.Fatalf("error spawning process: %v", err)
@@ -1351,24 +1394,26 @@ func awaitReload(sigChan chan os.Signal, closerWait chan bool, closer func()) ch
 		os.Exit(0)
 	}
 
-	// Listen for reload signal.
 	go func() {
 		for range sigChan {
 			lo.Println("reloading on signal ...")
 
-			go closer()
+			go func() {
+				closer()
+				select {
+				case closerWait <- true:
+				default:
+				}
+			}()
+
 			select {
 			case <-closerWait:
-				// Wait for the closer to finish.
 				respawn()
 			case <-time.After(time.Second * 3):
-				// Or timeout and force close.
 				respawn()
 			}
 		}
 	}()
-
-	return out
 }
 
 // initTplFuncs returns a generic template func map with custom template

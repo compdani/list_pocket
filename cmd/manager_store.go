@@ -620,7 +620,7 @@ func sqliteSubscriberTagFilterClause(includeTags, excludeTags []string, subscrib
 
 // GetAttachment fetches a media attachment blob.
 func (s *store) GetAttachment(mediaID int) (models.Attachment, error) {
-	m, err := s.core.GetMedia(mediaID, "", "", s.media)
+	m, err := s.core.GetMediaByRowID(mediaID, s.media)
 	if err != nil {
 		return models.Attachment{}, err
 	}

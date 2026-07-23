@@ -17,7 +17,7 @@ Retrieve the bounce records.
 
 | Name       | Type     | Required | Description                                                      |
 |:-----------|:---------|:---------|:-----------------------------------------------------------------|
-| campaign_id| number   |          | Bounce record retrieval for particular campaign id               |
+| campaign_id| string   |          | Bounce record retrieval for particular campaign record id               |
 | page       | number   |          | Page number for pagination.                                      |
 | per_page   | number   |          | Results per page. Set to 'all' to return all results.            |
 | source     | string   |          |                                |
@@ -27,7 +27,7 @@ Retrieve the bounce records.
 ##### Example Request
 
 ```shell
-curl -u "api_user:token" -X GET 'http://localhost:9000/api/bounces?campaign_id=1&page=1&per_page=2' \ 
+curl -u "api_user:token" -X GET 'http://localhost:9000/api/bounces?campaign_id=camp1xyz01&page=1&per_page=2' \ 
     -H 'accept: application/json' -H 'Content-Type: application/x-www-form-urlencoded' \
     --data '{"source":"demo","order_by":"created_at","order":"asc"}'
 ```
@@ -39,7 +39,7 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/bounces?campaign_id=1
   "data": {
     "results": [
       {
-        "id": 839971,
+        "id": "bounce839971",
         "type": "hard",
         "source": "demo",
         "meta": {
@@ -48,14 +48,14 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/bounces?campaign_id=1
         "created_at": "2024-08-20T23:54:22.851858Z",
         "email": "gilles.deleuze@example.app",
         "subscriber_uuid": "32ca1f3e-1a1d-42e1-af04-df0757f420f3",
-        "subscriber_id": 60,
+        "subscriber_id": "sub60xyz001",
         "campaign": {
-          "id": 1,
+          "id": "camp1xyz01",
           "name": "Test campaign"
         }
       },
       {
-        "id": 839725,
+        "id": "bounce839725",
         "type": "hard",
         "source": "demo",
         "meta": {
@@ -64,9 +64,9 @@ curl -u "api_user:token" -X GET 'http://localhost:9000/api/bounces?campaign_id=1
         "created_at": "2024-08-20T22:46:36.393547Z",
         "email": "gottfried.leibniz@example.app",
         "subscriber_uuid": "5911d3f4-2346-4bfc-aad2-eb319ab0e879",
-        "subscriber_id": 13,
+        "subscriber_id": "sub13xyz001",
         "campaign": {
-          "id": 1,
+          "id": "camp1xyz01",
           "name": "Test campaign"
         }
       }
@@ -140,7 +140,7 @@ To delete specific bounce id.
 ##### Example Request
 
 ```shell
-curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/bounces/840965'
+curl -u 'api_username:access_token' -X DELETE 'http://localhost:9000/api/bounces/bounce840965'
 ```
 
 ##### Example Response

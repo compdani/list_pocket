@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"log"
 	"net/http"
 	"time"
@@ -10,9 +11,9 @@ import (
 )
 
 // GCSubscribers garbage collects (deletes) orphaned or blocklisted subscribers.
-func (a *App) GCSubscribers(c echo.Context) error {
+func (a *App) GCSubscribers(re *pbcore.RequestEvent) error {
 	var (
-		typ = c.Param("type")
+		typ = pathParam(re, "type")
 
 		n   int
 		err error
@@ -31,15 +32,15 @@ func (a *App) GCSubscribers(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{struct {
+	return okJSON(re, struct {
 		Count int `json:"count"`
-	}{n}})
+	}{n})
 }
 
 // GCSubscriptions garbage collects (deletes) orphaned or blocklisted subscribers.
-func (a *App) GCSubscriptions(c echo.Context) error {
+func (a *App) GCSubscriptions(re *pbcore.RequestEvent) error {
 	// Validate the date.
-	t, err := time.Parse(time.RFC3339, c.FormValue("before_date"))
+	t, err := time.Parse(time.RFC3339, re.Request.FormValue("before_date"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 	}
@@ -50,20 +51,20 @@ func (a *App) GCSubscriptions(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{struct {
+	return okJSON(re, struct {
 		Count int `json:"count"`
-	}{n}})
+	}{n})
 }
 
 // GCCampaignAnalytics garbage collects (deletes) campaign analytics.
-func (a *App) GCCampaignAnalytics(c echo.Context) error {
+func (a *App) GCCampaignAnalytics(re *pbcore.RequestEvent) error {
 
-	t, err := time.Parse(time.RFC3339, c.FormValue("before_date"))
+	t, err := time.Parse(time.RFC3339, re.Request.FormValue("before_date"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
 	}
 
-	switch c.Param("type") {
+	switch pathParam(re, "type") {
 	case "all":
 		if err := a.core.DeleteCampaignViews(t); err != nil {
 			return err
@@ -81,7 +82,7 @@ func (a *App) GCCampaignAnalytics(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // RunDBVacuum runs a full VACUUM on the PostgreSQL database.

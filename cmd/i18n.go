@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,8 +26,8 @@ type i18nLangRaw struct {
 var reLangCode = regexp.MustCompile(`[^a-zA-Z_0-9\\-]`)
 
 // GetI18nLang returns the JSON language pack given the language code.
-func (a *App) GetI18nLang(c echo.Context) error {
-	lang := c.Param("lang")
+func (a *App) GetI18nLang(re *pbcore.RequestEvent) error {
+	lang := pathParam(re, "lang")
 	if len(lang) > 6 || reLangCode.MatchString(lang) {
 		return echo.NewHTTPError(http.StatusBadRequest, "Invalid language code.")
 	}
@@ -36,7 +37,7 @@ func (a *App) GetI18nLang(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Unknown language.")
 	}
 
-	return c.JSON(http.StatusOK, okResp{json.RawMessage(i.JSON())})
+	return okJSON(re, json.RawMessage(i.JSON()))
 }
 
 // getI18nLangList returns the list of available i18n languages.

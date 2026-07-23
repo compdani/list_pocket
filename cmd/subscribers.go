@@ -4,6 +4,7 @@ package main
 // record ids (SQLite subscribers.id), never numeric rowids.
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -78,8 +79,8 @@ var (
 	}
 )
 
-func (a *App) resolveSubscriberRouteID(c echo.Context) (int, error) {
-	rawID := strings.TrimSpace(c.Param("id"))
+func (a *App) resolveSubscriberRouteID(re *pbcore.RequestEvent) (int, error) {
+	rawID := strings.TrimSpace(pathParam(re, "id"))
 	if rawID == "" {
 		return 0, echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -97,11 +98,11 @@ func (a *App) resolveSubscriberRouteID(c echo.Context) (int, error) {
 }
 
 // GetSubscriber handles the retrieval of a single subscriber by ID.
-func (a *App) GetSubscriber(c echo.Context) error {
-	user := auth.GetUser(c)
+func (a *App) GetSubscriber(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
 
 	// Check if the user has access to at least one of the lists on the subscriber.
-	id, err := a.resolveSubscriberRouteID(c)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -115,15 +116,15 @@ func (a *App) GetSubscriber(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetSubscriberActivity handles campaign sends (ledger), views, and link clicks for the Activity tab.
-func (a *App) GetSubscriberActivity(c echo.Context) error {
-	user := auth.GetUser(c)
+func (a *App) GetSubscriberActivity(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
 
 	// Check if the user has access to at least one of the lists on the subscriber.
-	id, err := a.resolveSubscriberRouteID(c)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -137,14 +138,14 @@ func (a *App) GetSubscriberActivity(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetSubscriberTimeline returns merged outbound and inbound timeline events for a subscriber.
-func (a *App) GetSubscriberTimeline(c echo.Context) error {
-	user := auth.GetUser(c)
+func (a *App) GetSubscriberTimeline(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
 
-	id, err := a.resolveSubscriberRouteID(c)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -153,34 +154,34 @@ func (a *App) GetSubscriberTimeline(c echo.Context) error {
 	}
 
 	limit := 50
-	if raw := strings.TrimSpace(c.QueryParam("limit")); raw != "" {
+	if raw := strings.TrimSpace(queryParam(re, "limit")); raw != "" {
 		if v, err := strconv.Atoi(raw); err == nil {
 			limit = v
 		}
 	}
 	offset := 0
-	if raw := strings.TrimSpace(c.QueryParam("offset")); raw != "" {
+	if raw := strings.TrimSpace(queryParam(re, "offset")); raw != "" {
 		if v, err := strconv.Atoi(raw); err == nil {
 			offset = v
 		}
 	}
-	sortOrder := strings.TrimSpace(c.QueryParam("sort"))
+	sortOrder := strings.TrimSpace(queryParam(re, "sort"))
 
 	eventTypes := []string{}
-	for _, raw := range c.QueryParams()["event_type"] {
+	for _, raw := range re.Request.URL.Query()["event_type"] {
 		if v := strings.TrimSpace(raw); v != "" {
 			eventTypes = append(eventTypes, v)
 		}
 	}
 	if len(eventTypes) == 0 {
-		for _, raw := range strings.Split(strings.TrimSpace(c.QueryParam("event_types")), ",") {
+		for _, raw := range strings.Split(strings.TrimSpace(queryParam(re, "event_types")), ",") {
 			if v := strings.TrimSpace(raw); v != "" {
 				eventTypes = append(eventTypes, v)
 			}
 		}
 	}
 
-	out, err := a.core.GetUnifiedContactTimeline(c.Request().Context(), corepkg.TimelineQueryParams{
+	out, err := a.core.GetUnifiedContactTimeline(re.Request.Context(), corepkg.TimelineQueryParams{
 		SubscriberID: id,
 		Limit:        limit,
 		Offset:       offset,
@@ -191,22 +192,22 @@ func (a *App) GetSubscriberTimeline(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // QuerySubscribers handles querying subscribers based on an arbitrary SQL expression.
-func (a *App) QuerySubscribers(c echo.Context) error {
+func (a *App) QuerySubscribers(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Filter list IDs by permission.
-	listIDs, err := a.filterListQueryByPerm("list_record_id", c.QueryParams(), user)
+	listIDs, err := a.filterListQueryByPerm("list_record_id", re.Request.URL.Query(), user)
 	if err != nil {
 		return err
 	}
 
 	// Does the user have the subscribers:sql_query permission?
-	query := formatSQLExp(c.FormValue("query"))
+	query := formatSQLExp(re.Request.FormValue("query"))
 	if query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
 			return echo.NewHTTPError(http.StatusForbidden,
@@ -215,12 +216,12 @@ func (a *App) QuerySubscribers(c echo.Context) error {
 	}
 
 	var (
-		searchStr = strings.TrimSpace(c.FormValue("search"))
-		filters   = parseFiltersParam(c.FormValue("filters"))
-		subStatus = c.FormValue("subscription_status")
-		order     = c.FormValue("order")
-		orderBy   = c.FormValue("order_by")
-		pg        = a.pg.NewFromURL(c.Request().URL.Query())
+		searchStr = strings.TrimSpace(re.Request.FormValue("search"))
+		filters   = parseFiltersParam(re.Request.FormValue("filters"))
+		subStatus = re.Request.FormValue("subscription_status")
+		order     = re.Request.FormValue("order")
+		orderBy   = re.Request.FormValue("order_by")
+		pg        = a.pg.NewFromURL(re.Request.URL.Query())
 	)
 	a.log.Printf("query subscribers: username=%q role_id=%d search=%q query=%q has_filters=%v list_ids=%v sub_status=%q order_by=%q order=%q page=%d per_page=%d offset=%d limit=%d",
 		user.Username, user.UserRoleID, searchStr, query, hasSubscriberFilters(filters), listIDs, subStatus, orderBy, order, pg.Page, pg.PerPage, pg.Offset, pg.Limit)
@@ -242,23 +243,23 @@ func (a *App) QuerySubscribers(c echo.Context) error {
 		PerPage: pg.PerPage,
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // ExportSubscribers handles querying subscribers based on an arbitrary SQL expression.
-func (a *App) ExportSubscribers(c echo.Context) error {
+func (a *App) ExportSubscribers(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Filter list IDs by permission.
-	listIDs, err := a.filterListQueryByPerm("list_record_id", c.QueryParams(), user)
+	listIDs, err := a.filterListQueryByPerm("list_record_id", re.Request.URL.Query(), user)
 	if err != nil {
 		return err
 	}
 
 	// Export only specific subscribers (PocketBase record ids).
 	var subIDs []int
-	if recordIDs := c.QueryParams()["subscriber_record_id"]; len(recordIDs) > 0 {
+	if recordIDs := re.Request.URL.Query()["subscriber_record_id"]; len(recordIDs) > 0 {
 		var err error
 		subIDs, err = a.core.ResolveSubscriberIDs(nil, recordIDs)
 		if err != nil {
@@ -268,13 +269,13 @@ func (a *App) ExportSubscribers(c echo.Context) error {
 	}
 
 	// Filter by subscription status
-	subStatus := c.QueryParam("subscription_status")
+	subStatus := queryParam(re, "subscription_status")
 
 	// Does the user have the subscribers:sql_query permission?
 	var (
-		searchStr = strings.TrimSpace(c.FormValue("search"))
-		query     = formatSQLExp(c.FormValue("query"))
-		filters   = parseFiltersParam(c.FormValue("filters"))
+		searchStr = strings.TrimSpace(re.Request.FormValue("search"))
+		query     = formatSQLExp(re.Request.FormValue("query"))
+		filters   = parseFiltersParam(re.Request.FormValue("filters"))
 	)
 	if query != "" {
 		if !user.HasPerm(auth.PermSubscribersSqlQuery) {
@@ -290,8 +291,8 @@ func (a *App) ExportSubscribers(c echo.Context) error {
 	}
 
 	var (
-		hdr = c.Response().Header()
-		wr  = csv.NewWriter(c.Response())
+		hdr = re.Response.Header()
+		wr  = csv.NewWriter(re.Response)
 	)
 
 	hdr.Set(echo.HeaderContentType, echo.MIMEOctetStream)
@@ -328,13 +329,13 @@ loop:
 }
 
 // CreateSubscriber handles the creation of a new subscriber.
-func (a *App) CreateSubscriber(c echo.Context) error {
+func (a *App) CreateSubscriber(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Get and validate fields.
 	var req subimporter.SubReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -367,13 +368,13 @@ func (a *App) CreateSubscriber(c echo.Context) error {
 	}
 	a.log.Printf("create subscriber: success email=%q subscriber_record_id=%q uuid=%q", sub.Email, sub.RecordID, sub.UUID)
 
-	return c.JSON(http.StatusOK, okResp{sub})
+	return okJSON(re, sub)
 }
 
 // UpdateSubscriber handles modification of a subscriber.
-func (a *App) UpdateSubscriber(c echo.Context) error {
+func (a *App) UpdateSubscriber(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	// Get and validate fields.
 	req := struct {
@@ -382,7 +383,7 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 		ListRecordIDs  []string `json:"list_record_ids"`
 		PreconfirmSubs bool     `json:"preconfirm_subscriptions"`
 	}{}
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -421,23 +422,23 @@ func (a *App) UpdateSubscriber(c echo.Context) error {
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
-	// Update the subscriber in the DB.
-	id, err := a.resolveSubscriberRouteID(c)
-	if err != nil {
-		return err
+	// Update the subscriber in the DB by PocketBase record id from the path.
+	recordID := strings.TrimSpace(pathParam(re, "id"))
+	if recordID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
-	out, _, err := a.core.UpdateSubscriberWithLists(id, req.Subscriber, listIDs, nil, req.PreconfirmSubs, true, false)
+	out, _, err := a.core.UpdateSubscriberWithLists(recordID, req.Subscriber, listIDs, nil, req.PreconfirmSubs, true, false)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // SubscriberSendOptin sends an optin confirmation e-mail to a subscriber.
-func (a *App) SubscriberSendOptin(c echo.Context) error {
+func (a *App) SubscriberSendOptin(re *pbcore.RequestEvent) error {
 	// Fetch the subscriber.
-	id, err := a.resolveSubscriberRouteID(c)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -451,14 +452,14 @@ func (a *App) SubscriberSendOptin(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, a.i18n.T("subscribers.errorSendingOptin"))
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // SubscriberSMSOptOut marks a subscriber's phone as SMS-unsubscribed across
 // every list they're on. Used both from the admin UI ("this phone is not
 // SMS-reachable") and indirectly as the same action our STOP webhook takes.
-func (a *App) SubscriberSMSOptOut(c echo.Context) error {
-	id, err := a.resolveSubscriberRouteID(c)
+func (a *App) SubscriberSMSOptOut(re *pbcore.RequestEvent) error {
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -477,34 +478,34 @@ func (a *App) SubscriberSMSOptOut(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}
 
-	return c.JSON(http.StatusOK, okResp{map[string]any{
+	return okJSON(re, map[string]any{
 		"updated": n,
 		"phone":   phone,
-	}})
+	})
 }
 
 // BlocklistSubscriber handles the blocklisting of a given subscriber.
-func (a *App) BlocklistSubscriber(c echo.Context) error {
-	user := auth.GetUser(c)
-	id, err := a.resolveSubscriberRouteID(c)
+func (a *App) BlocklistSubscriber(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
 	if err := a.hasSubPerm(user, []int{id}); err != nil {
 		return err
 	}
-	recordID := strings.TrimSpace(c.Param("id"))
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if err := a.core.BlocklistSubscribers([]string{recordID}); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // BlocklistSubscribers handles the blocklisting of one or more subscribers.
-func (a *App) BlocklistSubscribers(c echo.Context) error {
+func (a *App) BlocklistSubscribers(re *pbcore.RequestEvent) error {
 	var req subQueryReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
@@ -519,24 +520,24 @@ func (a *App) BlocklistSubscribers(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // ManageSubscriberLists handles bulk addition or removal of subscribers
 // from or to one or more target lists.
 // It takes either a PocketBase record id in the URI, or subscriber_record_ids in the request body.
-func (a *App) ManageSubscriberLists(c echo.Context) error {
+func (a *App) ManageSubscriberLists(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	var req subQueryReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
 
 	recordIDs := uniqueNonEmptyStrings(req.SubscriberRecordIDs)
-	if pID := strings.TrimSpace(c.Param("id")); pID != "" {
+	if pID := strings.TrimSpace(pathParam(re, "id")); pID != "" {
 		recordIDs = uniqueNonEmptyStrings(append([]string{pID}, recordIDs...))
 	}
 	subIDs, err := a.core.ResolveSubscriberIDs(nil, recordIDs)
@@ -586,30 +587,30 @@ func (a *App) ManageSubscriberLists(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteSubscriber handles deletion of a single subscriber.
-func (a *App) DeleteSubscriber(c echo.Context) error {
-	user := auth.GetUser(c)
-	id, err := a.resolveSubscriberRouteID(c)
+func (a *App) DeleteSubscriber(re *pbcore.RequestEvent) error {
+	user := auth.GetUserRE(re)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
 	if err := a.hasSubPerm(user, []int{id}); err != nil {
 		return err
 	}
-	recordID := strings.TrimSpace(c.Param("id"))
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if err := a.core.DeleteSubscribers([]string{recordID}, nil); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteSubscribers handles bulk deletion of one or more subscribers.
-func (a *App) DeleteSubscribers(c echo.Context) error {
-	recordIDs := uniqueNonEmptyStrings(c.Request().URL.Query()["subscriber_record_id"])
+func (a *App) DeleteSubscribers(re *pbcore.RequestEvent) error {
+	recordIDs := uniqueNonEmptyStrings(re.Request.URL.Query()["subscriber_record_id"])
 	if len(recordIDs) == 0 {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("globals.messages.errorInvalidIDs", "error", "subscriber_record_id"))
@@ -619,17 +620,17 @@ func (a *App) DeleteSubscribers(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteSubscribersByQuery bulk deletes based on an
 // arbitrary SQL expression.
-func (a *App) DeleteSubscribersByQuery(c echo.Context) error {
+func (a *App) DeleteSubscribersByQuery(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	var req subQueryReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -662,17 +663,17 @@ func (a *App) DeleteSubscribersByQuery(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // BlocklistSubscribersByQuery bulk blocklists subscribers
 // based on an arbitrary SQL expression.
-func (a *App) BlocklistSubscribersByQuery(c echo.Context) error {
+func (a *App) BlocklistSubscribersByQuery(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	var req subQueryReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -704,17 +705,17 @@ func (a *App) BlocklistSubscribersByQuery(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // ManageSubscriberListsByQuery bulk adds/removes/unsubscribes subscribers
 // from one or more lists based on an arbitrary SQL expression.
-func (a *App) ManageSubscriberListsByQuery(c echo.Context) error {
+func (a *App) ManageSubscriberListsByQuery(re *pbcore.RequestEvent) error {
 	// Get the authenticated user.
-	user := auth.GetUser(c)
+	user := auth.GetUserRE(re)
 
 	var req subQueryReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 
@@ -770,16 +771,16 @@ func (a *App) ManageSubscriberListsByQuery(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{map[string]any{
+	return okJSON(re, map[string]any{
 		"ok":             true,
 		"affected_count": affected,
-	}})
+	})
 }
 
 // DeleteSubscriberBounces deletes all the bounces on a subscriber.
-func (a *App) DeleteSubscriberBounces(c echo.Context) error {
+func (a *App) DeleteSubscriberBounces(re *pbcore.RequestEvent) error {
 	// Delete the bounces from the DB.
-	id, err := a.resolveSubscriberRouteID(c)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -787,18 +788,18 @@ func (a *App) DeleteSubscriberBounces(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // ExportSubscriberData pulls the subscriber's profile,
 // list subscriptions, campaign views and clicks and produces
 // a JSON report. This is a privacy feature and depends on the
 // configuration in a.Constants.Privacy.
-func (a *App) ExportSubscriberData(c echo.Context) error {
+func (a *App) ExportSubscriberData(re *pbcore.RequestEvent) error {
 	// Get the subscriber's data. A single query that gets the profile,
 	// list subscriptions, campaign views, and link clicks. Names of
 	// private lists are replaced with "Private list".
-	id, err := a.resolveSubscriberRouteID(c)
+	id, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -810,9 +811,9 @@ func (a *App) ExportSubscriberData(c echo.Context) error {
 	}
 
 	// Set headers to force the browser to prompt for download.
-	c.Response().Header().Set("Cache-Control", "no-cache")
-	c.Response().Header().Set("Content-Disposition", `attachment; filename="data.json"`)
-	return c.Blob(http.StatusOK, "application/json", b)
+	re.Response.Header().Set("Cache-Control", "no-cache")
+	re.Response.Header().Set("Content-Disposition", `attachment; filename="data.json"`)
+	return writeBlob(re, http.StatusOK, "application/json", b)
 }
 
 // exportSubscriberData collates the data of a subscriber including profile,

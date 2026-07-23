@@ -4,14 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/utils"
-	"github.com/labstack/echo/v4"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"gopkg.in/volatiletech/null.v6"
 )
@@ -19,14 +18,12 @@ import (
 func (c *Core) GetUsers() ([]auth.User, error) {
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", "pocketbase unavailable"))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", "pocketbase unavailable"))
 	}
 
 	recs, err := pb.FindRecordsByFilter("users", "", "created", 0, 0)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", err.Error()))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", err.Error()))
 	}
 
 	out := make([]auth.User, 0, len(recs))
@@ -42,12 +39,10 @@ func (c *Core) GetUser(recordID, username, email string) (auth.User, error) {
 	rec, err := c.findAuthUserRecord(recordID, username, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return auth.User{}, echo.NewHTTPError(http.StatusNotFound,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
+			return auth.User{}, apperr.NotFound(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
 		}
 
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.users}", "error", err.Error()))
 	}
 
 	users, err := c.hydrateUsers([]auth.User{userFromAuthRecord(rec)})
@@ -62,8 +57,7 @@ func (c *Core) GetUser(recordID, username, email string) (auth.User, error) {
 func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 	pb := c.db.PocketBase()
 	if pb == nil {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", "pocketbase unavailable"))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", "pocketbase unavailable"))
 	}
 
 	// If it's an API user, generate a random token for password
@@ -81,14 +75,12 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 
 	rec, err := c.findAuthUserRecord("", u.Username, "")
 	if err != nil && err != sql.ErrNoRows {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 	if err == sql.ErrNoRows || rec == nil {
 		col, colErr := pb.FindCollectionByNameOrId("users")
 		if colErr != nil {
-			return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", colErr.Error()))
+			return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", colErr.Error()))
 		}
 		rec = pbcore.NewRecord(col)
 	}
@@ -96,20 +88,17 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 	if rec.GetInt("legacy_user_id") <= 0 {
 		nextID, err := c.nextLegacyUserID()
 		if err != nil {
-			return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-				c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+			return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
 		}
 		rec.Set("legacy_user_id", nextID)
 	}
 
 	if err := c.applyUserToRecord(rec, u, true); err != nil {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	if err := pb.Save(rec); err != nil {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	out, err := c.GetUser(rec.Id, "", "")
@@ -132,11 +121,9 @@ func (c *Core) UpdateUser(recordID string, u auth.User) (auth.User, error) {
 	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
+			return auth.User{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
 		}
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	oldUser, err := c.GetUser(recordID, "", "")
@@ -152,18 +139,16 @@ func (c *Core) UpdateUser(recordID string, u auth.User) (auth.User, error) {
 			return auth.User{}, err
 		}
 		if num == 0 {
-			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
+			return auth.User{}, apperr.BadRequest(c.i18n.T("users.needSuper"))
 		}
 	}
 
 	if err := c.applyUserToRecord(rec, u, false); err != nil {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	if err := c.db.PocketBase().Save(rec); err != nil {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return c.GetUser(recordID, "", "")
@@ -174,11 +159,9 @@ func (c *Core) UpdateUserProfile(recordID string, u auth.User) (auth.User, error
 	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return auth.User{}, echo.NewHTTPError(http.StatusBadRequest,
-				c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
+			return auth.User{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.user}"))
 		}
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	if strings.TrimSpace(u.Name) != "" {
@@ -193,8 +176,7 @@ func (c *Core) UpdateUserProfile(recordID string, u auth.User) (auth.User, error
 	}
 
 	if err := c.db.PocketBase().Save(rec); err != nil {
-		return auth.User{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return auth.User{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return c.GetUser(recordID, "", "")
@@ -204,8 +186,7 @@ func (c *Core) UpdateUserProfile(recordID string, u auth.User) (auth.User, error
 func (c *Core) UpdateUserLogin(recordID string, avatar string) error {
 	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	rec.Set("loggedin_at", time.Now().UTC().Format("2006-01-02 15:04:05.000Z"))
@@ -214,8 +195,7 @@ func (c *Core) UpdateUserLogin(recordID string, avatar string) error {
 	}
 
 	if err := c.db.PocketBase().Save(rec); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return nil
@@ -225,16 +205,14 @@ func (c *Core) UpdateUserLogin(recordID string, avatar string) error {
 func (c *Core) SetTwoFA(recordID string, twofaType, twofaKey string) error {
 	rec, err := c.findAuthUserRecord(recordID, "", "")
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	rec.Set("twofa_type", twofaType)
 	rec.Set("twofa_key", twofaKey)
 
 	if err := c.db.PocketBase().Save(rec); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.user}", "error", err.Error()))
 	}
 
 	return nil
@@ -268,7 +246,7 @@ func (c *Core) DeleteUsers(recordIDs []string) error {
 			continue
 		}
 		if u.Type == auth.UserTypeUser && u.Status == auth.UserStatusEnabled && u.UserRoleID == auth.SuperAdminRoleID && numEnabledSupers == 0 {
-			return echo.NewHTTPError(http.StatusBadRequest, c.i18n.T("users.needSuper"))
+			return apperr.BadRequest(c.i18n.T("users.needSuper"))
 		}
 	}
 
@@ -279,7 +257,7 @@ func (c *Core) DeleteUsers(recordIDs []string) error {
 func (c *Core) LoginUser(username, password string) (auth.User, error) {
 	rec, err := c.findAuthUserRecord("", username, "")
 	if err != nil || rec == nil || !rec.ValidatePassword(password) {
-		return auth.User{}, echo.NewHTTPError(http.StatusForbidden, c.i18n.T("users.invalidLogin"))
+		return auth.User{}, apperr.Forbidden(c.i18n.T("users.invalidLogin"))
 	}
 
 	return c.GetUser("", username, "")

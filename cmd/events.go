@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -13,8 +14,8 @@ import (
 
 // EventStream serves an endpoint that never closes and pushes a
 // live event stream (text/event-stream) such as a error messages.
-func (a *App) EventStream(c echo.Context) error {
-	hdr := c.Response().Header()
+func (a *App) EventStream(re *pbcore.RequestEvent) error {
+	hdr := re.Response.Header()
 	hdr.Set(echo.HeaderContentType, "text/event-stream")
 	hdr.Set(echo.HeaderCacheControl, "no-store")
 	hdr.Set(echo.HeaderConnection, "keep-alive")
@@ -26,7 +27,7 @@ func (a *App) EventStream(c echo.Context) error {
 		log.Fatalf("error subscribing to events: %v", err)
 	}
 
-	ctx := c.Request().Context()
+	ctx := re.Request.Context()
 	for {
 		select {
 		case e := <-sub:
@@ -36,8 +37,8 @@ func (a *App) EventStream(c echo.Context) error {
 				continue
 			}
 
-			c.Response().Write([]byte(fmt.Sprintf("retry: 3000\ndata: %s\n\n", b)))
-			c.Response().Flush()
+			re.Response.Write([]byte(fmt.Sprintf("retry: 3000\ndata: %s\n\n", b)))
+			flushResponse(re.Response)
 
 		case <-ctx.Done():
 			// On HTTP connection close, unsubscribe.

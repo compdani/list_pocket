@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,15 +15,19 @@ import (
 )
 
 // SendTxMessage handles the sending of a transactional message.
-func (a *App) SendTxMessage(c echo.Context) error {
+func (a *App) SendTxMessage(re *pbcore.RequestEvent) error {
 	var m models.TxMessage
 
 	// If it's a multipart form, there may be file attachments.
-	if strings.HasPrefix(c.Request().Header.Get("Content-Type"), "multipart/form-data") {
-		form, err := c.MultipartForm()
-		if err != nil {
+	if strings.HasPrefix(re.Request.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := re.Request.ParseMultipartForm(32 << 20); err != nil {
 			return echo.NewHTTPError(http.StatusBadRequest,
 				a.i18n.Ts("globals.messages.invalidFields", "name", err.Error()))
+		}
+		form := re.Request.MultipartForm
+		if form == nil {
+			return echo.NewHTTPError(http.StatusBadRequest,
+				a.i18n.Ts("globals.messages.invalidFields", "name", "multipart form"))
 		}
 
 		data, ok := form.Value["data"]
@@ -58,7 +63,7 @@ func (a *App) SendTxMessage(c echo.Context) error {
 			})
 		}
 
-	} else if err := c.Bind(&m); err != nil {
+	} else if err := bindJSON(re, &m); err != nil {
 		return err
 	}
 
@@ -70,12 +75,17 @@ func (a *App) SendTxMessage(c echo.Context) error {
 	}
 
 	var (
-		num      = len(m.SubscriberEmails)
-		isEmails = true
+		num          = len(m.SubscriberEmails)
+		isRecordIDs  = false
+		useLegacyIDs = false
 	)
-	if len(m.SubscriberIDs) > 0 {
+	switch {
+	case len(m.SubscriberRecordIDs) > 0:
+		num = len(m.SubscriberRecordIDs)
+		isRecordIDs = true
+	case len(m.SubscriberIDs) > 0:
 		num = len(m.SubscriberIDs)
-		isEmails = false
+		useLegacyIDs = true
 	}
 
 	notFound := []string{}
@@ -91,20 +101,28 @@ func (a *App) SendTxMessage(c echo.Context) error {
 		} else {
 			// Default/fallback mode: lookup subscriber in DB.
 			var (
-				subID    int
-				subEmail string
+				subID       int
+				subRecordID string
+				subEmail    string
 			)
 
-			if !isEmails {
+			switch {
+			case isRecordIDs:
+				subRecordID = m.SubscriberRecordIDs[n]
+			case useLegacyIDs:
 				subID = m.SubscriberIDs[n]
-			} else {
+			default:
 				subEmail = m.SubscriberEmails[n]
 			}
 
 			var err error
-			sub, err = a.core.GetSubscriber(subID, "", subEmail)
+			if subRecordID != "" {
+				sub, err = a.core.GetSubscriber(0, subRecordID, "")
+			} else {
+				sub, err = a.core.GetSubscriber(subID, "", subEmail)
+			}
 			if err != nil {
-				if er, ok := err.(*echo.HTTPError); ok && er.Code == http.StatusBadRequest {
+				if isHTTPStatus(err, http.StatusBadRequest) {
 					// `fallback`: Create an ephemeral "subscriber" if the subscriber wasn't found.
 					if m.SubscriberMode == models.TxSubModeFallback {
 						sub = models.Subscriber{
@@ -112,7 +130,8 @@ func (a *App) SendTxMessage(c echo.Context) error {
 						}
 					} else {
 						// `default`: log error and continue.
-						notFound = append(notFound, fmt.Sprintf("%v", er.Message))
+						_, msg, _ := asHTTPError(err)
+						notFound = append(notFound, msg)
 						continue
 					}
 				} else {
@@ -148,7 +167,7 @@ func (a *App) SendTxMessage(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, strings.Join(notFound, "; "))
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // validateTxMessage validates the tx message fields.
@@ -175,20 +194,34 @@ func (a *App) validateTxMessage(m models.TxMessage) (models.TxMessage, error) {
 		m.SubscriberMode = models.TxSubModeDefault
 	}
 
+	hasEmails := len(m.SubscriberEmails) > 0
+	hasRecordIDs := len(m.SubscriberRecordIDs) > 0
+	hasLegacyIDs := len(m.SubscriberIDs) > 0
+
 	switch m.SubscriberMode {
 	case models.TxSubModeDefault:
-		// Need subscriber_emails OR subscriber_ids, but not both.
-		if (len(m.SubscriberEmails) == 0 && len(m.SubscriberIDs) == 0) || (len(m.SubscriberEmails) > 0 && len(m.SubscriberIDs) > 0) {
+		// Need subscriber_emails OR subscriber_record_ids (or deprecated subscriber_ids), exclusively.
+		idModes := 0
+		if hasEmails {
+			idModes++
+		}
+		if hasRecordIDs {
+			idModes++
+		}
+		if hasLegacyIDs {
+			idModes++
+		}
+		if idModes != 1 {
 			return m, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", "send subscriber_emails OR subscriber_ids"))
+				a.i18n.Ts("globals.messages.invalidFields", "name", "send subscriber_emails OR subscriber_record_ids"))
 		}
 	case models.TxSubModeFallback, models.TxSubModeExternal:
 		// `fallback` and `external` can only use subscriber_emails.
-		if len(m.SubscriberIDs) > 0 {
+		if hasRecordIDs || hasLegacyIDs {
 			return m, echo.NewHTTPError(http.StatusBadRequest,
-				a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_ids not allowed in fallback or external mode"))
+				a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_record_ids/subscriber_ids not allowed in fallback or external mode"))
 		}
-		if len(m.SubscriberEmails) == 0 {
+		if !hasEmails {
 			return m, echo.NewHTTPError(http.StatusBadRequest,
 				a.i18n.Ts("globals.messages.invalidFields", "name", "subscriber_emails"))
 		}

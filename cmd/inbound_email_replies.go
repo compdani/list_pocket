@@ -106,44 +106,44 @@ type inboundEmailAttachment struct {
 	Content     []byte
 }
 
-func (a *App) InboundEmailReplyWebhook(c echo.Context) error {
-	id, err := a.processInboundEmailReplyWebhook(c)
+func (a *App) InboundEmailReplyWebhook(re *pbcore.RequestEvent) error {
+	id, err := a.processInboundEmailReplyWebhook(re)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{Data: map[string]string{"id": id}})
+	return okJSON(re, map[string]string{"id": id})
 }
 
-func (a *App) InboundEmailReplyWebhookPublic(c echo.Context) error {
+func (a *App) InboundEmailReplyWebhookPublic(re *pbcore.RequestEvent) error {
 	expected := strings.TrimSpace(os.Getenv(inboundEmailReplyWebhookSecretEnv))
-	provided := strings.TrimSpace(c.Request().Header.Get("X-Listpocket-Webhook-Secret"))
+	provided := strings.TrimSpace(re.Request.Header.Get("X-Listpocket-Webhook-Secret"))
 	if expected == "" || provided == "" || expected != provided {
-		a.log.Printf("inbound email webhook public: unauthorized remote=%q ua=%q expected_set=%t provided_set=%t", c.RealIP(), c.Request().UserAgent(), expected != "", provided != "")
+		a.log.Printf("inbound email webhook public: unauthorized remote=%q ua=%q expected_set=%t provided_set=%t", clientIP(re), re.Request.UserAgent(), expected != "", provided != "")
 		return echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	}
-	a.log.Printf("inbound email webhook public: authorized remote=%q ua=%q", c.RealIP(), c.Request().UserAgent())
-	id, err := a.processInboundEmailReplyWebhook(c)
+	a.log.Printf("inbound email webhook public: authorized remote=%q ua=%q", clientIP(re), re.Request.UserAgent())
+	id, err := a.processInboundEmailReplyWebhook(re)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{Data: map[string]string{"id": id}})
+	return okJSON(re, map[string]string{"id": id})
 }
 
-func (a *App) processInboundEmailReplyWebhook(c echo.Context) (string, error) {
-	body, err := io.ReadAll(io.LimitReader(c.Request().Body, 2<<20))
+func (a *App) processInboundEmailReplyWebhook(re *pbcore.RequestEvent) (string, error) {
+	body, err := io.ReadAll(io.LimitReader(re.Request.Body, 2<<20))
 	if err != nil {
-		a.log.Printf("inbound email webhook: read body failed remote=%q ua=%q err=%v", c.RealIP(), c.Request().UserAgent(), err)
+		a.log.Printf("inbound email webhook: read body failed remote=%q ua=%q err=%v", clientIP(re), re.Request.UserAgent(), err)
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid body")
 	}
 	if len(body) >= 2<<20 {
-		a.log.Printf("inbound email webhook: body too large remote=%q ua=%q size=%d", c.RealIP(), c.Request().UserAgent(), len(body))
+		a.log.Printf("inbound email webhook: body too large remote=%q ua=%q size=%d", clientIP(re), re.Request.UserAgent(), len(body))
 		return "", echo.NewHTTPError(http.StatusRequestEntityTooLarge, "body too large")
 	}
-	return a.processInboundEmailReplyWebhookBody(c, body)
+	return a.processInboundEmailReplyWebhookBody(re, body)
 }
 
-func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (string, error) {
-	a.logInboundEmailWebhookRequest(c, body)
+func (a *App) processInboundEmailReplyWebhookBody(re *pbcore.RequestEvent, body []byte) (string, error) {
+	a.logInboundEmailWebhookRequest(re, body)
 
 	if snsType, ok := parseSNSControlType(body); ok {
 		a.log.Printf("inbound email webhook: SNS control message type=%q acknowledged", snsType)
@@ -153,7 +153,7 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 	var req inboundEmailReplyWebhookRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		bodyPreview, bodyTruncated := inboundWebhookBodyPreviewForLog(body)
-		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body_preview=%q body_truncated=%t", c.RealIP(), c.Request().UserAgent(), err, bodyPreview, bodyTruncated)
+		a.log.Printf("inbound email webhook: invalid payload shape remote=%q ua=%q err=%v body_preview=%q body_truncated=%t", clientIP(re), re.Request.UserAgent(), err, bodyPreview, bodyTruncated)
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid payload")
 	}
 
@@ -215,7 +215,7 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 		ProcessedAt:       time.Now().UTC(),
 	}
 
-	id, err := a.core.CreateInboundEmailReplyEvent(c.Request().Context(), event)
+	id, err := a.core.CreateInboundEmailReplyEvent(re.Request.Context(), event)
 	if err != nil {
 		a.log.Printf("inbound email webhook: persistence failed provider=%q message_id=%q from=%q err=%v", provider, messageID, fromAddress, err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to persist inbound email reply")
@@ -223,7 +223,7 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 
 	// Skip saving attachments if the email was classified as spam or confirmed spam.
 	if len(normalized.Attachments) > 0 && event.SpamStatus != "spam" && event.SpamStatus != "confirmed_spam" {
-		pb := c.Get("app").(*pocketbase.PocketBase)
+		pb := a.pb
 		a.saveInboundEmailAttachments(pb, id, normalized.Attachments)
 	}
 	a.log.Printf("inbound email webhook: persisted id=%q provider=%q message_id=%q from=%q", id, provider, messageID, fromAddress)
@@ -231,19 +231,19 @@ func (a *App) processInboundEmailReplyWebhookBody(c echo.Context, body []byte) (
 	return id, nil
 }
 
-func (a *App) logInboundEmailWebhookRequest(c echo.Context, body []byte) {
-	headers := c.Request().Header
+func (a *App) logInboundEmailWebhookRequest(re *pbcore.RequestEvent, body []byte) {
+	headers := re.Request.Header
 	snsType := strings.TrimSpace(headers.Get("x-amz-sns-message-type"))
 	snsTopic := strings.TrimSpace(headers.Get("x-amz-sns-topic-arn"))
 	snsMsgID := strings.TrimSpace(headers.Get("x-amz-sns-message-id"))
 	sesNotificationType := parseSESNotificationType(body)
 	a.log.Printf(
 		"inbound email webhook: received method=%q path=%q remote=%q ua=%q content_type=%q size=%d sns_type=%q sns_topic=%q sns_message_id=%q ses_notification_type=%q",
-		c.Request().Method,
-		c.Path(),
-		c.RealIP(),
-		c.Request().UserAgent(),
-		c.Request().Header.Get(echo.HeaderContentType),
+		re.Request.Method,
+		re.Request.URL.Path,
+		clientIP(re),
+		re.Request.UserAgent(),
+		re.Request.Header.Get(echo.HeaderContentType),
 		len(body),
 		snsType,
 		snsTopic,
@@ -706,13 +706,13 @@ func parseSESNotificationType(raw []byte) string {
 
 // GetInboundEmailAttachments lists all attachments for a specific inbound email reply.
 // Handler: GET /mailapi/inbound-email-replies/{replyId}/attachments
-func (a *App) GetInboundEmailAttachments(c echo.Context) error {
-	replyID := strings.TrimSpace(c.Param("replyId"))
+func (a *App) GetInboundEmailAttachments(re *pbcore.RequestEvent) error {
+	replyID := strings.TrimSpace(pathParam(re, "replyId"))
 	if replyID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing replyId")
 	}
 
-	pb := c.Get("app").(*pocketbase.PocketBase)
+	pb := a.pb
 	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "attachment collection not found")
@@ -738,18 +738,18 @@ func (a *App) GetInboundEmailAttachments(c echo.Context) error {
 		})
 	}
 
-	return c.JSON(http.StatusOK, okResp{Data: items})
+	return okJSON(re, items)
 }
 
 // DownloadInboundEmailAttachment redirects to PocketBase file download endpoint.
 // Handler: GET /mailapi/inbound-email-attachments/{id}/download
-func (a *App) DownloadInboundEmailAttachment(c echo.Context) error {
-	attachmentID := strings.TrimSpace(c.Param("id"))
+func (a *App) DownloadInboundEmailAttachment(re *pbcore.RequestEvent) error {
+	attachmentID := strings.TrimSpace(pathParam(re, "id"))
 	if attachmentID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing attachment id")
 	}
 
-	pb := c.Get("app").(*pocketbase.PocketBase)
+	pb := a.pb
 	collection, err := pb.FindCollectionByNameOrId("inbound_email_attachments")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "attachment collection not found")
@@ -765,7 +765,7 @@ func (a *App) DownloadInboundEmailAttachment(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "attachment file missing")
 	}
 
-	return c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/api/files/%s/%s/%s?download=1", collection.Id, record.Id, fileName))
+	return re.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/api/files/%s/%s/%s?download=1", collection.Id, record.Id, fileName))
 }
 
 func firstFileName(v any) string {

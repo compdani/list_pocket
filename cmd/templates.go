@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -34,8 +35,8 @@ var (
 	regexpTplTag = regexp.MustCompile(`{{(\s+)?template\s+?"content"(\s+)?\.(\s+)?}}`)
 )
 
-func bindTemplateReq(c echo.Context, out *models.Template) error {
-	body, err := io.ReadAll(c.Request().Body)
+func bindTemplateReq(re *pbcore.RequestEvent, out *models.Template) error {
+	body, err := io.ReadAll(re.Request.Body)
 	if err != nil {
 		return err
 	}
@@ -72,8 +73,8 @@ func normalizeTemplateReqBody(body []byte) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func templateRouteRecordID(c echo.Context) (string, error) {
-	recordID := strings.TrimSpace(c.Param("id"))
+func templateRouteRecordID(re *pbcore.RequestEvent) (string, error) {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -81,12 +82,12 @@ func templateRouteRecordID(c echo.Context) (string, error) {
 }
 
 // GetTemplate handles the retrieval of a template
-func (a *App) GetTemplate(c echo.Context) error {
+func (a *App) GetTemplate(re *pbcore.RequestEvent) error {
 	// If no_body is true, blank out the body of the template from the response.
-	noBody, _ := strconv.ParseBool(c.QueryParam("no_body"))
+	noBody, _ := strconv.ParseBool(queryParam(re, "no_body"))
 
 	// Get the template from the DB.
-	recordID, err := templateRouteRecordID(c)
+	recordID, err := templateRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -95,13 +96,13 @@ func (a *App) GetTemplate(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetTemplates handles retrieval of templates.
-func (a *App) GetTemplates(c echo.Context) error {
+func (a *App) GetTemplates(re *pbcore.RequestEvent) error {
 	// If no_body is true, blank out the body of the template from the response.
-	noBody, _ := strconv.ParseBool(c.QueryParam("no_body"))
+	noBody, _ := strconv.ParseBool(queryParam(re, "no_body"))
 
 	// Fetch templates from the DB.
 	out, err := a.core.GetTemplates("", noBody)
@@ -109,13 +110,13 @@ func (a *App) GetTemplates(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // PreviewTemplate renders the HTML preview of a template in the DB.
-func (a *App) PreviewTemplate(c echo.Context) error {
+func (a *App) PreviewTemplate(re *pbcore.RequestEvent) error {
 	// Fetch one template from the DB.
-	recordID, err := templateRouteRecordID(c)
+	recordID, err := templateRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -130,14 +131,14 @@ func (a *App) PreviewTemplate(c echo.Context) error {
 		return err
 	}
 
-	return c.HTML(http.StatusOK, string(out))
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", out)
 }
 
 // PreviewTemplateBody renders the HTML preview of a template given its type and body.
-func (a *App) PreviewTemplateBody(c echo.Context) error {
+func (a *App) PreviewTemplateBody(re *pbcore.RequestEvent) error {
 	tpl := models.Template{
-		Type: c.FormValue("template_type"),
-		Body: c.FormValue("body"),
+		Type: re.Request.FormValue("template_type"),
+		Body: re.Request.FormValue("body"),
 	}
 
 	// Body is posted with the request.
@@ -156,13 +157,13 @@ func (a *App) PreviewTemplateBody(c echo.Context) error {
 		return err
 	}
 
-	return c.HTML(http.StatusOK, string(out))
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", out)
 }
 
 // CreateTemplate handles template creation.
-func (a *App) CreateTemplate(c echo.Context) error {
+func (a *App) CreateTemplate(re *pbcore.RequestEvent) error {
 	var o models.Template
-	if err := bindTemplateReq(c, &o); err != nil {
+	if err := bindTemplateReq(re, &o); err != nil {
 		return err
 	}
 	if err := a.validateTemplate(o); err != nil {
@@ -197,13 +198,13 @@ func (a *App) CreateTemplate(c echo.Context) error {
 		a.manager.CacheTpl(out.ID, &o)
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // UpdateTemplate handles template modification.
-func (a *App) UpdateTemplate(c echo.Context) error {
+func (a *App) UpdateTemplate(re *pbcore.RequestEvent) error {
 	var o models.Template
-	if err := bindTemplateReq(c, &o); err != nil {
+	if err := bindTemplateReq(re, &o); err != nil {
 		return err
 	}
 	if err := a.validateTemplate(o); err != nil {
@@ -227,7 +228,7 @@ func (a *App) UpdateTemplate(c echo.Context) error {
 	}
 
 	// Update the template in the DB.
-	recordID, err := templateRouteRecordID(c)
+	recordID, err := templateRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -241,14 +242,14 @@ func (a *App) UpdateTemplate(c echo.Context) error {
 		a.manager.CacheTpl(out.ID, &o)
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 
 }
 
 // TemplateSetDefault handles template modification.
-func (a *App) TemplateSetDefault(c echo.Context) error {
+func (a *App) TemplateSetDefault(re *pbcore.RequestEvent) error {
 	// Update the template in the DB.
-	recordID, err := templateRouteRecordID(c)
+	recordID, err := templateRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -256,13 +257,13 @@ func (a *App) TemplateSetDefault(c echo.Context) error {
 		return err
 	}
 
-	return a.GetTemplates(c)
+	return a.GetTemplates(re)
 }
 
 // DeleteTemplate handles template deletion.
-func (a *App) DeleteTemplate(c echo.Context) error {
+func (a *App) DeleteTemplate(re *pbcore.RequestEvent) error {
 	// Delete the template from the DB.
-	recordID, err := templateRouteRecordID(c)
+	recordID, err := templateRouteRecordID(re)
 	if err != nil {
 		return err
 	}
@@ -277,7 +278,7 @@ func (a *App) DeleteTemplate(c echo.Context) error {
 	// Delete cached in-memory template.
 	a.manager.DeleteTpl(tpl.ID)
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // compileTemplate validates template fields.

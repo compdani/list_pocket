@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,9 +13,9 @@ import (
 
 // GetInboundEmailInbox returns a paginated list of all inbound emails.
 // Handler: GET /mailapi/inbound-emails
-func (a *App) GetInboundEmailInbox(c echo.Context) error {
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+func (a *App) GetInboundEmailInbox(re *pbcore.RequestEvent) error {
+	limit, _ := strconv.Atoi(queryParam(re, "limit"))
+	offset, _ := strconv.Atoi(queryParam(re, "offset"))
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -25,107 +26,107 @@ func (a *App) GetInboundEmailInbox(c echo.Context) error {
 	params := core.InboxQueryParams{
 		Limit:      limit,
 		Offset:     offset,
-		Search:     strings.TrimSpace(c.QueryParam("search")),
-		SpamStatus: strings.TrimSpace(c.QueryParam("spam_status")),
-		SortOrder:  strings.TrimSpace(c.QueryParam("sort")),
+		Search:     strings.TrimSpace(queryParam(re, "search")),
+		SpamStatus: strings.TrimSpace(queryParam(re, "spam_status")),
+		SortOrder:  strings.TrimSpace(queryParam(re, "sort")),
 	}
 
-	if sd := strings.TrimSpace(c.QueryParam("start_date")); sd != "" {
+	if sd := strings.TrimSpace(queryParam(re, "start_date")); sd != "" {
 		if t, err := time.Parse(time.RFC3339, sd); err == nil {
 			params.StartDate = &t
 		}
 	}
-	if ed := strings.TrimSpace(c.QueryParam("end_date")); ed != "" {
+	if ed := strings.TrimSpace(queryParam(re, "end_date")); ed != "" {
 		if t, err := time.Parse(time.RFC3339, ed); err == nil {
 			params.EndDate = &t
 		}
 	}
 
-	emails, total, err := a.core.GetInboundEmailInbox(c.Request().Context(), params)
+	emails, total, err := a.core.GetInboundEmailInbox(re.Request.Context(), params)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{Data: map[string]any{
+	return okJSON(re, map[string]any{
 		"results": emails,
 		"total":   total,
-	}})
+	})
 }
 
 // GetInboundEmailByID returns a single inbound email with full body content.
 // Handler: GET /mailapi/inbound-emails/:id
-func (a *App) GetInboundEmailByID(c echo.Context) error {
-	id := strings.TrimSpace(c.Param("id"))
+func (a *App) GetInboundEmailByID(re *pbcore.RequestEvent) error {
+	id := strings.TrimSpace(pathParam(re, "id"))
 	if id == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing id")
 	}
-	email, err := a.core.GetInboundEmailByID(c.Request().Context(), id)
+	email, err := a.core.GetInboundEmailByID(re.Request.Context(), id)
 	if err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{Data: email})
+	return okJSON(re, email)
 }
 
 // UpdateInboundEmailSpamStatus marks or unmarks an inbound email as spam.
 // Handler: PUT /mailapi/inbound-emails/:id/spam
-func (a *App) UpdateInboundEmailSpamStatus(c echo.Context) error {
-	id := strings.TrimSpace(c.Param("id"))
+func (a *App) UpdateInboundEmailSpamStatus(re *pbcore.RequestEvent) error {
+	id := strings.TrimSpace(pathParam(re, "id"))
 	if id == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing id")
 	}
 	var req struct {
 		Status string `json:"status"`
 	}
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid request body")
 	}
-	if err := a.core.UpdateInboundEmailSpamStatus(c.Request().Context(), id, strings.TrimSpace(req.Status)); err != nil {
+	if err := a.core.UpdateInboundEmailSpamStatus(re.Request.Context(), id, strings.TrimSpace(req.Status)); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{Data: true})
+	return okJSON(re, true)
 }
 
 // GetInboundSpamRules returns paginated spam rules.
 // Handler: GET /mailapi/inbound-email-spam-rules
-func (a *App) GetInboundSpamRules(c echo.Context) error {
-	limit, _ := strconv.Atoi(c.QueryParam("limit"))
-	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+func (a *App) GetInboundSpamRules(re *pbcore.RequestEvent) error {
+	limit, _ := strconv.Atoi(queryParam(re, "limit"))
+	offset, _ := strconv.Atoi(queryParam(re, "offset"))
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
 	if offset < 0 {
 		offset = 0
 	}
-	ruleType := strings.TrimSpace(c.QueryParam("type"))
+	ruleType := strings.TrimSpace(queryParam(re, "type"))
 
-	rules, total, err := a.core.GetInboundSpamRules(c.Request().Context(), limit, offset, ruleType)
+	rules, total, err := a.core.GetInboundSpamRules(re.Request.Context(), limit, offset, ruleType)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fetch spam rules")
 	}
-	return c.JSON(http.StatusOK, okResp{Data: map[string]any{
+	return okJSON(re, map[string]any{
 		"results": rules,
 		"total":   total,
-	}})
+	})
 }
 
 // DeleteInboundSpamRule removes a spam rule by its ID.
 // Handler: DELETE /mailapi/inbound-email-spam-rules/:id
-func (a *App) DeleteInboundSpamRule(c echo.Context) error {
-	id := strings.TrimSpace(c.Param("id"))
+func (a *App) DeleteInboundSpamRule(re *pbcore.RequestEvent) error {
+	id := strings.TrimSpace(pathParam(re, "id"))
 	if id == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing id")
 	}
-	if err := a.core.DeleteInboundSpamRule(c.Request().Context(), id); err != nil {
+	if err := a.core.DeleteInboundSpamRule(re.Request.Context(), id); err != nil {
 		return err
 	}
-	return c.JSON(http.StatusOK, okResp{Data: true})
+	return okJSON(re, true)
 }
 
 // GCSpamInboundEmails manually triggers spam email garbage collection.
 // Handler: DELETE /mailapi/maintenance/inbound-emails/spam
-func (a *App) GCSpamInboundEmails(c echo.Context) error {
-	deleted, err := a.core.DeleteSpamInboundEmails(c.Request().Context())
+func (a *App) GCSpamInboundEmails(re *pbcore.RequestEvent) error {
+	deleted, err := a.core.DeleteSpamInboundEmails(re.Request.Context())
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "spam GC failed")
 	}
-	return c.JSON(http.StatusOK, okResp{Data: map[string]any{"deleted": deleted}})
+	return okJSON(re, map[string]any{"deleted": deleted})
 }

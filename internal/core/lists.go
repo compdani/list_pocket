@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/lib/pq"
+	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type listType struct {
@@ -410,7 +411,7 @@ func (c *Core) GetListTypes(ids []int, uuids []string) (map[any]string, error) {
 	return out, nil
 }
 
-// CreateList creates a new list.
+// CreateList creates a new list via the PocketBase Record API.
 func (c *Core) CreateList(l models.List) (models.List, error) {
 	uu, err := uuid.NewV4()
 	if err != nil {
@@ -429,55 +430,79 @@ func (c *Core) CreateList(l models.List) (models.List, error) {
 		l.Status = models.ListStatusActive
 	}
 
-	l.UUID = uu.String()
-	tags, err := json.Marshal(normalizeTags(l.Tags))
-	if err != nil {
-		c.log.Printf("error marshaling list tags: %v", err)
+	pb := c.db.PocketBase()
+	if pb == nil {
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", err.Error()))
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", "pocketbase is not initialized"))
 	}
 
-	if _, err := c.db.Exec(`
-		INSERT INTO lists (uuid, name, type, optin, status, tags, description)
-		VALUES (?, ?, ?, ?, ?, json(?), ?)`,
-		l.UUID, l.Name, l.Type, l.Optin, l.Status, string(tags), l.Description); err != nil {
+	col, err := pb.FindCollectionByNameOrId("lists")
+	if err != nil {
+		c.log.Printf("error finding lists collection: %v", err)
+		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+	}
+
+	rec := pbcore.NewRecord(col)
+	rec.Set("uuid", uu.String())
+	rec.Set("name", l.Name)
+	rec.Set("type", l.Type)
+	rec.Set("optin", l.Optin)
+	rec.Set("status", l.Status)
+	rec.Set("tags", normalizeTags(l.Tags))
+	rec.Set("description", l.Description)
+
+	if err := pb.Save(rec); err != nil {
 		c.log.Printf("error creating list: %v", err)
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
 	}
 
-	return c.GetList("", l.UUID)
+	return c.GetList(rec.Id, "")
 }
 
-// UpdateList updates a given list.
+// UpdateList updates a given list via the PocketBase Record API.
 func (c *Core) UpdateList(recordID string, l models.List) (models.List, error) {
-	tags, err := json.Marshal(normalizeTags(l.Tags))
-	if err != nil {
-		c.log.Printf("error marshaling list tags: %v", err)
-		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", err.Error()))
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
+			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 	}
 
-	res, err := c.db.Exec(`
-		UPDATE lists SET
-			name=(CASE WHEN ? != '' THEN ? ELSE name END),
-			type=(CASE WHEN ? != '' THEN ? ELSE type END),
-			optin=(CASE WHEN ? != '' THEN ? ELSE optin END),
-			status=(CASE WHEN ? != '' THEN ? ELSE status END),
-			tags=json(?),
-			description=(CASE WHEN ? != '' THEN ? ELSE description END),
-			updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now')
-		WHERE id = ?`,
-		l.Name, l.Name, l.Type, l.Type, l.Optin, l.Optin, l.Status, l.Status, string(tags), l.Description, l.Description, recordID)
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
+			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", "pocketbase is not initialized"))
+	}
+
+	rec, err := pb.FindRecordById("lists", recordID)
 	if err != nil {
+		c.log.Printf("error updating list: %v", err)
+		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
+			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
+	}
+
+	if l.Name != "" {
+		rec.Set("name", l.Name)
+	}
+	if l.Type != "" {
+		rec.Set("type", l.Type)
+	}
+	if l.Optin != "" {
+		rec.Set("optin", l.Optin)
+	}
+	if l.Status != "" {
+		rec.Set("status", l.Status)
+	}
+	rec.Set("tags", normalizeTags(l.Tags))
+	if l.Description != "" {
+		rec.Set("description", l.Description)
+	}
+
+	if err := pb.Save(rec); err != nil {
 		c.log.Printf("error updating list: %v", err)
 		return models.List{}, echo.NewHTTPError(http.StatusInternalServerError,
 			c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
-	}
-
-	if n, _ := res.RowsAffected(); n == 0 {
-		return models.List{}, echo.NewHTTPError(http.StatusBadRequest,
-			c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.list}"))
 	}
 
 	return c.GetList(recordID, "")
@@ -488,39 +513,65 @@ func (c *Core) DeleteList(recordID string) error {
 	return c.DeleteLists([]string{recordID}, "", true, nil)
 }
 
-// DeleteLists deletes multiple lists.
+// DeleteLists deletes multiple lists via the PocketBase Record API.
+// Query/filter matching still uses SQL to resolve record ids; deletes go through PB.
 func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permittedIDs []int) error {
-	q := `DELETE FROM lists WHERE 1=1`
-	args := []any{}
-
-	if len(recordIDs) > 0 {
-		q += ` AND id IN (` + sqlitePlaceholders(len(recordIDs)) + `)`
-		for _, recordID := range recordIDs {
-			args = append(args, recordID)
+	ids := make([]string, 0, len(recordIDs))
+	for _, recordID := range recordIDs {
+		recordID = strings.TrimSpace(recordID)
+		if recordID != "" {
+			ids = append(ids, recordID)
 		}
-	} else {
+	}
+
+	if len(ids) == 0 {
+		q := `SELECT id FROM lists WHERE 1=1`
+		args := []any{}
+
 		queryStr := strings.TrimSpace(query)
 		if queryStr != "" {
 			q += ` AND name LIKE ?`
 			args = append(args, "%"+queryStr+"%")
 		}
-	}
 
-	if !getAll {
-		if len(permittedIDs) == 0 {
-			q += ` AND 1=0`
-		} else {
+		if !getAll {
+			if len(permittedIDs) == 0 {
+				return nil
+			}
 			q += ` AND rowid IN (` + sqlitePlaceholders(len(permittedIDs)) + `)`
 			for _, id := range permittedIDs {
 				args = append(args, id)
 			}
 		}
+
+		if err := c.db.Select(&ids, q, args...); err != nil {
+			c.log.Printf("error resolving lists for delete: %v", err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		}
 	}
 
-	if _, err := c.db.Exec(q, args...); err != nil {
-		c.log.Printf("error deleting lists: %v", err)
+	if len(ids) == 0 {
+		return nil
+	}
+
+	pb := c.db.PocketBase()
+	if pb == nil {
 		return echo.NewHTTPError(http.StatusInternalServerError,
-			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+			c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", "pocketbase is not initialized"))
+	}
+
+	for _, id := range ids {
+		rec, err := pb.FindRecordById("lists", id)
+		if err != nil {
+			// Skip missing records so bulk delete remains idempotent.
+			continue
+		}
+		if err := pb.Delete(rec); err != nil {
+			c.log.Printf("error deleting list %s: %v", id, err)
+			return echo.NewHTTPError(http.StatusInternalServerError,
+				c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.lists}", "error", pqErrMsg(err)))
+		}
 	}
 	return nil
 }

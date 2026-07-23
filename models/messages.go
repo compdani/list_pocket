@@ -58,9 +58,11 @@ const (
 
 // TxMessage represents an e-mail campaign.
 type TxMessage struct {
-	SubscriberMode   string   `json:"subscriber_mode"`
-	SubscriberEmails []string `json:"subscriber_emails"`
-	SubscriberIDs    []int    `json:"subscriber_ids"`
+	SubscriberMode      string   `json:"subscriber_mode"`
+	SubscriberEmails    []string `json:"subscriber_emails"`
+	SubscriberRecordIDs []string `json:"subscriber_record_ids"`
+	// SubscriberIDs are deprecated integer rowids. Prefer SubscriberRecordIDs.
+	SubscriberIDs []int `json:"subscriber_ids"`
 
 	// Deprecated.
 	SubscriberEmail string `json:"subscriber_email"`

@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,27 +16,27 @@ import (
 )
 
 // GetBounce handles retrieval of a specific bounce record by ID.
-func (a *App) GetBounce(c echo.Context) error {
+func (a *App) GetBounce(re *pbcore.RequestEvent) error {
 	// Fetch one bounce from the DB.
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(pathParam(re, "id"))
 	out, err := a.core.GetBounce(id)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetBounces handles retrieval of bounce records.
-func (a *App) GetBounces(c echo.Context) error {
+func (a *App) GetBounces(re *pbcore.RequestEvent) error {
 	var (
-		source  = c.FormValue("source")
-		orderBy = c.FormValue("order_by")
-		order   = c.FormValue("order")
+		source  = re.Request.FormValue("source")
+		orderBy = re.Request.FormValue("order_by")
+		order   = re.Request.FormValue("order")
 
-		pg = a.pg.NewFromURL(c.Request().URL.Query())
+		pg = a.pg.NewFromURL(re.Request.URL.Query())
 	)
-	campIDs, err := a.core.ResolveCampaignIDs(nil, getQueryStrings("campaign_id", c.QueryParams()))
+	campIDs, err := a.core.ResolveCampaignIDs(nil, getQueryStrings("campaign_id", re.Request.URL.Query()))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidID"))
 	}
@@ -52,7 +53,7 @@ func (a *App) GetBounces(c echo.Context) error {
 
 	// No results.
 	if len(res) == 0 {
-		return c.JSON(http.StatusOK, okResp{models.PageResults{Results: []models.Bounce{}}})
+		return okJSON(re, models.PageResults{Results: []models.Bounce{}})
 	}
 
 	out := models.PageResults{
@@ -62,12 +63,12 @@ func (a *App) GetBounces(c echo.Context) error {
 		PerPage: pg.PerPage,
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // GetSubscriberBounces retrieves a subscriber's bounce records.
-func (a *App) GetSubscriberBounces(c echo.Context) error {
-	subID, err := a.resolveSubscriberRouteID(c)
+func (a *App) GetSubscriberBounces(re *pbcore.RequestEvent) error {
+	subID, err := a.resolveSubscriberRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -78,16 +79,16 @@ func (a *App) GetSubscriberBounces(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // DeleteBounces handles bounce deletion of a list.
-func (a *App) DeleteBounces(c echo.Context) error {
-	all, _ := strconv.ParseBool(c.QueryParam("all"))
+func (a *App) DeleteBounces(re *pbcore.RequestEvent) error {
+	all, _ := strconv.ParseBool(queryParam(re, "all"))
 
 	var ids []string
 	if !all {
-		ids = getQueryStrings("id", c.Request().URL.Query())
+		ids = getQueryStrings("id", re.Request.URL.Query())
 		if len(ids) == 0 {
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.invalidID"))
 		}
@@ -98,40 +99,40 @@ func (a *App) DeleteBounces(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // DeleteBounce handles bounce deletion of a single bounce record.
-func (a *App) DeleteBounce(c echo.Context) error {
+func (a *App) DeleteBounce(re *pbcore.RequestEvent) error {
 	// Delete bounces from the DB.
-	id := strings.TrimSpace(c.Param("id"))
+	id := strings.TrimSpace(pathParam(re, "id"))
 	if err := a.core.DeleteBounces([]string{id}, false); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // BlocklistBouncedSubscribers handles blocklisting of all bounced subscribers.
-func (a *App) BlocklistBouncedSubscribers(c echo.Context) error {
+func (a *App) BlocklistBouncedSubscribers(re *pbcore.RequestEvent) error {
 	if err := a.core.BlocklistBouncedSubscribers(); err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // BounceWebhook renders the HTML preview of a template.
-func (a *App) BounceWebhook(c echo.Context) error {
-	// Read the request body instead of using c.Bind() to read to save the entire raw request as meta.
-	rawReq, err := io.ReadAll(c.Request().Body)
+func (a *App) BounceWebhook(re *pbcore.RequestEvent) error {
+	// Read the request body instead of using bindJSON(re, ) to read to save the entire raw request as meta.
+	rawReq, err := io.ReadAll(re.Request.Body)
 	if err != nil {
 		a.log.Printf("error reading ses notification body: %v", err)
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("globals.messages.internalError"))
 	}
 
 	var (
-		service = c.Param("service")
+		service = pathParam(re, "service")
 
 		bounces []models.Bounce
 	)
@@ -161,7 +162,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 
 	// Amazon SES.
 	case service == "ses" && a.cfg.BounceSESEnabled:
-		switch c.Request().Header.Get("X-Amz-Sns-Message-Type") {
+		switch re.Request.Header.Get("X-Amz-Sns-Message-Type") {
 		// SNS webhook registration confirmation. Only after these are processed will the endpoint
 		// start getting bounce notifications.
 		case "SubscriptionConfirmation", "UnsubscribeConfirmation":
@@ -173,19 +174,19 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		// Bounce notification.
 		case "Notification":
 			if strings.EqualFold(parseSESNotificationType(rawReq), "Received") {
-				id, err := a.processInboundEmailReplyWebhookBody(c, rawReq)
+				id, err := a.processInboundEmailReplyWebhookBody(re, rawReq)
 				if err != nil {
 					a.log.Printf("ses service webhook: inbound email processing failed err=%v", err)
 					return err
 				}
 				a.log.Printf("ses service webhook: inbound email processed id=%q", id)
-				return c.JSON(http.StatusOK, okResp{true})
+				return okJSON(re, true)
 			}
 
 			b, err := a.bounce.SES.ProcessBounce(rawReq)
 			if err != nil {
 				if errors.Is(err, webhooks.ErrNotificationNotBounce) {
-					return c.JSON(http.StatusOK, okResp{true})
+					return okJSON(re, true)
 				}
 				a.log.Printf("error processing SES notification: %v", err)
 				return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("globals.messages.invalidData"))
@@ -199,8 +200,8 @@ func (a *App) BounceWebhook(c echo.Context) error {
 	// SendGrid.
 	case service == "sendgrid" && a.cfg.BounceSendgridEnabled:
 		var (
-			sig = c.Request().Header.Get("X-Twilio-Email-Event-Webhook-Signature")
-			ts  = c.Request().Header.Get("X-Twilio-Email-Event-Webhook-Timestamp")
+			sig = re.Request.Header.Get("X-Twilio-Email-Event-Webhook-Signature")
+			ts  = re.Request.Header.Get("X-Twilio-Email-Event-Webhook-Timestamp")
 		)
 
 		// Sendgrid sends multiple bounces.
@@ -213,7 +214,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 
 	// Postmark.
 	case service == "postmark" && a.cfg.BouncePostmarkEnabled:
-		bs, err := a.bounce.Postmark.ProcessBounce(rawReq, c)
+		bs, err := a.bounce.Postmark.ProcessBounce(rawReq, a.echo.NewContext(re.Request, re.Response))
 		if err != nil {
 			a.log.Printf("error processing postmark notification: %v", err)
 			if _, ok := err.(*echo.HTTPError); ok {
@@ -227,7 +228,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 	// ForwardEmail.
 	case service == "forwardemail" && a.cfg.BounceForwardemailEnabled:
 		var (
-			sig = c.Request().Header.Get("X-Webhook-Signature")
+			sig = re.Request.Header.Get("X-Webhook-Signature")
 		)
 
 		bs, err := a.bounce.Forwardemail.ProcessBounce(sig, rawReq)
@@ -246,7 +247,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		if a.bounce.Brevo == nil {
 			return echo.NewHTTPError(http.StatusBadRequest, a.i18n.Ts("bounces.unknownService"))
 		}
-		authz := c.Request().Header.Get(echo.HeaderAuthorization)
+		authz := re.Request.Header.Get(echo.HeaderAuthorization)
 		bs, err := a.bounce.Brevo.ProcessBounce(authz, rawReq)
 		if err != nil {
 			a.log.Printf("error processing brevo notification: %v", err)
@@ -265,7 +266,7 @@ func (a *App) BounceWebhook(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 func (a *App) validateBounceFields(b models.Bounce) (models.Bounce, error) {

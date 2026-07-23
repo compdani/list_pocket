@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"mime/multipart"
 	"net/http"
@@ -23,8 +24,12 @@ var (
 )
 
 // UploadMedia handles media file uploads.
-func (a *App) UploadMedia(c echo.Context) error {
-	file, err := c.FormFile("file")
+func (a *App) UploadMedia(re *pbcore.RequestEvent) error {
+	if err := re.Request.ParseMultipartForm(32 << 20); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("media.invalidFile", "error", err.Error()))
+	}
+	_, file, err := re.Request.FormFile("file")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("media.invalidFile", "error", err.Error()))
@@ -56,7 +61,7 @@ func (a *App) UploadMedia(c echo.Context) error {
 	fName := makeFilename(file.Filename)
 
 	// If the filename already exists in the DB, make it unique by adding a random suffix.
-	if _, err := a.core.GetMedia(0, "", fName, a.media); err == nil {
+	if _, err := a.core.GetMedia("", "", fName, a.media); err == nil {
 		suffix, err := generateRandomString(6)
 		if err != nil {
 			a.log.Printf("error generating random string: %v", err)
@@ -136,15 +141,15 @@ func (a *App) UploadMedia(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{m})
+	return okJSON(re, m)
 }
 
 // GetAllMedia handles retrieval of uploaded media.
-func (a *App) GetAllMedia(c echo.Context) error {
+func (a *App) GetAllMedia(re *pbcore.RequestEvent) error {
 	var (
-		query = c.FormValue("query")
+		query = re.Request.FormValue("query")
 
-		pg = a.pg.NewFromURL(c.Request().URL.Query())
+		pg = a.pg.NewFromURL(re.Request.URL.Query())
 	)
 	// Fetch the media items from the DB.
 	res, total, err := a.core.QueryMedia(a.cfg.MediaUpload.Provider, a.media, query, pg.Offset, pg.Limit)
@@ -159,27 +164,33 @@ func (a *App) GetAllMedia(c echo.Context) error {
 		PerPage: pg.PerPage,
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
-// GetMedia handles retrieval of a media item by ID.
-func (a *App) GetMedia(c echo.Context) error {
-	// Fetch the media item from the DB.
-	id := getID(c)
-	out, err := a.core.GetMedia(id, "", "", a.media)
+// GetMedia handles retrieval of a media item by PocketBase record id.
+func (a *App) GetMedia(re *pbcore.RequestEvent) error {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
+	if recordID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
+
+	out, err := a.core.GetMedia(recordID, "", "", a.media)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{out})
+	return okJSON(re, out)
 }
 
 // DeleteMedia handles deletion of uploaded media.
-func (a *App) DeleteMedia(c echo.Context) error {
+func (a *App) DeleteMedia(re *pbcore.RequestEvent) error {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
+	if recordID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
+	}
 
 	// Delete the media from the DB. The query returns the filename.
-	id := getID(c)
-	fname, err := a.core.DeleteMedia(id)
+	fname, err := a.core.DeleteMedia(recordID)
 	if err != nil {
 		return err
 	}
@@ -188,12 +199,12 @@ func (a *App) DeleteMedia(c echo.Context) error {
 	a.media.Delete(fname)
 	a.media.Delete(thumbPrefix + fname)
 
-	return c.JSON(http.StatusOK, okResp{true})
+	return okJSON(re, true)
 }
 
 // ServeS3Media serves media files stored in S3 when the public URL is a relative path.
-func (a *App) ServeS3Media(c echo.Context) error {
-	key := c.Param("filepath")
+func (a *App) ServeS3Media(re *pbcore.RequestEvent) error {
+	key := pathParam(re, "filepath")
 	if key == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing media file path")
 	}
@@ -204,7 +215,7 @@ func (a *App) ServeS3Media(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "error fetching media")
 	}
 
-	return c.Stream(http.StatusOK, http.DetectContentType(b), bytes.NewReader(b))
+	return writeStream(re, http.StatusOK, http.DetectContentType(b), bytes.NewReader(b))
 }
 
 // processImage reads the image file and returns thumbnail bytes and

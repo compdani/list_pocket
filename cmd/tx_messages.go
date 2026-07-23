@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"net/http"
 	"strings"
 
@@ -8,34 +9,34 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (a *App) resolveTxRouteID(c echo.Context) (string, error) {
-	recordID := strings.TrimSpace(c.Param("id"))
+func (a *App) resolveTxRouteID(re *pbcore.RequestEvent) (string, error) {
+	recordID := strings.TrimSpace(pathParam(re, "id"))
 	if recordID == "" {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
 	return recordID, nil
 }
 
-func (a *App) GetTxMessages(c echo.Context) error {
-	search := strings.TrimSpace(c.FormValue("query"))
-	pg := a.pg.NewFromURL(c.Request().URL.Query())
+func (a *App) GetTxMessages(re *pbcore.RequestEvent) error {
+	search := strings.TrimSpace(re.Request.FormValue("query"))
+	pg := a.pg.NewFromURL(re.Request.URL.Query())
 
 	res, total, err := a.core.QueryTransactionalMessages(search, pg.Offset, pg.Limit)
 	if err != nil {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{models.PageResults{
+	return okJSON(re, models.PageResults{
 		Query:   search,
 		Results: res,
 		Total:   total,
 		Page:    pg.Page,
 		PerPage: pg.PerPage,
-	}})
+	})
 }
 
-func (a *App) GetTxMessage(c echo.Context) error {
-	recordID, err := a.resolveTxRouteID(c)
+func (a *App) GetTxMessage(re *pbcore.RequestEvent) error {
+	recordID, err := a.resolveTxRouteID(re)
 	if err != nil {
 		return err
 	}
@@ -45,5 +46,5 @@ func (a *App) GetTxMessage(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, okResp{res})
+	return okJSON(re, res)
 }

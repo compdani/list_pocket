@@ -1280,7 +1280,7 @@ export default {
         altbody: this.form.content.contentType !== 'plain' ? this.form.altbody : null,
         attribs: this.form.attribs,
         subscribers: this.form.testEmails,
-        media: this.form.media.map((m) => m.id),
+        media_record_ids: this.form.media.map((m) => m.id).filter((id) => typeof id === 'string' && id.length > 0),
       };
 
       this.$api.testCampaign(data).then(() => {
@@ -1318,7 +1318,7 @@ export default {
           end_time: this.form.batching.endTime,
           timezone: this.form.batching.timezone,
         },
-        media: this.form.media.map((m) => m.id),
+        media_record_ids: this.form.media.map((m) => m.id).filter((id) => typeof id === 'string' && id.length > 0),
       };
 
       this.$api.createCampaign(data).then((d) => {
@@ -1362,7 +1362,7 @@ export default {
         archive: this.form.archive,
         archive_template_id: this.form.archiveTemplateId,
         archive_meta: this.form.archiveMeta,
-        media: this.form.media.map((m) => m.id),
+        media_record_ids: this.form.media.map((m) => m.id).filter((id) => typeof id === 'string' && id.length > 0),
       };
 
       let typMsg = 'globals.messages.updated';

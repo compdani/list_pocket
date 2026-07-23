@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -788,13 +789,13 @@ func (a *App) getAIBuilderSystemPrompt(editorMode string) string {
 	return msg
 }
 
-func (a *App) CreateAICampaignBuilderJob(c echo.Context) error {
+func (a *App) CreateAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
 
 	var req aiBuilderGenerateReq
-	if err := c.Bind(&req); err != nil {
+	if err := bindJSON(re, &req); err != nil {
 		return err
 	}
 	req.Context.EditorMode = strings.TrimSpace(req.Context.EditorMode)
@@ -815,14 +816,14 @@ func (a *App) CreateAICampaignBuilderJob(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
-	return c.JSON(http.StatusOK, okResp{job})
+	return okJSON(re, job)
 }
 
-func (a *App) GetAICampaignBuilderJob(c echo.Context) error {
+func (a *App) GetAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
-	jobID := strings.TrimSpace(c.Param("id"))
+	jobID := strings.TrimSpace(pathParam(re, "id"))
 	if jobID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -831,15 +832,15 @@ func (a *App) GetAICampaignBuilderJob(c echo.Context) error {
 	if !ok {
 		return echo.NewHTTPError(http.StatusNotFound, "job not found")
 	}
-	return c.JSON(http.StatusOK, okResp{job})
+	return okJSON(re, job)
 }
 
-func (a *App) StreamAICampaignBuilderJob(c echo.Context) error {
+func (a *App) StreamAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
 
-	jobID := strings.TrimSpace(c.Param("id"))
+	jobID := strings.TrimSpace(pathParam(re, "id"))
 	if jobID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -848,13 +849,13 @@ func (a *App) StreamAICampaignBuilderJob(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, "job not found")
 	}
 
-	res := c.Response()
-	req := c.Request()
+	res := re.Response
+	req := re.Request
 	res.Header().Set(echo.HeaderContentType, "text/event-stream")
 	res.Header().Set("Cache-Control", "no-cache")
 	res.Header().Set("Connection", "keep-alive")
 	res.WriteHeader(http.StatusOK)
-	res.Flush()
+	flushResponse(res)
 
 	lastSig := ""
 	lastHeartbeat := time.Now()
@@ -869,7 +870,7 @@ func (a *App) StreamAICampaignBuilderJob(c echo.Context) error {
 		if _, err := fmt.Fprintf(res, "event: job\ndata: %s\n\n", payload); err != nil {
 			return err
 		}
-		res.Flush()
+		flushResponse(res)
 		return nil
 	}
 
@@ -899,7 +900,7 @@ func (a *App) StreamAICampaignBuilderJob(c echo.Context) error {
 				if _, err := fmt.Fprint(res, ": keep-alive\n\n"); err != nil {
 					return nil
 				}
-				res.Flush()
+				flushResponse(res)
 				lastHeartbeat = time.Now()
 			}
 
@@ -907,18 +908,18 @@ func (a *App) StreamAICampaignBuilderJob(c echo.Context) error {
 				if _, err := fmt.Fprint(res, "event: done\ndata: {}\n\n"); err != nil {
 					return nil
 				}
-				res.Flush()
+				flushResponse(res)
 				return nil
 			}
 		}
 	}
 }
 
-func (a *App) CancelAICampaignBuilderJob(c echo.Context) error {
+func (a *App) CancelAICampaignBuilderJob(re *pbcore.RequestEvent) error {
 	if a.aiBuilder == nil {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "AI builder is unavailable")
 	}
-	jobID := strings.TrimSpace(c.Param("id"))
+	jobID := strings.TrimSpace(pathParam(re, "id"))
 	if jobID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid ID")
 	}
@@ -927,5 +928,5 @@ func (a *App) CancelAICampaignBuilderJob(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "job not found")
 	}
-	return c.JSON(http.StatusOK, okResp{job})
+	return okJSON(re, job)
 }

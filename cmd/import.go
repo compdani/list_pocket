@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 
 // ImportSubscribers handles the uploading and bulk importing of
 // a ZIP file of one or more CSV files.
-func (a *App) ImportSubscribers(c echo.Context) error {
+func (a *App) ImportSubscribers(re *pbcore.RequestEvent) error {
 	// Is an import already running?
 	if a.importer.GetStats().Status == subimporter.StatusImporting {
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("import.alreadyRunning"))
@@ -22,7 +23,7 @@ func (a *App) ImportSubscribers(c echo.Context) error {
 
 	// Unmarshal the JSON params.
 	var opt subimporter.SessionOpt
-	if err := json.Unmarshal([]byte(c.FormValue("params")), &opt); err != nil {
+	if err := json.Unmarshal([]byte(re.Request.FormValue("params")), &opt); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("import.invalidParams", "error", err.Error()))
 	}
@@ -55,7 +56,11 @@ func (a *App) ImportSubscribers(c echo.Context) error {
 	}
 
 	// Open the HTTP file.
-	file, err := c.FormFile("file")
+	if err := re.Request.ParseMultipartForm(32 << 20); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			a.i18n.Ts("import.invalidFile", "error", err.Error()))
+	}
+	_, file, err := re.Request.FormFile("file")
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			a.i18n.Ts("import.invalidFile", "error", err.Error()))
@@ -108,24 +113,24 @@ func (a *App) ImportSubscribers(c echo.Context) error {
 		go sess.LoadCSV(dir+"/"+files[0], rune(opt.Delim[0]))
 	}
 
-	return c.JSON(http.StatusOK, okResp{a.importer.GetStats()})
+	return okJSON(re, a.importer.GetStats())
 }
 
 // GetImportSubscribers returns import statistics.
-func (a *App) GetImportSubscribers(c echo.Context) error {
+func (a *App) GetImportSubscribers(re *pbcore.RequestEvent) error {
 	s := a.importer.GetStats()
-	return c.JSON(http.StatusOK, okResp{s})
+	return okJSON(re, s)
 }
 
 // GetImportSubscriberStats returns import statistics.
-func (a *App) GetImportSubscriberStats(c echo.Context) error {
-	return c.JSON(http.StatusOK, okResp{string(a.importer.GetLogs())})
+func (a *App) GetImportSubscriberStats(re *pbcore.RequestEvent) error {
+	return okJSON(re, string(a.importer.GetLogs()))
 }
 
 // StopImportSubscribers sends a stop signal to the importer.
 // If there's an ongoing import, it'll be stopped, and if an import
 // is finished, it's state is cleared.
-func (a *App) StopImportSubscribers(c echo.Context) error {
+func (a *App) StopImportSubscribers(re *pbcore.RequestEvent) error {
 	a.importer.Stop()
-	return c.JSON(http.StatusOK, okResp{a.importer.GetStats()})
+	return okJSON(re, a.importer.GetStats())
 }

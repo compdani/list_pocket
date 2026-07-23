@@ -1,6 +1,7 @@
 package main
 
 import (
+	pbcore "github.com/pocketbase/pocketbase/core"
 	"bytes"
 	"encoding/json"
 	"html/template"
@@ -24,18 +25,18 @@ type campArchive struct {
 }
 
 // GetCampaignArchives renders the public campaign archives page.
-func (a *App) GetCampaignArchives(c echo.Context) error {
+func (a *App) GetCampaignArchives(re *pbcore.RequestEvent) error {
 	// Get archives from the DB.
-	pg := a.pg.NewFromURL(c.Request().URL.Query())
+	pg := a.pg.NewFromURL(re.Request.URL.Query())
 	camps, total, err := a.getCampaignArchives(pg.Offset, pg.Limit, false)
 	if err != nil {
 		return err
 	}
 
 	if len(camps) == 0 {
-		return c.JSON(http.StatusOK, okResp{models.PageResults{
+		return okJSON(re, models.PageResults{
 			Results: []campArchive{},
-		}})
+		})
 	}
 
 	// Meta.
@@ -46,13 +47,13 @@ func (a *App) GetCampaignArchives(c echo.Context) error {
 		PerPage: pg.PerPage,
 	}
 
-	return c.JSON(200, okResp{out})
+	return re.JSON(200, okResp{out})
 }
 
 // GetCampaignArchivesFeed renders the public campaign archives RSS feed.
-func (a *App) GetCampaignArchivesFeed(c echo.Context) error {
+func (a *App) GetCampaignArchivesFeed(re *pbcore.RequestEvent) error {
 	var (
-		pg              = a.pg.NewFromURL(c.Request().URL.Query())
+		pg              = a.pg.NewFromURL(re.Request.URL.Query())
 		showFullContent = a.cfg.EnablePublicArchiveRSSContent
 	)
 
@@ -87,7 +88,7 @@ func (a *App) GetCampaignArchivesFeed(c echo.Context) error {
 		Items:       out,
 	}
 
-	if err := feed.WriteRss(c.Response().Writer); err != nil {
+	if err := feed.WriteRss(re.Response); err != nil {
 		a.log.Printf("error generating archive RSS feed: %v", err)
 		return echo.NewHTTPError(http.StatusBadRequest, a.i18n.T("public.errorProcessingRequest"))
 	}
@@ -96,9 +97,9 @@ func (a *App) GetCampaignArchivesFeed(c echo.Context) error {
 }
 
 // CampaignArchivesPage renders the public campaign archives page.
-func (a *App) CampaignArchivesPage(c echo.Context) error {
+func (a *App) CampaignArchivesPage(re *pbcore.RequestEvent) error {
 	// Get archives from the DB.
-	pg := a.pg.NewFromURL(c.Request().URL.Query())
+	pg := a.pg.NewFromURL(re.Request.URL.Query())
 	out, total, err := a.getCampaignArchives(pg.Offset, pg.Limit, false)
 	if err != nil {
 		return err
@@ -106,7 +107,7 @@ func (a *App) CampaignArchivesPage(c echo.Context) error {
 	pg.SetTotal(total)
 
 	title := a.i18n.T("public.archiveTitle")
-	return c.Render(http.StatusOK, "archive", struct {
+	return renderTpl(re, http.StatusOK, "archive", struct {
 		Title       string
 		Description string
 		Campaigns   []campArchive
@@ -116,10 +117,10 @@ func (a *App) CampaignArchivesPage(c echo.Context) error {
 }
 
 // CampaignArchivePage renders the public campaign archives page.
-func (a *App) CampaignArchivePage(c echo.Context) error {
+func (a *App) CampaignArchivePage(re *pbcore.RequestEvent) error {
 	// ID can be the UUID or slug.
 	var (
-		idStr      = c.Param("id")
+		idStr      = pathParam(re, "id")
 		uuid, slug string
 	)
 	if reUUID.MatchString(idStr) {
@@ -133,11 +134,9 @@ func (a *App) CampaignArchivePage(c echo.Context) error {
 	if err != nil || pubCamp.Type != models.CampaignTypeRegular {
 		notFound := false
 
-		// Camppaig doesn't exist.
-		if er, ok := err.(*echo.HTTPError); ok {
-			if er.Code == http.StatusBadRequest {
-				notFound = true
-			}
+		// Campaign doesn't exist.
+		if isHTTPStatus(err, http.StatusBadRequest) {
+			notFound = true
 		} else if pubCamp.Type != models.CampaignTypeRegular {
 			// Campaign isn't of regular type.
 			notFound = true
@@ -145,19 +144,19 @@ func (a *App) CampaignArchivePage(c echo.Context) error {
 
 		// 404.
 		if notFound {
-			return c.Render(http.StatusNotFound, tplMessage,
+			return renderTpl(re, http.StatusNotFound, tplMessage,
 				makeMsgTpl(a.i18n.T("public.notFoundTitle"), "", a.i18n.T("public.campaignNotFound")))
 		}
 
 		// Some other internal error.
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
 	// "Compile" the campaign template with appropriate data.
 	out, err := a.compileArchiveCampaigns([]models.Campaign{pubCamp})
 	if err != nil {
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
@@ -166,15 +165,15 @@ func (a *App) CampaignArchivePage(c echo.Context) error {
 	msg, err := a.manager.NewCampaignMessage(camp, out[0].Subscriber)
 	if err != nil {
 		a.log.Printf("error rendering campaign: %v", err)
-		return c.Render(http.StatusInternalServerError, tplMessage,
+		return renderTpl(re, http.StatusInternalServerError, tplMessage,
 			makeMsgTpl(a.i18n.T("public.errorTitle"), "", a.i18n.Ts("public.errorFetchingCampaign")))
 	}
 
-	return c.HTML(http.StatusOK, string(msg.Body()))
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", msg.Body())
 }
 
 // CampaignArchivePageLatest renders the latest public campaign.
-func (a *App) CampaignArchivePageLatest(c echo.Context) error {
+func (a *App) CampaignArchivePageLatest(re *pbcore.RequestEvent) error {
 	// Get the latest campaign from the DB.
 	camps, _, err := a.getCampaignArchives(0, 1, true)
 	if err != nil {
@@ -182,12 +181,12 @@ func (a *App) CampaignArchivePageLatest(c echo.Context) error {
 	}
 
 	if len(camps) == 0 {
-		return c.Render(http.StatusNotFound, tplMessage,
+		return renderTpl(re, http.StatusNotFound, tplMessage,
 			makeMsgTpl(a.i18n.T("public.notFoundTitle"), "", a.i18n.T("public.campaignNotFound")))
 	}
 	camp := camps[0]
 
-	return c.HTML(http.StatusOK, camp.Content)
+	return writeBlob(re, http.StatusOK, "text/html; charset=utf-8", []byte(camp.Content))
 }
 
 // getCampaignArchives fetches the public campaign archives from the DB.
