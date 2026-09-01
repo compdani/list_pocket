@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
+	iofs "io/fs"
 	"regexp"
 	"sort"
 
+	"github.com/compdani/list_pocket/internal/apperr"
+	"github.com/compdani/list_pocket/internal/assets"
 	"github.com/compdani/list_pocket/internal/i18n"
-	"github.com/knadh/stuffbin"
+	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type i18nLang struct {
@@ -40,29 +41,27 @@ func (a *App) GetI18nLang(re *pbcore.RequestEvent) error {
 }
 
 // getI18nLangList returns the list of available i18n languages.
-func getI18nLangList(fs stuffbin.FileSystem) ([]i18nLang, error) {
-	list, err := fs.Glob("/i18n/*.json")
+func getI18nLangList(fsys iofs.FS) ([]i18nLang, error) {
+	list, err := assets.Glob(fsys, "/i18n/*.json")
 	if err != nil {
 		return nil, err
 	}
 
-	// Read language JSON files from the fs.
 	var out []i18nLang
 	for _, l := range list {
-		b, err := fs.Get(l)
+		b, err := assets.ReadFile(fsys, l)
 		if err != nil {
 			return out, fmt.Errorf("error reading lang file: %s: %v", l, err)
 		}
 
 		var r i18nLangRaw
-		if err := json.Unmarshal(b.ReadBytes(), &r); err != nil {
+		if err := json.Unmarshal(b, &r); err != nil {
 			return out, fmt.Errorf("error parsing lang file: %s: %v", l, err)
 		}
 
 		out = append(out, i18nLang(r))
 	}
 
-	// Sort by language code.
 	sort.SliceStable(out, func(i, j int) bool {
 		return out[i].Code < out[j].Code
 	})
@@ -72,22 +71,20 @@ func getI18nLangList(fs stuffbin.FileSystem) ([]i18nLang, error) {
 
 // The bool indicates whether the specified language could be loaded. If it couldn't
 // be, the app shouldn't halt but throw a warning.
-func getI18nLang(lang string, fs stuffbin.FileSystem) (*i18n.I18n, bool, error) {
+func getI18nLang(lang string, fsys iofs.FS) (*i18n.I18n, bool, error) {
 	const def = "en"
 
-	b, err := fs.Read(fmt.Sprintf("/i18n/%s.json", def))
+	b, err := assets.ReadFile(fsys, fmt.Sprintf("/i18n/%s.json", def))
 	if err != nil {
 		return nil, false, fmt.Errorf("error reading default i18n language file: %s: %v", def, err)
 	}
 
-	// Initialize with the default language.
 	i, err := i18n.New(b)
 	if err != nil {
 		return nil, false, fmt.Errorf("error unmarshalling i18n language: %s: %v", lang, err)
 	}
 
-	// Load the selected language on top of it.
-	b, err = fs.Read(fmt.Sprintf("/i18n/%s.json", lang))
+	b, err = assets.ReadFile(fsys, fmt.Sprintf("/i18n/%s.json", lang))
 	if err != nil {
 		return i, true, fmt.Errorf("error reading i18n language file: %s: %v", lang, err)
 	}

@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/knadh/koanf/v2"
+	"github.com/compdani/list_pocket/internal/config"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 // registerDocsRoutes serves the MkDocs build at /docs/, the OpenAPI file at /openapi.yaml,
 // and Swagger UI at /swagger/ when the configured or default paths exist on disk.
-func registerDocsRoutes(se *pbcore.ServeEvent, ko *koanf.Koanf) {
+func registerDocsRoutes(se *pbcore.ServeEvent, ko *config.Conf) {
 	swaggerDir := resolveSwaggerDir(ko)
 	if swaggerDir != "" {
 		openAPI := filepath.Join(swaggerDir, "collections.yaml")
@@ -94,7 +94,7 @@ func safeJoinUnderDir(base, rel string) string {
 	return candidate
 }
 
-func resolveDocsDir(ko *koanf.Koanf) string {
+func resolveDocsDir(ko *config.Conf) string {
 	d := strings.TrimSpace(ko.String("app.docs_dir"))
 	if d != "" {
 		return filepath.Clean(d)
@@ -106,7 +106,7 @@ func resolveDocsDir(ko *koanf.Koanf) string {
 	return ""
 }
 
-func resolveSwaggerDir(ko *koanf.Koanf) string {
+func resolveSwaggerDir(ko *config.Conf) string {
 	d := strings.TrimSpace(ko.String("app.swagger_dir"))
 	if d != "" {
 		return filepath.Clean(d)

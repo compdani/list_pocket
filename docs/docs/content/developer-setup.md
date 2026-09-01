@@ -46,4 +46,4 @@ cd frontend && npm install && npm run build
 cd .. && go build -o listpocket ./cmd
 ```
 
-This embeds the built assets into the binary. Run `./listpocket` with your `config.toml` (and optional `LISTPOCKET_*` environment variables).
+This embeds static templates, i18n packs, permissions, and the sample config into the binary. Serve the admin UI from `frontend/dist` on disk (built in the previous step). Run `./listpocket` with your `config.toml` (and optional `LISTPOCKET_*` environment variables).
