@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	iofs "io/fs"
 	"log"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"github.com/compdani/list_pocket/internal/buflog"
 	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/internal/captcha"
+	"github.com/compdani/list_pocket/internal/config"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/events"
 	"github.com/compdani/list_pocket/internal/i18n"
@@ -27,15 +29,12 @@ import (
 	"github.com/compdani/list_pocket/internal/media"
 	"github.com/compdani/list_pocket/internal/messenger/email"
 	"github.com/compdani/list_pocket/internal/messenger/quo"
+	"github.com/compdani/list_pocket/internal/paginator"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
 	"github.com/joho/godotenv"
-	"github.com/knadh/koanf/providers/env"
-	"github.com/knadh/koanf/v2"
-	"github.com/knadh/paginator"
-	"github.com/knadh/stuffbin"
 	"github.com/pocketbase/pocketbase"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
@@ -45,7 +44,7 @@ import (
 type App struct {
 	cfg        *Config
 	urlCfg     *UrlConfig
-	fs         stuffbin.FileSystem
+	fs         iofs.FS
 	db         *pbdb.DB
 	core       *core.Core
 	manager    *manager.Manager
@@ -90,8 +89,8 @@ var (
 	bufLog   = buflog.New(5000)
 	lo       = log.New(io.MultiWriter(os.Stdout, bufLog, evStream.ErrWriter()), "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 
-	ko = koanf.New(".")
-	fs stuffbin.FileSystem
+	ko = config.New()
+	fs iofs.FS
 	db *pbdb.DB
 	pb *pocketbase.PocketBase
 
@@ -149,16 +148,7 @@ func init() {
 	// Load environment variables and merge into the loaded config.
 	// LISTPOCKET_foo__bar -> foo.bar (double underscore becomes dot for nested config)
 	// LISTPOCKET_static_dir -> static-dir (top-level keys with underscore become hyphen for CLI flags)
-	if err := ko.Load(env.Provider("LISTPOCKET_", ".", func(s string) string {
-		key := strings.ToLower(strings.TrimPrefix(s, "LISTPOCKET_"))
-		key = strings.ReplaceAll(key, "__", ".")
-		// Only convert underscore to hyphen for top-level keys (CLI flags like static-dir, i18n-dir)
-		// Nested config keys (containing dots) keep underscores (e.g., db.ssl_mode)
-		if !strings.Contains(key, ".") {
-			key = strings.ReplaceAll(key, "_", "-")
-		}
-		return key
-	}), nil); err != nil {
+	if err := ko.LoadEnv("LISTPOCKET_"); err != nil {
 		lo.Fatalf("error loading config from env: %v", err)
 	}
 
@@ -371,8 +361,6 @@ func wireApp(chReload chan os.Signal) *App {
 			DefaultPerPage: 20,
 			MaxPerPage:     50,
 			NumPageNums:    10,
-			PageParam:      "page",
-			PerPageParam:   "per_page",
 			AllowAll:       true,
 		}),
 

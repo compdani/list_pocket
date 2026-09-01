@@ -282,7 +282,7 @@ func serveAdminSPAFallback(a *App) func(e *pbcore.RequestEvent) error {
 		if a.isSetupRequired() {
 			return e.Redirect(http.StatusFound, path.Join(uriAdmin, "/setup"))
 		}
-		return e.FileFS(stuffbinSubFS{base: a.fs, root: "/admin"}, "index.html")
+		return e.FileFS(mustSubFS(a.fs, "/admin"), "index.html")
 	}
 }
 

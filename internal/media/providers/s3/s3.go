@@ -14,16 +14,16 @@ import (
 
 // Opt represents AWS S3 specific params
 type Opt struct {
-	URL        string        `koanf:"url"`
-	PublicURL  string        `koanf:"public_url"`
-	AccessKey  string        `koanf:"aws_access_key_id"`
-	SecretKey  string        `koanf:"aws_secret_access_key"`
-	Region     string        `koanf:"aws_default_region"`
-	Bucket     string        `koanf:"bucket"`
-	BucketPath string        `koanf:"bucket_path"`
-	BucketType string        `koanf:"bucket_type"`
-	Expiry     time.Duration `koanf:"expiry"`
-	RootURL    string        `koanf:"root_url"`
+	URL        string        `config:"url"`
+	PublicURL  string        `config:"public_url"`
+	AccessKey  string        `config:"aws_access_key_id"`
+	SecretKey  string        `config:"aws_secret_access_key"`
+	Region     string        `config:"aws_default_region"`
+	Bucket     string        `config:"bucket"`
+	BucketPath string        `config:"bucket_path"`
+	BucketType string        `config:"bucket_type"`
+	Expiry     time.Duration `config:"expiry"`
+	RootURL    string        `config:"root_url"`
 }
 
 // Client implements `media.Store` for S3 provider

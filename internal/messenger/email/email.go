@@ -34,7 +34,7 @@ type Server struct {
 
 	// Rest of the options are embedded directly from the smtppool lib.
 	// The JSON tag is for config unmarshal to work.
-	//lint:ignore SA5008 ,squash is needed by koanf/mapstructure config unmarshal.
+	//lint:ignore SA5008 ,squash is needed by mapstructure config unmarshal.
 	smtppool.Opt `json:",squash"`
 
 	pool *smtppool.Pool

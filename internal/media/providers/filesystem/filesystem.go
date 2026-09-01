@@ -11,9 +11,9 @@ import (
 
 // Opts represents filesystem params
 type Opts struct {
-	UploadPath string `koanf:"upload_path"`
-	UploadURI  string `koanf:"upload_uri"`
-	RootURL    string `koanf:"root_url"`
+	UploadPath string `config:"upload_path"`
+	UploadURI  string `config:"upload_uri"`
+	RootURL    string `config:"root_url"`
 }
 
 // Client implements `media.Store`

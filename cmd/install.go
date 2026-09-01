@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/compdani/list_pocket/internal/assets"
 )
 
 func newConfigFile(path string) error {
@@ -12,10 +14,10 @@ func newConfigFile(path string) error {
 
 	// Initialize the static file system into which all
 	// required static assets (.sql, .js files etc.) are loaded.
-	fs := initFS(appDir, "", "", "")
-	b, err := fs.Read("config.toml.sample")
+	fsys := initFS(appDir, "", "", "")
+	b, err := assets.ReadFile(fsys, "config.toml.sample")
 	if err != nil {
-		return fmt.Errorf("error reading sample config (is binary stuffed?): %v", err)
+		return fmt.Errorf("error reading sample config: %v", err)
 	}
 
 	return os.WriteFile(path, b, 0644)

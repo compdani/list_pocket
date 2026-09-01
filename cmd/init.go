@@ -22,11 +22,14 @@ import (
 	"time"
 
 	"github.com/Masterminds/sprig/v3"
+	listpocket "github.com/compdani/list_pocket"
+	"github.com/compdani/list_pocket/internal/assets"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/bounce"
 	"github.com/compdani/list_pocket/internal/bounce/mailbox"
 	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/internal/captcha"
+	"github.com/compdani/list_pocket/internal/config"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/manager"
@@ -40,13 +43,6 @@ import (
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
-	koanfmaps "github.com/knadh/koanf/maps"
-	"github.com/knadh/koanf/parsers/toml"
-	"github.com/knadh/koanf/providers/confmap"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/providers/posflag"
-	"github.com/knadh/koanf/v2"
-	"github.com/knadh/stuffbin"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -59,10 +55,10 @@ const (
 
 // UrlConfig contains various URL constants used in the app.
 type UrlConfig struct {
-	RootURL        string `koanf:"root_url"`
-	LogoURL        string `koanf:"logo_url"`
-	FaviconURL     string `koanf:"favicon_url"`
-	LoginURL       string `koanf:"login_url"`
+	RootURL        string `config:"root_url"`
+	LogoURL        string `config:"logo_url"`
+	FaviconURL     string `config:"favicon_url"`
+	LoginURL       string `config:"login_url"`
 	UnsubURL       string
 	LinkTrackURL   string
 	TxLinkTrackURL string
@@ -75,49 +71,49 @@ type UrlConfig struct {
 
 // Config contains static, constant config values required by arbitrary handlers and functions.
 type Config struct {
-	SiteName                      string   `koanf:"site_name"`
-	FromEmail                     string   `koanf:"from_email"`
-	LogVerbose                    bool     `koanf:"log_verbose"`
-	NotifyEmails                  []string `koanf:"notify_emails"`
-	EnablePublicSubPage           bool     `koanf:"enable_public_subscription_page"`
-	EnablePublicArchive           bool     `koanf:"enable_public_archive"`
-	EnablePublicArchiveRSSContent bool     `koanf:"enable_public_archive_rss_content"`
-	Lang                          string   `koanf:"lang"`
-	DBBatchSize                   int      `koanf:"batch_size"`
+	SiteName                      string   `config:"site_name"`
+	FromEmail                     string   `config:"from_email"`
+	LogVerbose                    bool     `config:"log_verbose"`
+	NotifyEmails                  []string `config:"notify_emails"`
+	EnablePublicSubPage           bool     `config:"enable_public_subscription_page"`
+	EnablePublicArchive           bool     `config:"enable_public_archive"`
+	EnablePublicArchiveRSSContent bool     `config:"enable_public_archive_rss_content"`
+	Lang                          string   `config:"lang"`
+	DBBatchSize                   int      `config:"batch_size"`
 	Privacy                       struct {
-		IndividualTracking bool            `koanf:"individual_tracking"`
-		DisableTracking    bool            `koanf:"disable_tracking"`
-		AllowPreferences   bool            `koanf:"allow_preferences"`
-		AllowBlocklist     bool            `koanf:"allow_blocklist"`
-		AllowExport        bool            `koanf:"allow_export"`
-		AllowWipe          bool            `koanf:"allow_wipe"`
-		RecordOptinIP      bool            `koanf:"record_optin_ip"`
-		UnsubHeader        bool            `koanf:"unsubscribe_header"`
-		Exportable         map[string]bool `koanf:"-"`
-		DomainBlocklist    []string        `koanf:"-"`
-		DomainAllowlist    []string        `koanf:"-"`
-	} `koanf:"privacy"`
+		IndividualTracking bool            `config:"individual_tracking"`
+		DisableTracking    bool            `config:"disable_tracking"`
+		AllowPreferences   bool            `config:"allow_preferences"`
+		AllowBlocklist     bool            `config:"allow_blocklist"`
+		AllowExport        bool            `config:"allow_export"`
+		AllowWipe          bool            `config:"allow_wipe"`
+		RecordOptinIP      bool            `config:"record_optin_ip"`
+		UnsubHeader        bool            `config:"unsubscribe_header"`
+		Exportable         map[string]bool `config:"-"`
+		DomainBlocklist    []string        `config:"-"`
+		DomainAllowlist    []string        `config:"-"`
+	} `config:"privacy"`
 	Security struct {
 		Captcha struct {
 			Altcha struct {
-				Enabled    bool `koanf:"enabled"`
-				Complexity int  `koanf:"complexity"`
-			} `koanf:"altcha"`
+				Enabled    bool `config:"enabled"`
+				Complexity int  `config:"complexity"`
+			} `config:"altcha"`
 			HCaptcha struct {
-				Enabled bool   `koanf:"enabled"`
-				Key     string `koanf:"key"`
-				Secret  string `koanf:"secret"`
-			} `koanf:"hcaptcha"`
-		} `koanf:"captcha"`
+				Enabled bool   `config:"enabled"`
+				Key     string `config:"key"`
+				Secret  string `config:"secret"`
+			} `config:"hcaptcha"`
+		} `config:"captcha"`
 
-		CorsOrigins []string `koanf:"cors_origins"`
-	} `koanf:"security"`
+		CorsOrigins []string `config:"cors_origins"`
+	} `config:"security"`
 
 	Appearance struct {
-		AdminCSS  []byte `koanf:"admin.custom_css"`
-		AdminJS   []byte `koanf:"admin.custom_js"`
-		PublicCSS []byte `koanf:"public.custom_css"`
-		PublicJS  []byte `koanf:"public.custom_js"`
+		AdminCSS  []byte `config:"admin.custom_css"`
+		AdminJS   []byte `config:"admin.custom_js"`
+		PublicCSS []byte `config:"public.custom_css"`
+		PublicJS  []byte `config:"public.custom_js"`
 	}
 
 	HasLegacyUser bool
@@ -139,8 +135,8 @@ type Config struct {
 	Permissions    map[string]struct{}
 }
 
-// initFlags initializes the commandline flags into the Koanf instance.
-func initFlags(ko *koanf.Koanf) {
+// initFlags initializes the commandline flags into the config instance.
+func initFlags(ko *config.Conf) {
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
 	f.ParseErrorsWhitelist.UnknownFlags = true
 	f.Usage = func() {
@@ -174,7 +170,7 @@ func initFlags(ko *koanf.Koanf) {
 		lo.Fatalf("error loading flags: %v", err)
 	}
 
-	if err := ko.Load(posflag.Provider(f, ".", ko), nil); err != nil {
+	if err := ko.LoadFlags(f); err != nil {
 		lo.Fatalf("error loading config: %v", err)
 	}
 }
@@ -321,11 +317,11 @@ func insertCLIArgs(args []string, idx int, values ...string) []string {
 	return out
 }
 
-// initConfigFiles loads the given config files into the koanf instance.
-func initConfigFiles(files []string, ko *koanf.Koanf) {
+// initConfigFiles loads the given config files into the config instance.
+func initConfigFiles(files []string, ko *config.Conf) {
 	for _, f := range files {
 		lo.Printf("reading config: %s", f)
-		if err := ko.Load(file.Provider(f), toml.Parser()); err != nil {
+		if err := ko.LoadTOMLFile(f); err != nil {
 			if os.IsNotExist(err) {
 				lo.Fatal("config file not found. If there isn't one yet, run --new-config to generate one.")
 			}
@@ -334,137 +330,26 @@ func initConfigFiles(files []string, ko *koanf.Koanf) {
 	}
 }
 
-// initFileSystem initializes the stuffbin FileSystem to provide
-// access to bundled static assets to the app.
-func initFS(appDir, frontendDir, staticDir, i18nDir string) stuffbin.FileSystem {
-	var (
-		// stuffbin real_path:virtual_alias paths to map local assets on disk
-		// when there an embedded filestystem is not found.
-
-		// These paths are joined with appDir.
-		appFiles = []string{
-			"./config.toml.sample:config.toml.sample",
-			"./permissions.json:permissions.json",
-		}
-
-		frontendFiles = []string{
-			// Admin frontend's static assets accessible at /admin/* during runtime.
-			// These paths are sourced from frontendDir.
-			"./:/admin",
-		}
-
-		staticFiles = []string{
-			// These paths are joined with staticDir.
-			"./email-templates:static/email-templates",
-			"./public:/public",
-		}
-
-		i18nFiles = []string{
-			// These paths are joined with i18nDir.
-			"./:/i18n",
-		}
-	)
-
-	// Get the executable's execPath.
-	execPath, err := os.Executable()
-	if err != nil {
-		lo.Fatalf("error getting executable path: %v", err)
+// initFS loads embedded static assets and optional on-disk overlays.
+func initFS(appDir, frontendDir, staticDir, i18nDir string) stdfs.FS {
+	if frontendDir == "" {
+		frontendDir = filepath.Join(appDir, "frontend/dist")
 	}
-
-	// Load embedded files in the executable.
-	hasEmbed := true
-	fs, err := stuffbin.UnStuff(execPath)
-	if err != nil {
-		hasEmbed = false
-
-		// Running in local mode. Load local assets into
-		// the in-memory stuffbin.FileSystem.
-		lo.Printf("unable to initialize embedded filesystem (%v). Using local filesystem", err)
-
-		fs, err = stuffbin.NewLocalFS("/")
-		if err != nil {
-			lo.Fatalf("failed to initialize local file for assets: %v", err)
-		}
-	}
-
-	// If the embed failed, load app and frontend files from the compile-time paths.
-	files := []string{}
-	if !hasEmbed {
-		files = append(files, joinFSPaths(appDir, appFiles)...)
-		files = append(files, joinFSPaths(frontendDir, frontendFiles)...)
-	}
-
-	// Irrespective of the embeds, if there are user specified static or i18n paths,
-	// load files from there and override default files (embedded or picked up from CWD).
-	if !hasEmbed || i18nDir != "" {
-		if i18nDir == "" {
-			// Default dir in cwd.
-			i18nDir = "i18n"
-		}
-		lo.Printf("loading i18n files from: %v", i18nDir)
-		files = append(files, joinFSPaths(i18nDir, i18nFiles)...)
-	}
-
-	if !hasEmbed || staticDir != "" {
-		if staticDir == "" {
-			// Default dir in cwd.
-			staticDir = "static"
-		} else {
-			// There is a custom static directory. Any paths that aren't in it, exclude.
-			sf := []string{}
-			for _, def := range staticFiles {
-				s := strings.Split(def, ":")[0]
-				if _, err := os.Stat(path.Join(staticDir, s)); err == nil {
-					sf = append(sf, def)
-				}
-			}
-			staticFiles = sf
-		}
-
+	if staticDir != "" {
 		lo.Printf("loading static files from: %v", staticDir)
-		files = append(files, joinFSPaths(staticDir, staticFiles)...)
 	}
-
-	// No additional files to load.
-	if len(files) == 0 {
-		return fs
+	if i18nDir != "" {
+		lo.Printf("loading i18n files from: %v", i18nDir)
 	}
-
-	// Load files from disk and overlay into the FS.
-	fStatic, err := stuffbin.NewLocalFS("/", files...)
+	fsys, err := assets.New(listpocket.Files, assets.Opt{
+		FrontendDir: frontendDir,
+		StaticDir:   staticDir,
+		I18nDir:     i18nDir,
+	})
 	if err != nil {
-		lo.Fatalf("failed reading static files from disk: '%s': %v", staticDir, err)
+		lo.Fatalf("failed to initialize asset filesystem: %v", err)
 	}
-
-	if err := fs.Merge(fStatic); err != nil {
-		lo.Fatalf("error merging static files: '%s': %v", staticDir, err)
-	}
-
-	return fs
-}
-
-type stuffbinSubFS struct {
-	base stuffbin.FileSystem
-	root string
-}
-
-func (s stuffbinSubFS) Open(name string) (stdfs.File, error) {
-	name = strings.TrimPrefix(filepath.ToSlash(name), "/")
-	name = path.Clean(name)
-	if name == "." {
-		name = ""
-	}
-
-	if name == ".." || strings.HasPrefix(name, "../") {
-		return nil, os.ErrNotExist
-	}
-
-	fullPath := s.root
-	if name != "" {
-		fullPath = path.Join(s.root, name)
-	}
-
-	return s.base.Open(fullPath)
+	return fsys
 }
 
 // initDB initializes the main DB connection pool from PocketBase.
@@ -526,7 +411,7 @@ func sqliteTimestampColumns(raw *sql.DB, table string) (string, string) {
 }
 
 // initSettings loads settings from the DB into the given Koanf map.
-func initSettings(ko *koanf.Koanf) {
+func initSettings(ko *config.Conf) {
 	var s types.JSONText
 
 	if pb != nil {
@@ -566,7 +451,7 @@ func initSettings(ko *koanf.Koanf) {
 	if err := json.Unmarshal(s, &out); err != nil {
 		lo.Fatalf("error unmarshalling settings from DB: %v", err)
 	}
-	if err := ko.Load(confmap.Provider(out, "."), nil); err != nil {
+	if err := ko.LoadMap(out); err != nil {
 		lo.Fatalf("error parsing settings from DB: %v", err)
 	}
 
@@ -606,7 +491,7 @@ func isLegacyPBSettingsBlob(raw []byte) bool {
 	return !hasSiteName && !hasSMTP && (hasAppAddress || hasDBHost)
 }
 
-func makeDefaultPBSettings(ko *koanf.Koanf) ([]byte, error) {
+func makeDefaultPBSettings(ko *config.Conf) ([]byte, error) {
 	s := models.Settings{
 		AppLang:                    "en",
 		UploadProvider:             "filesystem",
@@ -799,7 +684,7 @@ func patchPBSettings(pb *pocketbase.PocketBase, key string, value json.RawMessag
 	return setPBSettings(pb, b)
 }
 
-func initUrlConfig(ko *koanf.Koanf) *UrlConfig {
+func initUrlConfig(ko *config.Conf) *UrlConfig {
 	root := strings.TrimSuffix(ko.String("app.root_url"), "/")
 
 	return &UrlConfig{
@@ -830,8 +715,8 @@ func initUrlConfig(ko *koanf.Koanf) *UrlConfig {
 	}
 }
 
-// initConstConfig initializes the app's global constants from the given koanf instance.
-func initConstConfig(ko *koanf.Koanf) *Config {
+// initConstConfig initializes the app's global constants from config.
+func initConstConfig(ko *config.Conf) *Config {
 	// Read constants.
 	var c Config
 	if err := ko.Unmarshal("app", &c); err != nil {
@@ -844,12 +729,12 @@ func initConstConfig(ko *koanf.Koanf) *Config {
 		lo.Fatalf("error loading app.security config: %v", err)
 	}
 
-	if err := ko.UnmarshalWithConf("appearance", &c.Appearance, koanf.UnmarshalConf{FlatPaths: true}); err != nil {
+	if err := ko.UnmarshalFlat("appearance", &c.Appearance); err != nil {
 		lo.Fatalf("error loading app.appearance config: %v", err)
 	}
 
 	c.Lang = ko.String("app.lang")
-	c.Privacy.Exportable = koanfmaps.StringSliceToLookupMap(ko.Strings("privacy.exportable"))
+	c.Privacy.Exportable = config.LookupStrings(ko.Strings("privacy.exportable"))
 	c.MediaUpload.Provider = ko.String("upload.provider")
 	c.MediaUpload.Extensions = ko.Strings("upload.extensions")
 	c.Privacy.DomainBlocklist = ko.Strings("privacy.domain_blocklist")
@@ -866,7 +751,7 @@ func initConstConfig(ko *koanf.Koanf) *Config {
 	b := md5.Sum([]byte(time.Now().String()))
 	c.AssetVersion = fmt.Sprintf("%x", b)[0:10]
 
-	pm, err := fs.Read("/permissions.json")
+	pm, err := assets.ReadFile(fs, "/permissions.json")
 	if err != nil {
 		lo.Fatalf("error reading permissions file: %v", err)
 	}
@@ -895,7 +780,7 @@ func initConstConfig(ko *koanf.Koanf) *Config {
 // loaded from the filesystem. English is a loaded first as the default map
 // and then the selected language is loaded on top of it so that if there are
 // missing translations in it, the default English translations show up.
-func initI18n(lang string, fs stuffbin.FileSystem) *i18n.I18n {
+func initI18n(lang string, fsys stdfs.FS) *i18n.I18n {
 	i, ok, err := getI18nLang(lang, fs)
 	if err != nil {
 		if ok {
@@ -908,7 +793,7 @@ func initI18n(lang string, fs stuffbin.FileSystem) *i18n.I18n {
 }
 
 // initCore initializes the CRUD DB core .
-func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), db *pbdb.DB, i *i18n.I18n, ko *koanf.Koanf) *core.Core {
+func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), db *pbdb.DB, i *i18n.I18n, ko *config.Conf) *core.Core {
 	opt := &core.Opt{
 		Constants: core.Constants{
 			SendOptinConfirmation: ko.Bool("app.send_optin_confirmation"),
@@ -944,7 +829,7 @@ func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), 
 }
 
 // initCampaignManager initializes the campaign manager.
-func initCampaignManager(msgrs []manager.Messenger, db *pbdb.DB, u *UrlConfig, co *core.Core, md media.Store, i *i18n.I18n, ko *koanf.Koanf) *manager.Manager {
+func initCampaignManager(msgrs []manager.Messenger, db *pbdb.DB, u *UrlConfig, co *core.Core, md media.Store, i *i18n.I18n, ko *config.Conf) *manager.Manager {
 	if ko.Bool("passive") {
 		lo.Println("running in passive mode. won't process campaigns.")
 	}
@@ -1002,7 +887,7 @@ func initTxTemplates(m *manager.Manager, co *core.Core) {
 }
 
 // initImporter initializes the bulk subscriber importer.
-func initImporter(db *pbdb.DB, core *core.Core, i *i18n.I18n, ko *koanf.Koanf) *subimporter.Importer {
+func initImporter(db *pbdb.DB, core *core.Core, i *i18n.I18n, ko *config.Conf) *subimporter.Importer {
 	_, listUpdatedCol := sqliteTimestampColumns(db.DB.DB, "lists")
 
 	updateListDateStmt, err := db.DB.DB.Prepare(`
@@ -1054,7 +939,7 @@ func initSMTPMessengers() []manager.Messenger {
 
 		// Read the SMTP config.
 		var s email.Server
-		if err := item.UnmarshalWithConf("", &s, koanf.UnmarshalConf{Tag: "json"}); err != nil {
+		if err := item.UnmarshalJSONTag("", &s); err != nil {
 			lo.Fatalf("error reading SMTP config: %v", err)
 		}
 
@@ -1091,7 +976,7 @@ func initSMTPMessengers() []manager.Messenger {
 
 // initPostbackMessengers initializes and returns all the enabled
 // HTTP postback messenger backends.
-func initPostbackMessengers(ko *koanf.Koanf) []manager.Messenger {
+func initPostbackMessengers(ko *config.Conf) []manager.Messenger {
 	items := ko.Slices("messengers")
 	if len(items) == 0 {
 		return nil
@@ -1108,7 +993,7 @@ func initPostbackMessengers(ko *koanf.Koanf) []manager.Messenger {
 			name = item.String("name")
 			o    postback.Options
 		)
-		if err := item.UnmarshalWithConf("", &o, koanf.UnmarshalConf{Tag: "json"}); err != nil {
+		if err := item.UnmarshalJSONTag("", &o); err != nil {
 			lo.Fatalf("error reading Postback config: %v", err)
 		}
 
@@ -1126,7 +1011,7 @@ func initPostbackMessengers(ko *koanf.Koanf) []manager.Messenger {
 }
 
 // initMediaStore initializes Upload manager with a custom backend.
-func initMediaStore(ko *koanf.Koanf) media.Store {
+func initMediaStore(ko *config.Conf) media.Store {
 	switch provider := ko.String("upload.provider"); provider {
 	case "s3":
 		var o s3.Opt
@@ -1161,14 +1046,14 @@ func initMediaStore(ko *koanf.Koanf) media.Store {
 }
 
 // initNotifs initializes the notifier with the system e-mail templates.
-func initNotifs(fs stuffbin.FileSystem, i *i18n.I18n, em *email.Emailer, u *UrlConfig, ko *koanf.Koanf) {
-	tpls, err := stuffbin.ParseTemplatesGlob(initTplFuncs(i, u), fs, "/static/email-templates/*.html")
+func initNotifs(fsys stdfs.FS, i *i18n.I18n, em *email.Emailer, u *UrlConfig, ko *config.Conf) {
+	tpls, err := parseTemplatesFS(initTplFuncs(i, u), fsys, "static/email-templates/*.html")
 	if err != nil {
 		lo.Fatalf("error parsing e-mail notif templates: %v", err)
 	}
 
 	// Read the notification templates.
-	html, err := fs.Read("/static/email-templates/base.html")
+	html, err := assets.ReadFile(fsys, "/static/email-templates/base.html")
 	if err != nil {
 		lo.Fatalf("error reading static/email-templates/base.html: %v", err)
 	}
@@ -1194,7 +1079,7 @@ func initNotifs(fs stuffbin.FileSystem, i *i18n.I18n, em *email.Emailer, u *UrlC
 
 // initBounceManager initializes the bounce manager that scans mailboxes and listens to webhooks
 // for incoming bounce events.
-func initBounceManager(cb func(models.Bounce) error, lo *log.Logger, ko *koanf.Koanf) *bounce.Manager {
+func initBounceManager(cb func(models.Bounce) error, lo *log.Logger, ko *config.Conf) *bounce.Manager {
 	opt := bounce.Opt{
 		WebhooksEnabled: ko.Bool("bounce.webhooks_enabled"),
 		SESEnabled:      ko.Bool("bounce.ses_enabled"),
@@ -1228,7 +1113,7 @@ func initBounceManager(cb func(models.Bounce) error, lo *log.Logger, ko *koanf.K
 		}
 
 		var boxOpt mailbox.Opt
-		if err := b.UnmarshalWithConf("", &boxOpt, koanf.UnmarshalConf{Tag: "json"}); err != nil {
+		if err := b.UnmarshalJSONTag("", &boxOpt); err != nil {
 			lo.Fatalf("error reading bounce mailbox config: %v", err)
 		}
 
@@ -1293,8 +1178,8 @@ func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
 
 	registerDocsRoutes(se, ko)
 
-	se.Router.GET("/public/static/{path...}", apis.Static(stuffbinSubFS{base: app.fs, root: "/public/static"}, false))
-	se.Router.GET("/admin/static/{path...}", apis.Static(stuffbinSubFS{base: app.fs, root: "/admin/static"}, false))
+	se.Router.GET("/public/static/{path...}", apis.Static(mustSubFS(app.fs, "/public/static"), false))
+	se.Router.GET("/admin/static/{path...}", apis.Static(mustSubFS(app.fs, "/admin/static"), false))
 
 	var (
 		uploadProvider = ko.String("upload.provider")
@@ -1316,12 +1201,31 @@ func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
 }
 
 // parsePublicTemplates parses public HTML templates used by public RequestEvent handlers.
-func parsePublicTemplates(i *i18n.I18n, urlCfg *UrlConfig, fs stuffbin.FileSystem) *template.Template {
-	tpl, err := stuffbin.ParseTemplatesGlob(initTplFuncs(i, urlCfg), fs, "/public/templates/*.html")
+func parsePublicTemplates(i *i18n.I18n, urlCfg *UrlConfig, fsys stdfs.FS) *template.Template {
+	tpl, err := parseTemplatesFS(initTplFuncs(i, urlCfg), fsys, "public/templates/*.html")
 	if err != nil {
 		lo.Fatalf("error parsing public templates: %v", err)
 	}
 	return tpl
+}
+
+func parseTemplatesFS(funcMap template.FuncMap, fsys stdfs.FS, pattern string) (*template.Template, error) {
+	return template.New("").Funcs(funcMap).ParseFS(fsys, strings.TrimPrefix(pattern, "/"))
+}
+
+func mustSubFS(fsys stdfs.FS, dir string) stdfs.FS {
+	sub, err := assets.Sub(fsys, dir)
+	if err != nil {
+		lo.Printf("asset subdirectory %s not found: %v", dir, err)
+		return emptyFS{}
+	}
+	return sub
+}
+
+type emptyFS struct{}
+
+func (emptyFS) Open(name string) (stdfs.File, error) {
+	return nil, &stdfs.PathError{Op: "open", Path: name, Err: os.ErrNotExist}
 }
 
 // newTplRenderer builds the shared HTML template renderer for public pages.
@@ -1529,7 +1433,7 @@ func initTplFuncs(i *i18n.I18n, u *UrlConfig) template.FuncMap {
 }
 
 // initAuth initializes the auth module.
-func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *koanf.Koanf) *auth.Auth {
+func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *config.Conf) *auth.Auth {
 	callbacks := &auth.Callbacks{
 		GetUser:           func(recordID string) (auth.User, error) { return co.GetUser(recordID, "", "") },
 		GetUsers:          co.GetUsers,
@@ -1549,17 +1453,4 @@ func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *koanf.Koanf) *auth.A
 	}
 
 	return a
-}
-
-// joinFSPaths joins the given paths with the root path and returns the full paths.
-func joinFSPaths(root string, paths []string) []string {
-	out := make([]string, 0, len(paths))
-	for _, p := range paths {
-		// real_path:stuffbin_alias
-		f := strings.Split(p, ":")
-
-		out = append(out, path.Join(root, f[0])+":"+f[1])
-	}
-
-	return out
 }

@@ -19,7 +19,7 @@ COPY docs/docs/ ./
 RUN mkdocs build
 
 
-FROM golang:1.26-alpine AS go-builder
+FROM golang:1.27-alpine AS go-builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -30,7 +30,7 @@ COPY internal/ ./internal/
 COPY models/ ./models/
 COPY i18n/ ./i18n/
 COPY static/ ./static/
-COPY permissions.json config.toml.sample ./
+COPY permissions.json config.toml.sample embedded.go ./
 
 RUN go build -trimpath -ldflags="-s -w" -o /out/listpocket ./cmd
 

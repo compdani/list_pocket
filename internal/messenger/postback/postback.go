@@ -3,6 +3,7 @@ package postback
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,8 +14,6 @@ import (
 )
 
 // postback is the payload that's posted as JSON to the HTTP Postback server.
-//
-//easyjson:json
 type postback struct {
 	Subject     string       `json:"subject"`
 	FromEmail   string       `json:"from_email"`
@@ -133,7 +132,7 @@ func (p *Postback) Push(m models.Message) error {
 		pb.Attachments = files
 	}
 
-	b, err := pb.MarshalJSON()
+	b, err := json.Marshal(pb)
 	if err != nil {
 		return err
 	}
