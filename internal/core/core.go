@@ -90,24 +90,14 @@ func New(o *Opt, h *Hooks) *Core {
 	}
 }
 
-// RefreshMatViews is a no-op (SQLite / PocketBase; no materialized views).
-func (c *Core) RefreshMatViews(concurrent bool) error {
-	return nil
-}
-
-// RefreshMatView is a no-op (SQLite / PocketBase; no materialized views).
-func (c *Core) RefreshMatView(name string, concurrent bool) error {
-	return nil
-}
-
-func pqErrMsg(err error) string {
+func dbErr(err error) string {
 	if err == nil {
 		return ""
 	}
 	return err.Error()
 }
 
-// makeSearchString prepares a search string for use in both tsquery and ILIKE queries.
+// makeSearchString prepares a LIKE search string from a free-text query.
 func makeSearchString(searchStr string) string {
 	if searchStr == "" {
 		return ""

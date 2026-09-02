@@ -97,7 +97,7 @@ func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource
 	pb := c.db.PocketBase()
 	col, err := pb.FindCollectionByNameOrId("templates")
 	if err != nil {
-		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}
 	rec := pbcore.NewRecord(col)
 	rec.Set("name", name)
@@ -107,7 +107,7 @@ func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource
 	rec.Set("body_source", bodySource.String)
 	rec.Set("is_default", false)
 	if err := pb.Save(rec); err != nil {
-		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}
 	return c.sqliteTemplateFromRecord(rec), nil
 }
@@ -124,7 +124,7 @@ func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte
 	rec.Set("body", string(body))
 	rec.Set("body_source", bodySource.String)
 	if err := pb.Save(rec); err != nil {
-		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}
 	return c.sqliteTemplateFromRecord(rec), nil
 }
@@ -138,10 +138,10 @@ func (c *Core) SetDefaultTemplate(recordID string) error {
 		return apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.template}"))
 	}
 	if _, err := c.db.Exec(`UPDATE templates SET is_default = 0 WHERE type = ?`, tplType); err != nil {
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`UPDATE templates SET is_default = 1 WHERE id = ?`, recordID); err != nil {
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}
 	return nil
 }
@@ -156,7 +156,7 @@ func (c *Core) DeleteTemplate(recordID string) error {
 		return apperr.BadRequest(c.i18n.T("templates.cantDeleteDefault"))
 	}
 	if _, err := c.db.Exec(`DELETE FROM templates WHERE id = ?`, recordID); err != nil {
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.template}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}
 	return nil
 }

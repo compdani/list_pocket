@@ -49,7 +49,7 @@ func nullStringFrom(v string) null.String {
 func (c *Core) AddSubscriptions(subIDs, listIDs []int, status string) error {
 	if _, err := c.addSubscriptionsSQLite(subIDs, listIDs, status); err != nil {
 		c.log.Printf("error adding subscriptions: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 
 	return nil
@@ -61,13 +61,13 @@ func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, filters json.
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 
 	affected, err := c.addSubscriptionsSQLite(subIDs, targetListIDs, status)
 	if err != nil {
 		c.log.Printf("error adding subscriptions by query: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 	return affected, nil
 }
@@ -76,7 +76,7 @@ func (c *Core) AddSubscriptionsByQuery(searchStr, queryExp string, filters json.
 func (c *Core) DeleteSubscriptions(subIDs, listIDs []int) error {
 	if _, err := c.deleteSubscriptionsSQLite(subIDs, listIDs); err != nil {
 		c.log.Printf("error deleting subscriptions: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 
 	}
 
@@ -89,13 +89,13 @@ func (c *Core) DeleteSubscriptionsByQuery(searchStr, queryExp string, filters js
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 
 	affected, err := c.deleteSubscriptionsSQLite(subIDs, targetListIDs)
 	if err != nil {
 		c.log.Printf("error deleting subscriptions by query: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 	return affected, nil
 }
@@ -111,7 +111,7 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 		lists, err := c.getSubscriberListsSQLite(subIDs[0], "", nil, listUUIDs, "", "")
 		if err != nil {
 			c.log.Printf("error unsubscribing from lists: %v", err)
-			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 		}
 
 		for _, list := range lists {
@@ -136,7 +136,7 @@ func (c *Core) UnsubscribeLists(subIDs, listIDs []int, listUUIDs []string) error
 
 	if _, err := c.unsubscribeSubscriptionsSQLite(subIDs, deduped); err != nil {
 		c.log.Printf("error unsubscribing from lists: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 	return nil
 }
@@ -147,13 +147,13 @@ func (c *Core) UnsubscribeListsByQuery(searchStr, queryExp string, filters json.
 	subIDs, err := c.findSubscriberIDsSQLite(searchStr, queryExp, filters, sourceListIDs, subStatus, 0, 0)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 
 	affected, err := c.unsubscribeSubscriptionsSQLite(subIDs, targetListIDs)
 	if err != nil {
 		c.log.Printf("error unsubscribing from lists by query: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 	return affected, nil
 }
@@ -168,7 +168,7 @@ func (c *Core) DeleteUnconfirmedSubscriptions(beforeDate time.Time) (int, error)
 		beforeDate.UTC().Format("2006-01-02 15:04:05"))
 	if err != nil {
 		c.log.Printf("error deleting unconfirmed subscribers: %v", err)
-		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return 0, apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 
 	n, _ := res.RowsAffected()

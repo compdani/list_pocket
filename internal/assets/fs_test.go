@@ -59,6 +59,24 @@ func TestRemapAndRead(t *testing.T) {
 	f.Close()
 }
 
+func TestDiskWinsOverEmbed(t *testing.T) {
+	embed := fstest.MapFS{
+		"i18n/en.json": &fstest.MapFile{Data: []byte(`{"embed":true}`)},
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "en.json"), []byte(`{"disk":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fsys, err := New(embed, Opt{I18nDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := ReadFile(fsys, "i18n/en.json")
+	if err != nil || string(b) != `{"disk":true}` {
+		t.Fatalf("overlay: %s %v", b, err)
+	}
+}
+
 func TestMissingOptionalDirs(t *testing.T) {
 	embed := fstest.MapFS{
 		"permissions.json": &fstest.MapFile{Data: []byte("[]")},

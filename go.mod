@@ -17,7 +17,6 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/knadh/go-pop3 v1.0.2
 	github.com/knadh/smtppool/v2 v2.2.0
-	github.com/lib/pq v1.12.3
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pocketbase/dbx v1.12.0
@@ -49,6 +48,7 @@ require (
 	github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/lib/pq v1.12.3 // indirect
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect

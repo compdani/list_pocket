@@ -20,7 +20,7 @@ func (c *Core) GetSettings() (models.Settings, error) {
 		b, err = c.getSettings()
 		if err != nil {
 			return out, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching",
-				"name", "{globals.terms.settings}", "error", pqErrMsg(err)))
+				"name", "{globals.terms.settings}", "error", dbErr(err)))
 		}
 	} else {
 		return out, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching",
@@ -46,7 +46,7 @@ func (c *Core) UpdateSettings(s models.Settings) error {
 	// Update the settings in the DB.
 	if c.setSettings != nil {
 		if err := c.setSettings(b); err != nil {
-			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", dbErr(err)))
 		}
 	} else {
 		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", "settings not configured"))
@@ -59,7 +59,7 @@ func (c *Core) UpdateSettings(s models.Settings) error {
 func (c *Core) UpdateSettingsByKey(key string, value json.RawMessage) error {
 	if c.setSettingsByKey != nil {
 		if err := c.setSettingsByKey(key, value); err != nil {
-			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", dbErr(err)))
 		}
 	} else {
 		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", "settings not configured"))

@@ -20,7 +20,6 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/utils"
 	"github.com/compdani/list_pocket/models"
-	"github.com/lib/pq"
 )
 
 const (
@@ -861,7 +860,7 @@ func (a *App) processSubForm(re *pbcore.RequestEvent) (bool, error) {
 		return false, apperr.BadRequest(a.i18n.T("globals.messages.invalidData"))
 	}
 
-	listUUIDs := pq.StringArray(req.FormListUUIDs)
+	listUUIDs := req.FormListUUIDs
 
 	// Fetch the list types and ensure that they are not private.
 	listTypes, err := a.core.GetListTypes(nil, req.FormListUUIDs)
