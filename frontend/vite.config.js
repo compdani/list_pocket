@@ -47,8 +47,10 @@ export default defineConfig(({ _, mode }) => {
             if (!id.includes('node_modules')) {
               return undefined;
             }
+            // TinyMCE plugins share circular ESM exports; a forced vendor chunk
+            // rewrites those as Export 'anchor_exports' is not defined.
             if (id.includes('tinymce')) {
-              return 'tinymce';
+              return undefined;
             }
             if (id.includes('grapesjs')) {
               return 'grapesjs';
