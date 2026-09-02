@@ -77,7 +77,7 @@ func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, 
 
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching",
-			"name", "{globals.terms.media}", "error", pqErrMsg(err)))
+			"name", "{globals.terms.media}", "error", dbErr(err)))
 	}
 
 	out := make([]media.Media, 0, len(rows))
@@ -120,7 +120,7 @@ func (c *Core) GetMedia(recordID, uuid, fileName string, s media.Store) (media.M
 		if err == sql.ErrNoRows {
 			return media.Media{}, ErrNotFound
 		}
-		return media.Media{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+		return media.Media{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", dbErr(err)))
 	}
 
 	out := sqliteMediaRowToModel(row)
@@ -147,7 +147,7 @@ func (c *Core) GetMediaByRowID(rowID int, s media.Store) (media.Media, error) {
 		if err == sql.ErrNoRows {
 			return media.Media{}, ErrNotFound
 		}
-		return media.Media{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+		return media.Media{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.media}", "error", dbErr(err)))
 	}
 
 	out := sqliteMediaRowToModel(row)
@@ -170,7 +170,7 @@ func (c *Core) InsertMedia(fileName, thumbName, contentType string, meta models.
 			VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))`,
 		uu.String(), fileName, thumbName, contentType, provider, meta); err != nil {
 		c.log.Printf("error inserting uploaded file to db: %v", err)
-		return media.Media{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+		return media.Media{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", dbErr(err)))
 	}
 
 	return c.GetMedia("", uu.String(), "", s)
@@ -186,11 +186,11 @@ func (c *Core) DeleteMedia(recordID string) (string, error) {
 	var fname string
 	if err := c.db.Get(&fname, `SELECT filename FROM media WHERE id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting uploaded file from db: %v", err)
-		return "", apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+		return "", apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM media WHERE id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting uploaded file from db: %v", err)
-		return "", apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", pqErrMsg(err)))
+		return "", apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.media}", "error", dbErr(err)))
 	}
 	return fname, nil
 }

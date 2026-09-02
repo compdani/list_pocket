@@ -20,7 +20,6 @@ import (
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/internal/phoneutil"
 	"github.com/compdani/list_pocket/models"
-	"github.com/lib/pq"
 	"gopkg.in/volatiletech/null.v6"
 )
 
@@ -44,7 +43,7 @@ type campReq struct {
 	Batching    campaignBatchingReq `json:"batching"`
 
 	// This is only relevant to campaign test requests.
-	SubscriberEmails pq.StringArray `json:"subscribers"`
+	SubscriberEmails []string `json:"subscribers"`
 }
 
 // campContentReq wraps params coming from API requests for converting

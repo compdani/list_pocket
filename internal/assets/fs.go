@@ -1,13 +1,11 @@
-// Package assets builds an in-memory fs.FS from embedded files plus disk overlays.
+// Package assets builds an overlay fs.FS from embedded files plus disk overlays.
 package assets
 
 import (
 	"io/fs"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
-	"testing/fstest"
 )
 
 // Opt controls which on-disk directories overlay the embedded files.
@@ -17,42 +15,33 @@ type Opt struct {
 	I18nDir     string
 }
 
-// New copies embed plus optional disk trees into a memory FS.
+// New returns a first-hit-wins overlay of disk directories over embedded files.
 //
 // Embedded layout is remapped so static/public becomes public/. Disk overlays
 // (frontend as /admin, --static-dir, --i18n-dir, or cwd static/i18n) replace
-// matching virtual paths.
+// matching virtual paths. The admin UI is served from disk and is never copied
+// into memory.
 func New(embed fs.FS, opt Opt) (fs.FS, error) {
-	m := fstest.MapFS{}
-	if err := addFS(m, embed, remapEmbed); err != nil {
-		return nil, err
+	layers := make([]fs.FS, 0, 6)
+
+	if dir := existingDir(opt.StaticDir); dir != "" {
+		layers = append(layers, staticDirFS(dir)...)
+	} else if dir := existingDir("static"); opt.StaticDir == "" && dir != "" {
+		layers = append(layers, staticDirFS(dir)...)
+	}
+
+	if dir := existingDir(opt.I18nDir); dir != "" {
+		layers = append(layers, prefixFS{prefix: "i18n", base: os.DirFS(dir)})
+	} else if dir := existingDir("i18n"); opt.I18nDir == "" && dir != "" {
+		layers = append(layers, prefixFS{prefix: "i18n", base: os.DirFS(dir)})
 	}
 
 	if dir := existingDir(opt.FrontendDir); dir != "" {
-		if err := addDir(m, dir, "admin"); err != nil {
-			return nil, err
-		}
-	}
-	if dir := existingDir(opt.I18nDir); dir != "" {
-		if err := addDir(m, dir, "i18n"); err != nil {
-			return nil, err
-		}
-	} else if dir := existingDir("i18n"); opt.I18nDir == "" && dir != "" {
-		if err := addDir(m, dir, "i18n"); err != nil {
-			return nil, err
-		}
-	}
-	if dir := existingDir(opt.StaticDir); dir != "" {
-		if err := addStaticDir(m, dir); err != nil {
-			return nil, err
-		}
-	} else if dir := existingDir("static"); opt.StaticDir == "" && dir != "" {
-		if err := addStaticDir(m, dir); err != nil {
-			return nil, err
-		}
+		layers = append(layers, prefixFS{prefix: "admin", base: os.DirFS(dir)})
 	}
 
-	return m, nil
+	layers = append(layers, remapFS{base: embed})
+	return overlayFS{layers: layers}, nil
 }
 
 // ReadFile reads name from fsys, accepting a leading slash.
@@ -74,71 +63,99 @@ func Sub(fsys fs.FS, dir string) (fs.FS, error) {
 	return fs.Sub(fsys, dir)
 }
 
-func remapEmbed(name string) string {
+type overlayFS struct {
+	layers []fs.FS
+}
+
+func (o overlayFS) Open(name string) (fs.File, error) {
 	name = strings.TrimPrefix(name, "/")
-	if name == "static/public" || strings.HasPrefix(name, "static/public/") {
-		return strings.TrimPrefix(name, "static/")
+	if name == "" {
+		name = "."
 	}
-	return name
-}
-
-func addFS(m fstest.MapFS, fsys fs.FS, remap func(string) string) error {
-	return fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	var firstErr error
+	for _, layer := range o.layers {
+		f, err := layer.Open(name)
+		if err == nil {
+			return f, nil
 		}
-		if d.IsDir() || p == "." {
-			return nil
-		}
-		b, err := fs.ReadFile(fsys, p)
-		if err != nil {
-			return err
-		}
-		virt := p
-		if remap != nil {
-			virt = remap(p)
-		}
-		m[virt] = &fstest.MapFile{Data: b}
-		return nil
-	})
-}
-
-func addDir(m fstest.MapFS, root, virtPrefix string) error {
-	return filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		b, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		virt := path.Join(virtPrefix, filepath.ToSlash(rel))
-		m[virt] = &fstest.MapFile{Data: b}
-		return nil
-	})
-}
-
-func addStaticDir(m fstest.MapFS, root string) error {
-	email := filepath.Join(root, "email-templates")
-	if existingDir(email) != "" {
-		if err := addDir(m, email, "static/email-templates"); err != nil {
-			return err
+		if firstErr == nil {
+			firstErr = err
 		}
 	}
-	pub := filepath.Join(root, "public")
-	if existingDir(pub) != "" {
-		if err := addDir(m, pub, "public"); err != nil {
-			return err
+	if firstErr == nil {
+		firstErr = fs.ErrNotExist
+	}
+	return nil, firstErr
+}
+
+func (o overlayFS) Glob(pattern string) ([]string, error) {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, layer := range o.layers {
+		matches, err := fs.Glob(layer, pattern)
+		if err != nil {
+			continue
+		}
+		for _, m := range matches {
+			if _, ok := seen[m]; ok {
+				continue
+			}
+			seen[m] = struct{}{}
+			out = append(out, m)
 		}
 	}
-	return nil
+	return out, nil
+}
+
+type remapFS struct {
+	base fs.FS
+}
+
+func (r remapFS) Open(name string) (fs.File, error) {
+	name = strings.TrimPrefix(name, "/")
+	if name == "" {
+		name = "."
+	}
+	if name == "public" || strings.HasPrefix(name, "public/") {
+		if f, err := r.base.Open(path.Join("static", name)); err == nil {
+			return f, nil
+		}
+	}
+	return r.base.Open(name)
+}
+
+type prefixFS struct {
+	prefix string
+	base   fs.FS
+}
+
+func (p prefixFS) Open(name string) (fs.File, error) {
+	name = strings.TrimPrefix(name, "/")
+	if name == "" {
+		name = "."
+	}
+	if p.prefix == "" {
+		return p.base.Open(name)
+	}
+	if name == p.prefix {
+		return p.base.Open(".")
+	}
+	pref := p.prefix + "/"
+	if strings.HasPrefix(name, pref) {
+		return p.base.Open(strings.TrimPrefix(name, pref))
+	}
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+}
+
+func staticDirFS(root string) []fs.FS {
+	var out []fs.FS
+	if dir := existingDir(path.Join(root, "email-templates")); dir != "" {
+		out = append(out, prefixFS{prefix: "static/email-templates", base: os.DirFS(dir)})
+	}
+	if dir := existingDir(path.Join(root, "public")); dir != "" {
+		out = append(out, prefixFS{prefix: "public", base: os.DirFS(dir)})
+	}
+	return out
 }
 
 func existingDir(dir string) string {

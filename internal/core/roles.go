@@ -9,7 +9,6 @@ import (
 
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
-	"github.com/lib/pq"
 	"github.com/pocketbase/dbx"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	null "gopkg.in/volatiletech/null.v6"
@@ -54,14 +53,14 @@ func roleFromRecord(rec *pbcore.Record) auth.Role {
 	return out
 }
 
-func parsePermissions(raw any) pq.StringArray {
+func parsePermissions(raw any) []string {
 	if raw == nil {
-		return pq.StringArray{}
+		return []string{}
 	}
 
 	switch value := raw.(type) {
 	case []string:
-		return pq.StringArray(value)
+		return value
 	case []any:
 		out := make([]string, 0, len(value))
 		for _, entry := range value {
@@ -69,20 +68,20 @@ func parsePermissions(raw any) pq.StringArray {
 				out = append(out, text)
 			}
 		}
-		return pq.StringArray(out)
+		return out
 	case string:
 		if strings.TrimSpace(value) == "" {
-			return pq.StringArray{}
+			return []string{}
 		}
 
 		var out []string
 		if err := json.Unmarshal([]byte(value), &out); err == nil {
-			return pq.StringArray(out)
+			return out
 		}
 
-		return pq.StringArray{value}
+		return []string{value}
 	default:
-		return pq.StringArray{}
+		return []string{}
 	}
 }
 
@@ -649,7 +648,7 @@ func (c *Core) UpdateListRole(recordID string, r auth.ListRole) (auth.ListRole, 
 	}
 
 	if err := c.UpsertListPermissions(out.RecordID, r.Lists); err != nil {
-		return out, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.listRole}", "error", pqErrMsg(err)))
+		return out, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.listRole}", "error", dbErr(err)))
 	}
 
 	return out, nil

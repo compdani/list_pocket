@@ -84,13 +84,17 @@ func (a *App) GCCampaignAnalytics(re *pbcore.RequestEvent) error {
 	return okJSON(re, true)
 }
 
-// RunDBVacuum runs a full VACUUM on the PostgreSQL database.
-// VACUUM reclaims storage occupied by dead tuples and updates planner statistics.
+// RunDBVacuum runs VACUUM then ANALYZE on the SQLite database.
 func RunDBVacuum(db *pbdb.DB, lo *log.Logger) {
-	lo.Println("running database VACUUM ANALYZE")
-	if _, err := db.Exec("VACUUM ANALYZE"); err != nil {
-		lo.Printf("error running VACUUM ANALYZE: %v", err)
+	lo.Println("running database VACUUM")
+	if _, err := db.Exec("VACUUM"); err != nil {
+		lo.Printf("error running VACUUM: %v", err)
 		return
 	}
-	lo.Println("finished database VACUUM ANALYZE")
+	lo.Println("running database ANALYZE")
+	if _, err := db.Exec("ANALYZE"); err != nil {
+		lo.Printf("error running ANALYZE: %v", err)
+		return
+	}
+	lo.Println("finished database VACUUM and ANALYZE")
 }

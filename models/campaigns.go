@@ -9,9 +9,7 @@ import (
 	"strings"
 	txttpl "text/template"
 
-	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
@@ -58,9 +56,9 @@ type Campaign struct {
 	SendAt            null.Time       `db:"send_at" json:"send_at"`
 	Status            string          `db:"status" json:"status"`
 	ContentType       string          `db:"content_type" json:"content_type"`
-	Tags              pq.StringArray  `db:"tags" json:"tags"`
-	IncludeTags       pq.StringArray  `db:"include_tags" json:"include_tags"`
-	ExcludeTags       pq.StringArray  `db:"exclude_tags" json:"exclude_tags"`
+	Tags              []string        `db:"tags" json:"tags"`
+	IncludeTags       []string        `db:"include_tags" json:"include_tags"`
+	ExcludeTags       []string        `db:"exclude_tags" json:"exclude_tags"`
 	Headers           Headers         `db:"headers" json:"headers"`
 	Attribs           JSON            `db:"attribs" json:"attribs"`
 	TemplateID        null.String     `db:"template_id" json:"template_id"`
@@ -81,7 +79,7 @@ type Campaign struct {
 
 	// List of media (attachment) IDs obtained from the next-campaign query
 	// while sending a campaign.
-	MediaIDs pq.Int64Array `json:"-" db:"media_id"`
+	MediaIDs []int64 `json:"-" db:"media_id"`
 
 	// Fetched bodies of the attachments.
 	Attachments []Attachment `json:"-" db:"-"`
@@ -121,30 +119,6 @@ func (camps Campaigns) GetIDs() []int {
 	}
 
 	return IDs
-}
-
-// LoadStats lazy loads campaign stats onto a list of campaigns.
-func (camps Campaigns) LoadStats(stmt *pbdb.Query) error {
-	var meta []CampaignMeta
-	if err := stmt.Select(&meta, pq.Array(camps.GetIDs())); err != nil {
-		return err
-	}
-
-	if len(camps) != len(meta) {
-		return errors.New("campaign stats count does not match")
-	}
-
-	for i, c := range meta {
-		if c.CampaignID == camps[i].ID {
-			camps[i].Lists = c.Lists
-			camps[i].Views = c.Views
-			camps[i].Clicks = c.Clicks
-			camps[i].Bounces = c.Bounces
-			camps[i].Media = c.Media
-		}
-	}
-
-	return nil
 }
 
 // CompileTemplate compiles a campaign body template into its base

@@ -14,7 +14,6 @@ import (
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/lib/pq"
 	"github.com/pocketbase/dbx"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	null "gopkg.in/volatiletech/null.v6"
@@ -171,15 +170,15 @@ type sqliteCampaignStatsRow struct {
 }
 
 func sqliteCampaignRowToModel(row sqliteCampaignRow) models.Campaign {
-	tags := pq.StringArray{}
+	tags := []string{}
 	if len(row.Tags) > 0 && string(row.Tags) != "null" {
 		_ = json.Unmarshal(row.Tags, &tags)
 	}
-	includeTags := pq.StringArray{}
+	includeTags := []string{}
 	if len(row.IncludeTags) > 0 && string(row.IncludeTags) != "null" {
 		_ = json.Unmarshal(row.IncludeTags, &includeTags)
 	}
-	excludeTags := pq.StringArray{}
+	excludeTags := []string{}
 	if len(row.ExcludeTags) > 0 && string(row.ExcludeTags) != "null" {
 		_ = json.Unmarshal(row.ExcludeTags, &excludeTags)
 	}
@@ -330,6 +329,91 @@ func sqliteCampaignRowsToModels(rows []sqliteCampaignRow) models.Campaigns {
 		out = append(out, sqliteCampaignRowToModel(row))
 	}
 	return out
+}
+
+func (c *Core) attachCampaignStats(camps models.Campaigns) error {
+	if len(camps) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(camps))
+	idx := make(map[string]int, len(camps))
+	for i, camp := range camps {
+		if camp.RecordID == "" {
+			continue
+		}
+		idx[camp.RecordID] = i
+		ids = append(ids, camp.RecordID)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	ph := sqlitePlaceholders(len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+
+	type viewRow struct {
+		CampaignID     string `db:"campaign_id"`
+		Views          int    `db:"views"`
+		RawViews       int    `db:"raw_views"`
+		SuspectedViews int    `db:"suspected_views"`
+	}
+	var views []viewRow
+	if err := c.db.Select(&views, `
+		SELECT cv.campaign_id,
+			`+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0")+` AS views,
+			`+sqliteUniqueCampaignViewsExpr("cv", "")+` AS raw_views,
+			`+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1")+` AS suspected_views
+		FROM campaign_views cv
+		WHERE cv.campaign_id IN (`+ph+`)
+		GROUP BY cv.campaign_id
+	`, args...); err != nil {
+		return err
+	}
+	for _, row := range views {
+		i, ok := idx[row.CampaignID]
+		if !ok {
+			continue
+		}
+		camps[i].Views = row.Views
+		camps[i].RawViews = row.RawViews
+		camps[i].SuspectedViews = row.SuspectedViews
+	}
+
+	type countRow struct {
+		CampaignID string `db:"campaign_id"`
+		Count      int    `db:"count"`
+	}
+	var clicks []countRow
+	if err := c.db.Select(&clicks, `
+		SELECT campaign_id, COUNT(*) AS count
+		FROM link_clicks
+		WHERE campaign_id IN (`+ph+`)
+		GROUP BY campaign_id
+	`, args...); err != nil {
+		return err
+	}
+	for _, row := range clicks {
+		if i, ok := idx[row.CampaignID]; ok {
+			camps[i].Clicks = row.Count
+		}
+	}
+	var bounces []countRow
+	if err := c.db.Select(&bounces, `
+		SELECT campaign_id, COUNT(*) AS count
+		FROM bounces
+		WHERE campaign_id IN (`+ph+`)
+		GROUP BY campaign_id
+	`, args...); err != nil {
+		return err
+	}
+	for _, row := range bounces {
+		if i, ok := idx[row.CampaignID]; ok {
+			camps[i].Bounces = row.Count
+		}
+	}
+	return nil
 }
 
 func sqliteCampaignStatsRowsToModels(rows []sqliteCampaignStatsRow) []models.CampaignStats {
@@ -508,11 +592,11 @@ func (c *Core) UpdateCampaignStatus(recordID string, status string) (models.Camp
 	if err != nil {
 		c.log.Printf("error updating campaign status: %v", err)
 
-		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	if n, _ := res.RowsAffected(); n == 0 {
-		return models.Campaign{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return models.Campaign{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	cm.Status = status
@@ -575,17 +659,17 @@ func (c *Core) ResolveCampaignLedgerInflight(recordID, action string) (CampaignL
 		n, err = campaignledger.MarkInflightSent(c.db, recordID)
 		if err != nil {
 			c.log.Printf("error marking campaign ledger inflight as sent (%s): %v", recordID, err)
-			return res, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+			return res, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 		}
 		if err := campaignledger.FinalizeCampaignStats(c.db, cm.ID, recordID); err != nil {
 			c.log.Printf("error finalizing campaign stats after mark-sent (%s): %v", recordID, err)
-			return res, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+			return res, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 		}
 	case CampaignLedgerInflightActionResetPending:
 		n, err = campaignledger.ResetInflight(c.db, recordID)
 		if err != nil {
 			c.log.Printf("error resetting campaign ledger inflight (%s): %v", recordID, err)
-			return res, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+			return res, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 		}
 	default:
 		return res, apperr.BadRequest("invalid action; expected 'mark_sent' or 'reset_pending'")
@@ -621,7 +705,7 @@ func (c *Core) PreviewCampaignRecover(recordID string) (CampaignRecoverResult, e
 	stats, err := campaignledger.RecoveryStats(c.db, recordID)
 	if err != nil {
 		c.log.Printf("error previewing campaign recovery (%s): %v", recordID, err)
-		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	return CampaignRecoverResult{
 		RecoverStats: stats,
@@ -641,14 +725,14 @@ func (c *Core) RecoverCampaign(recordID string) (CampaignRecoverResult, error) {
 	ctx := context.Background()
 	tx, err := c.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	defer tx.Rollback()
 
 	stats, err := campaignledger.RecoverMissing(tx, cm.ID, recordID)
 	if err != nil {
 		c.log.Printf("error recovering campaign ledger (%s): %v", recordID, err)
-		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	if _, err := tx.ExecContext(ctx, `
@@ -659,11 +743,11 @@ UPDATE campaigns SET
   updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
 WHERE id = ?`, recordID); err != nil {
 		c.log.Printf("error starting recovered campaign (%s): %v", recordID, err)
-		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	if err := tx.Commit(); err != nil {
-		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return CampaignRecoverResult{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	updated, err := c.GetCampaign(recordID, "", "")
@@ -689,7 +773,7 @@ func (c *Core) UpdateCampaignArchive(recordID string, enabled bool, tplID string
 		WHERE id=?`,
 		enabled, archiveSlug, archiveSlug, tplID, tplID, string(metaJSON), string(metaJSON), recordID); err != nil {
 		c.log.Printf("error updating campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	return nil
 }
@@ -702,37 +786,37 @@ func (c *Core) DeleteCampaign(recordID string) error {
 
 	if _, err := c.db.Exec(`DELETE FROM campaign_lists WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM campaign_media WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM campaign_views WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM link_clicks WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM bounces WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM campaign_unsubscribes WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if _, err := c.db.Exec(`DELETE FROM campaign_send_ledger WHERE campaign_id = ?`, recordID); err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	res, err := c.db.Exec(`DELETE FROM campaigns WHERE id = ?`, recordID)
 	if err != nil {
 		c.log.Printf("error deleting campaign: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
@@ -774,7 +858,7 @@ func (c *Core) DeleteCampaigns(recordIDs []string, query string, hasAllPerm bool
 
 		if err := c.db.Select(&targetRecordIDs, q, args...); err != nil {
 			c.log.Printf("error deleting campaigns: %v", err)
-			return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaigns}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.campaigns}", "error", dbErr(err)))
 		}
 	}
 
@@ -804,7 +888,7 @@ func (c *Core) CampaignHasLists(recordID string, listIDs []int) (bool, error) {
 	has := false
 	if err := c.db.Get(&has, q, args...); err != nil {
 		c.log.Printf("error checking campaign lists: %v", err)
-		return false, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return false, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	return has, nil
 }
@@ -817,7 +901,7 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		'' AS template_body,
 		'' AS template_type,
-		COUNT(*) OVER() AS total,
+		0 AS total,
 		COALESCE((
 			SELECT json_group_array(json_object('id', COALESCE(l.id, cl.list_id), 'name', cl.list_name))
 			FROM campaign_lists cl
@@ -830,11 +914,11 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 			LEFT JOIN media m ON m.id = cm.media_id
 			WHERE cm.campaign_id = c.id
 		), '[]') AS media,
-		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
-		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS raw_views,
-		(SELECT ` + sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1") + ` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS suspected_views,
-		(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
-		(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
+		0 AS views,
+		0 AS raw_views,
+		0 AS suspected_views,
+		0 AS clicks,
+		0 AS bounces
 	FROM campaigns c
 	LEFT JOIN templates tpl ON tpl.id = c.template_id
 	LEFT JOIN templates atpl ON atpl.id = c.archive_template_id
@@ -877,6 +961,9 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 		}
 	}
 
+	whereSQL := query[strings.Index(query, "WHERE 1=1"):]
+	countArgs := append([]any{}, args...)
+
 	orderMap := map[string]string{
 		"id":         "c.rowid",
 		"name":       "c.name",
@@ -892,19 +979,28 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 	if order != SortAsc && order != SortDesc {
 		order = SortDesc
 	}
-	query += ` ORDER BY ` + sortCol + ` ` + strings.ToUpper(order) + ` LIMIT ? OFFSET ?`
-	args = append(args, limit, offset)
+	query += ` ORDER BY ` + sortCol + ` ` + strings.ToUpper(order)
+	if limit > 0 {
+		query += ` LIMIT ? OFFSET ?`
+		args = append(args, limit, offset)
+	}
 
 	rows := []sqliteCampaignRow{}
 	if err := c.db.Select(&rows, query, args...); err != nil {
 		c.log.Printf("error fetching campaigns: %v", err)
-		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	out := sqliteCampaignRowsToModels(rows)
+	if err := c.attachCampaignStats(out); err != nil {
+		c.log.Printf("error fetching campaign stats: %v", err)
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
+	}
+
 	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
+	if err := c.db.Get(&total, `SELECT COUNT(*) FROM campaigns c `+whereSQL, countArgs...); err != nil {
+		c.log.Printf("error counting campaigns: %v", err)
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	return out, total, nil
 }
@@ -974,7 +1070,7 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 			return models.Campaign{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
 		}
 		c.log.Printf("error fetching campaign: %v", err)
-		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	return sqliteCampaignRowToModel(row), nil
@@ -1012,7 +1108,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 			return models.Campaign{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{globals.terms.campaign}"))
 		}
 		c.log.Printf("error fetching campaign: %v", err)
-		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	return sqliteCampaignRowToModel(row), nil
@@ -1021,7 +1117,7 @@ func (c *Core) getCampaignForPreviewSQLite(recordID string, tplID string) (model
 func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, int, error) {
 	rows := []sqliteCampaignRow{}
 	if err := c.db.Select(&rows, `
-		SELECT COUNT(*) OVER() AS total, c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
+		SELECT 0 AS total, c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
 			c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
 			c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 			atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
@@ -1043,11 +1139,11 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			) AS template_type,
 			'[]' AS lists,
 			'[]' AS media,
-			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 0")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS views,
-			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS raw_views,
-			(SELECT `+sqliteUniqueCampaignViewsExpr("cv", "COALESCE(cv.is_suspected_privacy_open, 0) = 1")+` FROM campaign_views cv WHERE cv.campaign_id = c.id) AS suspected_views,
-			(SELECT COUNT(*) FROM link_clicks lc WHERE lc.campaign_id = c.id) AS clicks,
-			(SELECT COUNT(*) FROM bounces b WHERE b.campaign_id = c.id) AS bounces
+			0 AS views,
+			0 AS raw_views,
+			0 AS suspected_views,
+			0 AS clicks,
+			0 AS bounces
 		FROM campaigns c
 		LEFT JOIN templates tpl ON tpl.id = c.template_id
 		LEFT JOIN templates atpl ON atpl.id = c.archive_template_id
@@ -1057,13 +1153,21 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 		LIMIT ? OFFSET ?
 	`, limit, offset); err != nil {
 		c.log.Printf("error fetching public campaigns: %v", err)
-		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	out := sqliteCampaignRowsToModels(rows)
+	if err := c.attachCampaignStats(out); err != nil {
+		c.log.Printf("error fetching campaign stats: %v", err)
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
+	}
 	total := 0
-	if len(out) > 0 {
-		total = out[0].Total
+	if err := c.db.Get(&total, `
+		SELECT COUNT(*) FROM campaigns c
+		WHERE c.archive = 1 AND c.type = 'regular' AND c.status IN ('running', 'paused', 'finished')
+	`); err != nil {
+		c.log.Printf("error counting public campaigns: %v", err)
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	return out, total, nil
 }
@@ -1243,7 +1347,7 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaRecor
 		return nil
 	}); err != nil {
 		c.log.Printf("error creating campaign: %v", err)
-		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	c.log.Printf("create campaign sqlite: committed name=%q uuid=%q", o.Name, uu.String())
 
@@ -1381,7 +1485,7 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 		return nil
 	}); err != nil {
 		c.log.Printf("error updating campaign: %v", err)
-		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return models.Campaign{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	if err := c.sqliteUpdateCampaignToSendEstimate(recordID, o.Type); err != nil {
 		return models.Campaign{}, err
@@ -1477,7 +1581,7 @@ func (c *Core) GetRunningCampaignStats() ([]models.CampaignStats, error) {
 		}
 
 		c.log.Printf("error fetching campaign stats: %v", err)
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	} else if len(rows) == 0 {
 		return nil, nil
 	}
@@ -1527,7 +1631,7 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 			return nil
 		}
 		c.log.Printf("error resolving campaign view target: %s", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 
 	startedAt := time.Time{}
@@ -1555,7 +1659,7 @@ func (c *Core) RegisterCampaignView(campUUID, subUUID string, event models.OpenE
 		VALUES (?, ?, ?, ?, ?)
 	`, row.CampaignID, row.SubscriberID, meta, suspected, sqliteTimestampValue(event.OpenedAt)); err != nil {
 		c.log.Printf("error registering campaign view: %s", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.campaign}", "error", dbErr(err)))
 	}
 	return nil
 }
@@ -1755,7 +1859,7 @@ func (c *Core) getCampaignAnalyticsCountsSQLite(campRecordIDs []string, typ, fro
 	}
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching campaign %s: %v", typ, err)
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", dbErr(err)))
 	}
 
 	type groupedKey struct {
@@ -1862,7 +1966,7 @@ func (c *Core) getCampaignAnalyticsLinksSQLite(campRecordIDs []string, fromDate,
 	out := []models.CampaignAnalyticsLink{}
 	if err := c.db.Select(&out, q, args...); err != nil {
 		c.log.Printf("error fetching campaign links: %v", err)
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.analytics}", "error", dbErr(err)))
 	}
 	return out, nil
 }

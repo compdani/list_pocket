@@ -69,7 +69,7 @@ func (c *Core) BulkUpdateSubscribersByEmail(emails, tagsAdd, tagsRemove, listRem
 		n, err := c.deleteSubscriptionsSQLite(subIDs, listRemoveIDs)
 		if err != nil {
 			c.log.Printf("error removing bulk subscriptions: %v", err)
-			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 		}
 		result.ListsRemoved = n
 	}
@@ -82,7 +82,7 @@ func (c *Core) BulkUpdateSubscribersByEmail(emails, tagsAdd, tagsRemove, listRem
 		n, err := c.upsertSubscriptionsSQLite(subIDs, listUpdateIDs, subStatus)
 		if err != nil {
 			c.log.Printf("error upserting bulk subscriptions: %v", err)
-			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 		}
 		result.ListsUpdated = n
 	}
@@ -123,7 +123,7 @@ func (c *Core) lookupSubscribersByEmails(emails []string) (models.Subscribers, i
 	q := `SELECT rowid AS id, id AS record_id, created AS created_at, updated AS updated_at, uuid, email, phone, first_name, last_name, name, attribs, status FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(unique)) + `) ORDER BY rowid`
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching subscribers by email: %v", err)
-		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
 
 	found := make(map[string]struct{}, len(rows))

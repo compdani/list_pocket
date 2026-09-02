@@ -1,14 +1,13 @@
 package core
 
 import (
-	"database/sql"
 	"encoding/json"
-	"github.com/compdani/list_pocket/internal/apperr"
+	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/jmoiron/sqlx/types"
 )
 
@@ -19,6 +18,11 @@ func (c *Core) GetDashboardCharts(timeZone string) (types.JSONText, error) {
 
 // GetDashboardCounts returns stats counts to show on the dashboard.
 func (c *Core) GetDashboardCounts() (types.JSONText, error) {
+	if c.consts.CacheSlowQueries {
+		if cached, ok := c.readCachedJSON(cacheKeyDashboardCounts); ok {
+			return cached, nil
+		}
+	}
 	return c.getDashboardCountsSQLite()
 }
 
@@ -36,130 +40,95 @@ func (c *Core) getDashboardChartsSQLite(timeZone string) (types.JSONText, error)
 	nowLocal := time.Now().In(loc)
 	endLocal := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 23, 59, 59, 0, loc)
 	startLocal := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -30)
-	const tsFmt = "2006-01-02 15:04:05"
+	const tsFmt = "2006-01-02 15:04:05.000Z"
 	startUTC := startLocal.UTC().Format(tsFmt)
 	endUTC := endLocal.UTC().Format(tsFmt)
+	tzOff := sqliteTZOffset(loc)
 
-	type clickRow struct {
-		Created string `db:"created"`
+	type dayCount struct {
+		Day   string `db:"day"`
+		Count int    `db:"count"`
 	}
-	var clicks []clickRow
+	var clicks []dayCount
 	if err := c.db.Select(&clicks, `
-		SELECT created
+		SELECT strftime('%Y-%m-%d', created, ?) AS day, COUNT(*) AS count
 		FROM link_clicks
-		WHERE datetime(created) >= datetime(?) AND datetime(created) <= datetime(?)`, startUTC, endUTC); err != nil {
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
+		WHERE created >= ? AND created <= ?
+		GROUP BY day
+		ORDER BY day`, tzOff, startUTC, endUTC); err != nil {
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", dbErr(err)))
 	}
 
-	type viewRow struct {
-		RowID      int64          `db:"rowid"`
-		CampaignID string         `db:"campaign_id"`
-		Subscriber sql.NullString `db:"subscriber_id"`
-		Suspected  int            `db:"suspected"`
-		Created    string         `db:"created"`
+	type viewDay struct {
+		Day             string `db:"day"`
+		RawAll          int    `db:"raw_all"`
+		RawUnique       int    `db:"raw_unique"`
+		ConfirmedUnique int    `db:"confirmed_unique"`
+		SuspectedUnique int    `db:"suspected_unique"`
 	}
-	var views []viewRow
+	ident := `campaign_id || ':' || COALESCE(CAST(subscriber_id AS TEXT), 'anon:' || rowid)`
+	var views []viewDay
 	if err := c.db.Select(&views, `
-		SELECT rowid, campaign_id, subscriber_id, COALESCE(is_suspected_privacy_open, 0) AS suspected, created
+		SELECT strftime('%Y-%m-%d', created, ?) AS day,
+			COUNT(*) AS raw_all,
+			COUNT(DISTINCT `+ident+`) AS raw_unique,
+			COUNT(DISTINCT CASE WHEN COALESCE(is_suspected_privacy_open, 0) = 0 THEN `+ident+` END) AS confirmed_unique,
+			COUNT(DISTINCT CASE WHEN COALESCE(is_suspected_privacy_open, 0) = 1 THEN `+ident+` END) AS suspected_unique
 		FROM campaign_views
-		WHERE datetime(created) >= datetime(?) AND datetime(created) <= datetime(?)`, startUTC, endUTC); err != nil {
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
-	}
-
-	linkClicksByDay := map[string]int{}
-	for _, row := range clicks {
-		t, err := parseDashboardTimestamp(row.Created)
-		if err != nil {
-			continue
-		}
-		day := t.In(loc).Format("2006-01-02")
-		linkClicksByDay[day]++
-	}
-
-	confirmedUniqueByDay := map[string]int{}
-	rawUniqueByDay := map[string]int{}
-	rawAllByDay := map[string]int{}
-	suspectedUniqueByDay := map[string]int{}
-	confirmedSeen := map[string]struct{}{}
-	rawSeen := map[string]struct{}{}
-	suspectedSeen := map[string]struct{}{}
-
-	for _, row := range views {
-		t, err := parseDashboardTimestamp(row.Created)
-		if err != nil {
-			continue
-		}
-		day := t.In(loc).Format("2006-01-02")
-		rawAllByDay[day]++
-
-		identity := ""
-		if row.Subscriber.Valid {
-			identity = row.CampaignID + ":sub:" + row.Subscriber.String
-		} else {
-			identity = row.CampaignID + ":anon:" + stringInt64(row.RowID)
-		}
-		key := day + "|" + identity
-
-		if _, ok := rawSeen[key]; !ok {
-			rawSeen[key] = struct{}{}
-			rawUniqueByDay[day]++
-		}
-
-		if row.Suspected == 1 {
-			if _, ok := suspectedSeen[key]; !ok {
-				suspectedSeen[key] = struct{}{}
-				suspectedUniqueByDay[day]++
-			}
-			continue
-		}
-
-		if _, ok := confirmedSeen[key]; !ok {
-			confirmedSeen[key] = struct{}{}
-			confirmedUniqueByDay[day]++
-		}
+		WHERE created >= ? AND created <= ?
+		GROUP BY day
+		ORDER BY day`, tzOff, startUTC, endUTC); err != nil {
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", dbErr(err)))
 	}
 
 	type chartPoint struct {
 		Count int    `json:"count"`
 		Date  string `json:"date"`
 	}
-	toPoints := func(m map[string]int) []chartPoint {
-		dates := make([]string, 0, len(m))
-		for day := range m {
-			dates = append(dates, day)
+	toPoints := func(rows []dayCount) []chartPoint {
+		out := make([]chartPoint, 0, len(rows))
+		for _, r := range rows {
+			if strings.TrimSpace(r.Day) == "" {
+				continue
+			}
+			out = append(out, chartPoint{Count: r.Count, Date: r.Day})
 		}
-		sort.Strings(dates)
-		out := make([]chartPoint, 0, len(dates))
-		for _, day := range dates {
-			out = append(out, chartPoint{Count: m[day], Date: day})
+		return out
+	}
+	viewPoints := func(pick func(viewDay) int) []chartPoint {
+		out := make([]chartPoint, 0, len(views))
+		for _, r := range views {
+			if strings.TrimSpace(r.Day) == "" {
+				continue
+			}
+			out = append(out, chartPoint{Count: pick(r), Date: r.Day})
 		}
+		sort.Slice(out, func(i, j int) bool { return out[i].Date < out[j].Date })
 		return out
 	}
 
 	payload := map[string]any{
-		"link_clicks":              toPoints(linkClicksByDay),
-		"campaign_views":           toPoints(confirmedUniqueByDay),
-		"campaign_views_all_raw":   toPoints(rawAllByDay),
-		"campaign_views_raw":       toPoints(rawUniqueByDay),
-		"campaign_views_suspected": toPoints(suspectedUniqueByDay),
+		"link_clicks":              toPoints(clicks),
+		"campaign_views":           viewPoints(func(r viewDay) int { return r.ConfirmedUnique }),
+		"campaign_views_all_raw":   viewPoints(func(r viewDay) int { return r.RawAll }),
+		"campaign_views_raw":       viewPoints(func(r viewDay) int { return r.RawUnique }),
+		"campaign_views_suspected": viewPoints(func(r viewDay) int { return r.SuspectedUnique }),
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard charts", "error", dbErr(err)))
 	}
 	return types.JSONText(b), nil
 }
 
-func stringInt64(v int64) string {
-	return strconv.FormatInt(v, 10)
-}
-
-func parseDashboardTimestamp(value string) (time.Time, error) {
-	normalized, err := normalizeAnalyticsDateInput(value, false)
-	if err != nil {
-		return time.Time{}, err
+func sqliteTZOffset(loc *time.Location) string {
+	_, off := time.Now().In(loc).Zone()
+	sign := "+"
+	if off < 0 {
+		sign = "-"
+		off = -off
 	}
-	return time.Parse("2006-01-02 15:04:05", normalized)
+	return fmt.Sprintf("%s%02d:%02d", sign, off/3600, (off%3600)/60)
 }
 
 func (c *Core) getDashboardCountsSQLite() (types.JSONText, error) {
@@ -197,7 +166,7 @@ func (c *Core) getDashboardCountsSQLite() (types.JSONText, error) {
 
 	var out types.JSONText
 	if err := c.db.Get(&out, q); err != nil {
-		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard stats", "error", pqErrMsg(err)))
+		return nil, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "dashboard stats", "error", dbErr(err)))
 	}
 
 	return out, nil

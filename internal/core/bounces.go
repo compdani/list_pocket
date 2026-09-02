@@ -64,7 +64,7 @@ func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, of
 	if campID > 0 {
 		recordIDs, err := c.ResolveCampaignRecordIDs([]int{campID})
 		if err != nil {
-			return nil, 0, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
+			return nil, 0, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", dbErr(err)))
 		}
 		if len(recordIDs) > 0 {
 			campRecordID = recordIDs[0]
@@ -74,7 +74,7 @@ func (c *Core) QueryBounces(campID, subID int, source, orderBy, order string, of
 	if subID > 0 {
 		recordIDs, err := c.ResolveSubscriberRecordIDs([]int{subID})
 		if err != nil {
-			return nil, 0, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", pqErrMsg(err)))
+			return nil, 0, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", dbErr(err)))
 		}
 		if len(recordIDs) > 0 {
 			subRecordID = recordIDs[0]
@@ -134,7 +134,7 @@ func (c *Core) DeleteBounces(ids []string, all bool) error {
 	if all {
 		if _, err := c.db.Exec(`DELETE FROM bounces`); err != nil {
 			c.log.Printf("error deleting bounces: %v", err)
-			return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", dbErr(err)))
 		}
 		return nil
 	}
@@ -150,7 +150,7 @@ func (c *Core) DeleteBounces(ids []string, all bool) error {
 	}
 	if _, err := c.db.Exec(q, args...); err != nil {
 		c.log.Printf("error deleting bounces: %v", err)
-		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", pqErrMsg(err)))
+		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{globals.terms.list}", "error", dbErr(err)))
 	}
 	return nil
 }
@@ -223,7 +223,7 @@ func (c *Core) queryBouncesSQLite(campRecordID, subRecordID, source, orderBy, or
 	rows := []sqliteBounceRow{}
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error fetching bounces: %v", err)
-		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.bounce}", "error", pqErrMsg(err)))
+		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.bounce}", "error", dbErr(err)))
 	}
 
 	out := make([]models.Bounce, 0, len(rows))

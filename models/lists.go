@@ -1,7 +1,6 @@
 package models
 
 import (
-	"github.com/lib/pq"
 	null "gopkg.in/volatiletech/null.v6"
 )
 
@@ -18,19 +17,19 @@ const (
 type List struct {
 	Base
 
-	UUID             string         `db:"uuid" json:"uuid"`
-	Name             string         `db:"name" json:"name"`
-	Type             string         `db:"type" json:"type"`
-	Optin            string         `db:"optin" json:"optin"`
-	Status           string         `db:"status" json:"status"`
-	Tags             pq.StringArray `db:"tags" json:"tags"`
-	Description      string         `db:"description" json:"description"`
-	SubscriberCount  int            `db:"subscriber_count" json:"subscriber_count"`
-	SubscriberCounts StringIntMap   `db:"subscriber_statuses" json:"subscriber_statuses"`
-	SubscriberID     int            `db:"subscriber_id" json:"-"`
+	UUID             string       `db:"uuid" json:"uuid"`
+	Name             string       `db:"name" json:"name"`
+	Type             string       `db:"type" json:"type"`
+	Optin            string       `db:"optin" json:"optin"`
+	Status           string       `db:"status" json:"status"`
+	Tags             []string     `db:"tags" json:"tags"`
+	Description      string       `db:"description" json:"description"`
+	SubscriberCount  int          `db:"subscriber_count" json:"subscriber_count"`
+	SubscriberCounts StringIntMap `db:"subscriber_statuses" json:"subscriber_statuses"`
+	SubscriberID     int          `db:"subscriber_id" json:"-"`
 
 	// This is only relevant when querying the lists of a subscriber.
-	SubscriptionStatus    string    `db:"subscription_status" json:"subscription_status,omitempty"`
+	SubscriptionStatus string `db:"subscription_status" json:"subscription_status,omitempty"`
 	// SMS marketing consent for this list membership (mirrors subscription_status when sms_status is unset).
 	SubscriptionSmsStatus string    `db:"subscription_sms_status" json:"subscription_sms_status,omitempty"`
 	SubscriptionCreatedAt null.Time `db:"subscription_created_at" json:"subscription_created_at,omitempty"`
