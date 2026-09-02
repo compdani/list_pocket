@@ -308,7 +308,7 @@
     "lists.types.public": "パブリック",
     "logs.title": "ログ",
     "maintenance.database.title": "データベース",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE は削除された行が使用するストレージを回収し、大規模データベースのデータベースパフォーマンスを大幅に向上させます。重要: 大規模データベースの場合、これは遅くブロッキング操作です。ピーク時以外に実行するようにスケジュールしてください。",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE は削除された行が使用するストレージを回収し、大規模データベースのデータベースパフォーマンスを大幅に向上させます。重要: 大規模データベースの場合、これは遅くブロッキング操作です。ピーク時以外に実行するようにスケジュールしてください。",
     "maintenance.help": "データ量によりアクション完了するまでの時間が変わります。",
     "maintenance.maintenance.unconfirmedOptins": "未確認オプトインサブスクリプション",
     "maintenance.olderThan": "より古い",

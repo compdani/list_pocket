@@ -89,7 +89,9 @@ func (a *App) BulkUpdateSubscribers(re *pbcore.RequestEvent) error {
 	}
 
 	if resultMatchedOrChanged(result) {
-		_ = a.core.RefreshMatViews(true)
+		if err := a.core.RefreshMatViews(true); err != nil {
+			lo.Printf("error refreshing slow query cache: %v", err)
+		}
 	}
 
 	return okJSON(re, bulkContactResp{
@@ -155,7 +157,9 @@ func (a *App) BulkAddSubscribers(re *pbcore.RequestEvent) error {
 	}
 
 	if bulkAddChanged(result) {
-		_ = a.core.RefreshMatViews(true)
+		if err := a.core.RefreshMatViews(true); err != nil {
+			lo.Printf("error refreshing slow query cache: %v", err)
+		}
 	}
 
 	return okJSON(re, bulkContactResp{

@@ -308,7 +308,7 @@
     "lists.types.public": "Públic",
     "logs.title": "Registres",
     "maintenance.database.title": "Base de dades",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE recupera l'emmagatzematge utilitzat per les files eliminades i accelera significativament el rendiment de la base de dades en bases de dades grans. IMPORTANT: Per a bases de dades grans, aquesta és una operació lenta i bloquejant. Programa-la per executar-se durant les hores de poca activitat.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE recupera l'emmagatzematge utilitzat per les files eliminades i accelera significativament el rendiment de la base de dades en bases de dades grans. IMPORTANT: Per a bases de dades grans, aquesta és una operació lenta i bloquejant. Programa-la per executar-se durant les hores de poca activitat.",
     "maintenance.help": "Algunes accions poden trigar una estona a completar-se en funció de la quantitat de dades.",
     "maintenance.maintenance.unconfirmedOptins": "Subscripcions opt-in no confirmades",
     "maintenance.olderThan": "Més antic de",

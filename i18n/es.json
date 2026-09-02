@@ -308,7 +308,7 @@
     "lists.types.public": "Pública",
     "logs.title": "Registros",
     "maintenance.database.title": "Base de datos",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE recupera el almacenamiento utilizado por filas eliminadas y aumenta significativamente el rendimiento de la base de datos en bases de datos grandes. IMPORTANTE: Para bases de datos grandes, esta es una operación lenta y bloqueante. Programa para ejecutarla durante horas de menor actividad.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE recupera el almacenamiento utilizado por filas eliminadas y aumenta significativamente el rendimiento de la base de datos en bases de datos grandes. IMPORTANTE: Para bases de datos grandes, esta es una operación lenta y bloqueante. Programa para ejecutarla durante horas de menor actividad.",
     "maintenance.help": "Algunas acciones pueden tardar más tiempo dependiendo de la cantidad de datos a procesar.",
     "maintenance.maintenance.unconfirmedOptins": "Suscripciones opt-in no confirmadas",
     "maintenance.olderThan": "Más viejo que",

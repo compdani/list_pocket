@@ -41,6 +41,34 @@ export default defineConfig(({ _, mode }) => {
     },
     build: {
       assetsDir: 'static',
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) {
+              return undefined;
+            }
+            if (id.includes('tinymce')) {
+              return 'tinymce';
+            }
+            if (id.includes('grapesjs')) {
+              return 'grapesjs';
+            }
+            if (id.includes('@codemirror') || id.includes('/codemirror/')) {
+              return 'codemirror';
+            }
+            if (id.includes('@vue-flow')) {
+              return 'vue-flow';
+            }
+            if (id.includes('chart.js') || id.includes('vue-chartjs')) {
+              return 'charts';
+            }
+            if (id.includes('vuetify')) {
+              return 'vuetify';
+            }
+            return undefined;
+          },
+        },
+      },
     },
     server: {
       port: env.LISTPOCKET_FRONTEND_PORT || 8080,

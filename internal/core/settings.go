@@ -43,7 +43,22 @@ func (c *Core) UpdateSettings(s models.Settings) error {
 		return apperr.Internal(c.i18n.Ts("settings.errorEncoding", "error", err.Error()))
 	}
 
-	// Update the settings in the DB.
+	if c.getSettings != nil {
+		if existing, err := c.getSettings(); err == nil && len(existing) > 0 {
+			var oldMap, newMap map[string]json.RawMessage
+			if json.Unmarshal(existing, &oldMap) == nil && json.Unmarshal(b, &newMap) == nil {
+				for k, v := range oldMap {
+					if _, ok := newMap[k]; !ok {
+						newMap[k] = v
+					}
+				}
+				if merged, err := json.Marshal(newMap); err == nil {
+					b = merged
+				}
+			}
+		}
+	}
+
 	if c.setSettings != nil {
 		if err := c.setSettings(b); err != nil {
 			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.settings}", "error", dbErr(err)))

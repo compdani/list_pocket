@@ -308,7 +308,7 @@
     "lists.types.public": "Publiczna",
     "logs.title": "Logi",
     "maintenance.database.title": "Baza danych",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE odzyskuje pamięć zajętą przez usunięte wiersze i znacznie przyspiesza wydajność bazy danych na dużych bazach. WAŻNE: Dla dużych baz danych jest to powolna operacja blokująca. Zaplanuj jej uruchomienie w godzinach szczytu.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE odzyskuje pamięć zajętą przez usunięte wiersze i znacznie przyspiesza wydajność bazy danych na dużych bazach. WAŻNE: Dla dużych baz danych jest to powolna operacja blokująca. Zaplanuj jej uruchomienie w godzinach szczytu.",
     "maintenance.help": "Niektóre akcje mogą zająć dłużej, w zależności od ilości danych.",
     "maintenance.maintenance.unconfirmedOptins": "Niepotwierdzone subskrypcje opt-in.",
     "maintenance.olderThan": "Starsze niż",

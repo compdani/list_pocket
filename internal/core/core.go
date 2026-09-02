@@ -36,6 +36,8 @@ type Core struct {
 	getSettings      func() (types.JSONText, error)
 	setSettings      func(types.JSONText) error
 	setSettingsByKey func(string, json.RawMessage) error
+
+	stats statsCacheMem
 }
 
 // Constants represents constant config.

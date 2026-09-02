@@ -308,7 +308,7 @@
     "lists.types.public": "Publiek",
     "logs.title": "Logboeken",
     "maintenance.database.title": "Database",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE geeft opslag vrij die door verwijderde rijen wordt gebruikt en versnelt de databaseprestaties op grote databases aanzienlijk. BELANGRIJK: Voor grote databases is dit een langzame, blokkeringsbewerking. Plan dit in om te draaien tijdens buiten kantooruren.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE geeft opslag vrij die door verwijderde rijen wordt gebruikt en versnelt de databaseprestaties op grote databases aanzienlijk. BELANGRIJK: Voor grote databases is dit een langzame, blokkeringsbewerking. Plan dit in om te draaien tijdens buiten kantooruren.",
     "maintenance.help": "Sommige acties duren mogelijk even voordat ze afgerond zijn afhankelijk van de hoeveelheid data.",
     "maintenance.maintenance.unconfirmedOptins": "Onbevestigde opt-in abonnementen ",
     "maintenance.olderThan": "Ouder dan",

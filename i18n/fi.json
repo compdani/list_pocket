@@ -308,7 +308,7 @@
     "lists.types.public": "Julkinen",
     "logs.title": "Lokit",
     "maintenance.database.title": "Tietokanta",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE vapauttaa poistettujen rivien käyttämää tallennustilaa ja merkittävästi nopeuttaa tietokannan suorituskykyä suurissa tietokannoissa. TÄRKEÄ: Suuriin tietokantoihin, tämä on hidas, estävä toiminta. Ajoita se suoritettavaksi huipputtunneista poissa olevan ajan.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE vapauttaa poistettujen rivien käyttämää tallennustilaa ja merkittävästi nopeuttaa tietokannan suorituskykyä suurissa tietokannoissa. TÄRKEÄ: Suuriin tietokantoihin, tämä on hidas, estävä toiminta. Ajoita se suoritettavaksi huipputtunneista poissa olevan ajan.",
     "maintenance.help": "Joidenkin toimintojen suorittaminen voi kestää jonkin aikaa riippuen tiedon määrästä.",
     "maintenance.maintenance.unconfirmedOptins": "Varmentamattomat tilaukset",
     "maintenance.olderThan": "Vanhempi kuin",

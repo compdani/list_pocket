@@ -308,7 +308,7 @@
     "lists.types.public": "Erişime açık",
     "logs.title": "Günlükler",
     "maintenance.database.title": "Veritabanı",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE silinen satırlar tarafından kullanılan depolamayı geri alır ve büyük veritabanlarında veritabanı performansını önemli ölçüde hızlandırır. ÖNEMLİ: Büyük veritabanları için bu yavaş, bloklanmış bir işlemdir. Bunu yoğun saatlerin dışında çalıştırmak için planlayın.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE silinen satırlar tarafından kullanılan depolamayı geri alır ve büyük veritabanlarında veritabanı performansını önemli ölçüde hızlandırır. ÖNEMLİ: Büyük veritabanları için bu yavaş, bloklanmış bir işlemdir. Bunu yoğun saatlerin dışında çalıştırmak için planlayın.",
     "maintenance.help": "Veri miktarına bağlı olarak bazı eylemlerin tamamlanması biraz zaman alabilir.",
     "maintenance.maintenance.unconfirmedOptins": "Onaylanmamış katılım abonelikleri",
     "maintenance.olderThan": "Daha eski",

@@ -786,7 +786,7 @@
     "lists.archived": "Archived",
     "lists.archivedHelp": "Archiving hides the lists from lists page, campaigns, and public forms. It can be unarchived anytime. It is useful for hiding old and rarely used lists.",
     "maintenance.database.title": "Database",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE reclaims storage used by deleted rows and significantly speeds up database performance on large databases. IMPORTANT: For large databases, this is a slow, blocking operation. Schedule to run this during off-peak hours.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM reclaims storage used by deleted rows, and ANALYZE updates query planner statistics. Routine jobs also run PRAGMA optimize and incremental_vacuum. IMPORTANT: a full VACUUM takes an exclusive lock and can be slow on large databases. Schedule it during off-peak hours.",
     "globals.days.shortFri": "Fri",
     "globals.days.shortMon": "Mon",
     "globals.days.shortSat": "Sat",

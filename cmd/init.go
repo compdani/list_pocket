@@ -405,10 +405,10 @@ WHERE id IN (SELECT value FROM json_each(?1));
 			// Hook for triggering admin notifications and refreshing stats materialized
 			// views after a successful import.
 			PostCB: func(subject string, data any) error {
-				// Refresh cached subscriber counts and stats.
-				core.RefreshMatViews(true)
+				if err := core.RefreshMatViews(true); err != nil {
+					lo.Printf("error refreshing slow query cache after import: %v", err)
+				}
 
-				// Send admin notification.
 				notifs.NotifySystem(subject, notifs.TplImport, data, nil)
 				return nil
 			},
@@ -425,7 +425,13 @@ func initAbout(db *pbdb.DB) about {
 	runtime.ReadMemStats(&mem)
 
 	info := types.JSONText(`{}`)
-	if err := db.QueryRow(`SELECT JSON_OBJECT('version', SQLITE_VERSION(), 'size_mb', NULL) AS info`).Scan(&info); err != nil {
+	if err := db.QueryRow(`SELECT JSON_OBJECT(
+		'version', SQLITE_VERSION(),
+		'size_mb', ROUND(
+			(SELECT page_count FROM pragma_page_count()) * (SELECT page_size FROM pragma_page_size()) / 1024.0 / 1024.0,
+			2
+		)
+	) AS info`).Scan(&info); err != nil {
 		lo.Printf("WARNING: error getting database version: %v", err)
 	}
 

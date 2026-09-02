@@ -84,16 +84,23 @@ func (a *App) GCCampaignAnalytics(re *pbcore.RequestEvent) error {
 	return okJSON(re, true)
 }
 
-// RunDBVacuum runs VACUUM then ANALYZE on the SQLite database.
+// RunDBVacuum runs PRAGMA optimize, ANALYZE, incremental_vacuum, then VACUUM.
 func RunDBVacuum(db *pbdb.DB, lo *log.Logger) {
-	lo.Println("running database VACUUM")
-	if _, err := db.Exec("VACUUM"); err != nil {
-		lo.Printf("error running VACUUM: %v", err)
-		return
+	lo.Println("running database PRAGMA optimize")
+	if _, err := db.Exec("PRAGMA optimize"); err != nil {
+		lo.Printf("error running PRAGMA optimize: %v", err)
 	}
 	lo.Println("running database ANALYZE")
 	if _, err := db.Exec("ANALYZE"); err != nil {
 		lo.Printf("error running ANALYZE: %v", err)
+	}
+	lo.Println("running database incremental_vacuum")
+	if _, err := db.Exec("PRAGMA incremental_vacuum"); err != nil {
+		lo.Printf("error running PRAGMA incremental_vacuum: %v", err)
+	}
+	lo.Println("running database VACUUM")
+	if _, err := db.Exec("VACUUM"); err != nil {
+		lo.Printf("error running VACUUM: %v", err)
 		return
 	}
 	lo.Println("finished database VACUUM and ANALYZE")

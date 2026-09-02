@@ -19,11 +19,21 @@ func (c *Core) GetDashboardCharts(timeZone string) (types.JSONText, error) {
 // GetDashboardCounts returns stats counts to show on the dashboard.
 func (c *Core) GetDashboardCounts() (types.JSONText, error) {
 	if c.consts.CacheSlowQueries {
+		if cached, ok := c.memDashboardCounts(); ok {
+			return cached, nil
+		}
 		if cached, ok := c.readCachedJSON(cacheKeyDashboardCounts); ok {
+			c.setMemDashboardCounts(cached)
 			return cached, nil
 		}
 	}
-	return c.getDashboardCountsSQLite()
+	v, err, _ := c.stats.sf.Do("dashboard-counts", func() (any, error) {
+		return c.getDashboardCountsSQLite()
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(types.JSONText), nil
 }
 
 func (c *Core) getDashboardChartsSQLite(timeZone string) (types.JSONText, error) {
@@ -144,9 +154,10 @@ func (c *Core) getDashboardCountsSQLite() (types.JSONText, error) {
 			'total', COALESCE((SELECT SUM(num) FROM subs), 0),
 			'blocklisted', COALESCE((SELECT num FROM subs WHERE status='blocklisted'), 0),
 			'orphans', COALESCE((
-				SELECT COUNT(s.id) FROM subscribers s
-				LEFT JOIN subscriber_lists sl ON s.id = sl.subscriber_id
-				WHERE sl.subscriber_id IS NULL
+				SELECT COUNT(*) FROM subscribers s
+				WHERE NOT EXISTS (
+					SELECT 1 FROM subscriber_lists sl WHERE sl.subscriber_id = s.id
+				)
 			), 0)
 		),
 		'lists', json_object(

@@ -308,7 +308,7 @@
     "lists.types.public": "Public",
     "logs.title": "Loguri",
     "maintenance.database.title": "Bază de date",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE recuperează spațiul de stocare folosit de rândurile șterse și accelerează semnificativ performanța bazei de date pe baze de date mari. IMPORTANT: Pentru baze de date mari, aceasta este o operațiune lentă și blocantă. Planifică să o execuți în orele de vârf redus.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE recuperează spațiul de stocare folosit de rândurile șterse și accelerează semnificativ performanța bazei de date pe baze de date mari. IMPORTANT: Pentru baze de date mari, aceasta este o operațiune lentă și blocantă. Planifică să o execuți în orele de vârf redus.",
     "maintenance.help": "Unele acțiuni pot dura un timp pentru a finaliza în funcție de cantitatea de date.",
     "maintenance.maintenance.unconfirmedOptins": "Abonări neconfirmate de opt-in",
     "maintenance.olderThan": "Este mai mică decât",

@@ -308,7 +308,7 @@
     "lists.types.public": "Verejný",
     "logs.title": "Logy",
     "maintenance.database.title": "Databáza",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE obnovuje úložný priestor používaný vymazanými riadkami a výrazne zvyšuje výkon databázy na veľkých databázach. DÔLEŽITÉ: Pre veľké databázy ide o pomalú operáciu blokujúcu. Naplánujte spustenie počas doby nízkej aktivity.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE obnovuje úložný priestor používaný vymazanými riadkami a výrazne zvyšuje výkon databázy na veľkých databázach. DÔLEŽITÉ: Pre veľké databázy ide o pomalú operáciu blokujúcu. Naplánujte spustenie počas doby nízkej aktivity.",
     "maintenance.help": "Niektoré operácie môžu trvať dlhšie v závislosti na množstve dáť.",
     "maintenance.maintenance.unconfirmedOptins": "Nepotvrdené opt-in prihlásenia",
     "maintenance.olderThan": "Staršie než",
