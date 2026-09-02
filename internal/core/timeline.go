@@ -263,7 +263,9 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 		}, nil
 	}
 
-	pageSQL := unionSQL + ` ORDER BY datetime(occurred_at) ` + sortDir + `, event_rowid ` + sortDir + ` LIMIT ? OFFSET ?`
+	// Compound SELECTs may only ORDER BY result columns or positions. Wrap so
+	// datetime(occurred_at) is a valid expression over the union result.
+	pageSQL := `SELECT event_type, occurred_at, event_rowid, ref1, ref2 FROM (` + unionSQL + `) ORDER BY datetime(occurred_at) ` + sortDir + `, event_rowid ` + sortDir + ` LIMIT ? OFFSET ?`
 	pageArgs := append(append([]any{}, args...), limit, offset)
 	var keys []timelineKeyRow
 	if err := c.db.Select(&keys, pageSQL, pageArgs...); err != nil {

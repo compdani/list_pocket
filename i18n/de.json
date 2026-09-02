@@ -308,7 +308,7 @@
     "lists.types.public": "Öffentlich",
     "logs.title": "Protokolle",
     "maintenance.database.title": "Datenbank",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE gibt ungenutzten Speicher frei, der durch gelöschte Datensätze belegt ist, und verbessert die Leistung. WICHTIG: Der Vorgang blockiert die Datenbank für andere Zugriffe und kann bei großen Datenbanken lange dauern.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE gibt ungenutzten Speicher frei, der durch gelöschte Datensätze belegt ist, und verbessert die Leistung. WICHTIG: Der Vorgang blockiert die Datenbank für andere Zugriffe und kann bei großen Datenbanken lange dauern.",
     "maintenance.help": "Je nach Datenmenge kann es eine Weile dauern, bis einige Aktionen abgeschlossen sind.",
     "maintenance.maintenance.unconfirmedOptins": "Unbestätigte Opt-in-Abonnements",
     "maintenance.olderThan": "Älter als",

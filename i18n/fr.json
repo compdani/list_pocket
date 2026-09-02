@@ -308,7 +308,7 @@
     "lists.types.public": "Publique",
     "logs.title": "Journalisations",
     "maintenance.database.title": "Base de données",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE récupère le stockage utilisé par les lignes supprimées et améliore considérablement les performances de la base de données sur les grandes bases de données. IMPORTANT: Pour les grandes bases de données, il s'agit d'une opération lente et bloquante. Programmez son exécution pendant les heures creuses.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE récupère le stockage utilisé par les lignes supprimées et améliore considérablement les performances de la base de données sur les grandes bases de données. IMPORTANT: Pour les grandes bases de données, il s'agit d'une opération lente et bloquante. Programmez son exécution pendant les heures creuses.",
     "maintenance.help": "Certaines actions peuvent prendre un certain temps, en fonction de la quantité de données.",
     "maintenance.maintenance.unconfirmedOptins": "Abonnements sélectionnés non-confirmés",
     "maintenance.olderThan": "Plus vieux que",

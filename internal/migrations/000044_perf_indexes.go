@@ -22,12 +22,6 @@ func init() {
 		if err := add("link_clicks", "idx_clicks_created", "created", "", false); err != nil {
 			return err
 		}
-		if err := add("campaign_views", "idx_views_sub_camp", "subscriber_id, campaign_id", "", false); err != nil {
-			return err
-		}
-		if err := add("link_clicks", "idx_clicks_sub_camp", "subscriber_id, campaign_id", "", false); err != nil {
-			return err
-		}
 		if err := add("subscriber_lists", "idx_sub_lists_list_status", "list_id, status", "", false); err != nil {
 			return err
 		}
@@ -43,8 +37,6 @@ func init() {
 		}
 		_ = drop("campaign_views", "idx_views_created")
 		_ = drop("link_clicks", "idx_clicks_created")
-		_ = drop("campaign_views", "idx_views_sub_camp")
-		_ = drop("link_clicks", "idx_clicks_sub_camp")
 		_ = drop("subscriber_lists", "idx_sub_lists_list_status")
 		_ = drop("subscribers", "idx_subs_phone")
 		return nil

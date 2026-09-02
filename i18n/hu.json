@@ -308,7 +308,7 @@
     "lists.types.public": "Nyilvános",
     "logs.title": "Napló",
     "maintenance.database.title": "Adatbázis",
-    "maintenance.database.vacuumHelp": "A PostgreSQL VACUUM ANALYZE felszabadítja a törölt sorok által használt tárolót és jelentősen felgyorsítja az adatbázis teljesítményét nagy adatbázisokon. FONTOS: Nagy adatbázisoknál ez egy lassú, blokkoló művelet. Ütemezesd ezt a csúcsokon kívüli órákra.",
+    "maintenance.database.vacuumHelp": "A SQLite VACUUM / ANALYZE felszabadítja a törölt sorok által használt tárolót és jelentősen felgyorsítja az adatbázis teljesítményét nagy adatbázisokon. FONTOS: Nagy adatbázisoknál ez egy lassú, blokkoló művelet. Ütemezesd ezt a csúcsokon kívüli órákra.",
     "maintenance.help": "Az adatmennyiségtől függően egyes műveletek több időt is igénybe vehetnek.",
     "maintenance.maintenance.unconfirmedOptins": "Megerősítésre vár",
     "maintenance.olderThan": "Régebbi mint",

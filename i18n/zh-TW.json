@@ -308,7 +308,7 @@
     "lists.types.public": "公開",
     "logs.title": "日誌",
     "maintenance.database.title": "資料庫",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE 會回收已刪除資料列所使用的儲存空間，並顯著提升大型資料庫的效能。重要提示：對於大型資料庫，這是一個緩慢且會阻塞的操作。請安排在離峰時段執行。",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE 會回收已刪除資料列所使用的儲存空間，並顯著提升大型資料庫的效能。重要提示：對於大型資料庫，這是一個緩慢且會阻塞的操作。請安排在離峰時段執行。",
     "maintenance.help": "某些操作可能需要一段時間才能完成，具體取決於資料量。",
     "maintenance.maintenance.unconfirmedOptins": "尚未確認的訂閱",
     "maintenance.olderThan": "早於",

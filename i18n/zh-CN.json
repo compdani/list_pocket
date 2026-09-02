@@ -308,7 +308,7 @@
     "lists.types.public": "公开",
     "logs.title": "日志",
     "maintenance.database.title": "数据库",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE 回收已删除行使用的存储空间，并显著加快大型数据库的性能。重要提示：对于大型数据库，这是一个缓慢的阻塞操作。应在非高峰时段执行。",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE 回收已删除行使用的存储空间，并显著加快大型数据库的性能。重要提示：对于大型数据库，这是一个缓慢的阻塞操作。应在非高峰时段执行。",
     "maintenance.help": "根据数据量，某些操作可能需要一段时间才能完成。",
     "maintenance.maintenance.unconfirmedOptins": "未经确认的选择加入订阅",
     "maintenance.olderThan": "早于",

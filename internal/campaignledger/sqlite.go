@@ -28,7 +28,10 @@ import (
 	"github.com/pocketbase/pocketbase/tools/security"
 )
 
-const tableName = "campaign_send_ledger"
+const (
+	tableName         = "campaign_send_ledger"
+	ledgerInsertChunk = 5000
+)
 
 func ledgerMessageID(ledgerID string) string {
 	ledgerID = strings.TrimSpace(ledgerID)
@@ -94,42 +97,86 @@ func RecipientMembershipSQL() string {
   )`
 }
 
-func eligibleSubscriberIDs(db sqlx.ExtContext, campaignRecID string, missingOnly bool) ([]string, error) {
-	ctx := context.Background()
+func eligibleDistinctSQL(missingOnly bool) string {
 	q := `
 SELECT DISTINCT s.id
 FROM campaign_lists cl
 JOIN campaigns c ON c.id = cl.campaign_id
 JOIN lists l ON l.id = cl.list_id
 JOIN subscriber_lists sl ON sl.list_id = cl.list_id
-JOIN subscribers s ON s.id = sl.subscriber_id`
-	if missingOnly {
-		q += `
-LEFT JOIN ` + tableName + ` csl ON csl.campaign_id = c.id AND csl.subscriber_id = s.id`
-	}
-	q += `
+JOIN subscribers s ON s.id = sl.subscriber_id
 WHERE cl.campaign_id = ?
   AND s.status != 'blocklisted'`
 	q += RecipientMembershipSQL()
 	if missingOnly {
 		q += `
-  AND csl.id IS NULL`
+  AND NOT EXISTS (
+    SELECT 1 FROM ` + tableName + ` csl
+    WHERE csl.campaign_id = c.id AND csl.subscriber_id = s.id
+  )`
 	}
+	return q
+}
 
+func eligibleQueryArgs(db sqlx.ExtContext, campaignRecID string, missingOnly bool) (string, []any, error) {
 	includeTags, excludeTags, err := campaignTagFilters(db, campaignRecID)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	tagClause, tagArgs := sqliteSubscriberTagFilterClause(includeTags, excludeTags)
-	q += tagClause
-
-	var subIDs []string
 	args := []any{campaignRecID}
 	args = append(args, tagArgs...)
-	if err := sqlx.SelectContext(ctx, db, &subIDs, q, args...); err != nil {
-		return nil, err
+	return eligibleDistinctSQL(missingOnly) + tagClause, args, nil
+}
+
+func countEligibleSubscribers(db sqlx.ExtContext, campaignRecID string, missingOnly bool) (int, error) {
+	q, args, err := eligibleQueryArgs(db, campaignRecID, missingOnly)
+	if err != nil {
+		return 0, err
 	}
-	return subIDs, nil
+	var n int
+	if err := sqlx.GetContext(context.Background(), db, &n, `SELECT COUNT(*) FROM (`+q+`)`, args...); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func insertEligiblePending(db sqlx.ExtContext, campaignRecID string) (int64, error) {
+	ctx := context.Background()
+	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
+	inner, innerArgs, err := eligibleQueryArgs(db, campaignRecID, true)
+	if err != nil {
+		return 0, err
+	}
+
+	q := `
+INSERT OR IGNORE INTO ` + tableName + ` (id, campaign_id, subscriber_id, message_id, status, created, updated)
+SELECT lid, ?, subscriber_id, lid || '@listpocket.local', 'pending', ?, ?
+FROM (
+  SELECT substr(lower(hex(randomblob(8))), 1, 15) AS lid, id AS subscriber_id
+  FROM (
+    ` + inner + `
+    LIMIT ?
+  )
+)`
+
+	var inserted int64
+	for {
+		args := make([]any, 0, 4+len(innerArgs))
+		args = append(args, campaignRecID, now, now)
+		args = append(args, innerArgs...)
+		args = append(args, ledgerInsertChunk)
+		res, err := db.ExecContext(ctx, q, args...)
+		if err != nil {
+			return inserted, err
+		}
+		n, _ := res.RowsAffected()
+		inserted += n
+		if n == 0 {
+			break
+		}
+	}
+	return inserted, nil
 }
 
 // RecoveryStats calculates campaign ledger coverage without changing data.
@@ -137,17 +184,17 @@ func RecoveryStats(db sqlx.ExtContext, campaignRecID string) (RecoverStats, erro
 	ctx := context.Background()
 	out := RecoverStats{}
 
-	eligible, err := eligibleSubscriberIDs(db, campaignRecID, false)
+	eligible, err := countEligibleSubscribers(db, campaignRecID, false)
 	if err != nil {
 		return out, err
 	}
-	out.Eligible = len(eligible)
+	out.Eligible = eligible
 
-	missing, err := eligibleSubscriberIDs(db, campaignRecID, true)
+	missing, err := countEligibleSubscribers(db, campaignRecID, true)
 	if err != nil {
 		return out, err
 	}
-	out.Missing = len(missing)
+	out.Missing = missing
 
 	rows := []struct {
 		Status string `db:"status"`
@@ -179,30 +226,16 @@ GROUP BY status`, campaignRecID); err != nil {
 // who are not yet represented in the ledger, resets stranded inflight rows, and
 // reconciles campaign counters. Existing sent rows are preserved.
 func RecoverMissing(db sqlx.ExtContext, campaignRowID int, campaignRecID string) (RecoverStats, error) {
-	ctx := context.Background()
 	out, err := RecoveryStats(db, campaignRecID)
 	if err != nil {
 		return out, err
 	}
 
-	missingIDs, err := eligibleSubscriberIDs(db, campaignRecID, true)
+	inserted, err := insertEligiblePending(db, campaignRecID)
 	if err != nil {
 		return out, err
 	}
-
-	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
-	for _, sid := range missingIDs {
-		id := security.RandomString(15)
-		messageID := ledgerMessageID(id)
-		res, err := db.ExecContext(ctx, `
-INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, message_id, status, created, updated)
-VALUES (?, ?, ?, ?, 'pending', ?, ?)`, id, campaignRecID, sid, messageID, now, now)
-		if err != nil {
-			return out, err
-		}
-		n, _ := res.RowsAffected()
-		out.Inserted += n
-	}
+	out.Inserted = inserted
 
 	reset, err := ResetInflight(db, campaignRecID)
 	if err != nil {
@@ -235,21 +268,8 @@ func BackfillIfEmpty(db sqlx.ExtContext, campaignRowID int, campaignRecID string
 		return false, nil
 	}
 
-	subIDs, err := eligibleSubscriberIDs(db, campaignRecID, false)
-	if err != nil {
+	if _, err := insertEligiblePending(db, campaignRecID); err != nil {
 		return false, err
-	}
-
-	now := time.Now().UTC().Format("2006-01-02 15:04:05.000Z")
-	for _, sid := range subIDs {
-		id := security.RandomString(15)
-		messageID := ledgerMessageID(id)
-		_, err := db.ExecContext(ctx, `
-INSERT OR IGNORE INTO `+tableName+` (id, campaign_id, subscriber_id, message_id, status, created, updated)
-VALUES (?, ?, ?, ?, 'pending', ?, ?)`, id, campaignRecID, sid, messageID, now, now)
-		if err != nil {
-			return false, err
-		}
 	}
 
 	if _, err := db.ExecContext(ctx, `
@@ -278,20 +298,17 @@ func NextPending(db *pbdb.DB, campaignRecID string, limit int) ([]SubscriberRow,
 	}
 	defer tx.Rollback()
 
-	var pendingTotal int
-	if err := tx.GetContext(ctx, &pendingTotal, `
-SELECT COUNT(1) FROM `+tableName+` WHERE campaign_id = ? AND status = 'pending'`, campaignRecID); err != nil {
-		return nil, false, err
-	}
-	hasMore := pendingTotal > limit
-
 	var rowIDs []int64
 	if err := sqlx.SelectContext(ctx, tx, &rowIDs, `
 SELECT rowid FROM `+tableName+`
 WHERE campaign_id = ? AND status = 'pending'
 ORDER BY created, id
-LIMIT ?`, campaignRecID, limit); err != nil {
+LIMIT ?`, campaignRecID, limit+1); err != nil {
 		return nil, false, err
+	}
+	hasMore := len(rowIDs) > limit
+	if hasMore {
+		rowIDs = rowIDs[:limit]
 	}
 	if len(rowIDs) == 0 {
 		if err := tx.Commit(); err != nil {

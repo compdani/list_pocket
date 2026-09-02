@@ -308,7 +308,7 @@
     "lists.types.public": "Público",
     "logs.title": "Logs (Histórico)",
     "maintenance.database.title": "Banco de dados",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE recupera o espaço de armazenamento usado por linhas excluídas e acelera significativamente o desempenho do banco de dados em grandes bancos de dados. IMPORTANTE: Para bancos de dados grandes, esta é uma operação lenta e bloqueante. Agende para executar durante horários de menor movimento.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE recupera o espaço de armazenamento usado por linhas excluídas e acelera significativamente o desempenho do banco de dados em grandes bancos de dados. IMPORTANTE: Para bancos de dados grandes, esta é uma operação lenta e bloqueante. Agende para executar durante horários de menor movimento.",
     "maintenance.help": "Algumas ações podem demorar algum tempo, dependendo da quantidade de dados.",
     "maintenance.maintenance.unconfirmedOptins": "Adesão a subscrições não confirmadas",
     "maintenance.olderThan": "Mais antigo que",

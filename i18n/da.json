@@ -308,7 +308,7 @@
     "lists.types.public": "Offentlig",
     "logs.title": "Logfiler",
     "maintenance.database.title": "Database",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE genvinder lagerplads brugt af slettede rækker og forbedrer databasens ydeevne betydeligt på store databaser. VIGTIGT: For store databaser er dette en langsom, blokerende operation. Planlæg at køre dette i perioder med lav aktivitet.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE genvinder lagerplads brugt af slettede rækker og forbedrer databasens ydeevne betydeligt på store databaser. VIGTIGT: For store databaser er dette en langsom, blokerende operation. Planlæg at køre dette i perioder med lav aktivitet.",
     "maintenance.help": "Nogle handlinger kan tage et stykke tid at fuldføre, afhængigt af mængden af data.",
     "maintenance.maintenance.unconfirmedOptins": "Ubekræftede tilmeldingsabonnementer",
     "maintenance.olderThan": "Ældre end",

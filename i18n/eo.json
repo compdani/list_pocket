@@ -308,7 +308,7 @@
     "lists.types.public": "Públic",
     "logs.title": "Registres",
     "maintenance.database.title": "Datumbazo",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE rehuntras ŝtonon uzatan de forviŝitaj vicoj kaj signife akcelas datumbazan efikadon en grandaj datumbazoj. GRAVA: Por grandaj datumbazoj, ĉi tio estas malrapida, blokanta operacio. Planu ĝin kuri dum maloctipaj horoj.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE rehuntras ŝtonon uzatan de forviŝitaj vicoj kaj signife akcelas datumbazan efikadon en grandaj datumbazoj. GRAVA: Por grandaj datumbazoj, ĉi tio estas malrapida, blokanta operacio. Planu ĝin kuri dum maloctipaj horoj.",
     "maintenance.help": "Algunes accions poden trigar una estona a completar-se en funció de la quantitat de dades.",
     "maintenance.maintenance.unconfirmedOptins": "Subscripcions opt-in no confirmades",
     "maintenance.olderThan": "Més antic de",

@@ -308,7 +308,7 @@
     "lists.types.public": "ציבואי",
     "logs.title": "לוגים",
     "maintenance.database.title": "מסד נתונים",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE משחררת את האחסון המשמש לשורות שנמחקו וישפר משמעותית את ביצועי מסד הנתונים במסדי נתונים גדולים. חשוב: למסדי נתונים גדולים, זו פעולה איטית וחוסמת. קבע לתוך עתות כבות חוצץ.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE משחררת את האחסון המשמש לשורות שנמחקו וישפר משמעותית את ביצועי מסד הנתונים במסדי נתונים גדולים. חשוב: למסדי נתונים גדולים, זו פעולה איטית וחוסמת. קבע לתוך עתות כבות חוצץ.",
     "maintenance.help": "קיימות פעולות שעלולות לדרוש זמן להשלמתן בהתאם לכמות הנתונים.",
     "maintenance.maintenance.unconfirmedOptins": "מנויים שלא אומתו",
     "maintenance.olderThan": "ישן מ",

@@ -308,7 +308,7 @@
     "lists.types.public": "Cyhoeddus",
     "logs.title": "Logos",
     "maintenance.database.title": "Cronfa ddata",
-    "maintenance.database.vacuumHelp": "Mae PostgreSQL VACUUM ANALYZE yn adennill storio a ddefnyddiwyd gan resi wedi'u dileu ac yn cyflymu perfformiad cronfa ddata yn sylweddol ar gronfeydd data mawr. PWYSIG: Ar gyfer cronfeydd data mawr, dyma weithrediad araf a rhwystredig. Amseru i redeg hwn yn ystod oriau digwyddiadau dim-sicrwydd.",
+    "maintenance.database.vacuumHelp": "Mae SQLite VACUUM / ANALYZE yn adennill storio a ddefnyddiwyd gan resi wedi'u dileu ac yn cyflymu perfformiad cronfa ddata yn sylweddol ar gronfeydd data mawr. PWYSIG: Ar gyfer cronfeydd data mawr, dyma weithrediad araf a rhwystredig. Amseru i redeg hwn yn ystod oriau digwyddiadau dim-sicrwydd.",
     "maintenance.help": "Efallai y bydd yn cymryd amser i gwblhau rhai gweithredoedd yn dibynnu ar nifer y data.",
     "maintenance.maintenance.unconfirmedOptins": "Tanysgrifiadau optio i mewn sydd heb eu cadarnhau",
     "maintenance.olderThan": "Cyn",

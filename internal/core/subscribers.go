@@ -1286,7 +1286,7 @@ func (c *Core) querySubscribersSQLite(searchStr, queryExp string, filters json.R
 	}
 
 	var rows []sqliteSubscriberRow
-	c.log.Printf("query subscribers sqlite: where=%q args=%v total=%d order_by=%q order=%q", whereSQL, args, total, sortCol, order)
+	c.log.Printf("query subscribers sqlite: total=%d order_by=%q order=%q", total, sortCol, order)
 	if err := c.db.Select(&rows, q, args...); err != nil {
 		c.log.Printf("error querying subscribers: %v", err)
 		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "{globals.terms.subscribers}", "error", dbErr(err)))

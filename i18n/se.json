@@ -308,7 +308,7 @@
     "lists.types.public": "Offentlig",
     "logs.title": "Loggar",
     "maintenance.database.title": "Databas",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE återhämtar lagring som används av borttagna rader och ökar avsevärt databasens prestanda på stora databaser. VIKTIGT: För stora databaser är detta en långsam, blockerande operation. Schemalägg för att köra detta under lågtrafiktimmar.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE återhämtar lagring som används av borttagna rader och ökar avsevärt databasens prestanda på stora databaser. VIKTIGT: För stora databaser är detta en långsam, blockerande operation. Schemalägg för att köra detta under lågtrafiktimmar.",
     "maintenance.help": "Vissa åtgärder kan ta tid beroende på mängden data.",
     "maintenance.maintenance.unconfirmedOptins": "Obekräftade opt-in-prenumerationer",
     "maintenance.olderThan": "Äldre än",

@@ -32,7 +32,10 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 		} else {
 			err := pb.Cron().Add("slow-query-cache-refresh", intval, func() {
 				lo.Println("refreshing slow query cache")
-				_ = co.RefreshMatViews(true)
+				if err := co.RefreshMatViews(true); err != nil {
+					lo.Printf("error refreshing slow query cache: %v", err)
+					return
+				}
 				lo.Println("done refreshing slow query cache")
 			})
 			if err != nil {

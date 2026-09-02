@@ -896,7 +896,7 @@ func (c *Core) CampaignHasLists(recordID string, listIDs []int) (bool, error) {
 func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, orderBy, order string, getAll bool, permittedLists []int, offset, limit int) (models.Campaigns, int, error) {
 	query := `
 	SELECT c.rowid AS id, c.id AS record_id, c.created AS created_at, c.updated AS updated_at, c.uuid, c.type, c.name,
-		c.subject, c.from_email, c.body, c.body_source, c.altbody, c.send_at, c.status, c.content_type,
+		c.subject, c.from_email, '' AS body, '' AS body_source, '' AS altbody, c.send_at, c.status, c.content_type,
 		c.tags, c.include_tags, c.exclude_tags, c.headers, c.attribs, tpl.id AS template_id, c.messenger, c.archive, c.archive_slug,
 		atpl.id AS archive_template_id, c.archive_meta, c.started_at, c.to_send, c.sent,
 		'' AS template_body,

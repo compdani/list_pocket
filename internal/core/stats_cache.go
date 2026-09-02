@@ -3,14 +3,20 @@ package core
 import (
 	"encoding/json"
 	"strings"
+	"sync"
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
 	cacheKeyDashboardCounts      = "cache.dashboard_counts"
 	cacheKeyListSubscriberCounts = "cache.list_subscriber_counts"
+
+	statsCacheTable         = "listpocket_stats_cache"
+	statsCacheRowDashboard  = "cDashboardCnts"
+	statsCacheRowListCounts = "cListCountBlobs"
 )
 
 type cachedListCounts struct {
@@ -18,30 +24,87 @@ type cachedListCounts struct {
 	Statuses models.StringIntMap `json:"statuses"`
 }
 
+type statsCacheMem struct {
+	mu         sync.RWMutex
+	dashboard  types.JSONText
+	dashOK     bool
+	listCounts map[string]cachedListCounts
+	listsOK    bool
+	sf         singleflight.Group
+}
+
+func (c *Core) memDashboardCounts() (types.JSONText, bool) {
+	c.stats.mu.RLock()
+	defer c.stats.mu.RUnlock()
+	if !c.stats.dashOK || len(c.stats.dashboard) == 0 {
+		return nil, false
+	}
+	out := make(types.JSONText, len(c.stats.dashboard))
+	copy(out, c.stats.dashboard)
+	return out, true
+}
+
+func (c *Core) setMemDashboardCounts(v types.JSONText) {
+	c.stats.mu.Lock()
+	defer c.stats.mu.Unlock()
+	c.stats.dashboard = append(types.JSONText(nil), v...)
+	c.stats.dashOK = len(v) > 0
+}
+
+func (c *Core) memListCounts() (map[string]cachedListCounts, bool) {
+	c.stats.mu.RLock()
+	defer c.stats.mu.RUnlock()
+	if !c.stats.listsOK || c.stats.listCounts == nil {
+		return nil, false
+	}
+	out := make(map[string]cachedListCounts, len(c.stats.listCounts))
+	for k, v := range c.stats.listCounts {
+		statuses := models.StringIntMap{}
+		for sk, sv := range v.Statuses {
+			statuses[sk] = sv
+		}
+		out[k] = cachedListCounts{Count: v.Count, Statuses: statuses}
+	}
+	return out, true
+}
+
+func (c *Core) setMemListCounts(in map[string]cachedListCounts) {
+	c.stats.mu.Lock()
+	defer c.stats.mu.Unlock()
+	c.stats.listCounts = in
+	c.stats.listsOK = in != nil
+}
+
 func (c *Core) readCachedJSON(key string) (types.JSONText, bool) {
-	if c.getSettings == nil {
+	if c.db == nil {
 		return nil, false
 	}
-	raw, err := c.getSettings()
-	if err != nil || len(raw) == 0 {
+	var value string
+	if err := c.db.Get(&value, `SELECT value FROM `+statsCacheTable+` WHERE cache_key = ? LIMIT 1`, key); err != nil {
 		return nil, false
 	}
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
+	if strings.TrimSpace(value) == "" || value == "null" {
 		return nil, false
 	}
-	v, ok := m[key]
-	if !ok || len(v) == 0 || string(v) == "null" {
-		return nil, false
-	}
-	return types.JSONText(v), true
+	return types.JSONText(value), true
 }
 
 func (c *Core) writeCachedJSON(key string, value types.JSONText) error {
-	if c.setSettingsByKey == nil {
+	if c.db == nil {
 		return nil
 	}
-	return c.setSettingsByKey(key, json.RawMessage(value))
+	rowID := statsCacheRowDashboard
+	if key == cacheKeyListSubscriberCounts {
+		rowID = statsCacheRowListCounts
+	}
+	_, err := c.db.Exec(`
+		INSERT INTO `+statsCacheTable+` (id, cache_key, value, created, updated)
+		VALUES (?, ?, ?, strftime('%Y-%m-%d %H:%M:%fZ'), strftime('%Y-%m-%d %H:%M:%fZ'))
+		ON CONFLICT(cache_key) DO UPDATE SET
+			value = excluded.value,
+			updated = strftime('%Y-%m-%d %H:%M:%fZ')
+	`, rowID, key, string(value))
+	return err
 }
 
 func (c *Core) readCachedListCounts() (map[string]cachedListCounts, bool) {
@@ -58,12 +121,22 @@ func (c *Core) readCachedListCounts() (map[string]cachedListCounts, bool) {
 
 // RefreshMatViews refreshes cached dashboard and list subscriber counts.
 func (c *Core) RefreshMatViews(_ bool) error {
+	_, err, _ := c.stats.sf.Do("refresh", func() (any, error) {
+		return nil, c.refreshMatViewsOnce()
+	})
+	return err
+}
+
+func (c *Core) refreshMatViewsOnce() error {
 	counts, err := c.getDashboardCountsSQLite()
 	if err != nil {
 		return err
 	}
+	c.setMemDashboardCounts(counts)
 	if err := c.writeCachedJSON(cacheKeyDashboardCounts, counts); err != nil {
-		return err
+		if c.log != nil {
+			c.log.Printf("error persisting dashboard count cache: %v", err)
+		}
 	}
 
 	type row struct {
@@ -97,7 +170,14 @@ func (c *Core) RefreshMatViews(_ bool) error {
 	if err != nil {
 		return err
 	}
-	return c.writeCachedJSON(cacheKeyListSubscriberCounts, types.JSONText(b))
+	payload := types.JSONText(b)
+	c.setMemListCounts(out)
+	if err := c.writeCachedJSON(cacheKeyListSubscriberCounts, payload); err != nil {
+		if c.log != nil {
+			c.log.Printf("error persisting list count cache: %v", err)
+		}
+	}
+	return nil
 }
 
 // RefreshMatView refreshes a single cache blob. Empty name refreshes all.
@@ -111,13 +191,13 @@ func (c *Core) attachListSubscriberCounts(lists []models.List) error {
 		return nil
 	}
 	if c.consts.CacheSlowQueries {
+		if cached, ok := c.memListCounts(); ok {
+			applyCachedListCounts(lists, cached)
+			return nil
+		}
 		if cached, ok := c.readCachedListCounts(); ok {
-			for i := range lists {
-				if v, found := cached[lists[i].RecordID]; found {
-					lists[i].SubscriberCount = v.Count
-					lists[i].SubscriberCounts = v.Statuses
-				}
-			}
+			c.setMemListCounts(cached)
+			applyCachedListCounts(lists, cached)
 			return nil
 		}
 	}
@@ -165,4 +245,13 @@ func (c *Core) attachListSubscriberCounts(lists []models.List) error {
 		lists[i].SubscriberCount += r.Count
 	}
 	return nil
+}
+
+func applyCachedListCounts(lists []models.List, cached map[string]cachedListCounts) {
+	for i := range lists {
+		if v, found := cached[lists[i].RecordID]; found {
+			lists[i].SubscriberCount = v.Count
+			lists[i].SubscriberCounts = v.Statuses
+		}
+	}
 }

@@ -308,7 +308,7 @@
     "lists.types.public": "Javno",
     "logs.title": "Dnevniki",
     "maintenance.database.title": "Baza podatkov",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE reši pomnilnik, ki ga uporabljajo izbrisane vrstice, in bistveno pospešuje zmogljivost baze podatkov pri velikih bazah. POMEMBNO: Pri velikih bazah je to počasna, blokirajuča operacija. Razporedite jo v izvedbo v času manjše obremenitve.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE reši pomnilnik, ki ga uporabljajo izbrisane vrstice, in bistveno pospešuje zmogljivost baze podatkov pri velikih bazah. POMEMBNO: Pri velikih bazah je to počasna, blokirajuča operacija. Razporedite jo v izvedbo v času manjše obremenitve.",
     "maintenance.help": "Nekatera dejanja lahko trajajo nekaj časa, odvisno od količine podatkov.",
     "maintenance.maintenance.unconfirmedOptins": "Nepotrjene privolitvene naročnine",
     "maintenance.olderThan": "Starejši od",

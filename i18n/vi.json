@@ -308,7 +308,7 @@
     "lists.types.public": "Công cộng",
     "logs.title": "Nhật ký",
     "maintenance.database.title": "Cơ sở dữ liệu",
-    "maintenance.database.vacuumHelp": "PostgreSQL VACUUM ANALYZE thu hồi bộ nhớ được sử dụng bởi các hàng bị xóa và tăng đáng kể hiệu suất cơ sở dữ liệu trên các cơ sở dữ liệu lớn. QUAN TRỌNG: Đối với các cơ sở dữ liệu lớn, đây là một hoạt động chậm, chặn. Lên lịch để chạy điều này trong giờ thấp điểm.",
+    "maintenance.database.vacuumHelp": "SQLite VACUUM / ANALYZE thu hồi bộ nhớ được sử dụng bởi các hàng bị xóa và tăng đáng kể hiệu suất cơ sở dữ liệu trên các cơ sở dữ liệu lớn. QUAN TRỌNG: Đối với các cơ sở dữ liệu lớn, đây là một hoạt động chậm, chặn. Lên lịch để chạy điều này trong giờ thấp điểm.",
     "maintenance.help": "Một số hoạt động có thể mất một thời gian để hoàn thành tùy thuộc vào lượng dữ liệu.",
     "maintenance.maintenance.unconfirmedOptins": "Đăng ký chưa xác nhận",
     "maintenance.olderThan": "Cũ hơn",
