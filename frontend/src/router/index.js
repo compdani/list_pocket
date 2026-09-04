@@ -7,37 +7,37 @@ const routes = [
   {
     path: '/login',
     name: 'login',
-    meta: { title: 'Login', guestOnly: true, authPage: true },
+    meta: { title: 'users.login', guestOnly: true, authPage: true },
     component: () => import('../views/AuthLogin.vue'),
   },
   {
     path: '/login/twofa',
     name: 'loginTwofa',
-    meta: { title: 'Two-Factor Authentication', guestOnly: true, authPage: true },
+    meta: { title: 'users.twoFA', guestOnly: true, authPage: true },
     component: () => import('../views/AuthTwofa.vue'),
   },
   {
     path: '/forgot',
     name: 'forgotPassword',
-    meta: { title: 'Forgot Password', guestOnly: true, authPage: true },
+    meta: { title: 'users.forgotPassword', guestOnly: true, authPage: true },
     component: () => import('../views/AuthForgotPassword.vue'),
   },
   {
     path: '/reset',
     name: 'resetPassword',
-    meta: { title: 'Reset Password', guestOnly: true, authPage: true },
+    meta: { title: 'users.resetPassword', guestOnly: true, authPage: true },
     component: () => import('../views/AuthResetPassword.vue'),
   },
   {
     path: '/404',
     name: '404_page',
-    meta: { title: '404' },
+    meta: { title: 'notFound.title' },
     component: () => import('../views/404.vue'),
   },
   {
     path: '/',
     name: 'dashboard',
-    meta: { title: '' },
+    meta: { title: 'menu.overview' },
     component: () => import('../views/Dashboard.vue'),
   },
   {
@@ -109,7 +109,7 @@ const routes = [
   {
     path: '/campaigns/transactional',
     name: 'txMessages',
-    meta: { title: 'Transactional Messages', group: 'campaigns' },
+    meta: { title: 'menu.transactional', group: 'campaigns' },
     component: () => import('../views/TxMessages.vue'),
   },
   {
@@ -169,19 +169,19 @@ const routes = [
   {
     path: '/settings/admin-console',
     name: 'adminConsole',
-    meta: { title: 'Admin Console', group: 'settings', superAdmin: true },
+    meta: { title: 'menu.adminConsole', group: 'settings', superAdmin: true },
     component: () => import('../views/AdminConsole.vue'),
   },
   {
     path: '/workflows',
     name: 'workflows',
-    meta: { title: 'Workflows', group: 'workflows' },
+    meta: { title: 'menu.workflows', group: 'workflows' },
     component: () => import('../views/Workflow.vue'),
   },
   {
     path: '/workflows/builder/:workflowId?',
     name: 'workflowBuilder',
-    meta: { title: 'Workflow Builder', group: 'workflows' },
+    meta: { title: 'menu.workflowBuilder', group: 'workflows' },
     component: () => import('../views/WorkflowBuilder.vue'),
   },
   {

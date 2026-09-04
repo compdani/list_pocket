@@ -1,13 +1,7 @@
 <template>
   <section class="campaigns">
-    <header class="page-header">
-      <div class="header-content">
-        <h1 class="text-h4">
-          {{ $t('globals.terms.campaigns') }}
-          <span v-if="!isNaN(campaigns.total)">({{ campaigns.total }})</span>
-        </h1>
-      </div>
-      <div class="header-actions d-flex flex-wrap ga-2">
+    <page-header :title="$t('globals.terms.campaigns')" :count="campaigns.total">
+      <template #actions>
         <v-btn
           v-if="$can('campaigns:manage')"
           :to="{ name: 'campaign', params: { id: 'new' } }"
@@ -27,81 +21,56 @@
         >
           {{ $t('campaigns.newSmsCampaign') }}
         </v-btn>
-      </div>
-    </header>
+      </template>
+    </page-header>
 
-    <v-card class="mb-4 query-card" elevation="0">
-      <v-card-text class="query-card-body">
-        <form class="query-form" @submit.prevent="onSearchSubmit">
-          <v-text-field
-            v-model="queryParams.query"
-            class="query-input"
-            name="query"
-            :placeholder="$t('campaigns.queryPlaceholder')"
-            prepend-inner-icon="mdi-magnify"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-            ref="query"
-            data-cy="search"
-          />
-          <v-combobox
-            v-model="queryParams.tags"
-            :items="campaignTagOptions"
-            :aria-label="$t('globals.terms.tags')"
-            :label="$t('globals.terms.tags')"
-            :placeholder="$t('globals.terms.tags')"
-            class="query-tags"
-            variant="outlined"
-            density="comfortable"
-            multiple
-            chips
-            closable-chips
-            clearable
-            hide-details
-            @update:model-value="onTagFilterChange"
-          />
-          <v-btn
-            type="submit"
-            class="query-submit"
-            color="primary"
-            icon="mdi-magnify"
-            :aria-label="$t('campaigns.queryPlaceholder')"
-            data-cy="btn-search"
-          />
-        </form>
-      </v-card-text>
-    </v-card>
+    <query-bar
+      v-model="queryParams.query"
+      :placeholder="$t('campaigns.queryPlaceholder')"
+      :search-label="$t('globals.buttons.search')"
+      input-cy="search"
+      submit-cy="btn-search"
+      @submit="onSearchSubmit"
+    >
+      <template #filters>
+        <v-combobox
+          v-model="queryParams.tags"
+          :items="campaignTagOptions"
+          :aria-label="$t('globals.terms.tags')"
+          :label="$t('globals.terms.tags')"
+          :placeholder="$t('globals.terms.tags')"
+          class="query-tags"
+          variant="outlined"
+          density="comfortable"
+          multiple
+          chips
+          closable-chips
+          clearable
+          hide-details
+          @update:model-value="onTagFilterChange"
+        />
+      </template>
+    </query-bar>
 
-    <v-card v-if="bulk.checked.length > 0" class="mb-4 bulk-actions-card" elevation="0">
-      <v-card-text class="actions bulk-actions-content">
-        <v-btn
-          variant="text"
-          size="small"
-          prepend-icon="mdi-trash-can-outline"
-          @click="deleteCampaigns"
-          data-cy="btn-delete-campaigns"
-        >
-          {{ $t('globals.buttons.delete') }}
-        </v-btn>
-        <span class="ml-4">
-          {{ $tc('globals.messages.numSelected', numSelectedCampaigns, { num: numSelectedCampaigns }) }}
-          <span v-if="!bulk.all && campaigns.total > campaigns.perPage">
-            &mdash;
-            <v-btn
-              variant="text"
-              size="small"
-              @click="onSelectAll"
-              data-cy="select-all-campaigns"
-            >
-              {{ $tc('globals.messages.selectAll', campaigns.total, { num: campaigns.total }) }}
-            </v-btn>
-          </span>
-        </span>
-      </v-card-text>
-    </v-card>
+    <bulk-action-bar
+      :selected-count="bulk.checked.length"
+      :total="campaigns.total"
+      :show-select-all="!bulk.all && campaigns.total > campaigns.perPage"
+      select-all-cy="select-all-campaigns"
+      @select-all="onSelectAll"
+    >
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-trash-can-outline"
+        data-cy="btn-delete-campaigns"
+        @click="deleteCampaigns"
+      >
+        {{ $t('globals.buttons.delete') }}
+      </v-btn>
+    </bulk-action-bar>
 
-    <v-data-table-server
+    <admin-data-table
       :headers="tableHeaders"
       :items="campaigns.results || []"
       :items-length="campaigns.total || 0"
@@ -114,9 +83,9 @@
       item-value="id"
       return-object
       show-select
-      hide-default-footer
       @update:model-value="updateCheckedCampaigns"
       @update:options="onTableOptionsChange"
+      @update:page="onPageChange"
     >
       <template #[`item.status`]="{ item }">
         <div>
@@ -393,19 +362,15 @@
       </template>
 
       <template #no-data>
-        <empty-placeholder v-if="!loading.campaigns" />
+        <empty-placeholder
+          v-if="!loading.campaigns"
+          icon="mdi-rocket-launch-outline"
+          :label="$t('globals.messages.emptyState')"
+          :action-label="$can('campaigns:manage') ? $t('globals.buttons.new') : ''"
+          :action-to="$can('campaigns:manage') ? { name: 'campaign', params: { id: 'new' } } : null"
+        />
       </template>
-    </v-data-table-server>
-
-    <div class="table-pagination" v-if="campaigns.total > 0">
-      <v-pagination
-        :length="campaignPageCount"
-        :model-value="queryParams.page"
-        rounded="circle"
-        total-visible="7"
-        @update:model-value="onPageChange"
-      />
-    </div>
+    </admin-data-table>
 
     <campaign-preview
       v-if="previewItem"
@@ -428,6 +393,11 @@ import { pb } from '../api';
 import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
+import PageHeader from '../components/PageHeader.vue';
+import QueryBar from '../components/QueryBar.vue';
+import BulkActionBar from '../components/BulkActionBar.vue';
+import AdminDataTable from '../components/AdminDataTable.vue';
+import { events } from '../utils/events';
 
 export default {
   campaignStatsTopic: 'events/campaign-stats',
@@ -436,6 +406,10 @@ export default {
     CampaignPreview,
     EmptyPlaceholder,
     CopyText,
+    PageHeader,
+    QueryBar,
+    BulkActionBar,
+    AdminDataTable,
   },
 
   data() {
@@ -827,7 +801,7 @@ export default {
   },
 
   created() {
-    this.$events.$on('page.refresh', this.getCampaigns);
+    events.$on('page.refresh', this.getCampaigns);
   },
 
   mounted() {
@@ -838,7 +812,7 @@ export default {
   },
 
   beforeUnmount() {
-    this.$events.$off('page.refresh', this.getCampaigns);
+    events.$off('page.refresh', this.getCampaigns);
     this.unsubscribeCampaignStats();
   },
 };

@@ -1,9 +1,9 @@
-/* eslint-disable no-alert */
 import dayjs from 'dayjs';
 import dayDuration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import updateLocale from 'dayjs/plugin/updateLocale';
 
+import { openConfirm, openPrompt } from './utils/confirmDialog';
 import { pushToast } from './utils/toast';
 
 dayjs.extend(updateLocale);
@@ -11,7 +11,8 @@ dayjs.extend(relativeTime);
 dayjs.extend(dayDuration);
 
 const reEmail = /(.+?)@(.+?)/ig;
-const prefKey = 'listmonk_pref';
+const prefKey = 'listpocket_pref';
+const legacyPrefKey = 'listmonk_pref';
 
 const htmlEntities = {
   '&': '&amp;',
@@ -151,31 +152,42 @@ export default class Utils {
 
   titleCase = (str) => str[0].toUpperCase() + str.substr(1).toLowerCase();
 
-  // UI shortcuts.
+  // UI shortcuts. Returns a promise; callbacks are optional for existing call sites.
   confirm = (msg, onConfirm, onCancel) => {
-    const message = !msg ? this.i18n.t('globals.messages.confirm') : msg;
-    if (window.confirm(message)) {
-      if (typeof onConfirm === 'function') {
-        onConfirm();
+    const message = !msg && this.i18n ? this.i18n.t('globals.messages.confirm') : msg;
+    return openConfirm({ message }).then((ok) => {
+      if (ok) {
+        if (typeof onConfirm === 'function') {
+          onConfirm();
+        }
+        return true;
       }
-      return;
-    }
-    if (typeof onCancel === 'function') {
-      onCancel();
-    }
+      if (typeof onCancel === 'function') {
+        onCancel();
+      }
+      return false;
+    });
   };
 
   prompt = (msg, inputAttrs, onConfirm, onCancel) => {
-    const value = window.prompt(msg, inputAttrs && inputAttrs.value ? inputAttrs.value : '');
-    if (value !== null) {
-      if (typeof onConfirm === 'function') {
-        onConfirm(value);
+    const attrs = inputAttrs && typeof inputAttrs === 'object' ? inputAttrs : {};
+    return openPrompt({
+      message: msg || '',
+      title: msg || '',
+      value: attrs.value || '',
+      placeholder: attrs.placeholder || '',
+    }).then((value) => {
+      if (value !== null && value !== false) {
+        if (typeof onConfirm === 'function') {
+          onConfirm(value);
+        }
+        return value;
       }
-      return;
-    }
-    if (typeof onCancel === 'function') {
-      onCancel();
-    }
+      if (typeof onCancel === 'function') {
+        onCancel();
+      }
+      return null;
+    });
   };
 
   toast = (msg, typ, duration) => {
@@ -227,21 +239,26 @@ export default class Utils {
     return obj;
   };
 
-  getPref = (key) => {
-    if (localStorage.getItem(prefKey) === null) {
-      return null;
+  readPrefs = () => {
+    const raw = localStorage.getItem(prefKey) ?? localStorage.getItem(legacyPrefKey);
+    if (raw === null) {
+      return {};
     }
 
-    const p = JSON.parse(localStorage.getItem(prefKey));
+    try {
+      return JSON.parse(raw) || {};
+    } catch {
+      return {};
+    }
+  };
+
+  getPref = (key) => {
+    const p = this.readPrefs();
     return key in p ? p[key] : null;
   };
 
   setPref = (key, val) => {
-    let p = {};
-    if (localStorage.getItem(prefKey) !== null) {
-      p = JSON.parse(localStorage.getItem(prefKey));
-    }
-
+    const p = this.readPrefs();
     p[key] = val;
     localStorage.setItem(prefKey, JSON.stringify(p));
   };

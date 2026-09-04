@@ -39,6 +39,7 @@
           density="comfortable"
           class="settings-tabs"
           align-tabs="start"
+          show-arrows
         >
           <v-tab
             v-for="item in settingsTabs"

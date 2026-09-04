@@ -1,8 +1,9 @@
 <template>
   <v-app>
+    <a href="#app-content" class="skip-link">{{ $t('menu.skipToContent') }}</a>
     <template v-if="isAuthPage">
-      <v-main class="app-main auth-main">
-        <router-view :key="$route.fullPath" />
+      <v-main id="app-content" class="app-main auth-main" tabindex="-1">
+        <router-view :key="$route.name" />
       </v-main>
     </template>
     <template v-else>
@@ -21,8 +22,8 @@
       >
         <div class="app-drawer-brand">
           <router-link :to="{ name: 'dashboard' }" class="app-brand-link">
-            <img class="full" src="@/assets/logo.svg" alt="" />
-            <img class="favicon" src="@/assets/favicon.png" alt="" />
+            <img class="full" src="@/assets/logo.svg" :alt="$t('menu.dashboard')" />
+            <img class="favicon" src="@/assets/favicon.png" :alt="$t('menu.dashboard')" />
           </router-link>
         </div>
 
@@ -36,8 +37,18 @@
       </v-navigation-drawer>
 
       <v-app-bar v-if="$root.isLoaded" flat color="surface" border="b" class="app-bar">
-        <v-app-bar-nav-icon v-if="isMobile" @click="drawer = !drawer" />
-        <v-btn v-else icon="mdi-dock-left" variant="text" @click="rail = !rail" />
+        <v-app-bar-nav-icon
+          v-if="isMobile"
+          :aria-label="$t('globals.buttons.openMenu')"
+          @click="drawer = !drawer"
+        />
+        <v-btn
+          v-else
+          icon="mdi-dock-left"
+          variant="text"
+          :aria-label="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
+          @click="rail = !rail"
+        />
 
         <v-toolbar-title class="app-title">
           <span>{{ pageTitle }}</span>
@@ -48,6 +59,7 @@
         <v-btn
           icon="mdi-refresh"
           variant="text"
+          :aria-label="$t('globals.buttons.refresh')"
           @click="emitPageRefresh"
         />
 
@@ -61,9 +73,10 @@
                 v-bind="props"
                 variant="text"
                 class="app-user-trigger"
+                :aria-label="$t('globals.buttons.accountMenu')"
               >
                 <v-avatar size="32" color="primary" class="mr-2">
-                  <img v-if="profile.avatar" :src="profile.avatar" alt="" />
+                  <img v-if="profile.avatar" :src="profile.avatar" :alt="profile.username" />
                   <span v-else>{{ userInitial }}</span>
                 </v-avatar>
                 <span class="app-user-name">{{ profile.username }}</span>
@@ -85,7 +98,7 @@
         </div>
       </v-app-bar>
 
-      <v-main class="app-main">
+      <v-main id="app-content" class="app-main" tabindex="-1">
         <div v-if="$root.isLoaded" class="app-shell">
           <div class="global-notices" v-if="isGlobalNotices">
             <v-alert
@@ -112,7 +125,7 @@
                 {{ $t('settings.updateAvailable', {
                   version: `${serverConfig.update.update.release_version} (${$utils.getDate(serverConfig.update.update.release_date).format('DD MMM YY')})`,
                 }) }}
-                <a :href="serverConfig.update.update.url" target="_blank" rel="noopener noreferer">View</a>
+                <a :href="serverConfig.update.update.url" target="_blank" rel="noopener noreferrer">{{ $t('globals.messages.viewLink') }}</a>
               </v-alert>
 
               <v-alert
@@ -124,7 +137,7 @@
               >
                 <div class="font-weight-bold" v-if="m.title">{{ m.title }}</div>
                 <p v-if="m.description" class="mb-0">{{ m.description }}</p>
-                <a v-if="m.url" :href="m.url" target="_blank" rel="noopener noreferer">View</a>
+                <a v-if="m.url" :href="m.url" target="_blank" rel="noopener noreferrer">{{ $t('globals.messages.viewLink') }}</a>
               </v-alert>
             </template>
 
@@ -136,11 +149,11 @@
             >
               Remove the <code>admin_username</code> and <code>admin_password</code> fields from the TOML configuration file or environment variables.
               Visit <router-link :to="{ name: 'users' }">Admin -> Settings -> Users</router-link>.
-              <a :href="$docsUrl('upgrade/')" target="_blank" rel="noopener noreferrer">Learn more.</a>
+              <a :href="$docsUrl('upgrade/')" target="_blank" rel="noopener noreferrer">{{ $t('globals.buttons.learnMore') }}.</a>
             </v-alert>
           </div>
 
-          <router-view :key="$route.fullPath" />
+          <router-view :key="$route.name" />
         </div>
 
         <v-overlay
@@ -148,10 +161,18 @@
           class="align-center justify-center"
           persistent
         >
-          <v-progress-circular indeterminate size="56" width="5" color="primary" />
+          <div v-if="$root.initError" class="text-center pa-4">
+            <p class="mb-4">{{ $root.initError }}</p>
+            <v-btn color="primary" variant="flat" @click="retryInit">
+              {{ $t('globals.buttons.retry') }}
+            </v-btn>
+          </div>
+          <v-progress-circular v-else indeterminate size="56" width="5" color="primary" />
         </v-overlay>
       </v-main>
     </template>
+
+    <confirm-dialog />
 
     <v-snackbar-queue
       v-model="toastQueue"
@@ -163,17 +184,28 @@
 </template>
 
 <script>
+import { computed } from 'vue';
 import { mapState } from 'vuex';
+import { useDisplay } from 'vuetify';
 import { uris } from './constants';
 import { pb } from './api';
 import Navigation from './components/Navigation.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 import { toastQueue } from './utils/toast';
+import { events } from './utils/events';
 
 export default {
   name: 'App',
 
   components: {
     Navigation,
+    ConfirmDialog,
+  },
+
+  setup() {
+    const { width } = useDisplay();
+    const isMobile = computed(() => width.value <= 960);
+    return { isMobile };
   },
 
   data() {
@@ -185,7 +217,6 @@ export default {
       rail: false,
       railBeforeAI: undefined,
       eventsTopic: 'events/error',
-      windowWidth: window.innerWidth,
       toastQueue,
     };
   },
@@ -201,34 +232,27 @@ export default {
           && this.serverConfig.update.messages.length > 0));
     },
 
-    isMobile() {
-      return this.windowWidth <= 960;
-    },
-
     isAuthPage() {
       return Boolean(this.$route.meta && this.$route.meta.authPage);
     },
 
     pageTitle() {
       if (this.isAuthPage) {
-        return typeof this.$route.meta.title === 'string' ? this.$route.meta.title : 'Admin';
+        const authTitle = this.$route.meta && this.$route.meta.title;
+        return typeof authTitle === 'string' ? this.$t(authTitle) : this.$t('menu.dashboard');
       }
       if (this.$route.name === 'dashboard') {
-        return 'Overview';
+        return this.$t('menu.overview');
       }
-      if (this.$route.meta && typeof this.$route.meta.title === 'string' && this.$route.meta.title.startsWith('Workflow')) {
-        return this.$route.meta.title;
+      const titleKey = this.$route.meta && this.$route.meta.title;
+      if (typeof titleKey === 'string' && titleKey) {
+        return this.$t(titleKey);
       }
-      if (this.$route.name === 'workflows') {
-        return 'Workflows';
-      }
-      return typeof this.$route.meta.title === 'string' && this.$route.meta.title
-        ? this.$t(this.$route.meta.title)
-        : 'Admin';
+      return this.$t('menu.dashboard');
     },
 
     userInitial() {
-      return this.profile.username ? this.profile.username[0].toUpperCase() : '?';
+      return this.profile && this.profile.username ? this.profile.username[0].toUpperCase() : '?';
     },
   },
 
@@ -247,6 +271,11 @@ export default {
         }
       },
     },
+    isMobile(mobile) {
+      if (!mobile) {
+        this.drawer = true;
+      }
+    },
   },
 
   methods: {
@@ -261,7 +290,7 @@ export default {
     },
 
     emitPageRefresh() {
-      this.$events.$emit('page.refresh');
+      events.$emit('page.refresh');
     },
 
     onAIPanel(open) {
@@ -280,7 +309,7 @@ export default {
 
     reloadApp() {
       this.$api.reloadApp().then(() => {
-        this.$utils.toast('Reloading app ...');
+        this.$utils.toast(this.$t('globals.messages.reloading'));
         const pollId = setInterval(() => {
           this.$api.getHealth().then(() => {
             clearInterval(pollId);
@@ -288,6 +317,12 @@ export default {
           });
         }, 500);
       });
+    },
+
+    retryInit() {
+      if (this.$root && typeof this.$root.retryInit === 'function') {
+        this.$root.retryInit();
+      }
     },
 
     doLogout() {
@@ -315,43 +350,46 @@ export default {
           const d = e && e.data ? e.data : e;
           if (d && d.type === 'error' && d.message) {
             const msg = reMatchLog.exec(d.message.trim());
-            this.$utils.toast(msg ? msg[2] : d.message.trim(), 'is-danger', null, true);
+            this.$utils.toast(msg ? msg[2] : d.message.trim(), 'error', null, true);
           }
         });
       } catch (err) {
-        const msg = err?.response?.message || err?.message || 'Realtime connection failed';
-        this.$utils.toast(msg, 'is-danger', 5000, false);
+        const msg = err?.response?.message || err?.message || this.$t('globals.messages.realtimeFailed');
+        this.$utils.toast(msg, 'error', 5000, false);
       }
     },
   },
 
   mounted() {
     this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
-    window.addEventListener('resize', this.onResize);
-    this.$events.$on('layout.aiPanel', this.onAIPanel);
+    events.$on('layout.aiPanel', this.onAIPanel);
     this.listenEvents();
   },
 
   beforeUnmount() {
     pb.realtime.unsubscribe(this.eventsTopic);
-    window.removeEventListener('resize', this.onResize);
-    this.$events.$off('layout.aiPanel', this.onAIPanel);
-  },
-
-  created() {
-    this.onResize = () => {
-      this.windowWidth = window.innerWidth;
-      if (!this.isMobile) {
-        this.drawer = true;
-      }
-    };
+    events.$off('layout.aiPanel', this.onAIPanel);
   },
 };
 </script>
 
 <style lang="scss">
 @use "assets/style.scss";
-@import "assets/icons/fontello.css";
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 12px;
+  z-index: 4000;
+  padding: 8px 14px;
+  background: rgb(var(--v-theme-primary));
+  color: rgb(var(--v-theme-on-primary));
+  border-radius: 8px;
+}
+
+.skip-link:focus {
+  left: 16px;
+}
 
 .app-drawer .v-navigation-drawer__content {
   padding: 16px 12px;
@@ -399,7 +437,7 @@ export default {
 
 .app-title {
   font-weight: 600;
-  color: #0f172a;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .app-user-trigger {

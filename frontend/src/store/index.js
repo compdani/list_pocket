@@ -8,7 +8,10 @@ export default createStore({
   },
 
   state: {
-    ...Object.keys(models).reduce((obj, cur) => ({ ...obj, [cur]: [] }), {}),
+    ...Object.keys(models).reduce((obj, cur) => ({
+      ...obj,
+      [cur]: cur === models.profile ? {} : [],
+    }), {}),
     loading: Object.keys(models).reduce((obj, cur) => ({ ...obj, [cur]: false }), {}),
   },
 

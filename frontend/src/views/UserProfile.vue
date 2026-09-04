@@ -43,28 +43,17 @@
 
       <v-row v-if="data.passwordLogin">
         <v-col cols="12" md="6">
-          <v-text-field
+          <password-field
             v-model="form.password"
             :label="$t('users.password')"
-            :placeholder="$t('users.password')"
-            type="password"
-            minlength="8"
-            maxlength="200"
-            name="password"
-            variant="outlined"
-            density="comfortable"
+            autocomplete="new-password"
           />
         </v-col>
         <v-col cols="12" md="6">
-          <v-text-field
+          <password-field
             v-model="form.password2"
             :label="$t('users.passwordRepeat')"
-            type="password"
-            minlength="8"
-            maxlength="200"
-            name="password2"
-            variant="outlined"
-            density="comfortable"
+            autocomplete="new-password"
           />
         </v-col>
       </v-row>
@@ -153,16 +142,12 @@
         <p class="twofa-desc">{{ $t('users.twoFAEnabledDesc', { type: data.twofaType.toUpperCase() }) }}</p>
 
         <v-form v-if="showDisableTOTP" class="mt-4" @submit.prevent="confirmDisableTOTP">
-          <v-text-field
-            ref="disablePasswordInput"
+          <password-field
             v-model="disableTOTPPassword"
             :label="$t('users.password')"
-            type="password"
-            minlength="8"
-            required
-            variant="outlined"
-            density="comfortable"
-            class="mb-3"
+            autocomplete="current-password"
+            field-class="mb-3"
+            :rules="[(v) => Boolean(v) || $t('auth.requiredField')]"
           />
           <div class="d-flex ga-3">
             <v-btn color="error" variant="flat" type="submit">
@@ -181,12 +166,14 @@
 <script>
 import { mapState } from 'vuex';
 import CopyText from '../components/CopyText.vue';
+import PasswordField from '../components/PasswordField.vue';
 
 export default {
   name: 'UserProfile',
 
   components: {
     CopyText,
+    PasswordField,
   },
 
   data() {

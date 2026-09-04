@@ -2,16 +2,15 @@
   <section class="workflow-hub">
     <v-card class="workflow-hero" variant="outlined">
       <div class="workflow-hero-copy">
-        <span class="workflow-eyebrow">Automation Workspace</span>
-        <h1 class="title is-3">Workflows in the Admin</h1>
+        <span class="workflow-eyebrow">{{ $t('menu.workflows') }}</span>
+        <h1 class="text-h4 font-weight-semibold">{{ $t('menu.workflows') }}</h1>
         <p>
-          Manage automations next to subscribers, campaigns, and lists. Review workflow health here,
-          then jump into the builder when you need to edit logic.
+          {{ $t('workflows.hubHelp') }}
         </p>
       </div>
 
       <div class="workflow-hero-actions">
-        <v-btn type="button" color="primary" variant="flat" @click="openBuilder()">Open Builder</v-btn>
+        <v-btn type="button" color="primary" variant="flat" @click="openBuilder()">{{ $t('menu.workflowBuilder') }}</v-btn>
       </div>
     </v-card>
 
@@ -145,6 +144,8 @@
 </template>
 
 <script>
+import { events } from '../utils/events';
+
 export default {
   name: 'WorkflowView',
 
@@ -227,7 +228,7 @@ export default {
           this.selectedWorkflowId = this.dashboard.activeWorkflow.workflow.id;
         }
       } catch (err) {
-        this.$utils.toast(err && err.message ? err.message : 'Failed to load workflows', 'is-danger');
+        this.$utils.toast(err && err.message ? err.message : 'Failed to load workflows', 'error');
       } finally {
         this.loading = false;
       }
@@ -254,13 +255,13 @@ export default {
         };
         this.selectedWorkflowId = this.dashboard.activeWorkflow?.workflow?.id || this.dashboard.workflows[0]?.id || '';
       } catch (err) {
-        this.$utils.toast(err && err.message ? err.message : 'Failed to delete workflow', 'is-danger');
+        this.$utils.toast(err && err.message ? err.message : 'Failed to delete workflow', 'error');
       }
     },
 
     confirmDeleteWorkflow() {
       const name = this.dashboard.activeWorkflow?.workflow?.name || 'this workflow';
-      this.$utils.confirm(`Delete ${name}? This also removes its runs and graph history.`, this.deleteSelectedWorkflow);
+      this.$utils.confirm(this.$t('workflows.deleteConfirm', { name }), this.deleteSelectedWorkflow);
     },
 
     openBuilder(workflowId = this.selectedWorkflowId || this.dashboard.activeWorkflow?.workflow?.id || this.dashboard.workflows[0]?.id) {
@@ -273,7 +274,7 @@ export default {
   },
 
   created() {
-    this.$events.$on('page.refresh', this.refreshDashboard);
+    events.$on('page.refresh', this.refreshDashboard);
   },
 
   mounted() {
@@ -281,7 +282,7 @@ export default {
   },
 
   beforeUnmount() {
-    this.$events.$off('page.refresh', this.refreshDashboard);
+    events.$off('page.refresh', this.refreshDashboard);
   },
 };
 </script>

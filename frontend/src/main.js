@@ -8,47 +8,8 @@ import * as api from './api';
 import Utils from './utils';
 import { docsUrl } from './utils/docs';
 import { isSuperAdmin } from './utils/auth';
+import { events } from './utils/events';
 import vuetify from './plugins/vuetify';
-
-function createEventBus() {
-  const listeners = new Map();
-
-  return {
-    $on(event, handler) {
-      const handlers = listeners.get(event) || new Set();
-      handlers.add(handler);
-      listeners.set(event, handlers);
-    },
-
-    $off(event, handler) {
-      const handlers = listeners.get(event);
-      if (!handlers) {
-        return;
-      }
-
-      if (!handler) {
-        listeners.delete(event);
-        return;
-      }
-
-      handlers.delete(handler);
-      if (handlers.size === 0) {
-        listeners.delete(event);
-      }
-    },
-
-    $emit(event, ...args) {
-      const handlers = listeners.get(event);
-      if (!handlers) {
-        return;
-      }
-
-      handlers.forEach((handler) => {
-        handler(...args);
-      });
-    },
-  };
-}
 
 const i18n = createI18n({
   legacy: false,
@@ -56,7 +17,7 @@ const i18n = createI18n({
   fallbackLocale: 'en',
   messages: {},
 });
-const eventBus = createEventBus();
+const eventBus = events;
 
 const NAMED_PLACEHOLDER_RE = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const SIMPLE_PLACEHOLDER_RE = /\{([^{}]+)\}/g;
@@ -441,11 +402,22 @@ const Root = {
   data() {
     return {
       isLoaded: false,
+      initError: '',
     };
   },
   methods: {
     async loadConfig() {
+      this.initError = '';
       await initConfig(this);
+    },
+    async retryInit() {
+      this.initError = '';
+      try {
+        await this.loadConfig();
+      } catch (err) {
+        this.initError = (err && err.response && err.response.message) || (err && err.message)
+          || i18n.global.t('globals.messages.initFailed');
+      }
     },
     awaitRestart(response) {
       return new Promise((resolve) => {
@@ -488,9 +460,18 @@ app.config.globalProperties.$canList = () => false;
 app.config.globalProperties.$docsUrl = docsUrl;
 
 const rootProxy = app.mount('#app');
-initConfig(rootProxy).catch((err) => {
+initConfig(rootProxy).catch(async (err) => {
   if (err && (err.status === 401 || (err.response && err.response.status === 401))) {
     if (isAuthPath() || (router.currentRoute.value.meta && router.currentRoute.value.meta.authPage)) {
+      try {
+        const { defaultMessages, localeMessages } = await loadLocaleMessages('en');
+        i18n.global.setLocaleMessage('en', defaultMessages);
+        setI18nLocale('en');
+        i18n.global.setLocaleMessage('en', localeMessages);
+        sharedUtils.updateRelativeTimeLocale();
+      } catch {
+        // Auth pages still render with fallback keys if language files are unavailable.
+      }
       rootProxy.isLoaded = true;
       return;
     }
@@ -499,5 +480,6 @@ initConfig(rootProxy).catch((err) => {
   }
   const msg = (err && err.response && err.response.message) || (err && err.message)
     || 'Failed to initialize the app';
-  sharedUtils.toast(msg, 'is-danger', 5000, false);
+  rootProxy.initError = msg;
+  sharedUtils.toast(msg, 'error', 5000, false);
 });

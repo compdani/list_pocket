@@ -590,7 +590,7 @@
           <a
             :href="$docsUrl('templating/#template-expressions')"
             target="_blank"
-            rel="noopener noreferer"
+            rel="noopener noreferrer"
             class="templating-link"
           >
             <v-icon size="small">mdi-code-tags</v-icon> {{ $t('campaigns.templatingRef') }}
@@ -657,7 +657,7 @@
             <v-btn
               :href="`${serverConfig.root_url}/archive/${data.uuid}`"
               target="_blank"
-              rel="noopener noreferer"
+              rel="noopener noreferrer"
               variant="text"
               icon
               :disabled="!form.archive"

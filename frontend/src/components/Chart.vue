@@ -29,7 +29,7 @@ const transitionMarkerPlugin = {
     const { ctx } = chart;
     ctx.save();
     ctx.setLineDash([6, 6]);
-    ctx.strokeStyle = 'rgba(0, 85, 212, 0.35)';
+    ctx.strokeStyle = 'rgba(15, 76, 129, 0.35)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(x, chartArea.top);
@@ -37,7 +37,7 @@ const transitionMarkerPlugin = {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = 'rgba(0, 85, 212, 0.8)';
+    ctx.fillStyle = 'rgba(15, 76, 129, 0.8)';
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
