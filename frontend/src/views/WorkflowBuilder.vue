@@ -1,9 +1,10 @@
 <script setup>
 /* eslint-disable */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import RunHistory from "../components/RunHistory.vue";
-import WorkflowBuilderPanel from "../components/WorkflowBuilderPanel.vue";
+import { openConfirm } from "../utils/confirmDialog";
 import {
   armWorkflowWebhookCapture,
   cancelWorkflowRun as cancelWorkflowRunRequest,
@@ -19,6 +20,9 @@ import {
   saveWorkflowGraph,
   validateWorkflow as validateWorkflowRequest,
 } from "../api";
+
+const WorkflowBuilderPanel = defineAsyncComponent(() => import("../components/WorkflowBuilderPanel.vue"));
+const { t } = useI18n();
 
 const builderRef = ref(null);
 const route = useRoute();
@@ -469,7 +473,7 @@ async function selectRun(runId) {
 }
 
 async function cancelRun(runId) {
-  if (!runId || !window.confirm("Stop this run? Waiting or queued work will be cancelled.")) {
+  if (!runId || !(await openConfirm({ message: t("workflows.stopRunConfirm") }))) {
     return;
   }
 
@@ -521,7 +525,7 @@ async function createWorkflow() {
 }
 
 async function deleteWorkflow(workflowId) {
-  if (!workflowId || !window.confirm("Delete this workflow? This also removes its runs and graph history.")) {
+  if (!workflowId || !(await openConfirm({ message: t("workflows.deleteConfirm", { name: "this workflow" }) }))) {
     return;
   }
 

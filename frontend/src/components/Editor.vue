@@ -9,7 +9,7 @@
 
       <v-btn v-if="isContentTypeLocked" color="warning" prepend-icon="mdi-lock-open-variant-outline"
         :disabled="disabled" @click="onUnlockContentTypeSelect">
-        Unlock
+        {{ $t('campaigns.unlockFormat') }}
       </v-btn>
       <v-btn v-if="!isVisualTplSelector && self.contentType === 'visual'" @click="onShowVisualTplSelector"
         variant="text" prepend-icon="mdi-file-find-outline" data-cy="btn-select-visual-tpl">
@@ -20,7 +20,7 @@
         <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
       </v-btn>
       <v-btn color="primary" variant="outlined" prepend-icon="mdi-creation-outline" :disabled="disabled" @click="isAIDialogOpen = true">
-        AI Builder
+        {{ $t('campaigns.aiBuilder') }}
       </v-btn>
 
       <template #extension v-if="self.contentType !== 'visual'">
@@ -79,17 +79,19 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue';
 import { html as beautifyHTML } from 'js-beautify';
 import TurndownService from 'turndown';
 import { mapState } from 'vuex';
 
 import CampaignPreview from './CampaignPreview.vue';
-import RichtextEditor from './RichtextEditor.vue';
-import VisualEditor from './VisualEditor.vue';
 import GrapesMjmlEditor from './GrapesMjmlEditor.vue';
 import markdownToVisualBlock from './editor';
-import CodeEditor from './CodeEditor.vue';
 import AICampaignBuilderDialog from './AICampaignBuilderDialog.vue';
+
+const RichtextEditor = defineAsyncComponent(() => import('./RichtextEditor.vue'));
+const VisualEditor = defineAsyncComponent(() => import('./VisualEditor.vue'));
+const CodeEditor = defineAsyncComponent(() => import('./CodeEditor.vue'));
 
 const turndown = new TurndownService();
 

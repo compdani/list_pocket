@@ -47,7 +47,7 @@
             <a
               :href="publicSubscriptionURL"
               target="_blank"
-              rel="noopener noreferer"
+              rel="noopener noreferrer"
               data-cy="url"
               class="form-link"
             >

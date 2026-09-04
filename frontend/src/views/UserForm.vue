@@ -124,30 +124,21 @@
 
           <v-row>
             <v-col cols="12" md="6">
-              <v-text-field
+              <password-field
                 v-model="form.password"
                 :disabled="!form.passwordLogin"
                 :label="$t('users.password')"
-                type="password"
-                minlength="8"
-                maxlength="200"
-                :required="form.passwordLogin && !isEditing"
-                variant="outlined"
-                density="comfortable"
+                autocomplete="new-password"
+                :rules="form.passwordLogin && !isEditing ? [(v) => Boolean(v) || $t('auth.requiredField')] : []"
               />
             </v-col>
 
             <v-col cols="12" md="6">
-              <v-text-field
+              <password-field
                 v-model="form.password2"
                 :disabled="!form.passwordLogin"
                 :label="$t('users.passwordRepeat')"
-                type="password"
-                minlength="8"
-                maxlength="200"
-                :required="form.passwordLogin && !isEditing && !!form.password"
-                variant="outlined"
-                density="comfortable"
+                autocomplete="new-password"
               />
             </v-col>
           </v-row>
@@ -229,6 +220,7 @@
 <script>
 import { mapState } from 'vuex';
 import CopyText from '../components/CopyText.vue';
+import PasswordField from '../components/PasswordField.vue';
 
 const baseForm = () => ({
   username: '',
@@ -248,6 +240,7 @@ export default {
 
   components: {
     CopyText,
+    PasswordField,
   },
 
   emits: ['close', 'finished'],

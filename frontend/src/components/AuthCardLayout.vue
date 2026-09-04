@@ -37,7 +37,7 @@ defineProps({
   min-height: 100dvh;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, rgba(0, 85, 212, 0.18), transparent 28rem),
+    radial-gradient(circle at top left, rgba(var(--v-theme-primary), 0.18), transparent 28rem),
     linear-gradient(135deg, #f5f8ff 0%, #eef3fb 45%, #f7fafc 100%);
 }
 
@@ -48,8 +48,8 @@ defineProps({
     linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.35)),
     repeating-linear-gradient(
       -45deg,
-      rgba(0, 85, 212, 0.03),
-      rgba(0, 85, 212, 0.03) 18px,
+      rgba(var(--v-theme-primary), 0.03),
+      rgba(var(--v-theme-primary), 0.03) 18px,
       transparent 18px,
       transparent 36px
     );
@@ -78,7 +78,7 @@ defineProps({
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #5f6b7a;
+  color: rgba(var(--v-theme-on-surface), 0.62);
 }
 
 .auth-brand h1 {
@@ -89,6 +89,6 @@ defineProps({
 
 .auth-description {
   margin: 10px 0 0;
-  color: #586679;
+  color: rgba(var(--v-theme-on-surface), 0.7);
 }
 </style>

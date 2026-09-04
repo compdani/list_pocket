@@ -1,83 +1,61 @@
 <template>
   <section class="lists">
-    <header class="page-header">
-      <v-row align="center" class="ma-0">
-        <v-col cols="12" md="9" class="px-0">
-          <h1 class="text-h5 font-weight-semibold mb-2">
-          {{ $t('globals.terms.lists') }}
-          <span v-if="queryParams.status === 'archived'" class="text-medium-emphasis">/ {{ queryParams.status }} </span>
-          <span v-if="!isNaN(lists.total)">({{ lists.total }})</span>
-          </h1>
+    <page-header :title="$t('globals.terms.lists')" :count="lists.total">
+      <template #title>
+        {{ $t('globals.terms.lists') }}
+        <span v-if="queryParams.status === 'archived'" class="text-medium-emphasis"> / {{ queryParams.status }}</span>
+      </template>
+      <template #subtitle>
+        <router-link v-if="queryParams.status !== 'archived'" :to="{ name: 'lists', query: { status: 'archived' } }">
+          {{ $t('globals.buttons.view') }} {{ $t('lists.archived').toLowerCase() }} &rarr;
+        </router-link>
+        <router-link v-else :to="{ name: 'lists' }">
+          {{ $t('globals.buttons.view') }} {{ $t('menu.allLists').toLowerCase() }} &rarr;
+        </router-link>
+      </template>
+      <template #actions>
+        <v-btn
+          v-if="$can('lists:manage_all')"
+          type="button"
+          color="primary"
+          variant="flat"
+          class="text-none"
+          @click.stop.prevent="showNewForm"
+          data-cy="btn-new"
+        >
+          {{ $t('globals.buttons.new') }}
+        </v-btn>
+      </template>
+    </page-header>
 
-          <div class="text-caption">
-            <router-link v-if="queryParams.status !== 'archived'" :to="{ name: 'lists', query: { status: 'archived' } }">
-              {{ $t('globals.buttons.view') }} {{ $t('lists.archived').toLowerCase() }} &rarr;
-            </router-link>
-            <router-link v-else :to="{ name: 'lists' }">
-              {{ $t('globals.buttons.view') }} {{ $t('menu.allLists').toLowerCase() }} &rarr;
-            </router-link>
-          </div>
-        </v-col>
-        <v-col cols="12" md="3" class="px-0 d-flex justify-end justify-md-end">
-          <v-btn
-            v-if="$can('lists:manage_all')"
-            type="button"
-            color="primary"
-            variant="flat"
-            class="text-none"
-            @click.stop.prevent="showNewForm"
-            data-cy="btn-new"
-          >
-            {{ $t('globals.buttons.new') }}
-          </v-btn>
-        </v-col>
-      </v-row>
-    </header>
+    <query-bar
+      v-model="queryParams.query"
+      :placeholder="$t('globals.fields.name')"
+      :search-label="$t('globals.buttons.search')"
+      input-cy="query"
+      submit-cy="btn-query"
+      @submit="onSearchSubmit"
+    />
 
-    <v-card class="mb-4 query-card" elevation="0">
-      <v-card-text class="query-card-body">
-        <form class="query-form" @submit.prevent="onSearchSubmit">
-          <v-text-field
-            v-model="queryParams.query"
-            class="query-input"
-            name="query"
-            :placeholder="$t('globals.fields.name')"
-            prepend-inner-icon="mdi-magnify"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-            ref="query"
-            data-cy="query"
-          />
-          <v-btn
-            type="submit"
-            class="query-submit"
-            color="primary"
-            icon="mdi-magnify"
-            variant="flat"
-            data-cy="btn-query"
-          />
-        </form>
-      </v-card-text>
-    </v-card>
+    <bulk-action-bar
+      :selected-count="bulk.checked.length"
+      :total="lists.total"
+      :show-select-all="!bulk.all && lists.total > lists.perPage"
+      select-all-cy="select-all-lists"
+      @select-all="onSelectAll"
+    >
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-trash-can-outline"
+        data-cy="btn-delete-lists"
+        @click="deleteLists"
+      >
+        {{ $t('globals.buttons.delete') }}
+      </v-btn>
+    </bulk-action-bar>
 
-    <div class="actions mb-4" v-if="bulk.checked.length > 0">
-      <a class="a" href="#" @click.prevent="deleteLists" data-cy="btn-delete-lists">
-        <v-icon icon="mdi-trash-can-outline" size="16" /> {{ $t('globals.buttons.delete') }}
-      </a>
-      <span class="a">
-        {{ $tc('globals.messages.numSelected', numSelectedLists, { num: numSelectedLists }) }}
-        <span v-if="!bulk.all && lists.total > lists.perPage">
-          &mdash;
-          <a href="#" @click.prevent="onSelectAll" data-cy="select-all-lists">
-            {{ $tc('globals.messages.selectAll', lists.total, { num: lists.total }) }}
-          </a>
-        </span>
-      </span>
-    </div>
-
-    <div class="table-wrap">
-      <v-data-table-server
+    <admin-data-table
         :headers="tableHeaders"
         :items="listRows"
         :items-length="lists.total || 0"
@@ -86,14 +64,17 @@
         :items-per-page="lists.perPage || 20"
         :sort-by="tableSortBy"
         :model-value="bulk.checked"
+        :empty-icon="'mdi-format-list-bulleted-square'"
+        :empty-label="$t('globals.messages.emptyState')"
+        :empty-action-label="$can('lists:manage_all') ? $t('globals.buttons.new') : ''"
         class="admin-data-table lists-table"
         item-value="id"
         return-object
         show-select
         select-strategy="page"
-        hide-default-footer
         @update:model-value="updateCheckedLists"
         @update:options="onTableOptionsChange"
+        @update:page="onPageChange"
       >
         <template #[`item.name`]="{ item }">
           <div>
@@ -133,7 +114,7 @@
         <template #[`item.subscriber_statuses`]="{ item }">
           <div class="fields stats">
             <p v-for="(count, status) in filterStatuses(item)" :key="status">
-              <label for="#">{{ $tc(`subscribers.status.${status}`, count) }}</label>
+              <span class="stat-label">{{ $tc(`subscribers.status.${status}`, count) }}</span>
               <router-link :to="`/subscribers/lists/${item.id}?subscription_status=${status}`" :class="status">
                 {{ $utils.formatNumber(count) }}
               </router-link>
@@ -193,49 +174,51 @@
         </template>
 
         <template #no-data>
-          <empty-placeholder v-if="!loading.listsFull" />
+          <empty-placeholder
+            v-if="!loading.listsFull"
+            icon="mdi-format-list-bulleted-square"
+            :label="$t('globals.messages.emptyState')"
+            :action-label="$can('lists:manage_all') ? $t('globals.buttons.new') : ''"
+            @action="showNewForm"
+          />
         </template>
-      </v-data-table-server>
-    </div>
+      </admin-data-table>
 
-    <div class="table-pagination" v-if="lists.total > 0">
-      <v-pagination
-        :length="listPageCount"
-        :model-value="queryParams.page"
-        rounded="circle"
-        total-visible="7"
-        @update:model-value="onPageChange"
-      />
-    </div>
-
-    <v-overlay
+    <v-dialog
       :model-value="isFormVisible"
-      class="admin-overlay align-center justify-center"
-      scrim="rgba(15, 23, 42, 0.45)"
+      max-width="680"
+      scrollable
       @update:model-value="handleDialogModelUpdate"
     >
-      <div class="admin-dialog-frame" style="max-width: 680px; width: calc(100vw - 32px);">
-        <list-form
-          v-if="isFormVisible"
-          :data="listFormData"
-          :is-editing="isEditing"
-          @finished="formFinished"
-          @close="closeForm"
-        />
-      </div>
-    </v-overlay>
+      <list-form
+        v-if="isFormVisible"
+        :data="listFormData"
+        :is-editing="isEditing"
+        @finished="formFinished"
+        @close="closeForm"
+      />
+    </v-dialog>
   </section>
 </template>
 
 <script>
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
+import PageHeader from '../components/PageHeader.vue';
+import QueryBar from '../components/QueryBar.vue';
+import BulkActionBar from '../components/BulkActionBar.vue';
+import AdminDataTable from '../components/AdminDataTable.vue';
 import ListForm from './ListForm.vue';
+import { events } from '../utils/events';
 
 export default {
   components: {
     ListForm,
     EmptyPlaceholder,
+    PageHeader,
+    QueryBar,
+    BulkActionBar,
+    AdminDataTable,
   },
 
   data() {
@@ -525,11 +508,11 @@ export default {
   },
 
   created() {
-    this.$events.$on('page.refresh', this.getLists);
+    events.$on('page.refresh', this.getLists);
   },
 
-  destroyed() {
-    this.$events.$off('page.refresh', this.getLists);
+  beforeUnmount() {
+    events.$off('page.refresh', this.getLists);
   },
 
   mounted() {

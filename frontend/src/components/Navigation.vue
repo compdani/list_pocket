@@ -10,11 +10,12 @@
       <v-list-item
         v-if="!item.children"
         :key="`item-${item.key}`"
+        :to="item.route"
         :active="Boolean(activeItem[item.key])"
         :prepend-icon="item.icon"
         :title="item.label"
         rounded="lg"
-        @click="navigate(item)"
+        @click="onItemClick"
       />
 
       <v-list-group
@@ -41,12 +42,13 @@
             class="workflow-nav-rail-divider"
           />
           <v-list-item
+            :to="child.route"
             :active="Boolean(activeItem[child.key])"
             :prepend-icon="child.icon"
             :title="child.label"
             rounded="lg"
             class="workflow-nav-child"
-            @click="navigate(child)"
+            @click="onItemClick"
           />
           <v-divider
             v-if="rail && index === item.children.length - 1"
@@ -60,7 +62,6 @@
 
 <script setup>
 import { computed, getCurrentInstance } from 'vue';
-import { useRouter } from 'vue-router';
 
 defineProps({
   activeItem: { type: Object, default: () => ({}) },
@@ -69,7 +70,6 @@ defineProps({
 });
 
 const emit = defineEmits(['updateOpenedGroups', 'navigate']);
-const router = useRouter();
 const { proxy } = getCurrentInstance();
 
 const navItems = computed(() => {
@@ -87,13 +87,13 @@ const navItems = computed(() => {
   const workflowChildren = [
     {
       key: 'workflows',
-      label: 'Overview',
+      label: $t('menu.overview'),
       icon: 'mdi-view-grid-outline',
       route: { name: 'workflows' },
     },
     {
       key: 'workflowBuilder',
-      label: 'Builder',
+      label: $t('menu.workflowBuilder'),
       icon: 'mdi-vector-polyline',
       route: { name: 'workflowBuilder' },
     },
@@ -101,7 +101,7 @@ const navItems = computed(() => {
 
   items.push({
     key: 'workflows',
-    label: 'Workflows',
+    label: $t('menu.workflows'),
     icon: 'mdi-source-branch',
     children: workflowChildren,
   });
@@ -187,7 +187,7 @@ const navItems = computed(() => {
     } : null,
     $can('tx:get') ? {
       key: 'txMessages',
-      label: 'Transactional',
+      label: $t('menu.transactional'),
       icon: 'mdi-email-outline',
       route: { name: 'txMessages' },
     } : null,
@@ -268,7 +268,7 @@ const navItems = computed(() => {
     } : null,
     isSuper ? {
       key: 'adminConsole',
-      label: 'Admin Console',
+      label: $t('menu.adminConsole'),
       icon: 'mdi-console',
       route: { name: 'adminConsole' },
     } : null,
@@ -290,11 +290,7 @@ function updateOpenedGroups(groups) {
   emit('updateOpenedGroups', groups.slice(-1));
 }
 
-function navigate(item) {
-  if (!item.route) {
-    return;
-  }
-  router.push(item.route);
+function onItemClick() {
   emit('navigate');
 }
 </script>

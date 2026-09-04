@@ -1,7 +1,7 @@
 <template>
   <section class="dashboard content">
     <header class="dashboard-header">
-      <h1 class="title is-4 dashboard-date">
+      <h1 class="text-h5 font-weight-semibold dashboard-date">
         {{ $utils.niceDate(new Date()) }}
       </h1>
     </header>
@@ -12,7 +12,7 @@
           <v-progress-circular indeterminate color="primary" size="40" />
         </div>
 
-        <article class="overview-card" data-cy="lists">
+        <router-link :to="{ name: 'lists' }" class="overview-card" data-cy="lists">
           <div class="metric-head">
             <p class="metric-value">
               <span class="metric-icon"><v-icon icon="mdi-format-list-bulleted-square" size="20" /></span>
@@ -24,25 +24,25 @@
           </div>
           <ul class="metric-breakdown">
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.lists.public) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.lists.public) }}</span>
               {{ $t('lists.types.public') }}
             </li>
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.lists.private) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.lists.private) }}</span>
               {{ $t('lists.types.private') }}
             </li>
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.lists.optinSingle) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.lists.optinSingle) }}</span>
               {{ $t('lists.optins.single') }}
             </li>
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.lists.optinDouble) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.lists.optinDouble) }}</span>
               {{ $t('lists.optins.double') }}
             </li>
           </ul>
-        </article>
+        </router-link>
 
-        <article class="overview-card" data-cy="campaigns">
+        <router-link :to="{ name: 'campaigns' }" class="overview-card" data-cy="campaigns">
           <div class="metric-head">
             <p class="metric-value">
               <span class="metric-icon"><v-icon icon="mdi-rocket-launch-outline" size="20" /></span>
@@ -54,14 +54,14 @@
           </div>
           <ul class="metric-breakdown">
             <li v-for="(num, status) in counts.campaigns.byStatus || {}" :key="status">
-              <label for="#" :data-cy="`campaigns-${status}`">{{ $utils.niceNumber(num) }}</label>
+              <span class="metric-count" :data-cy="`campaigns-${status}`">{{ $utils.niceNumber(num) }}</span>
               {{ $t(`campaigns.status.${status}`) }}
               <span v-if="status === 'running' && Number(num) > 0" class="running-indicator" aria-hidden="true" />
             </li>
           </ul>
-        </article>
+        </router-link>
 
-        <article class="overview-card" data-cy="subscribers">
+        <router-link :to="{ name: 'subscribers' }" class="overview-card" data-cy="subscribers">
           <div class="metric-head">
             <p class="metric-value">
               <span class="metric-icon"><v-icon icon="mdi-account-multiple" size="20" /></span>
@@ -74,15 +74,15 @@
 
           <ul class="metric-breakdown">
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.subscribers.blocklisted) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.subscribers.blocklisted) }}</span>
               {{ $t('subscribers.status.blocklisted') }}
             </li>
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.subscribers.orphans) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.subscribers.orphans) }}</span>
               {{ $t('dashboard.orphanSubs') }}
             </li>
             <li>
-              <label for="#">{{ $utils.niceNumber(counts.unsubscribes || 0) }}</label>
+              <span class="metric-count">{{ $utils.niceNumber(counts.unsubscribes || 0) }}</span>
               {{ $t('analytics.unsubscribes') }}
             </li>
           </ul>
@@ -98,7 +98,7 @@
               {{ $t('dashboard.messagesSent') }}
             </p>
           </div>
-        </article>
+        </router-link>
       </div>
 
       <div class="charts-card relative">
@@ -108,7 +108,7 @@
         <article class="charts-panel">
           <div class="charts-grid">
             <div class="chart-block">
-              <h3 class="title is-size-6 chart-title">
+              <h3 class="text-subtitle-1 font-weight-medium chart-title">
                 {{ $t('analytics.openTracking') }}
               </h3>
               <div v-if="openTrackingBreakdown" class="chart-legend">
@@ -131,7 +131,7 @@
               <chart type="line" v-if="openTrackingBreakdown" :data="openTrackingBreakdown" />
             </div>
             <div class="chart-block">
-              <h3 class="title is-size-6 chart-title align-right">
+              <h3 class="text-subtitle-1 font-weight-medium chart-title align-right">
                 {{ $t('dashboard.linkClicks') }}
               </h3>
               <chart type="line" v-if="campaignClicks" :data="campaignClicks" />
@@ -144,9 +144,12 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue';
 import dayjs from 'dayjs';
 import { colors } from '../constants';
-import Chart from '../components/Chart.vue';
+import { events } from '../utils/events';
+
+const Chart = defineAsyncComponent(() => import('../components/Chart.vue'));
 
 export default {
   components: {
@@ -321,11 +324,11 @@ export default {
   },
 
   created() {
-    this.$events.$on('page.refresh', this.fetchData);
+    events.$on('page.refresh', this.fetchData);
   },
 
   beforeUnmount() {
-    this.$events.$off('page.refresh', this.fetchData);
+    events.$off('page.refresh', this.fetchData);
   },
 
   mounted() {
@@ -376,8 +379,15 @@ export default {
   background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
   border: 1px solid var(--dashboard-border);
   border-radius: 16px;
+  color: inherit;
+  display: block;
   min-height: 220px;
   padding: 16px;
+  text-decoration: none;
+}
+
+.overview-card:hover {
+  border-color: rgba(var(--v-theme-primary), 0.35);
 }
 
 .metric-head {
@@ -426,7 +436,7 @@ export default {
   padding: 4px 0;
 }
 
-.metric-breakdown label {
+.metric-breakdown .metric-count {
   color: #0f172a;
   font-weight: 700;
   margin-right: auto;

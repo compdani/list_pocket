@@ -100,7 +100,7 @@
                   size="x-small"
                   variant="text"
                   data-cy="btn-clone"
-                  @click="$utils.prompt('Clone template', { placeholder: 'Name', value: `Copy of ${item.name}` }, (name) => cloneTemplate(name, item))"
+                  @click="$utils.prompt($t('templates.clone'), { placeholder: $t('globals.fields.name'), value: $t('campaigns.copyOf', { name: item.name }) }, (name) => cloneTemplate(name, item))"
                 />
               </template>
             </v-tooltip>

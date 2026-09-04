@@ -1,65 +1,44 @@
 <template>
   <section class="subscribers">
-    <header class="page-header mb-4">
-      <v-row align="center" class="ma-0">
-        <v-col cols="12" md="9" class="px-0">
-          <h1 class="text-h5 font-weight-semibold mb-0">
-          {{ $t('globals.terms.subscribers') }}
-          <span v-if="!isNaN(subscribers.total)">
-            (<span data-cy="count">{{ subscribers.total }}</span>)
+    <page-header :title="$t('globals.terms.subscribers')" :count="subscribers.total">
+      <template #title>
+        {{ $t('globals.terms.subscribers') }}
+        <span v-if="currentList">
+          &raquo; {{ currentList.name }}
+          <span v-if="queryParams.subStatus" class="text-medium-emphasis font-weight-regular text-capitalize">
+            ({{ queryParams.subStatus }})
           </span>
-          <span v-if="currentList">
-            &raquo; {{ currentList.name }}
-            <span v-if="queryParams.subStatus" class="text-medium-emphasis font-weight-regular text-capitalize">({{
-              queryParams.subStatus }})</span>
-          </span>
-          </h1>
-        </v-col>
-        <v-col cols="12" md="3" class="px-0 d-flex justify-end justify-md-end">
-          <v-btn
-            v-if="$can('subscribers:manage')"
-            type="button"
-            color="primary"
-            variant="flat"
-            class="text-none"
-            @click.stop.prevent="showNewForm"
-            data-cy="btn-new"
-          >
-            {{ $t('globals.buttons.new') }}
-          </v-btn>
-        </v-col>
-      </v-row>
-    </header>
+        </span>
+      </template>
+      <template #count>
+        <span data-cy="count">{{ subscribers.total }}</span>
+      </template>
+      <template #actions>
+        <v-btn
+          v-if="$can('subscribers:manage')"
+          type="button"
+          color="primary"
+          variant="flat"
+          class="text-none"
+          @click.stop.prevent="showNewForm"
+          data-cy="btn-new"
+        >
+          {{ $t('globals.buttons.new') }}
+        </v-btn>
+      </template>
+    </page-header>
 
     <section class="subscribers-controls">
-      <v-card class="mb-4 query-card" elevation="0">
-        <v-card-text class="query-card-body">
-          <form class="query-form" @submit.prevent="onSubmit">
-            <div class="query-main-row">
-              <v-text-field
-                @update:model-value="onSimpleQueryInput"
-                v-model="queryInput"
-                class="query-input"
-                name="query"
-                :placeholder="$t('subscribers.queryPlaceholder')"
-                prepend-inner-icon="mdi-magnify"
-                variant="outlined"
-                density="comfortable"
-                hide-details
-                ref="query"
-                :disabled="isSearchAdvanced"
-                data-cy="search"
-              />
-              <v-btn
-                type="submit"
-                class="query-submit"
-                color="primary"
-                icon="mdi-magnify"
-                variant="flat"
-                :disabled="isSearchAdvanced"
-                data-cy="btn-search"
-              />
-            </div>
+      <query-bar
+        v-model="queryInput"
+        :placeholder="$t('subscribers.queryPlaceholder')"
+        :search-label="$t('globals.buttons.search')"
+        :disabled="isSearchAdvanced"
+        input-cy="search"
+        submit-cy="btn-search"
+        @update:model-value="onSimpleQueryInput"
+        @submit="onSubmit"
+      >
 
             <div v-if="isSearchAdvanced" class="advanced-query mt-2">
               <div v-if="canUseSqlQuery" class="advanced-mode-tabs mb-3">
@@ -127,7 +106,6 @@
                 </v-btn>
               </div>
             </div>
-          </form>
 
           <div
             v-if="!isSearchAdvanced && activeFilterChips.length"
@@ -156,38 +134,55 @@
               <span v-if="activeFilterCount" class="filter-count">({{ activeFilterCount }})</span>
             </a>
           </div>
-        </v-card-text>
-      </v-card>
+      </query-bar>
     </section>
-    <div class="actions mb-4">
-      <a class="a" href="#" @click.prevent="exportSubscribers" data-cy="btn-export-subscribers">
-        <v-icon icon="mdi-cloud-download-outline" size="16" />
+    <div class="d-flex flex-wrap ga-2 mb-4">
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-cloud-download-outline"
+        data-cy="btn-export-subscribers"
+        @click="exportSubscribers"
+      >
         {{ $t('subscribers.export') }}
-      </a>
-      <template v-if="bulk.checked.length > 0">
-        <a class="a" href="#" @click.prevent="showBulkListForm" data-cy="btn-manage-lists">
-          <v-icon icon="mdi-format-list-bulleted-square" size="16" /> Manage lists
-        </a>
-        <a class="a" href="#" @click.prevent="deleteSubscribers" data-cy="btn-delete-subscribers">
-          <v-icon icon="mdi-trash-can-outline" size="16" /> Delete
-        </a>
-        <a class="a" href="#" @click.prevent="blocklistSubscribers" data-cy="btn-manage-blocklist">
-          <v-icon icon="mdi-account-off-outline" size="16" /> Blocklist
-        </a>
-        <span class="a">
-          {{ $t('globals.messages.numSelected', { num: numSelectedSubscribers }) }}
-          <span v-if="!bulk.all && subscribers.total > subscribers.perPage">
-            &mdash;
-            <a href="#" @click.prevent="selectAllSubscribers">
-              {{ $t('globals.messages.selectAll', { num: subscribers.total }) }}
-            </a>
-          </span>
-        </span>
-      </template>
+      </v-btn>
     </div>
+    <bulk-action-bar
+      :selected-count="bulk.checked.length"
+      :total="subscribers.total"
+      :show-select-all="!bulk.all && subscribers.total > subscribers.perPage"
+      @select-all="selectAllSubscribers"
+    >
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-format-list-bulleted-square"
+        data-cy="btn-manage-lists"
+        @click="showBulkListForm"
+      >
+        {{ $t('subscribers.manageLists') }}
+      </v-btn>
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-trash-can-outline"
+        data-cy="btn-delete-subscribers"
+        @click="deleteSubscribers"
+      >
+        {{ $t('globals.buttons.delete') }}
+      </v-btn>
+      <v-btn
+        variant="text"
+        size="small"
+        prepend-icon="mdi-account-off-outline"
+        data-cy="btn-manage-blocklist"
+        @click="blocklistSubscribers"
+      >
+        {{ $t('subscribers.status.blocklisted') }}
+      </v-btn>
+    </bulk-action-bar>
 
-    <div class="table-wrap">
-      <v-data-table-server
+    <admin-data-table
         :headers="tableHeaders"
         :items="subscriberRows"
         :items-length="subscribers.total || 0"
@@ -201,9 +196,9 @@
         return-object
         show-select
         select-strategy="page"
-        hide-default-footer
         @update:model-value="updateCheckedSubscribers"
         @update:options="onTableOptionsChange"
+        @update:page="onPageChange"
       >
         <template #[`item.email`]="{ item }">
           <div>
@@ -286,59 +281,53 @@
         </template>
 
         <template #no-data>
-          <empty-placeholder v-if="!loading.subscribers" />
+          <empty-placeholder
+            v-if="!loading.subscribers"
+            icon="mdi-account-multiple-outline"
+            :label="$t('globals.messages.emptyState')"
+            :action-label="$can('subscribers:manage') ? $t('globals.buttons.new') : ''"
+            @action="showNewForm"
+          />
         </template>
-      </v-data-table-server>
-    </div>
+      </admin-data-table>
 
-    <div class="table-pagination" v-if="subscribers.total > 0">
-      <v-pagination
-        :length="subscriberPageCount"
-        :model-value="queryParams.page"
-        rounded="circle"
-        total-visible="7"
-        @update:model-value="onPageChange"
-      />
-    </div>
-
-    <v-overlay
-      :model-value="isBulkListFormVisible"
-      class="admin-overlay align-center justify-center"
-      scrim="rgba(15, 23, 42, 0.45)"
-      @update:model-value="isBulkListFormVisible = $event"
+    <v-dialog
+      v-model="isBulkListFormVisible"
+      max-width="560"
+      scrollable
     >
-      <div class="admin-dialog-frame" style="max-width: 560px; width: calc(100vw - 32px);">
-        <subscriber-bulk-list
-          :num-subscribers="this.numSelectedSubscribers"
-          @finished="bulkChangeLists"
-          @close="isBulkListFormVisible = false"
-        />
-      </div>
-    </v-overlay>
+      <subscriber-bulk-list
+        :num-subscribers="numSelectedSubscribers"
+        @finished="bulkChangeLists"
+        @close="isBulkListFormVisible = false"
+      />
+    </v-dialog>
 
-    <v-overlay
+    <v-dialog
       :model-value="isFormVisible"
-      class="admin-overlay align-center justify-center"
-      scrim="rgba(15, 23, 42, 0.45)"
+      max-width="920"
+      scrollable
       @update:model-value="handleDialogModelUpdate"
     >
-      <div class="admin-dialog-frame" style="max-width: 920px; width: calc(100vw - 32px);">
-        <subscriber-form
-          v-if="isFormVisible"
-          :key="subscriberFormKey"
-          :data="subscriberFormData"
-          :is-editing="false"
-          @finished="querySubscribers"
-          @close="closeForm"
-        />
-      </div>
-    </v-overlay>
+      <subscriber-form
+        v-if="isFormVisible"
+        :key="subscriberFormKey"
+        :data="subscriberFormData"
+        :is-editing="false"
+        @finished="querySubscribers"
+        @close="closeForm"
+      />
+    </v-dialog>
   </section>
 </template>
 
 <script>
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
+import PageHeader from '../components/PageHeader.vue';
+import QueryBar from '../components/QueryBar.vue';
+import BulkActionBar from '../components/BulkActionBar.vue';
+import AdminDataTable from '../components/AdminDataTable.vue';
 import SubscriberFilterBuilder from '../components/SubscriberFilterBuilder.vue';
 import { uris } from '../constants';
 import {
@@ -352,6 +341,7 @@ import {
 import SubscriberBulkList from './SubscriberBulkList.vue';
 import SubscriberForm from './SubscriberForm.vue';
 import CopyText from '../components/CopyText.vue';
+import { events } from '../utils/events';
 
 export default {
   components: {
@@ -360,6 +350,10 @@ export default {
     SubscriberFilterBuilder,
     CopyText,
     EmptyPlaceholder,
+    PageHeader,
+    QueryBar,
+    BulkActionBar,
+    AdminDataTable,
   },
 
   data() {
@@ -589,7 +583,7 @@ export default {
     },
 
     onSimpleQueryInput(v) {
-      const q = v.replace(/'/, "''").trim();
+      const q = String(v || '').replace(/'/, "''").trim();
       this.queryParams.page = 1;
       this.queryParams.search = q.toLowerCase();
     },
@@ -953,11 +947,11 @@ export default {
   },
 
   created() {
-    this.$events.$on('page.refresh', this.querySubscribers);
+    events.$on('page.refresh', this.querySubscribers);
   },
 
-  destroyed() {
-    this.$events.$off('page.refresh', this.querySubscribers);
+  beforeUnmount() {
+    events.$off('page.refresh', this.querySubscribers);
   },
 
   mounted() {

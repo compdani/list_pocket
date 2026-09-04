@@ -33,7 +33,7 @@ $color: $grey-dark;
 }
 
 $body-family: "Inter", "Helvetica Neue", sans-serif;
-$primary: #0055d4;
+$primary: #0f4c81;
 $green: #36995b;
 $red: #FF5722;
 
@@ -46,6 +46,7 @@ $grey-lightest: #eaeaea;
 /* Custom style overrides */
 html, body {
   height: 100%;
+  font-family: $body-family;
 }
 
 code {

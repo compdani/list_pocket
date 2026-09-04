@@ -209,10 +209,12 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue';
 import dayjs from 'dayjs';
 import { mapState } from 'vuex';
 import { colors } from '../constants';
-import Chart from '../components/Chart.vue';
+
+const Chart = defineAsyncComponent(() => import('../components/Chart.vue'));
 
 const chartColorRed = '#ee7d5b';
 const chartColors = [

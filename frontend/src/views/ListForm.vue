@@ -1,5 +1,5 @@
 <template>
-  <v-form @submit.prevent="onSubmit">
+  <v-form ref="formRef" @submit.prevent="onSubmit">
     <div class="admin-dialog-card modal-card content">
       <header class="admin-dialog-head modal-card-head">
         <div class="dialog-meta-row">
@@ -28,7 +28,8 @@
           maxlength="200"
           name="name"
           :placeholder="$t('globals.fields.name')"
-          required
+          :rules="nameRules"
+          hide-details="auto"
           type="text"
           variant="outlined"
           density="comfortable"
@@ -162,7 +163,12 @@ export default {
   },
 
   methods: {
-    onSubmit() {
+    async onSubmit() {
+      const result = await this.$refs.formRef?.validate?.();
+      if (result && result.valid === false) {
+        return;
+      }
+
       if (this.isEditing) {
         this.updateList();
         return;
@@ -195,6 +201,12 @@ export default {
       return [
         { title: this.$t('lists.types.private'), value: 'private' },
         { title: this.$t('lists.types.public'), value: 'public' },
+      ];
+    },
+
+    nameRules() {
+      return [
+        (v) => Boolean(v && String(v).trim()) || this.$t('auth.requiredField'),
       ];
     },
 

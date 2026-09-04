@@ -121,10 +121,10 @@
       <div v-else-if="items.length > 0" class="grid">
         <div v-for="item in items" :key="item.id" class="item">
           <div class="thumb">
-            <a @click="(e) => onMediaSelect(item, e)" :href="item.url" target="_blank" rel="noopener noreferer"
+            <a @click="(e) => onMediaSelect(item, e)" :href="item.url" target="_blank" rel="noopener noreferrer"
               class="thumb-link">
               <div class="thumb-container">
-                <img v-if="item.thumbUrl" :src="item.thumbUrl" :title="item.filename" :alt="item.filename" />
+                <img v-if="item.thumbUrl" :src="item.thumbUrl" :title="item.filename" :alt="item.filename" loading="lazy" decoding="async" />
                 <div v-else class="thumb-placeholder">
                   <span class="file-ext">
                     {{ item.filename.split(".").pop().toUpperCase() }}
