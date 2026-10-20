@@ -12,7 +12,7 @@ listpocket is intended for running and managing newsletters from your own infras
 
 While listpocket draws inspiration from listmonk, it is **not a drop-in replacement** and has been substantially reworked:
 
-- **Frontend rewrite.** The admin UI is a complete rewrite in Vue 3 using Vuetify 4.0. None of the original frontend code remains.
+- **Frontend rewrite.** The admin UI is a complete rewrite in Vue 3 using Vuetify 3. None of the original frontend code remains.
 - **PocketBase as the sole datastore.** Rather than supporting multiple SQL backends, listpocket uses [PocketBase](https://pocketbase.io) as its main and only database. This is a deliberate design choice — it simplifies deployment, embeds auth and storage, and removes the need for an external database server.
 - **Go backend, restructured.** The backend retains a Go foundation but has been adapted to integrate directly with PocketBase rather than the original listmonk data layer.
 
@@ -77,7 +77,7 @@ This produces the frontend bundle in `frontend/dist` and the backend binary at `
 ## Tech Stack
 
 - **Backend:** Go
-- **Frontend:** Vue 3 + Vuetify 4.0
+- **Frontend:** Vue 3 + Vuetify 3
 - **Database / Auth / Storage:** PocketBase
 
 ## License

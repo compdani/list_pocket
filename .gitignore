@@ -1,3 +1,7 @@
 pb_data
 .gocache
 .env
+# Local build output and config
+/listpocket
+/config.toml
+.DS_Store
