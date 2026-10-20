@@ -216,14 +216,18 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue';
 import { mapState } from 'vuex';
 import CampaignPreview from '../components/CampaignPreview.vue';
-import CodeEditor from '../components/CodeEditor.vue';
-import RichtextEditor from '../components/RichtextEditor.vue';
-import VisualEditor from '../components/VisualEditor.vue';
-import GrapesMjmlEditor from '../components/GrapesMjmlEditor.vue';
 import CopyText from '../components/CopyText.vue';
 import AICampaignBuilderDialog from '../components/AICampaignBuilderDialog.vue';
+
+// Editors load on demand: each pulls in a large library (CodeMirror,
+// TinyMCE, the email builder, GrapesJS + MJML) and only one is shown.
+const CodeEditor = defineAsyncComponent(() => import('../components/CodeEditor.vue'));
+const RichtextEditor = defineAsyncComponent(() => import('../components/RichtextEditor.vue'));
+const VisualEditor = defineAsyncComponent(() => import('../components/VisualEditor.vue'));
+const GrapesMjmlEditor = defineAsyncComponent(() => import('../components/GrapesMjmlEditor.vue'));
 
 const baseForm = () => ({
   name: '',

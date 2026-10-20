@@ -85,13 +85,13 @@ import TurndownService from 'turndown';
 import { mapState } from 'vuex';
 
 import CampaignPreview from './CampaignPreview.vue';
-import GrapesMjmlEditor from './GrapesMjmlEditor.vue';
 import markdownToVisualBlock from './editor';
 import AICampaignBuilderDialog from './AICampaignBuilderDialog.vue';
 
 const RichtextEditor = defineAsyncComponent(() => import('./RichtextEditor.vue'));
 const VisualEditor = defineAsyncComponent(() => import('./VisualEditor.vue'));
 const CodeEditor = defineAsyncComponent(() => import('./CodeEditor.vue'));
+const GrapesMjmlEditor = defineAsyncComponent(() => import('./GrapesMjmlEditor.vue'));
 
 const turndown = new TurndownService();
 
