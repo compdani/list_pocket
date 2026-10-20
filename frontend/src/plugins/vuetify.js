@@ -1,15 +1,28 @@
 import 'vuetify/styles';
-import '@mdi/font/css/materialdesignicons.css';
 
+import { h } from 'vue';
 import { createVuetify } from 'vuetify';
-import { aliases, mdi } from 'vuetify/iconsets/mdi';
+import { aliases, mdi } from 'vuetify/iconsets/mdi-svg';
+import iconPaths from './icons';
+
+// Resolve `mdi-*` names to bundled SVG paths instead of loading the full
+// Material Design Icons webfont. Vuetify's own aliases are already SVG paths.
+const mdiNamed = {
+  component: (props) => {
+    const path = iconPaths[props.icon];
+    if (!path && import.meta.env.DEV && String(props.icon).startsWith('mdi-')) {
+      console.warn(`Icon "${props.icon}" is not in src/plugins/icons.js`);
+    }
+    return h(mdi.component, { ...props, icon: path || props.icon });
+  },
+};
 
 export default createVuetify({
   icons: {
     defaultSet: 'mdi',
     aliases,
     sets: {
-      mdi,
+      mdi: mdiNamed,
     },
   },
   theme: {

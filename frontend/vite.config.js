@@ -58,6 +58,11 @@ export default defineConfig(({ _, mode }) => {
             if (id.includes('@codemirror') || id.includes('/codemirror/')) {
               return 'codemirror';
             }
+            // Keep the Vue runtime in its own chunk; otherwise it gets merged
+            // into vue-flow and that whole chunk is preloaded on every page.
+            if (/node_modules\/(@vue\/|vue\/|vue-router|vuex|vue-i18n|@intlify)/.test(id)) {
+              return 'vue';
+            }
             if (id.includes('@vue-flow')) {
               return 'vue-flow';
             }
