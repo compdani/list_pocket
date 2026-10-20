@@ -476,6 +476,7 @@ app.config.globalProperties.$t = i18n.global.t;
 app.config.globalProperties.$tc = i18n.global.tc;
 app.config.globalProperties.$can = () => false;
 app.config.globalProperties.$canList = () => false;
+app.config.globalProperties.$isSuperAdmin = () => false;
 app.config.globalProperties.$docsUrl = docsUrl;
 
 const rootProxy = app.mount('#app');

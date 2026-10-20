@@ -420,9 +420,13 @@ export default {
   },
 
   mounted() {
-    this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
     events.$on('layout.aiPanel', this.onAIPanel);
-    this.listenEvents();
+    // Signed-out visitors (the login and password pages) can't load lists or
+    // subscribe to events; login does a full page load, so this re-runs after.
+    if (this.$api.isAuthenticated()) {
+      this.$api.getLists({ minimal: true, per_page: 'all', status: 'active' });
+      this.listenEvents();
+    }
   },
 
   beforeUnmount() {
