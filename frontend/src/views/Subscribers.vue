@@ -583,9 +583,10 @@ export default {
     },
 
     onSimpleQueryInput(v) {
-      const q = String(v || '').replace(/'/, "''").trim();
+      // Sent as a bound parameter and matched with COLLATE NOCASE server-side,
+      // so no quoting or case-folding is needed here.
       this.queryParams.page = 1;
-      this.queryParams.search = q.toLowerCase();
+      this.queryParams.search = String(v || '').trim();
     },
 
     // Ctrl + Enter on the advanced query searches.
