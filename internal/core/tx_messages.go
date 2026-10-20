@@ -77,17 +77,14 @@ func txMessageRowToModel(row txMessageRow) models.TransactionalMessage {
 
 func (c *Core) QueryTransactionalMessages(search string, offset, limit int) ([]models.TransactionalMessage, int, error) {
 	search = strings.TrimSpace(search)
-	searchLike := "%"
-	if search != "" {
-		searchLike = "%" + search + "%"
-	}
+	searchLike := likeContains(search)
 
 	total := 0
 	if err := c.db.Get(&total, `
 		SELECT COUNT(*)
 		FROM transactional_messages tm
 		LEFT JOIN templates t ON t.id = tm.template_id
-		WHERE (? = '' OR tm.subject LIKE ? OR tm.to_email LIKE ? OR COALESCE(t.name, '') LIKE ?)
+		WHERE (? = '' OR tm.subject LIKE ? ESCAPE '\' OR tm.to_email LIKE ? ESCAPE '\' OR COALESCE(t.name, '') LIKE ? ESCAPE '\')
 	`, search, searchLike, searchLike, searchLike); err != nil {
 		c.log.Printf("error counting transactional messages: %v", err)
 		return nil, 0, apperr.Internal(c.i18n.Ts("globals.messages.errorFetching", "name", "transactional messages", "error", err.Error()))
@@ -121,7 +118,7 @@ func (c *Core) QueryTransactionalMessages(search string, offset, limit int) ([]m
 			COALESCE(tm.sent_at, '') AS sent_at
 		FROM transactional_messages tm
 		LEFT JOIN templates t ON t.id = tm.template_id
-		WHERE (? = '' OR tm.subject LIKE ? OR tm.to_email LIKE ? OR COALESCE(t.name, '') LIKE ?)
+		WHERE (? = '' OR tm.subject LIKE ? ESCAPE '\' OR tm.to_email LIKE ? ESCAPE '\' OR COALESCE(t.name, '') LIKE ? ESCAPE '\')
 		ORDER BY tm.created DESC
 		LIMIT ? OFFSET ?
 	`, search, searchLike, searchLike, searchLike, limit, offset); err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/compdani/list_pocket/internal/apperr"
 
 	"github.com/compdani/list_pocket/models"
+	"github.com/pocketbase/dbx"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
@@ -361,8 +362,8 @@ func (c *Core) DeleteSpamInboundEmails(ctx context.Context) (int, error) {
 	deleted := 0
 	for _, r := range rows {
 		// Delete attachment records first (PocketBase cascades file deletion).
-		attachmentRecords, err := pb.FindRecordsByFilter("inbound_email_attachments",
-			fmt.Sprintf(`inbound_email_reply_id = "%s"`, strings.ReplaceAll(r.RecordID, `"`, ``)), "", 0, 200)
+		attachmentRecords, err := pb.FindAllRecords("inbound_email_attachments",
+			dbx.HashExp{"inbound_email_reply_id": r.RecordID})
 		if err == nil {
 			for _, a := range attachmentRecords {
 				_ = pb.Delete(a)

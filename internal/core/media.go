@@ -68,8 +68,8 @@ func (c *Core) QueryMedia(provider string, s media.Store, query string, offset, 
 		`
 	args := []any{provider}
 	if query != "" {
-		query = "%" + strings.ToLower(query) + "%"
-		q += ` AND LOWER(filename) LIKE ?`
+		query = likeContains(strings.ToLower(query))
+		q += ` AND LOWER(filename) LIKE ?` + likeEsc
 		args = append(args, query)
 	}
 	q += ` ORDER BY created DESC LIMIT ? OFFSET ?`

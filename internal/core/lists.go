@@ -173,8 +173,8 @@ func (c *Core) queryListsSQLite(searchStr, typ, optin, status string, tags []str
 
 	args := make([]any, 0, 6+len(tags)+len(permittedIDs))
 	if searchStr != "" {
-		query += ` AND l.name LIKE ?`
-		args = append(args, "%"+searchStr+"%")
+		query += ` AND l.name LIKE ?` + likeEsc
+		args = append(args, likeContains(searchStr))
 	}
 	if typ != "" {
 		query += ` AND l.type = ?`
@@ -508,8 +508,8 @@ func (c *Core) DeleteLists(recordIDs []string, query string, getAll bool, permit
 
 		queryStr := strings.TrimSpace(query)
 		if queryStr != "" {
-			q += ` AND name LIKE ?`
-			args = append(args, "%"+queryStr+"%")
+			q += ` AND name LIKE ?` + likeEsc
+			args = append(args, likeContains(queryStr))
 		}
 
 		if !getAll {

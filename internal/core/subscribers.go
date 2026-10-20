@@ -1532,8 +1532,8 @@ func (c *Core) subscriberFilterSQLite(searchStr, queryExp string, filters json.R
 	}
 
 	if searchStr != "" {
-		like := "%" + searchStr + "%"
-		where = append(where, `(subscribers.name LIKE ? COLLATE NOCASE OR subscribers.email LIKE ? COLLATE NOCASE OR subscribers.phone LIKE ? COLLATE NOCASE)`)
+		like := likeContains(searchStr)
+		where = append(where, `(subscribers.name LIKE ?`+likeEsc+` OR subscribers.email LIKE ?`+likeEsc+` OR subscribers.phone LIKE ?`+likeEsc+`)`)
 		args = append(args, like, like, like)
 	}
 

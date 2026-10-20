@@ -43,8 +43,8 @@ func (c *Core) GetInboundEmailInbox(ctx context.Context, params InboxQueryParams
 	args := []any{}
 	search := strings.TrimSpace(params.Search)
 	if search != "" {
-		conds = append(conds, `(LOWER(e.from_address) LIKE ? OR LOWER(e.subject) LIKE ?)`)
-		like := "%" + strings.ToLower(search) + "%"
+		conds = append(conds, `(LOWER(e.from_address) LIKE ?`+likeEsc+` OR LOWER(e.subject) LIKE ?`+likeEsc+`)`)
+		like := likeContains(strings.ToLower(search))
 		args = append(args, like, like)
 	}
 	switch params.SpamStatus {

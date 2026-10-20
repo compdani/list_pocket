@@ -249,7 +249,7 @@ func compileAttribRule(n *SubscriberFilterNode) (string, []any, error) {
 		case "neq":
 			return `(CAST(` + extract + ` AS TEXT) != ? COLLATE NOCASE OR ` + extract + ` IS NULL)`, []any{path, val, path}, nil
 		case "contains":
-			return `(CAST(` + extract + ` AS TEXT) LIKE ? COLLATE NOCASE)`, []any{path, "%" + val + "%"}, nil
+			return `(CAST(` + extract + ` AS TEXT) LIKE ?` + likeEsc + `)`, []any{path, likeContains(val)}, nil
 		}
 	case "gt", "gte", "lt", "lte":
 		num, err := parseScalarNumber(n.Value)
@@ -276,11 +276,11 @@ func compileTextFieldRule(n *SubscriberFilterNode) (string, []any, error) {
 	case "eq":
 		return `(` + col + ` = ? COLLATE NOCASE)`, []any{val}, nil
 	case "contains":
-		return `(` + col + ` LIKE ? COLLATE NOCASE)`, []any{"%" + val + "%"}, nil
+		return `(` + col + ` LIKE ?` + likeEsc + `)`, []any{likeContains(val)}, nil
 	case "starts_with":
-		return `(` + col + ` LIKE ? COLLATE NOCASE)`, []any{val + "%"}, nil
+		return `(` + col + ` LIKE ?` + likeEsc + `)`, []any{likePrefix(val)}, nil
 	case "ends_with":
-		return `(` + col + ` LIKE ? COLLATE NOCASE)`, []any{"%" + val}, nil
+		return `(` + col + ` LIKE ?` + likeEsc + `)`, []any{likeSuffix(val)}, nil
 	default:
 		return "", nil, apperr.BadRequest("invalid " + n.Field + " operator")
 	}

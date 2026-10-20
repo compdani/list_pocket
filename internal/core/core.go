@@ -72,7 +72,6 @@ var (
 )
 
 var (
-	regexFullTextQuery  = regexp.MustCompile(`\s+`)
 	regexpSpaces        = regexp.MustCompile(`[\s]+`)
 	listQuerySortFields = []string{"name", "status", "created_at", "updated_at", "subscriber_count"}
 )
@@ -99,13 +98,20 @@ func dbErr(err error) string {
 	return err.Error()
 }
 
-// makeSearchString prepares a LIKE search string from a free-text query.
-func makeSearchString(searchStr string) string {
-	if searchStr == "" {
-		return ""
-	}
-	return `%` + string(regexFullTextQuery.ReplaceAll([]byte(searchStr), []byte("&"))) + `%`
-}
+// likeEsc is appended after a `LIKE ?` whose argument was built with the
+// like* helpers, so that % and _ typed by users match literally.
+const likeEsc = ` ESCAPE '\'`
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// likeContains returns a LIKE pattern that matches s anywhere.
+func likeContains(s string) string { return "%" + likeEscaper.Replace(s) + "%" }
+
+// likePrefix returns a LIKE pattern that matches values starting with s.
+func likePrefix(s string) string { return likeEscaper.Replace(s) + "%" }
+
+// likeSuffix returns a LIKE pattern that matches values ending with s.
+func likeSuffix(s string) string { return "%" + likeEscaper.Replace(s) }
 
 // strSliceContains checks if a string is present in the string slice.
 func strSliceContains(str string, sl []string) bool {

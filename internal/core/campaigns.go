@@ -829,15 +829,16 @@ func (c *Core) DeleteCampaign(recordID string) error {
 func (c *Core) DeleteCampaigns(recordIDs []string, query string, hasAllPerm bool, permittedLists []int) error {
 	targetRecordIDs := append([]string{}, recordIDs...)
 	if len(targetRecordIDs) == 0 {
-		searchStr := makeSearchString(query)
+		searchStr := strings.TrimSpace(query)
 		q := `SELECT DISTINCT c.id
 			FROM campaigns c
 			WHERE 1=1`
 		args := []any{}
 
 		if searchStr != "" {
-			q += ` AND (c.name LIKE ? OR c.subject LIKE ?)`
-			args = append(args, searchStr, searchStr)
+			q += ` AND (c.name LIKE ?` + likeEsc + ` OR c.subject LIKE ?` + likeEsc + `)`
+			s := likeContains(searchStr)
+			args = append(args, s, s)
 		}
 
 		if !hasAllPerm {
@@ -943,8 +944,8 @@ func (c *Core) queryCampaignsSQLite(searchStr string, statuses, tags []string, o
 	}
 
 	if searchStr != "" {
-		query += ` AND (c.name LIKE ? OR c.subject LIKE ?)`
-		s := "%" + searchStr + "%"
+		query += ` AND (c.name LIKE ?` + likeEsc + ` OR c.subject LIKE ?` + likeEsc + `)`
+		s := likeContains(searchStr)
 		args = append(args, s, s)
 	}
 
