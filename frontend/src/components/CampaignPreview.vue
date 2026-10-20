@@ -196,7 +196,7 @@ export default {
 .preview-content {
   background:
     radial-gradient(circle at top, rgba(var(--v-theme-primary), 0.06), transparent 35%),
-    linear-gradient(180deg, #f6f7fb 0%, #eef1f6 100%);
+    linear-gradient(180deg, rgb(var(--v-theme-surface-light)) 0%, rgb(var(--v-theme-surface-light)) 100%);
   min-height: 70vh;
   padding: 24px !important;
   position: relative;

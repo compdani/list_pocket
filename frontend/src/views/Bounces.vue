@@ -328,9 +328,9 @@ export default {
 
 <style scoped>
 .bounces {
-  --bounces-border: #dce5f2;
-  --bounces-border-strong: #c7d5ea;
-  --bounces-surface-soft: #f6f9ff;
+  --bounces-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  --bounces-border-strong: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
+  --bounces-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
 .page-header {
@@ -342,8 +342,8 @@ export default {
 }
 
 .bulk-actions-card {
-  background: #f0f7ff;
-  border: 1px solid #d8e9ff;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 14px;
 }
 
@@ -355,7 +355,7 @@ export default {
 }
 
 .bounces-table {
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   border: 1px solid var(--bounces-border);
   border-radius: 16px;
   overflow: hidden;
@@ -364,7 +364,7 @@ export default {
 .bounces-table :deep(thead th) {
   background: var(--bounces-surface-soft);
   border-bottom: 1px solid var(--bounces-border-strong) !important;
-  color: #334155;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 600;
 }
 
@@ -375,11 +375,11 @@ export default {
 }
 
 .bounces-table :deep(tbody tr:hover) {
-  background: #f8fbff;
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .bounces-table :deep(.v-data-table__tr--selected) {
-  background: #edf5ff;
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 .table-pagination {

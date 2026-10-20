@@ -120,7 +120,7 @@ export default {
 
 .toggle-field {
   align-items: start;
-  border: 1px solid rgba(15, 76, 129, 0.14);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   display: flex;
   gap: 16px;

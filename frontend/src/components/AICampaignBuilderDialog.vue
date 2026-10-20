@@ -925,7 +925,7 @@ export default {
 
 .ai-chat-thread-row {
   flex-shrink: 0;
-  background: rgba(var(--v-theme-surface-variant), 0.2);
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .ai-chat-messages {
@@ -968,7 +968,7 @@ export default {
 }
 
 .chat-bubble--assistant {
-  background: rgba(var(--v-theme-surface-variant), 0.55);
+  background: rgb(var(--v-theme-surface-light));
   color: rgba(var(--v-theme-on-surface), 0.92);
   border-bottom-left-radius: 4px;
 }

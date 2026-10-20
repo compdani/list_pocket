@@ -17,7 +17,13 @@
 </template>
 
 <script setup>
-import logo from '@/assets/logo.svg';
+import { computed } from 'vue';
+import { useTheme } from 'vuetify';
+import logoLight from '@/assets/logo.svg';
+import logoDark from '@/assets/logo-dark.svg';
+
+const theme = useTheme();
+const logo = computed(() => (theme.current.value.dark ? logoDark : logoLight));
 
 defineProps({
   title: {
@@ -38,14 +44,14 @@ defineProps({
   overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(var(--v-theme-primary), 0.18), transparent 28rem),
-    linear-gradient(135deg, #f5f8ff 0%, #eef3fb 45%, #f7fafc 100%);
+    linear-gradient(135deg, rgb(var(--v-theme-surface-light)) 0%, rgb(var(--v-theme-surface-light)) 45%, rgb(var(--v-theme-surface-light)) 100%);
 }
 
 .auth-backdrop {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.35)),
+    linear-gradient(120deg, rgba(var(--v-theme-surface), 0.72), rgba(var(--v-theme-surface), 0.35)),
     repeating-linear-gradient(
       -45deg,
       rgba(var(--v-theme-primary), 0.03),

@@ -302,7 +302,7 @@ export default {
 }
 
 .page-help {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   margin: 0;
 }
 
@@ -324,7 +324,7 @@ export default {
 }
 
 .section-help {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.85rem;
   margin: 0 0 16px;
 }

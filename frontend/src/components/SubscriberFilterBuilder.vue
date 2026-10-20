@@ -189,8 +189,8 @@ export default {
 }
 
 .filter-group {
-  background: #f8fafc;
-  border: 1px dashed #c7d5ea;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px dashed rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   border-radius: 12px;
   padding: 12px;
 }
@@ -203,7 +203,7 @@ export default {
 }
 
 .filter-group-label {
-  color: #475569;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -222,7 +222,7 @@ export default {
   background: transparent;
   border: 0;
   border-radius: 8px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   cursor: pointer;
   display: inline-flex;
   height: 36px;
@@ -231,7 +231,7 @@ export default {
 }
 
 .filter-remove:hover {
-  background: rgba(15, 23, 42, 0.06);
-  color: #0f172a;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
 }
 </style>

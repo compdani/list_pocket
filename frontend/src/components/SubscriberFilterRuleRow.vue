@@ -163,7 +163,7 @@ export default {
   background: transparent;
   border: 0;
   border-radius: 8px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   cursor: pointer;
   display: inline-flex;
   height: 36px;
@@ -172,8 +172,8 @@ export default {
 }
 
 .filter-remove:hover {
-  background: rgba(15, 23, 42, 0.06);
-  color: #0f172a;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
 }
 
 @media (max-width: 900px) {

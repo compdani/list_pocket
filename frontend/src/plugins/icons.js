@@ -79,6 +79,9 @@ import {
   mdiViewDashboardOutline,
   mdiViewGridOutline,
   mdiWrenchOutline,
+  mdiThemeLightDark,
+  mdiWeatherNight,
+  mdiWhiteBalanceSunny,
 } from '@mdi/js';
 
 export default {
@@ -159,4 +162,7 @@ export default {
   'mdi-view-dashboard-outline': mdiViewDashboardOutline,
   'mdi-view-grid-outline': mdiViewGridOutline,
   'mdi-wrench-outline': mdiWrenchOutline,
+  'mdi-theme-light-dark': mdiThemeLightDark,
+  'mdi-weather-night': mdiWeatherNight,
+  'mdi-white-balance-sunny': mdiWhiteBalanceSunny,
 };

@@ -229,12 +229,12 @@ const formHTML = computed(() => {
 }
 
 .form-link {
-  color: #0f5bd8;
+  color: rgb(var(--v-theme-primary));
   text-decoration: none;
 }
 
 .form-link:hover {
-  color: #0a47a7;
+  color: rgb(var(--v-theme-primary));
   text-decoration: underline;
 }
 </style>

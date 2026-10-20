@@ -829,9 +829,9 @@ export default {
 
 <style scoped>
 .campaigns {
-  --campaigns-border: #dce5f2;
-  --campaigns-border-strong: #c7d5ea;
-  --campaigns-surface-soft: #f6f9ff;
+  --campaigns-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  --campaigns-border-strong: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
+  --campaigns-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
 .page-header {
@@ -854,7 +854,7 @@ export default {
 }
 
 .query-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
   border: 1px solid var(--campaigns-border);
   border-radius: 16px;
 }
@@ -889,8 +889,8 @@ export default {
 }
 
 .bulk-actions-card {
-  background: #f0f7ff;
-  border: 1px solid #d8e9ff;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 14px;
 }
 
@@ -902,7 +902,7 @@ export default {
 }
 
 .campaigns-table {
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   border: 1px solid var(--campaigns-border);
   border-radius: 16px;
   overflow: hidden;
@@ -911,7 +911,7 @@ export default {
 .campaigns-table :deep(thead th) {
   background: var(--campaigns-surface-soft);
   border-bottom: 1px solid var(--campaigns-border-strong) !important;
-  color: #334155;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 600;
 }
 
@@ -922,11 +922,11 @@ export default {
 }
 
 .campaigns-table :deep(tbody tr:hover) {
-  background: #f8fbff;
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .campaigns-table :deep(.v-data-table__tr--selected) {
-  background: #edf5ff;
+  background: rgba(var(--v-theme-primary), 0.08);
 }
 
 .campaigns-table :deep(td ul) {

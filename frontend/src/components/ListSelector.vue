@@ -39,7 +39,7 @@
         @update:search="updateQuery"
         @update:model-value="selectListValue"
       />
-      <div v-if="message" class="text-caption text-grey mt-1">
+      <div v-if="message" class="text-caption text-medium-emphasis mt-1">
         {{ message }}
       </div>
     </div>

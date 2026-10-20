@@ -184,7 +184,7 @@ export default {
 <style lang="css">
 .visual-editor-wrapper {
   width: 100%;
-  border: 1px solid #eaeaea;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   height: 100%;
   max-width: 100vw;
 }

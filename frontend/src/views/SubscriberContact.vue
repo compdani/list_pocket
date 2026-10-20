@@ -142,7 +142,7 @@ export default {
 
 <style scoped>
 .subscriber-contact-page {
-  --contact-border: #dce5f2;
+  --contact-border: rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 .header-top-row {
@@ -161,7 +161,7 @@ export default {
 }
 
 .timeline-card {
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   border: 1px solid var(--contact-border);
   border-radius: 16px;
 }

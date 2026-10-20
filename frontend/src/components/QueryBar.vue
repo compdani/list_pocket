@@ -50,7 +50,7 @@ defineEmits(['update:modelValue', 'submit']);
 
 <style scoped>
 .query-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
   border: 1px solid rgba(var(--v-theme-primary), 0.16);
   border-radius: 16px;
 }

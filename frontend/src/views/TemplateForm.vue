@@ -569,8 +569,8 @@ export default {
 
 <style scoped>
 .admin-dialog-card {
-  background: #fff;
-  border: 1px solid #dce5f2;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   display: flex;
@@ -581,8 +581,8 @@ export default {
 }
 
 .admin-dialog-head {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border-bottom: 1px solid #ebf1fb;
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: block;
   padding: 18px 20px;
   width: 100%;
@@ -610,8 +610,8 @@ export default {
 }
 
 .editor-shell {
-  background: #f8fbff;
-  border: 1px solid #e7eefb;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   display: flex;
   flex: 1;
@@ -628,7 +628,7 @@ export default {
 }
 
 .editor-label {
-  color: #334155;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 0.9rem;
   font-weight: 600;
   margin-bottom: 10px;
@@ -641,8 +641,8 @@ export default {
 }
 
 .admin-dialog-foot {
-  background: #fff;
-  border-top: 1px solid #ebf1fb;
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   gap: 12px;
   justify-content: flex-end;
@@ -655,7 +655,7 @@ export default {
 }
 
 .form-help {
-  color: #667085;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -665,16 +665,16 @@ export default {
 }
 
 :deep(.code-editor) {
-  background: #fff;
-  border-color: #d7e0ee;
+  background: rgb(var(--v-theme-surface));
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
   height: 62vh;
   min-height: 420px;
 }
 
 :deep(.visual-editor-wrapper) {
-  background: #fff;
-  border-color: #d7e0ee;
+  background: rgb(var(--v-theme-surface));
+  border-color: rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
   height: min(62vh, calc(100vh - 360px));
   min-height: 420px;

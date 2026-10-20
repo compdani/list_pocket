@@ -416,8 +416,8 @@ export default {
 
 <style scoped>
 .admin-dialog-card {
-  background: #fff;
-  border: 1px solid #dce5f2;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   display: flex;
@@ -428,8 +428,8 @@ export default {
 }
 
 .admin-dialog-head {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border-bottom: 1px solid #ebf1fb;
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: block;
   padding: 18px 20px;
 }
@@ -450,8 +450,8 @@ export default {
 }
 
 .panel-card {
-  background: linear-gradient(180deg, #fbfdff 0%, #f6f9ff 100%);
-  border: 1px solid #dce5f2;
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface-light)) 0%, rgb(var(--v-theme-surface-light)) 100%);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 14px;
   margin-top: 16px;
   padding: 16px;
@@ -471,7 +471,7 @@ export default {
 }
 
 .panel-card__subtle {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.92rem;
   margin: 4px 0 0;
 }
@@ -483,7 +483,7 @@ export default {
 }
 
 .warning-row {
-  color: #b45309;
+  color: rgb(var(--v-theme-warning));
   font-size: 0.92rem;
   margin-top: 12px;
 }
@@ -495,8 +495,8 @@ export default {
 }
 
 .list-perm-card {
-  background: #fff;
-  border: 1px solid #d7e1f0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 14px;
 }
@@ -512,7 +512,7 @@ export default {
 }
 
 .list-perm-card__meta {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.85rem;
   margin-top: 2px;
 }
@@ -530,14 +530,14 @@ export default {
 }
 
 .permissions-card {
-  background: #fff;
-  border: 1px solid #d7e1f0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 14px;
 }
 
 .permissions-card__title {
-  color: #1e293b;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 0.95rem;
   font-weight: 700;
   margin: 0 0 10px;
@@ -550,8 +550,8 @@ export default {
 
 .permission-chip {
   align-items: center;
-  background: #f8fbff;
-  border: 1px solid #e2e8f0;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
   display: flex;
   gap: 8px;
@@ -570,7 +570,7 @@ export default {
 
 .learn-link {
   align-items: center;
-  color: #2563eb;
+  color: rgb(var(--v-theme-primary));
   display: inline-flex;
   gap: 6px;
   margin-top: 16px;
@@ -578,7 +578,7 @@ export default {
 }
 
 .admin-dialog-foot {
-  border-top: 1px solid #ebf1fb;
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   gap: 12px;
   justify-content: flex-end;

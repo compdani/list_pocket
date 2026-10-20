@@ -291,9 +291,9 @@ export default {
 
 <style scoped>
 .users {
-  --users-border: #dce5f2;
-  --users-border-strong: #c7d5ea;
-  --users-surface-soft: #f6f9ff;
+  --users-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  --users-border-strong: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
+  --users-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
 .page-header {

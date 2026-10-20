@@ -339,9 +339,9 @@ export default {
 
 <style scoped>
 .dashboard {
-  --dashboard-border: #dce5f2;
-  --dashboard-border-strong: #c7d5ea;
-  --dashboard-surface-soft: #f6f9ff;
+  --dashboard-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  --dashboard-border-strong: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
+  --dashboard-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
 .dashboard-header {
@@ -359,7 +359,7 @@ export default {
 
 .section-loading {
   align-items: center;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(var(--v-theme-surface), 0.72);
   border-radius: 16px;
   display: flex;
   inset: 0;
@@ -376,7 +376,7 @@ export default {
 }
 
 .overview-card {
-  background: linear-gradient(180deg, #ffffff 0%, #f6f9ff 100%);
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
   border: 1px solid var(--dashboard-border);
   border-radius: 16px;
   color: inherit;
@@ -396,7 +396,7 @@ export default {
 
 .metric-value {
   align-items: center;
-  color: #0f172a;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   display: flex;
   font-size: 2rem;
   font-weight: 700;
@@ -410,18 +410,18 @@ export default {
 }
 
 .metric-icon {
-  color: #0f5bd8;
+  color: rgb(var(--v-theme-primary));
   display: inline-flex;
   font-size: 1.1rem;
 }
 
 .metric-label {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   margin: 6px 0 0;
 }
 
 .metric-breakdown {
-  color: #475569;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   list-style: none;
   margin: 0;
   padding: 0;
@@ -437,7 +437,7 @@ export default {
 }
 
 .metric-breakdown .metric-count {
-  color: #0f172a;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 700;
   margin-right: auto;
 }
@@ -445,7 +445,7 @@ export default {
 .running-indicator {
   animation: dashboard-running-pulse 1.2s ease-in-out infinite;
   border-radius: 999px;
-  color: #16a34a;
+  color: rgb(var(--v-theme-success));
   display: inline-block;
   height: 8px;
   width: 8px;
@@ -474,7 +474,7 @@ export default {
 }
 
 .charts-panel {
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   border: 1px solid var(--dashboard-border);
   border-radius: 16px;
   padding: 16px;
@@ -487,7 +487,7 @@ export default {
 }
 
 .chart-block {
-  border: 1px solid #e6edf8;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 14px;
 }
@@ -512,22 +512,22 @@ export default {
 
 .legend-chip-confirmed {
   background: rgba(76, 175, 80, 0.16);
-  color: #2e7d32;
+  color: rgb(var(--v-theme-success));
 }
 
 .legend-chip-raw {
   background: rgba(58, 130, 214, 0.12);
-  color: #235fa3;
+  color: rgb(var(--v-theme-primary));
 }
 
 .legend-chip-all-raw {
-  background: rgba(120, 120, 120, 0.16);
-  color: #616161;
+  background: rgba(var(--v-theme-on-surface), 0.16);
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 .legend-chip-suspected {
   background: rgba(255, 181, 13, 0.2);
-  color: #956400;
+  color: rgb(var(--v-theme-warning));
 }
 
 .align-right {

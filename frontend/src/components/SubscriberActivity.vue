@@ -83,7 +83,7 @@
         </div>
       </div>
 
-      <div v-else class="text-center text-grey py-12">
+      <div v-else class="text-center text-medium-emphasis py-12">
         <p>{{ $t('globals.messages.emptyState') }}</p>
       </div>
     </div>
@@ -333,7 +333,7 @@ export default {
 }
 
 .timeline-item {
-  border: 1px solid #e8edf7;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
 }
 
@@ -345,7 +345,7 @@ export default {
 }
 
 .event-metadata {
-  background: #f8fafc;
+  background: rgb(var(--v-theme-surface-light));
   border-radius: 8px;
   margin-top: 8px;
   overflow-x: auto;
@@ -355,9 +355,9 @@ export default {
 
 .attachment-link {
   align-items: center;
-  border: 1px solid #d6deed;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 999px;
-  color: #1e4eb3;
+  color: rgb(var(--v-theme-primary));
   display: inline-flex;
   font-size: 12px;
   font-weight: 600;
@@ -366,6 +366,6 @@ export default {
 }
 
 .attachment-link:hover {
-  background: #eef4ff;
+  background: rgb(var(--v-theme-surface-light));
 }
 </style>

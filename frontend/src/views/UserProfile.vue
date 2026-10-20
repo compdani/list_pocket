@@ -335,7 +335,7 @@ export default {
 
 .section-loading {
   align-items: center;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(var(--v-theme-surface), 0.72);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -387,7 +387,7 @@ export default {
 }
 
 .twofa-desc {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   margin: 0;
 }
 

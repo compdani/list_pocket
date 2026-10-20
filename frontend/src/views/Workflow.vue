@@ -296,8 +296,8 @@ export default {
 .workflow-hero,
 .workflow-panel,
 .workflow-stat-card {
-  background: #fff;
-  border: 1px solid #dde5f0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 20px;
   box-shadow: 0 14px 35px rgba(15, 23, 42, 0.05);
 }
@@ -309,7 +309,7 @@ export default {
   padding: 28px;
   background:
     radial-gradient(circle at top right, rgba(15, 91, 216, 0.08), transparent 28%),
-    linear-gradient(180deg, #ffffff, #f8fbff);
+    linear-gradient(180deg, rgb(var(--v-theme-surface)), rgb(var(--v-theme-surface-light)));
 }
 
 .workflow-hero-copy {
@@ -321,14 +321,14 @@ export default {
 .workflow-hero-copy p,
 .workflow-run-card p,
 .workflow-record-card p {
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   margin: 0;
 }
 
 .workflow-eyebrow,
 .workflow-stat-label,
 .workflow-focus-label {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -356,13 +356,13 @@ export default {
 
 .workflow-stat-card strong,
 .workflow-focus-card strong {
-  color: #0f172a;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 1.85rem;
   line-height: 1.1;
 }
 
 .workflow-stat-card p {
-  color: #6b7280;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   margin: 0;
 }
 
@@ -404,8 +404,8 @@ export default {
 
 .workflow-record-card,
 .workflow-run-card {
-  background: #f8fbff;
-  border: 1px solid #dce7f8;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   display: grid;
   gap: 10px;
@@ -418,8 +418,8 @@ export default {
 }
 
 .workflow-record-card-active {
-  background: #edf4ff;
-  border-color: #9dbcf3;
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.35);
   box-shadow: inset 0 0 0 1px rgba(15, 91, 216, 0.18);
 }
 
@@ -443,35 +443,35 @@ export default {
 }
 
 .workflow-status-draft {
-  background: #fff4d6;
-  color: #8a5b00;
+  background: rgba(var(--v-theme-warning), 0.12);
+  color: rgb(var(--v-theme-warning));
 }
 
 .workflow-status-published,
 .workflow-run-success {
-  background: #ddf6e7;
-  color: #0f6a34;
+  background: rgba(var(--v-theme-success), 0.12);
+  color: rgb(var(--v-theme-success));
 }
 
 .workflow-status-archived,
 .workflow-run-cancelled {
-  background: #ebeff5;
-  color: #475569;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 .workflow-run-running,
 .workflow-run-waiting {
-  background: #dfeeff;
-  color: #0f5bd8;
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
 }
 
 .workflow-run-failed {
-  background: #fde7e3;
-  color: #b42318;
+  background: rgba(var(--v-theme-error), 0.12);
+  color: rgb(var(--v-theme-error));
 }
 
 .workflow-run-meta {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.88rem;
 }
 
@@ -486,8 +486,8 @@ export default {
 }
 
 .workflow-focus-card {
-  background: #f8fbff;
-  border: 1px solid #dce7f8;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   display: grid;
   gap: 8px;
@@ -496,10 +496,10 @@ export default {
 }
 
 .workflow-empty-state {
-  background: #f8fafc;
-  border: 1px dashed #cdd7e3;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px dashed rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   border-radius: 16px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   padding: 28px;
   text-align: center;
 }

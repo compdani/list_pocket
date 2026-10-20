@@ -639,9 +639,9 @@ onBeforeUnmount(() => {
 
 <style>
 .workflow-route {
-  --wf-border: #d8dde6;
-  --wf-muted: #7b8796;
-  --wf-panel: rgba(255, 255, 255, 0.94);
+  --wf-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  --wf-muted: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  --wf-panel: rgba(var(--v-theme-surface), 0.94);
 }
 
 .workflow-route button,
@@ -745,8 +745,8 @@ onBeforeUnmount(() => {
   margin: 0;
   padding: 6px 10px;
   border-radius: 8px;
-  background: #fdebec;
-  color: #b42318;
+  background: rgba(var(--v-theme-error), 0.12);
+  color: rgb(var(--v-theme-error));
   font-size: 0.84rem;
 }
 
@@ -843,15 +843,15 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 8px 12px;
   border: none;
-  background: #f8fafc;
+  background: rgb(var(--v-theme-surface-light));
   cursor: pointer;
   font: inherit;
   font-weight: 600;
-  color: #334155;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
 }
 
 .workflow-route .workflow-run-history-dock:not(.workflow-run-history-dock--collapsed) .workflow-run-history-toggle {
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 .workflow-route .workflow-run-history-toggle-label {
@@ -864,8 +864,8 @@ onBeforeUnmount(() => {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #475569;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 .workflow-route .workflow-run-history-body {
@@ -907,10 +907,10 @@ onBeforeUnmount(() => {
   width: min(420px, 100%);
   min-height: 46px;
   padding: 10px 14px;
-  border: 1px solid #ccd5e2;
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   border-radius: 14px;
-  background: #fff;
-  color: #0f172a;
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 1.4rem;
   font-weight: 700;
 }
@@ -952,10 +952,10 @@ onBeforeUnmount(() => {
 
 .workflow-route .workflow-chip,
 .workflow-route .quick-add-chip {
-  border: 1px solid #dbe2ea;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 999px;
-  background: #f8fafc;
-  color: #1f2937;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   cursor: pointer;
   padding: 9px 14px;
   white-space: nowrap;
@@ -979,8 +979,8 @@ onBeforeUnmount(() => {
 .workflow-route .run-card-button,
 .workflow-route .validation-item {
   padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 .workflow-route .builder-toolbar p,
@@ -989,13 +989,13 @@ onBeforeUnmount(() => {
 .workflow-route .run-row.subtle,
 .workflow-route .workflow-node-card span,
 .workflow-route .topbar-note {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   margin: 0;
 }
 
 .workflow-route .workflow-chip:hover,
 .workflow-route .quick-add-chip:hover {
-  background: #f3f6f9;
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .workflow-route .workspace-main,
@@ -1060,9 +1060,9 @@ onBeforeUnmount(() => {
   min-height: 30px;
   padding: 0 10px;
   border-radius: 999px;
-  background: #f4f7fb;
-  border: 1px solid #dde5ee;
-  color: #526173;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.84rem;
 }
 
@@ -1082,33 +1082,33 @@ onBeforeUnmount(() => {
 .workflow-route .save-indicator {
   align-self: flex-start;
   padding: 10px 14px;
-  background: #eef3f8;
-  color: #51606f;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   white-space: nowrap;
 }
 
 .workflow-route .save-indicator[data-state="saving"],
 .workflow-route .validation-severity[data-severity="warning"] {
-  background: #fff4d6;
-  color: #9a6700;
+  background: rgba(var(--v-theme-warning), 0.12);
+  color: rgb(var(--v-theme-warning));
 }
 
 .workflow-route .save-indicator[data-state="saved"],
 .workflow-route .status-pill[data-status="success"] {
-  background: #e7f7ef;
-  color: #0f766e;
+  background: rgba(var(--v-theme-success), 0.12);
+  color: rgb(var(--v-theme-success));
 }
 
 .workflow-route .save-indicator[data-state="error"],
 .workflow-route .status-pill[data-status="failed"],
 .workflow-route .validation-severity[data-severity="error"] {
-  background: #fdebec;
-  color: #b42318;
+  background: rgba(var(--v-theme-error), 0.12);
+  color: rgb(var(--v-theme-error));
 }
 
 .workflow-route .save-indicator[data-state="dirty"] {
-  background: #fef0c7;
-  color: #a16207;
+  background: rgba(var(--v-theme-warning), 0.12);
+  color: rgb(var(--v-theme-warning));
 }
 
 .workflow-route .builder-body,
@@ -1143,7 +1143,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #e6ebf2;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 .workflow-route .modal-header h2 {
@@ -1180,10 +1180,10 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 10px;
   padding: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  background: rgba(var(--v-theme-surface), 0.92);
+  box-shadow: inset 0 1px 0 rgba(var(--v-theme-surface), 0.75);
 }
 
 .workflow-route .form-field-card-wide {
@@ -1198,12 +1198,12 @@ onBeforeUnmount(() => {
 .workflow-route .form-field-label {
   font-size: 0.98rem;
   font-weight: 700;
-  color: #0f172a;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
 }
 
 .workflow-route .field-help {
   margin: 0;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.9rem;
   line-height: 1.45;
   letter-spacing: normal;
@@ -1217,7 +1217,7 @@ onBeforeUnmount(() => {
 
 .workflow-route .context-help-header p {
   margin: 0;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.9rem;
 }
 
@@ -1245,7 +1245,7 @@ onBeforeUnmount(() => {
 .workflow-route .trace-json-block {
   padding: 12px;
   border-radius: 14px;
-  background: #f6f8fb;
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .workflow-route .canvas-frame {
@@ -1254,15 +1254,15 @@ onBeforeUnmount(() => {
   min-width: 0;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid #e2e8f1;
-  background: #f6f8fb;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .workflow-route .workflow-canvas {
   height: 100%;
   width: 100%;
   min-width: 0;
-  background: linear-gradient(180deg, rgba(249, 251, 253, 0.98), rgba(245, 248, 251, 0.98));
+  background: linear-gradient(180deg, rgba(var(--v-theme-surface), 0.98), rgba(var(--v-theme-surface), 0.98));
 }
 
 .workflow-route .vue-flow {
@@ -1274,8 +1274,8 @@ onBeforeUnmount(() => {
   min-width: 180px;
   padding: 10px 12px;
   border-radius: 14px;
-  border: 1px solid #dbe2ea;
-  background: #fff;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
   display: grid;
   gap: 4px;
@@ -1284,45 +1284,45 @@ onBeforeUnmount(() => {
 .workflow-route .workflow-node-badge {
   justify-self: start;
   padding: 2px 8px;
-  background: #edf7f3;
-  color: #0f766e;
+  background: rgba(var(--v-theme-success), 0.12);
+  color: rgb(var(--v-theme-success));
   font-size: 0.72rem;
   font-weight: 600;
 }
 
 .workflow-route .workflow-node-card[data-kind="transform"] .workflow-node-badge {
-  background: #eef4ff;
-  color: #3b5ccc;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgb(var(--v-theme-primary));
 }
 
 .workflow-route .workflow-node-card[data-kind="condition"] .workflow-node-badge {
-  background: #edf9ed;
-  color: #15803d;
+  background: rgba(var(--v-theme-success), 0.12);
+  color: rgb(var(--v-theme-success));
 }
 
 .workflow-route .workflow-node-card[data-kind="event_start"] .workflow-node-badge {
-  background: #fff1f2;
-  color: #be123c;
+  background: rgba(var(--v-theme-error), 0.12);
+  color: rgb(var(--v-theme-error));
 }
 
 .workflow-route .workflow-node-card[data-kind="pb_update"] .workflow-node-badge {
-  background: #fff4d6;
-  color: #9a6700;
+  background: rgba(var(--v-theme-warning), 0.12);
+  color: rgb(var(--v-theme-warning));
 }
 
 .workflow-route .workflow-node-card[data-kind="send_transactional_email"] .workflow-node-badge {
-  background: #fef3e6;
-  color: #b45309;
+  background: rgba(var(--v-theme-warning), 0.12);
+  color: rgb(var(--v-theme-warning));
 }
 
 .workflow-route .workflow-node-card[data-kind="campaign_launch"] .workflow-node-badge {
-  background: #e0f2fe;
-  color: #0f5b99;
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
 }
 
 .workflow-route .workflow-node-card[data-kind="wait_until"] .workflow-node-badge {
-  background: #f3e8ff;
-  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.14);
+  color: #8b5cf6;
 }
 
 .workflow-route .branch-handle-labels {
@@ -1332,7 +1332,7 @@ onBeforeUnmount(() => {
   padding: 0 18px 8px;
   font-size: 0.72rem;
   font-weight: 600;
-  color: #5f6b7a;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 .workflow-route .vue-flow__node.selected .workflow-node-card,
@@ -1347,30 +1347,42 @@ onBeforeUnmount(() => {
 .workflow-route .vue-flow__handle {
   width: 10px;
   height: 10px;
-  background: #cbd5e1;
-  border: 2px solid #fff;
+  background: rgba(var(--v-theme-on-surface), 0.16);
+  border: 2px solid rgb(var(--v-theme-surface));
 }
 
 .workflow-route .vue-flow__controls {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
   border-radius: 10px;
   overflow: hidden;
-  border: 1px solid #dde5ef;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 
 .workflow-route .vue-flow__controls-button {
   width: 32px;
   height: 32px;
   border: none;
-  background: rgba(255, 255, 255, 0.96);
-  color: #334155;
+  background: rgba(var(--v-theme-surface), 0.96);
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
 }
 
 .workflow-route .vue-flow__minimap {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #dde3eb;
+  background: rgba(var(--v-theme-surface), 0.9);
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.workflow-route .vue-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.workflow-route .vue-flow__edge-textbg {
+  fill: rgb(var(--v-theme-surface));
+}
+
+.workflow-route .vue-flow__edge-text {
+  fill: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 .workflow-route .status-pill,
@@ -1388,13 +1400,13 @@ onBeforeUnmount(() => {
 .workflow-route .status-pill[data-status="queued"],
 .workflow-route .status-pill[data-status="running"],
 .workflow-route .status-pill[data-status="waiting"] {
-  background: #dfeeff;
-  color: #0f5bd8;
+  background: rgba(var(--v-theme-primary), 0.08);
+  color: rgb(var(--v-theme-primary));
 }
 
 .workflow-route .status-pill[data-status="cancelled"] {
-  background: #ebeff5;
-  color: #475569;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 .workflow-route .run-card-button,
@@ -1405,8 +1417,8 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .run-card-active {
-  background: #eef3f8;
-  border-color: #c7d3e2;
+  background: rgb(var(--v-theme-surface-light));
+  border-color: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
 }
 
 .workflow-route .run-row {
@@ -1415,7 +1427,7 @@ onBeforeUnmount(() => {
 }
 
 .workflow-route .trace-error {
-  color: #b42318;
+  color: rgb(var(--v-theme-error));
   font-weight: 600;
   margin: 0;
 }
@@ -1427,12 +1439,12 @@ onBeforeUnmount(() => {
 
 .workflow-route .context-help {
   grid-column: 1 / -1;
-  background: linear-gradient(180deg, #f8fbff, #f3f7fc);
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface-light)), rgb(var(--v-theme-surface-light)));
 }
 
 .workflow-route .demo-contact-hint {
   padding: 10px 14px;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.9rem;
 }
 
@@ -1452,9 +1464,9 @@ onBeforeUnmount(() => {
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
-  border: 1px solid #d7e0ea;
-  background: #fff;
-  color: #475569;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   font-size: 0.82rem;
 }
@@ -1463,8 +1475,8 @@ onBeforeUnmount(() => {
 .workflow-route .form-field > select,
 .workflow-route .form-field > textarea,
 .workflow-route .map-field-row > input {
-  background: #fff;
-  border: 1px solid #ccd5e2;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   border-radius: 12px;
   font: inherit;
   min-height: 42px;

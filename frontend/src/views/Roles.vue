@@ -263,9 +263,9 @@ export default {
 
 <style scoped>
 .roles {
-  --roles-border: #dce5f2;
-  --roles-border-strong: #c7d5ea;
-  --roles-surface-soft: #f6f9ff;
+  --roles-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  --roles-border-strong: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
+  --roles-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
 .page-header {

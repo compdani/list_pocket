@@ -254,8 +254,8 @@ export default {
 
 <style scoped>
 .admin-dialog-card {
-  background: #fff;
-  border: 1px solid #dce5f2;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   display: flex;
@@ -266,8 +266,8 @@ export default {
 }
 
 .admin-dialog-head {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border-bottom: 1px solid #ebf1fb;
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: block;
   padding: 18px 20px;
 }
@@ -278,8 +278,8 @@ export default {
 }
 
 .admin-dialog-foot {
-  background: #fff;
-  border-top: 1px solid #ebf1fb;
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   gap: 12px;
   justify-content: flex-end;
@@ -305,14 +305,14 @@ export default {
 }
 
 .form-help {
-  color: #667085;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.9rem;
   margin-top: 4px;
 }
 
 .settings-box {
-  background: #f8fbff;
-  border: 1px solid #e7eefb;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
 }
 
@@ -326,9 +326,9 @@ export default {
 }
 
 .type-pill {
-  background: #eff6ff;
+  background: rgb(var(--v-theme-surface-light));
   border-radius: 999px;
-  color: #0f5bd8;
+  color: rgb(var(--v-theme-primary));
   display: inline-block;
   float: right;
   font-size: 0.85rem;

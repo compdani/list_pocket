@@ -115,8 +115,8 @@ export default {
 
 <style scoped>
 .admin-dialog-card {
-  background: #fff;
-  border: 1px solid #ddd;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   display: flex;
@@ -149,7 +149,7 @@ export default {
 }
 
 .field-label {
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.875rem;
   font-weight: 500;
   margin-bottom: 8px;
@@ -167,14 +167,14 @@ export default {
 }
 
 .form-help {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.8rem;
   line-height: 1.4;
   margin: 0;
 }
 
 .admin-dialog-foot {
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   border-top: 0;
   display: flex;
   gap: 12px;

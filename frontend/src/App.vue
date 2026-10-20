@@ -22,7 +22,7 @@
       >
         <div class="app-drawer-brand">
           <router-link :to="{ name: 'dashboard' }" class="app-brand-link">
-            <img class="full" src="@/assets/logo.svg" :alt="$t('menu.dashboard')" />
+            <img class="full" :src="logoSrc" :alt="$t('menu.dashboard')" />
             <img class="favicon" src="@/assets/favicon.png" :alt="$t('menu.dashboard')" />
           </router-link>
         </div>
@@ -84,11 +84,33 @@
               </v-btn>
             </template>
 
-            <v-list width="240">
+            <v-list width="300">
               <v-list-item :title="profile.username" :subtitle="profile.name" />
               <v-divider />
               <v-list-item prepend-icon="mdi-account-outline" @click="goToUserProfile">
                 <v-list-item-title>{{ $t('users.profile') }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item :title="$t('users.theme')" prepend-icon="mdi-theme-light-dark">
+                <template #append>
+                  <v-btn-toggle
+                    :model-value="themeChoice"
+                    mandatory
+                    density="compact"
+                    variant="text"
+                    divided
+                    @update:model-value="setTheme"
+                  >
+                    <v-btn
+                      v-for="opt in themeOptions"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :icon="opt.icon"
+                      size="small"
+                      :aria-label="opt.label"
+                      :title="opt.label"
+                    />
+                  </v-btn-toggle>
+                </template>
               </v-list-item>
               <v-list-item prepend-icon="mdi-logout" @click="doLogout">
                 <v-list-item-title>{{ $t('users.logout') }}</v-list-item-title>
@@ -195,9 +217,12 @@
 </template>
 
 <script>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { mapState } from 'vuex';
-import { useDisplay } from 'vuetify';
+import { useDisplay, useTheme } from 'vuetify';
+import { saveThemeChoice, storedThemeChoice } from './plugins/vuetify';
+import logoLight from './assets/logo.svg';
+import logoDark from './assets/logo-dark.svg';
 import { uris } from './constants';
 import { pb } from './api';
 import Navigation from './components/Navigation.vue';
@@ -216,7 +241,20 @@ export default {
   setup() {
     const { width } = useDisplay();
     const isMobile = computed(() => width.value <= 960);
-    return { isMobile };
+
+    const theme = useTheme();
+    const themeChoice = ref(storedThemeChoice());
+    const setTheme = (choice) => {
+      themeChoice.value = choice;
+      theme.change(choice);
+      saveThemeChoice(choice);
+    };
+
+    const logoSrc = computed(() => (theme.current.value.dark ? logoDark : logoLight));
+
+    return {
+      isMobile, themeChoice, setTheme, logoSrc,
+    };
   },
 
   data() {
@@ -234,6 +272,14 @@ export default {
 
   computed: {
     ...mapState(['serverConfig', 'profile']),
+
+    themeOptions() {
+      return [
+        { value: 'light', icon: 'mdi-white-balance-sunny', label: this.$t('users.themeLight') },
+        { value: 'dark', icon: 'mdi-weather-night', label: this.$t('users.themeDark') },
+        { value: 'system', icon: 'mdi-theme-light-dark', label: this.$t('users.themeSystem') },
+      ];
+    },
 
     isGlobalNotices() {
       return (this.serverConfig.needs_restart
@@ -468,7 +514,7 @@ export default {
 }
 
 .app-main {
-  background: linear-gradient(180deg, #f6f7fb 0%, #eef2f9 100%);
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface-light)) 0%, rgb(var(--v-theme-surface-light)) 100%);
   display: flex;
   flex-direction: column;
   min-height: 0;

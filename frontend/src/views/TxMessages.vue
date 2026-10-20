@@ -276,8 +276,8 @@ export default {
 }
 
 .table-wrap {
-  background: white;
-  border: 1px solid #dce5f2;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 20px;
   overflow: hidden;
 }
@@ -299,7 +299,7 @@ export default {
 
 .metric-detail {
   font-size: 0.75rem;
-  color: rgba(33, 33, 33, 0.6);
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   white-space: nowrap;
 }
 
@@ -314,10 +314,10 @@ export default {
 }
 
 .message-preview {
-  border: 1px solid #dce5f2;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   padding: 20px;
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   overflow: auto;
 }
 

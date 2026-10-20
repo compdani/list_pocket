@@ -131,25 +131,25 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
 
 <style scoped>
 .run-list-shell {
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   padding-right: 10px;
 }
 
 .run-summary {
   margin: 4px 0 0;
-  color: #475569;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   line-height: 1.35;
 }
 
 .run-trace-shell {
-  background: linear-gradient(180deg, #f8fafc, #f3f6fb);
-  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface-light)), rgb(var(--v-theme-surface-light)));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
 }
 
 .run-trace-summary-card {
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 12px;
 }
@@ -165,13 +165,13 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
 }
 
 .trace-logs-shell {
-  border: 1px solid #e2e8f0;
-  background: #fff;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
 }
 
 .trace-log-line {
   display: block;
-  color: #334155;
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
   font-size: 0.79rem;
   line-height: 1.4;
@@ -189,7 +189,7 @@ const canCancelSelectedRun = computed(() => ["queued", "waiting"].includes(Strin
 @media (max-width: 1200px) {
   .run-list-shell {
     border-right: none;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
     padding-right: 0;
     padding-bottom: 10px;
   }

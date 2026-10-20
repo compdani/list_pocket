@@ -9,6 +9,7 @@ import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
 import { useVueFlow, VueFlow } from "@vue-flow/core";
+import { useTheme } from "vuetify";
 import { useBuilderState } from "../composables/useBuilderState";
 import NodeInspector from "./NodeInspector.vue";
 import AppRightSidebar from "./AppRightSidebar.vue";
@@ -29,6 +30,12 @@ const emit = defineEmits(["captureSchema", "createWorkflow", "deleteWorkflow", "
 
 const builder = useBuilderState(computed(() => props.workflow));
 const { fitView, setCenter, setViewport, viewport, zoomIn, zoomOut } = useVueFlow();
+
+// Canvas colors passed as props, so they can't come from CSS theme variables.
+const theme = useTheme();
+const canvasColors = computed(() => (theme.current.value.dark
+  ? { pattern: "#2a323d", mask: "rgba(15, 19, 24, 0.6)", node: "#3a4452" }
+  : { pattern: "#d9dee7", mask: "rgba(240, 240, 240, 0.6)", node: "#e2e2e2" }));
 const committedSignature = ref("");
 const initializedWorkflowId = ref("");
 const isDirty = ref(false);
@@ -414,9 +421,9 @@ defineExpose({
           <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Reset saved view" @click="clearSavedViewport">Reset</v-btn>
         </v-sheet>
         <VueFlow :node-types="nodeTypes" :nodes="decoratedNodes" :edges="decoratedEdges" :default-viewport="restoredViewport" :fit-view-on-init="!hasRestoredViewport" :min-zoom="0.2" :max-zoom="1.2" :pan-on-scroll="true" :pan-on-drag="true" :zoom-on-double-click="false" :zoom-on-scroll="true" :selection-on-drag="false" class="workflow-canvas" @connect="builder.connectNodes" @edge-click="({ edge }) => builder.selectEdge(edge.id)" @node-click="({ node }) => builder.selectNode(node.id)" @node-drag-stop="onNodeDragStop">
-          <MiniMap position="bottom-right" :pannable="true" />
+          <MiniMap position="bottom-right" :pannable="true" :mask-color="canvasColors.mask" :node-color="canvasColors.node" />
           <Controls position="bottom-left" />
-          <Background :gap="22" :size="1.2" :pattern-color="'#d9dee7'" />
+          <Background :gap="22" :size="1.2" :pattern-color="canvasColors.pattern" />
         </VueFlow>
 
         <v-dialog v-model="showNodeCommand" width="560">
@@ -509,10 +516,10 @@ defineExpose({
   max-width: min(520px, 100%);
   min-height: 34px;
   padding: 6px 10px;
-  border: 1px solid #ccd5e2;
+  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   border-radius: 8px;
-  background: #fff;
-  color: #0f172a;
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 0.98rem;
   font-weight: 600;
 }
@@ -544,18 +551,18 @@ defineExpose({
   align-items: center;
   gap: 6px;
   padding: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(var(--v-theme-surface), 0.95);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
   backdrop-filter: blur(6px);
 }
 
 .canvas-action-btn {
-  border: 1px solid #dce4ee;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
-  background: #fff;
-  color: #334155;
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-size: 0.8rem;
   font-weight: 700;
   line-height: 1;
@@ -565,7 +572,7 @@ defineExpose({
 }
 
 .canvas-action-btn:hover {
-  background: #f8fafc;
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .canvas-action-btn-wide {
@@ -578,15 +585,15 @@ defineExpose({
   z-index: 12;
   display: grid;
   place-items: center;
-  background: rgba(15, 23, 42, 0.28);
+  background: rgba(var(--v-theme-on-surface), 0.28);
 }
 
 .node-command-card {
   width: min(560px, calc(100% - 32px));
   max-height: 70%;
   border-radius: 12px;
-  border: 1px solid #d7dfeb;
-  background: #fff;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
   box-shadow: 0 24px 44px rgba(15, 23, 42, 0.18);
   display: grid;
   gap: 10px;
@@ -601,7 +608,7 @@ defineExpose({
 
 .node-command-input {
   min-height: 40px;
-  border: 1px solid #d4dde9;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
   padding: 8px 10px;
 }
@@ -618,25 +625,25 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
-  background: #f8fafc;
+  background: rgb(var(--v-theme-surface-light));
   text-align: left;
   padding: 9px 10px;
 }
 
 .node-command-item small {
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.72rem;
 }
 
 .node-command-item:hover {
-  background: #f1f5f9;
+  background: rgb(var(--v-theme-surface-light));
 }
 
 .node-command-empty {
   margin: 0;
-  color: #64748b;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   padding: 8px 2px;
 }
 

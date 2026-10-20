@@ -692,8 +692,8 @@ onMounted(() => {
 
 <style scoped>
 .admin-dialog-card {
-  background: #fff;
-  border: 1px solid #dce5f2;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
   display: flex;
@@ -710,8 +710,8 @@ onMounted(() => {
 }
 
 .admin-dialog-head {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  border-bottom: 1px solid #ebf1fb;
+  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: block;
   padding: 18px 20px;
 }
@@ -736,8 +736,8 @@ onMounted(() => {
 }
 
 .admin-dialog-foot {
-  background: #fff;
-  border-top: 1px solid #ebf1fb;
+  background: rgb(var(--v-theme-surface));
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: flex;
   gap: 12px;
   justify-content: flex-end;
@@ -749,7 +749,7 @@ onMounted(() => {
 }
 
 .form-help {
-  color: #667085;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.9rem;
   margin-top: 4px;
 }
@@ -761,8 +761,8 @@ onMounted(() => {
 }
 
 .tab-panel {
-  background: #f8fbff;
-  border: 1px solid #e7eefb;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 14px;
 }
@@ -800,7 +800,7 @@ onMounted(() => {
 }
 
 .table-wrap {
-  border: 1px solid #e4ebf7;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   overflow-x: auto;
 }
@@ -811,28 +811,28 @@ onMounted(() => {
 }
 
 .dialog-table th {
-  background: #f8fbff;
-  color: #334155;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 600;
 }
 
 .dialog-table th,
 .dialog-table td {
-  border-bottom: 1px solid #eaecf0;
+  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   padding: 12px 10px;
   text-align: left;
   vertical-align: top;
 }
 
 .subtle-row {
-  color: #667085;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.85rem;
   margin-top: 6px;
 }
 
 .meta-block {
-  background: #f8fafc;
-  border: 1px solid #e4e7ec;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 8px;
   margin-top: 8px;
   padding: 10px;
@@ -840,9 +840,9 @@ onMounted(() => {
 }
 
 .status-pill {
-  background: #eff6ff;
+  background: rgb(var(--v-theme-surface-light));
   border-radius: 999px;
-  color: #0f5bd8;
+  color: rgb(var(--v-theme-primary));
   display: inline-block;
   font-size: 0.85rem;
   font-weight: 600;
@@ -850,18 +850,18 @@ onMounted(() => {
 }
 
 .status-pill.enabled {
-  background: #eaf8ef;
-  color: #177245;
+  background: rgba(var(--v-theme-success), 0.12);
+  color: rgb(var(--v-theme-success));
 }
 
 .status-pill.blocklisted {
-  background: #fff1f0;
-  color: #c2413a;
+  background: rgba(var(--v-theme-error), 0.12);
+  color: rgb(var(--v-theme-error));
 }
 
 .status-pill.neutral {
-  background: #f5f7fb;
-  color: #475467;
+  background: rgb(var(--v-theme-surface-light));
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 
 :deep(.v-field) {
@@ -874,8 +874,8 @@ onMounted(() => {
 }
 
 .settings-tabs {
-  background: #f8fbff;
-  border: 1px solid #d8dfec;
+  background: rgb(var(--v-theme-surface-light));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   display: flex;
   flex-wrap: wrap;
@@ -891,16 +891,16 @@ onMounted(() => {
 
 :deep(.settings-tabs .v-tab) {
   border-radius: 10px;
-  color: #667085;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.95rem;
   font-weight: 500;
   text-transform: none;
 }
 
 :deep(.settings-tabs .v-tab.v-tab--selected) {
-  background: #fff;
+  background: rgb(var(--v-theme-surface));
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-  color: #0f5bd8;
+  color: rgb(var(--v-theme-primary));
   font-weight: 600;
 }
 

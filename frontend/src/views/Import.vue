@@ -563,7 +563,7 @@ export default {
 }
 
 .csv-example {
-  background: rgb(var(--v-theme-surface-variant));
+  background: rgb(var(--v-theme-surface-light));
   border-radius: 8px;
   font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.84rem;
