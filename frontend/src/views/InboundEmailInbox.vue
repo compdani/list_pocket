@@ -97,7 +97,7 @@
       <template #item.actions="{ item }">
         <v-menu>
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" @click.stop />
+            <v-btn :aria-label="$t('globals.buttons.more')" v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" @click.stop />
           </template>
           <v-list density="compact">
             <v-list-item
@@ -146,7 +146,7 @@
       <v-card v-if="selectedEmail">
         <v-card-title class="d-flex align-center justify-space-between">
           <span class="text-truncate mr-2">{{ selectedEmail.subject || '(no subject)' }}</span>
-          <v-btn icon="mdi-close" variant="text" @click="detailDialog = false" />
+          <v-btn :aria-label="$t('globals.buttons.close')" icon="mdi-close" variant="text" @click="detailDialog = false" />
         </v-card-title>
         <v-card-subtitle>
           <div><strong>From:</strong> {{ selectedEmail.fromAddress }}</div>
@@ -200,7 +200,7 @@
       <v-card>
         <v-card-title>
           Spam Rules
-          <v-btn icon="mdi-close" variant="text" style="float:right" @click="showSpamRules = false" />
+          <v-btn :aria-label="$t('globals.buttons.close')" icon="mdi-close" variant="text" style="float:right" @click="showSpamRules = false" />
         </v-card-title>
         <v-card-text>
           <v-data-table
@@ -217,6 +217,7 @@
             </template>
             <template #item.actions="{ item }">
               <v-btn
+                :aria-label="$t('globals.buttons.delete')"
                 icon="mdi-trash-can-outline"
                 variant="text"
                 size="small"

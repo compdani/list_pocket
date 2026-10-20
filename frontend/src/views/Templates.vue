@@ -69,6 +69,7 @@
             <v-tooltip :text="$t('templates.preview')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('templates.preview')"
                   v-bind="props"
                   icon="mdi-file-find-outline"
                   size="x-small"
@@ -82,6 +83,7 @@
             <v-tooltip :text="$t('globals.buttons.edit')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('globals.buttons.edit')"
                   v-bind="props"
                   icon="mdi-pencil-outline"
                   size="x-small"
@@ -95,6 +97,7 @@
             <v-tooltip :text="$t('globals.buttons.clone')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('globals.buttons.clone')"
                   v-bind="props"
                   icon="mdi-file-multiple-outline"
                   size="x-small"
@@ -112,6 +115,7 @@
             >
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('templates.makeDefault')"
                   v-bind="props"
                   icon="mdi-check-circle-outline"
                   size="x-small"
@@ -122,6 +126,7 @@
               </template>
             </v-tooltip>
             <v-btn
+              :aria-label="$t('templates.makeDefault')"
               v-else
               icon="mdi-check-circle-outline"
               size="x-small"
@@ -136,6 +141,7 @@
             >
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('globals.buttons.delete')"
                   v-bind="props"
                   icon="mdi-trash-can-outline"
                   size="x-small"
@@ -147,6 +153,7 @@
               </template>
             </v-tooltip>
             <v-btn
+              :aria-label="$t('globals.buttons.delete')"
               v-else
               icon="mdi-trash-can-outline"
               size="x-small"

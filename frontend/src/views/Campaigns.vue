@@ -240,6 +240,7 @@
             <v-tooltip v-if="canStart(item)" :text="$t('campaigns.start')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('campaigns.start')"
                   v-bind="props"
                   icon="mdi-rocket-launch-outline"
                   size="x-small"
@@ -253,6 +254,7 @@
             <v-tooltip v-if="canPause(item)" :text="$t('campaigns.pause')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('campaigns.pause')"
                   v-bind="props"
                   icon="mdi-pause-circle-outline"
                   size="x-small"
@@ -266,6 +268,7 @@
             <v-tooltip v-if="canResume(item)" :text="$t('campaigns.send')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('campaigns.send')"
                   v-bind="props"
                   icon="mdi-rocket-launch-outline"
                   size="x-small"
@@ -279,6 +282,7 @@
             <v-tooltip v-if="canSchedule(item)" :text="$t('campaigns.schedule')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('campaigns.schedule')"
                   v-bind="props"
                   icon="mdi-clock-start"
                   size="x-small"
@@ -290,6 +294,7 @@
             </v-tooltip>
 
             <v-btn
+              :aria-label="$t('campaigns.start')"
               v-if="!canCancel(item) && !canSchedule(item) && !canStart(item)"
               icon="mdi-rocket-launch-outline"
               size="x-small"
@@ -300,6 +305,7 @@
             <v-tooltip v-if="canCancel(item)" :text="$t('globals.buttons.cancel')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('globals.buttons.cancel')"
                   v-bind="props"
                   icon="mdi-cancel"
                   size="x-small"
@@ -309,12 +315,13 @@
                 />
               </template>
             </v-tooltip>
-            <v-btn v-else icon="mdi-cancel" size="x-small" variant="text" disabled />
+            <v-btn :aria-label="$t('globals.buttons.cancel')" v-else icon="mdi-cancel" size="x-small" variant="text" disabled />
           </template>
 
           <v-tooltip :text="$t('campaigns.preview')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('campaigns.preview')"
                 v-bind="props"
                 icon="mdi-file-find-outline"
                 size="x-small"
@@ -328,6 +335,7 @@
           <v-tooltip v-if="$can('campaigns:manage')" :text="$t('globals.buttons.clone')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('globals.buttons.clone')"
                 v-bind="props"
                 icon="mdi-file-multiple-outline"
                 size="x-small"
@@ -341,7 +349,7 @@
           <router-link v-if="$can('campaigns:get_analytics')" :to="{ name: 'campaignAnalytics', query: { id: item.id } }">
             <v-tooltip :text="$t('globals.terms.analytics')" location="top">
               <template #activator="{ props }">
-                <v-btn v-bind="props" icon="mdi-chart-bar" size="x-small" variant="text" />
+                <v-btn :aria-label="$t('globals.terms.analytics')" v-bind="props" icon="mdi-chart-bar" size="x-small" variant="text" />
               </template>
             </v-tooltip>
           </router-link>
@@ -349,6 +357,7 @@
           <v-tooltip v-if="$can('campaigns:manage')" :text="$t('globals.buttons.delete')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('globals.buttons.delete')"
                 v-bind="props"
                 icon="mdi-trash-can-outline"
                 size="x-small"

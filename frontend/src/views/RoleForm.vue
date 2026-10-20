@@ -82,6 +82,7 @@
                   <div class="list-perm-card__meta">List ID: {{ item.id }}</div>
                 </div>
                 <v-btn
+                  :aria-label="$t('globals.buttons.delete')"
                   v-if="!disabled"
                   icon="mdi-trash-can-outline"
                   variant="text"

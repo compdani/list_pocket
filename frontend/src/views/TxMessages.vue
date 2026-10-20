@@ -85,7 +85,7 @@
         </template>
 
         <template #[`item.actions`]="{ item }">
-          <v-btn icon="mdi-eye-outline" size="x-small" variant="text" @click="openMessage(item)" />
+          <v-btn :aria-label="$t('globals.buttons.view')" icon="mdi-eye-outline" size="x-small" variant="text" @click="openMessage(item)" />
         </template>
       </v-data-table>
 
@@ -110,7 +110,7 @@
               {{ activeMessage.subscriberEmail }} • {{ activeMessage.status }}
             </div>
           </div>
-          <v-btn icon="mdi-close" variant="text" @click="detailOpen = false" />
+          <v-btn :aria-label="$t('globals.buttons.close')" icon="mdi-close" variant="text" @click="detailOpen = false" />
         </v-card-title>
 
         <v-card-text>

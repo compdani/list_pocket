@@ -36,6 +36,7 @@
             data-cy="query"
           />
           <v-btn
+            :aria-label="$t('globals.buttons.search')"
             type="submit"
             class="query-submit"
             color="primary"
@@ -115,6 +116,7 @@
           <v-tooltip :text="$t('globals.buttons.edit')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('globals.buttons.edit')"
                 v-if="$can('users:manage')"
                 v-bind="props"
                 icon="mdi-pencil-outline"
@@ -129,6 +131,7 @@
           <v-tooltip :text="$t('globals.buttons.delete')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('globals.buttons.delete')"
                 v-if="$can('users:manage')"
                 v-bind="props"
                 icon="mdi-trash-can-outline"

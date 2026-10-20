@@ -57,6 +57,7 @@
           <v-tooltip :text="$t('globals.buttons.clone')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('globals.buttons.clone')"
                 v-if="$can('roles:manage')"
                 v-bind="props"
                 icon="mdi-file-multiple-outline"
@@ -72,6 +73,7 @@
             <v-tooltip :text="$t('globals.buttons.edit')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('globals.buttons.edit')"
                   v-if="$can('roles:manage')"
                   v-bind="props"
                   icon="mdi-pencil-outline"
@@ -86,6 +88,7 @@
             <v-tooltip :text="$t('globals.buttons.delete')" location="top">
               <template #activator="{ props }">
                 <v-btn
+                  :aria-label="$t('globals.buttons.delete')"
                   v-if="$can('roles:manage')"
                   v-bind="props"
                   icon="mdi-trash-can-outline"

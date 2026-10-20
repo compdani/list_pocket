@@ -37,7 +37,7 @@
         </v-btn>
         <v-menu location="bottom end">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon size="small" variant="text" :disabled="isRunning">
+            <v-btn :aria-label="$t('globals.buttons.more')" v-bind="props" icon size="small" variant="text" :disabled="isRunning">
               <v-icon>mdi-dots-vertical</v-icon>
             </v-btn>
           </template>

@@ -113,7 +113,7 @@
       <v-card v-if="activeItem" class="editor-card">
         <v-card-title class="editor-card__title">
           <span>{{ activeItem.name || activeItem.host || `SMTP ${activeIndex + 1}` }}</span>
-          <v-btn icon="mdi-close" variant="text" @click="closeEditor" />
+          <v-btn :aria-label="$t('globals.buttons.close')" icon="mdi-close" variant="text" @click="closeEditor" />
         </v-card-title>
 
         <v-divider />

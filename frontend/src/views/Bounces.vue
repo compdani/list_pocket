@@ -103,6 +103,7 @@
           <v-tooltip :text="$t('globals.buttons.delete')" location="top">
             <template #activator="{ props }">
               <v-btn
+                :aria-label="$t('globals.buttons.delete')"
                 v-bind="props"
                 icon="mdi-trash-can-outline"
                 size="x-small"

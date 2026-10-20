@@ -35,7 +35,7 @@
                 ref="query"
                 data-cy="query"
               />
-              <v-btn type="submit" color="primary" icon="mdi-magnify" data-cy="btn-query" />
+              <v-btn :aria-label="$t('globals.buttons.search')" type="submit" color="primary" icon="mdi-magnify" data-cy="btn-query" />
             </div>
           </v-form>
         </v-col>

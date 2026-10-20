@@ -423,7 +423,7 @@ defineExpose({
           <v-card class="node-command-card">
             <div class="node-command-header">
               <strong>Add node</strong>
-              <v-btn type="button" size="small" icon="mdi-close" variant="text" @click="closeNodeCommand" />
+              <v-btn :aria-label="$t('globals.buttons.close')" type="button" size="small" icon="mdi-close" variant="text" @click="closeNodeCommand" />
             </div>
             <v-text-field v-model="commandSearch" class="node-command-input" placeholder="Search nodes (A)" autofocus hide-details />
             <v-list class="node-command-list">
