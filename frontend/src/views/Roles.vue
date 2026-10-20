@@ -27,6 +27,9 @@
       class="admin-data-table roles-table"
       item-value="id"
     >
+      <template v-if="!roles.length" #loading>
+        <v-skeleton-loader type="table-row@8" />
+      </template>
       <template #[`item.name`]="{ item }">
         <div>
           <button

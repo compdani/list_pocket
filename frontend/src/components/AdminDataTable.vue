@@ -14,6 +14,11 @@
         <template v-for="(_, name) in slots" :key="name" #[name]="slotProps">
           <slot :name="name" v-bind="slotProps || {}" />
         </template>
+        <!-- Placeholder rows on first load only; later reloads keep the
+             current rows and show the progress bar instead. -->
+        <template v-if="!slots.loading && !items.length" #loading>
+          <v-skeleton-loader type="table-row@8" />
+        </template>
         <template v-if="!slots['no-data']" #no-data>
           <empty-placeholder
             v-if="!loading"

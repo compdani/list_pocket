@@ -8,97 +8,101 @@
 
     <section class="counts wrap">
       <div class="overview-grid relative">
-        <div v-if="isCountsLoading" class="section-loading">
-          <v-progress-circular indeterminate color="primary" size="40" />
-        </div>
-
-        <router-link :to="{ name: 'lists' }" class="overview-card" data-cy="lists">
-          <div class="metric-head">
-            <p class="metric-value">
-              <span class="metric-icon"><v-icon icon="mdi-format-list-bulleted-square" size="20" /></span>
-              {{ $utils.niceNumber(counts.lists.total) }}
-            </p>
-            <p class="metric-label">
-              {{ $tc('globals.terms.list', counts.lists.total) }}
-            </p>
+        <template v-if="isCountsLoading">
+          <div v-for="n in 3" :key="n" class="overview-card" aria-hidden="true">
+            <v-skeleton-loader type="heading, list-item@3" color="transparent" />
           </div>
-          <ul class="metric-breakdown">
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.lists.public) }}</span>
-              {{ $t('lists.types.public') }}
-            </li>
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.lists.private) }}</span>
-              {{ $t('lists.types.private') }}
-            </li>
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.lists.optinSingle) }}</span>
-              {{ $t('lists.optins.single') }}
-            </li>
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.lists.optinDouble) }}</span>
-              {{ $t('lists.optins.double') }}
-            </li>
-          </ul>
-        </router-link>
+        </template>
 
-        <router-link :to="{ name: 'campaigns' }" class="overview-card" data-cy="campaigns">
-          <div class="metric-head">
-            <p class="metric-value">
-              <span class="metric-icon"><v-icon icon="mdi-rocket-launch-outline" size="20" /></span>
-              {{ $utils.niceNumber(counts.campaigns.total) }}
-            </p>
-            <p class="metric-label">
-              {{ $tc('globals.terms.campaign', counts.campaigns.total) }}
-            </p>
-          </div>
-          <ul class="metric-breakdown">
-            <li v-for="(num, status) in counts.campaigns.byStatus || {}" :key="status">
-              <span class="metric-count" :data-cy="`campaigns-${status}`">{{ $utils.niceNumber(num) }}</span>
-              {{ $t(`campaigns.status.${status}`) }}
-              <span v-if="status === 'running' && Number(num) > 0" class="running-indicator" aria-hidden="true" />
-            </li>
-          </ul>
-        </router-link>
+        <template v-else>
+          <router-link :to="{ name: 'lists' }" class="overview-card" data-cy="lists">
+            <div class="metric-head">
+              <p class="metric-value">
+                <span class="metric-icon"><v-icon icon="mdi-format-list-bulleted-square" size="20" /></span>
+                {{ $utils.niceNumber(counts.lists.total) }}
+              </p>
+              <p class="metric-label">
+                {{ $tc('globals.terms.list', counts.lists.total) }}
+              </p>
+            </div>
+            <ul class="metric-breakdown">
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.lists.public) }}</span>
+                {{ $t('lists.types.public') }}
+              </li>
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.lists.private) }}</span>
+                {{ $t('lists.types.private') }}
+              </li>
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.lists.optinSingle) }}</span>
+                {{ $t('lists.optins.single') }}
+              </li>
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.lists.optinDouble) }}</span>
+                {{ $t('lists.optins.double') }}
+              </li>
+            </ul>
+          </router-link>
 
-        <router-link :to="{ name: 'subscribers' }" class="overview-card" data-cy="subscribers">
-          <div class="metric-head">
-            <p class="metric-value">
-              <span class="metric-icon"><v-icon icon="mdi-account-multiple" size="20" /></span>
-              {{ $utils.niceNumber(counts.subscribers.total) }}
-            </p>
-            <p class="metric-label">
-              {{ $tc('globals.terms.subscriber', counts.subscribers.total) }}
-            </p>
-          </div>
+          <router-link :to="{ name: 'campaigns' }" class="overview-card" data-cy="campaigns">
+            <div class="metric-head">
+              <p class="metric-value">
+                <span class="metric-icon"><v-icon icon="mdi-rocket-launch-outline" size="20" /></span>
+                {{ $utils.niceNumber(counts.campaigns.total) }}
+              </p>
+              <p class="metric-label">
+                {{ $tc('globals.terms.campaign', counts.campaigns.total) }}
+              </p>
+            </div>
+            <ul class="metric-breakdown">
+              <li v-for="(num, status) in counts.campaigns.byStatus || {}" :key="status">
+                <span class="metric-count" :data-cy="`campaigns-${status}`">{{ $utils.niceNumber(num) }}</span>
+                {{ $t(`campaigns.status.${status}`) }}
+                <span v-if="status === 'running' && Number(num) > 0" class="running-indicator" aria-hidden="true" />
+              </li>
+            </ul>
+          </router-link>
 
-          <ul class="metric-breakdown">
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.subscribers.blocklisted) }}</span>
-              {{ $t('subscribers.status.blocklisted') }}
-            </li>
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.subscribers.orphans) }}</span>
-              {{ $t('dashboard.orphanSubs') }}
-            </li>
-            <li>
-              <span class="metric-count">{{ $utils.niceNumber(counts.unsubscribes || 0) }}</span>
-              {{ $t('analytics.unsubscribes') }}
-            </li>
-          </ul>
+          <router-link :to="{ name: 'subscribers' }" class="overview-card" data-cy="subscribers">
+            <div class="metric-head">
+              <p class="metric-value">
+                <span class="metric-icon"><v-icon icon="mdi-account-multiple" size="20" /></span>
+                {{ $utils.niceNumber(counts.subscribers.total) }}
+              </p>
+              <p class="metric-label">
+                {{ $tc('globals.terms.subscriber', counts.subscribers.total) }}
+              </p>
+            </div>
 
-          <div class="metric-divider" />
+            <ul class="metric-breakdown">
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.subscribers.blocklisted) }}</span>
+                {{ $t('subscribers.status.blocklisted') }}
+              </li>
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.subscribers.orphans) }}</span>
+                {{ $t('dashboard.orphanSubs') }}
+              </li>
+              <li>
+                <span class="metric-count">{{ $utils.niceNumber(counts.unsubscribes || 0) }}</span>
+                {{ $t('analytics.unsubscribes') }}
+              </li>
+            </ul>
 
-          <div class="messages-block" data-cy="messages">
-            <p class="metric-value compact">
-              <span class="metric-icon"><v-icon icon="mdi-email-outline" size="20" /></span>
-              {{ $utils.niceNumber(counts.messages) }}
-            </p>
-            <p class="metric-label">
-              {{ $t('dashboard.messagesSent') }}
-            </p>
-          </div>
-        </router-link>
+            <div class="metric-divider" />
+
+            <div class="messages-block" data-cy="messages">
+              <p class="metric-value compact">
+                <span class="metric-icon"><v-icon icon="mdi-email-outline" size="20" /></span>
+                {{ $utils.niceNumber(counts.messages) }}
+              </p>
+              <p class="metric-label">
+                {{ $t('dashboard.messagesSent') }}
+              </p>
+            </div>
+          </router-link>
+        </template>
       </div>
 
       <div class="charts-card relative">

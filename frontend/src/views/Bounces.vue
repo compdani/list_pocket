@@ -59,6 +59,9 @@
       @update:model-value="updateChecked"
       @update:options="onTableOptionsChange"
     >
+      <template v-if="!(bounces.results || []).length" #loading>
+        <v-skeleton-loader type="table-row@8" />
+      </template>
       <template #[`item.email`]="{ item }">
         <router-link :to="{ name: 'subscriber', params: { id: item.subscriberId } }"
           :class="{ 'text-error': item.subscriberStatus === 'blocklisted' }">

@@ -40,6 +40,9 @@
         item-value="id"
         hide-default-footer
       >
+        <template v-if="!(txMessages.results || []).length" #loading>
+          <v-skeleton-loader type="table-row@8" />
+        </template>
         <template #[`item.subject`]="{ item }">
           <button type="button" class="link-button" @click="openMessage(item)">
             {{ item.subject }}

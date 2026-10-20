@@ -63,6 +63,9 @@
       @update:options="onTableOptionsChange"
       @click:row="(_, { item }) => openEmail(item)"
     >
+      <template v-if="!emails.length" #loading>
+        <v-skeleton-loader type="table-row@8" />
+      </template>
       <template #item.spamStatus="{ item }">
         <v-chip
           v-if="item.spamStatus"

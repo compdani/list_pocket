@@ -29,6 +29,9 @@
         class="admin-data-table templates-table"
         item-value="id"
       >
+        <template v-if="!templates.length" #loading>
+          <v-skeleton-loader type="table-row@8" />
+        </template>
         <template #[`item.name`]="{ item }">
           <div>
             <button

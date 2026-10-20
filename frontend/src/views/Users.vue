@@ -54,6 +54,9 @@
       class="admin-data-table users-table"
       item-value="id"
     >
+      <template v-if="!filteredUsers.length" #loading>
+        <v-skeleton-loader type="table-row@8" />
+      </template>
       <template #[`item.username`]="{ item }">
         <div>
           <button
