@@ -11,7 +11,7 @@ export default defineConfig(({ _, mode }) => {
   return {
     plugins: [
       vue(),
-      vuetify({ autoImport: true }),
+      vuetify({ autoImport: true, styles: { configFile: 'src/styles/settings.scss' } }),
     ],
     base: '/admin/',
     mode,

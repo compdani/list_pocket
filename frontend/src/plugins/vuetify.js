@@ -59,6 +59,10 @@ export default createVuetify({
           error: '#b3261e',
           success: '#1b7f4a',
           warning: '#9a6700',
+          // Palette colors used by name in templates (the color pack is off).
+          grey: '#757575',
+          orange: '#e65100',
+          'deep-purple': '#5e35b1',
         },
       },
       dark: {
@@ -73,6 +77,9 @@ export default createVuetify({
           success: '#7dd3a0',
           warning: '#f0c060',
           info: '#7cc4fa',
+          grey: '#9e9e9e',
+          orange: '#ffb74d',
+          'deep-purple': '#b39ddb',
         },
       },
     },
