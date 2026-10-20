@@ -805,6 +805,7 @@
     "globals.buttons.openMenu": "Open menu",
     "globals.buttons.accountMenu": "Account menu",
     "globals.messages.reloading": "Reloading app …",
+    "globals.messages.restartTimeout": "The app didn't come back within a minute. Check the server logs, then reload this page.",
     "globals.messages.initFailed": "Failed to initialize the app",
     "globals.messages.realtimeFailed": "Realtime connection failed",
     "globals.messages.emptyCreate": "Create your first {name}",

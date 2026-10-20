@@ -172,6 +172,17 @@
       </v-main>
     </template>
 
+    <v-overlay
+      :model-value="$root.isRestarting"
+      class="align-center justify-center"
+      persistent
+    >
+      <div class="text-center" role="status" aria-live="polite">
+        <v-progress-circular indeterminate size="56" width="5" color="primary" />
+        <p class="mt-4 text-white">{{ $t('globals.messages.reloading') }}</p>
+      </div>
+    </v-overlay>
+
     <confirm-dialog />
 
     <v-snackbar-queue
@@ -308,14 +319,16 @@ export default {
     },
 
     reloadApp() {
-      this.$api.reloadApp().then(() => {
-        this.$utils.toast(this.$t('globals.messages.reloading'));
-        const pollId = setInterval(() => {
-          this.$api.getHealth().then(() => {
-            clearInterval(pollId);
-            document.location.reload();
-          });
-        }, 500);
+      this.$api.reloadApp().then(async () => {
+        this.$root.isRestarting = true;
+        // Give the server a moment to go down before polling for it.
+        await new Promise((r) => { setTimeout(r, 500); });
+        if (await this.$api.waitForHealth({ intervalMs: 500 })) {
+          document.location.reload();
+          return;
+        }
+        this.$root.isRestarting = false;
+        this.$utils.toast(this.$t('globals.messages.restartTimeout'), 'error', -1);
       });
     },
 

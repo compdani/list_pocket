@@ -417,6 +417,7 @@ const Root = {
   data() {
     return {
       isLoaded: false,
+      isRestarting: false,
       initError: '',
     };
   },
@@ -443,13 +444,16 @@ const Root = {
         }
 
         this.$utils.toast(i18n.global.t('settings.messengers.messageSaved'));
-        const pollId = setInterval(() => {
-          api.getHealth().then(() => {
-            clearInterval(pollId);
+        this.isRestarting = true;
+        api.waitForHealth().then((ok) => {
+          this.isRestarting = false;
+          if (ok) {
             this.loadConfig();
-            resolve({ needsRestart: false });
-          });
-        }, 1000);
+          } else {
+            this.$utils.toast(i18n.global.t('globals.messages.restartTimeout'), 'error', -1);
+          }
+          resolve({ needsRestart: false, timedOut: !ok });
+        });
       });
     },
   },

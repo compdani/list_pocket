@@ -353,13 +353,35 @@ export { pb };
 // loading: modelName (set's the loading status in the global store: eg: store.loading.lists = true)
 // store: modelName (set's the API response in the global store. eg: store.lists: { ... } )
 
-// Health check endpoint that does not throw a toast.
-export const getHealth = () => http.get(
-  '/api/health',
-  { disableToast: true },
-);
-
 export const reloadApp = () => http.post('/api/admin/reload');
+
+// Polls the public (unauthenticated) health endpoint until the server answers
+// or `timeoutMs` passes. Requests run one at a time, and each is aborted after
+// `requestTimeoutMs` so a hung connection can't stall the loop. Resolves true
+// when healthy.
+export async function waitForHealth({
+  intervalMs = 1000,
+  timeoutMs = 60000,
+  requestTimeoutMs = 5000,
+} = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), requestTimeoutMs);
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await pb.send('/health', { method: 'GET', signal: ctrl.signal, requestKey: null });
+      return true;
+    } catch {
+      // Server still down; retry after the interval.
+    } finally {
+      clearTimeout(timer);
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => { setTimeout(r, intervalMs); });
+  }
+  return false;
+}
 
 // Dashboard
 export const getDashboardCounts = () => http.get(
