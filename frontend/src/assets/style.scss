@@ -14,22 +14,21 @@ $size-7: 0.875rem;
 $weight-semibold: 600;
 $color: $grey-dark;
 
-/* import inter-regular */
+/* Inter: 400, and the bold file serves 600-700. */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
   font-weight: 400;
-  src: local(''),
-       url('./fonts/Inter-Regular.woff2') format('woff2'),
+  font-display: swap;
+  src: url('./fonts/Inter-Regular.woff2') format('woff2');
 }
 
-/* import inter-600 */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
-  font-weight: 600;
-  src: local(''),
-       url('./fonts/Inter-Bold.woff2') format('woff2'),
+  font-weight: 600 700;
+  font-display: swap;
+  src: url('./fonts/Inter-Bold.woff2') format('woff2');
 }
 
 $body-family: "Inter", "Helvetica Neue", sans-serif;
