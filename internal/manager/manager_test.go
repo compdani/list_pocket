@@ -21,10 +21,11 @@ func (testStore) UpdateCampaignStatus(int, string) error                      { 
 func (testStore) ScheduleCampaignBatch(int, time.Time) error                  { return nil }
 func (testStore) UpdateCampaignCounts(int, int, int, int) error               { return nil }
 func (testStore) MarkCampaignLedgerSent(int, string) error                    { return nil }
+func (testStore) MarkCampaignLedgerSkipped(int, string) error                 { return nil }
 func (testStore) RollbackCampaignLedgerInflight(int, string) error            { return nil }
 func (testStore) ResetCampaignLedgerInflight(int) (int64, error)              { return 0, nil }
 func (testStore) FinalizeCampaignLedgerStats(int) error                       { return nil }
-func (testStore) MarkSMSUnsendable(string) (int64, error)                     { return 0, nil }
+func (testStore) MarkSMSUnsendable(string, string) (int64, error)             { return 0, nil }
 func (testStore) CreateLink(url string) (string, error)                       { return "linkrid01234501", nil }
 func (testStore) CreateTransactionalMessage(msg models.TransactionalMessage) (models.TransactionalMessage, error) {
 	return msg, nil

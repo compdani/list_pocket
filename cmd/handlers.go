@@ -59,7 +59,6 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 
 	api.GET("/health", asHandler(a.HealthCheck))
 	api.GET("/config", asHandler(a.GetServerConfig))
-	api.GET("/lang/{lang}", asHandler(a.GetI18nLang))
 	api.GET("/dashboard/charts", asHandler(a.GetDashboardCharts))
 	api.GET("/dashboard/counts", asHandler(a.GetDashboardCounts))
 
@@ -233,6 +232,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 		return renderTpl(re, http.StatusOK, "home", publicTpl{Title: "listpocket"})
 	}))
 
+	public.GET("/mailapi/lang/{lang}", asHandler(a.GetI18nLang))
 	public.GET("/mailapi/public/lists", asHandler(a.GetPublicLists))
 	public.POST("/mailapi/public/subscription", asHandler(a.PublicSubscription))
 	public.GET("/mailapi/public/captcha/altcha", asHandler(a.AltchaChallenge))

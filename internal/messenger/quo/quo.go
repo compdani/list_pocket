@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -160,6 +161,11 @@ type Messenger struct {
 	loadSettings func() models.TextMessagingSettings
 	throttleMu   sync.Mutex
 	lastSend     time.Time
+
+	clientMu  sync.Mutex
+	http      *http.Client
+	cached    *Client
+	cachedKey string
 }
 
 func NewMessenger(loadSettings func() models.TextMessagingSettings) *Messenger {
@@ -179,7 +185,32 @@ func (m *Messenger) client() (*Client, error) {
 	if p == nil || !p.Enabled {
 		return nil, errors.New("quo messaging is not enabled")
 	}
-	return NewClientFromSettings(s)
+	apiKey := strings.TrimSpace(p.APIKey)
+	from := strings.TrimSpace(p.From)
+	if apiKey == "" {
+		return nil, errors.New("missing quo api_key")
+	}
+	if from == "" {
+		return nil, errors.New("missing quo from")
+	}
+	key := apiKey + "\x00" + from
+
+	m.clientMu.Lock()
+	defer m.clientMu.Unlock()
+	if m.http == nil {
+		m.http = &http.Client{Timeout: 30 * time.Second}
+	}
+	if m.cached != nil && m.cachedKey == key {
+		return m.cached, nil
+	}
+	m.cached = &Client{
+		APIKey:  apiKey,
+		From:    from,
+		BaseURL: defaultAPIBase,
+		HTTP:    m.http,
+	}
+	m.cachedKey = key
+	return m.cached, nil
 }
 
 func (m *Messenger) Push(msg models.Message) error {

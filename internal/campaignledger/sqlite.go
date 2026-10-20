@@ -8,8 +8,8 @@
 //   - Backfill and InsertPendingIfEligible use INSERT OR IGNORE, so they cannot add a second row for the same pair.
 //
 // Audit trail: application code does not delete ledger rows when a message is sent; rows remain (typically with
-// status='sent') so you can see what was delivered. FinalizeCampaignStats only updates aggregate counts on campaigns.
-// A maintenance cleanup may later prune old sent rows after campaign counters are reconciled.
+// status='sent' or 'skipped') so you can see what was delivered. FinalizeCampaignStats only updates aggregate
+// counts on campaigns. A maintenance cleanup may later prune old sent/skipped rows after counters are reconciled.
 // Note: PocketBase relation fields may still cascade-delete ledger rows if a parent campaign or subscriber record
 // is removed from the DB; this package does not delete rows as part of the send pipeline.
 package campaignledger
@@ -70,6 +70,7 @@ type RecoverStats struct {
 	Sent          int   `json:"sent"`
 	Pending       int   `json:"pending"`
 	Inflight      int   `json:"inflight"`
+	Skipped       int   `json:"skipped"`
 	Missing       int   `json:"missing"`
 	Inserted      int64 `json:"inserted,omitempty"`
 	ResetInflight int64 `json:"reset_inflight,omitempty"`
@@ -216,6 +217,8 @@ GROUP BY status`, campaignRecID); err != nil {
 			out.Pending = row.Count
 		case "inflight":
 			out.Inflight = row.Count
+		case "skipped":
+			out.Skipped = row.Count
 		}
 	}
 
@@ -224,7 +227,7 @@ GROUP BY status`, campaignRecID); err != nil {
 
 // RecoverMissing inserts pending ledger rows for currently eligible subscribers
 // who are not yet represented in the ledger, resets stranded inflight rows, and
-// reconciles campaign counters. Existing sent rows are preserved.
+// reconciles campaign counters. Existing sent and skipped rows are preserved.
 func RecoverMissing(db sqlx.ExtContext, campaignRowID int, campaignRecID string) (RecoverStats, error) {
 	out, err := RecoveryStats(db, campaignRecID)
 	if err != nil {
@@ -421,6 +424,61 @@ WHERE campaign_id = ? AND subscriber_id = ? AND status = 'inflight'`, campaignRe
 	return err
 }
 
+// MarkSkipped sets the ledger row to skipped for this campaign + subscriber pair.
+// Used for permanent per-recipient failures (opted-out, invalid number, etc.)
+// so NextPending does not retry them. Only inflight rows are updated.
+func MarkSkipped(db sqlx.ExecerContext, campaignRecID, subscriberRecID string) error {
+	ctx := context.Background()
+	_, err := db.ExecContext(ctx, `
+UPDATE `+tableName+`
+SET status = 'skipped', updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
+WHERE campaign_id = ? AND subscriber_id = ? AND status = 'inflight'`, campaignRecID, subscriberRecID)
+	return err
+}
+
+// SkipPendingSMSForSubscribers marks pending Quo campaign ledger rows as skipped
+// for the given subscribers so later SMS campaigns do not claim and POST them.
+// Email campaigns and inflight rows (already claimed by a worker) are left alone.
+func SkipPendingSMSForSubscribers(db sqlx.ExecerContext, subscriberRecIDs []string) (int64, error) {
+	ids := make([]string, 0, len(subscriberRecIDs))
+	seen := make(map[string]struct{}, len(subscriberRecIDs))
+	for _, id := range subscriberRecIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+
+	args := make([]any, 0, len(ids)+1)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	args = append(args, models.CampaignMessengerQuo)
+
+	ctx := context.Background()
+	res, err := db.ExecContext(ctx, `
+UPDATE `+tableName+`
+SET status = 'skipped', updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
+WHERE status = 'pending'
+  AND subscriber_id IN (`+placeholders(len(ids))+`)
+  AND campaign_id IN (
+    SELECT id FROM campaigns WHERE trim(COALESCE(messenger, '')) = ?
+  )`, args...)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // SyncToSendFromLedger sets campaigns.to_send from the ledger row count when the ledger
 // already has rows (e.g. subscriber_lists hooks ran before the first backfill).
 func SyncToSendFromLedger(db sqlx.ExecerContext, campaignRowID int, campaignRecID string) error {
@@ -435,23 +493,24 @@ WHERE rowid = ?
 }
 
 // FinalizeCampaignStats writes authoritative to_send and sent counts from the ledger
-// into the campaigns row (by rowid).
+// into the campaigns row (by rowid). Skipped recipients count as completed so a
+// campaign that opted out many numbers still reports 100% progress.
 func FinalizeCampaignStats(db sqlx.ExecerContext, campaignRowID int, campaignRecID string) error {
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `
 UPDATE campaigns SET
   to_send = (SELECT COUNT(1) FROM `+tableName+` WHERE campaign_id = ?),
-  sent = (SELECT COUNT(1) FROM `+tableName+` WHERE campaign_id = ? AND status = 'sent'),
+  sent = (SELECT COUNT(1) FROM `+tableName+` WHERE campaign_id = ? AND status IN ('sent', 'skipped')),
   updated = (strftime('%Y-%m-%d %H:%M:%fZ', 'now'))
 WHERE rowid = ?`, campaignRecID, campaignRecID, campaignRowID)
 	return err
 }
 
 // CleanupSentOlderThan reconciles campaign counters from the ledger and then deletes old
-// sent rows for completed campaigns.
+// sent/skipped rows for completed campaigns.
 //
 // Only ledger rows that are:
-//   - status = 'sent'
+//   - status IN ('sent', 'skipped')
 //   - older than olderThan (based on updated timestamp)
 //   - attached to campaigns in status finished/cancelled
 //
@@ -477,7 +536,7 @@ SELECT DISTINCT c.rowid, c.id
 FROM campaigns c
 JOIN `+tableName+` l ON l.campaign_id = c.id
 WHERE c.status IN ('finished', 'cancelled')
-  AND l.status = 'sent'
+  AND l.status IN ('sent', 'skipped')
   AND datetime(l.updated) <= datetime(?)`, cutoff); err != nil {
 		return 0, 0, err
 	}
@@ -490,7 +549,7 @@ WHERE c.status IN ('finished', 'cancelled')
 
 	res, err := tx.ExecContext(ctx, `
 DELETE FROM `+tableName+`
-WHERE status = 'sent'
+WHERE status IN ('sent', 'skipped')
   AND datetime(updated) <= datetime(?)
   AND campaign_id IN (
     SELECT id FROM campaigns WHERE status IN ('finished', 'cancelled')

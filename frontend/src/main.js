@@ -15,6 +15,7 @@ const i18n = createI18n({
   legacy: false,
   locale: 'en',
   fallbackLocale: 'en',
+  flatJson: true,
   messages: {},
 });
 const eventBus = events;
@@ -242,11 +243,27 @@ function setI18nLocale(locale) {
   i18n.global.locale.value = locale;
 }
 
+function applyLocaleMessages(locale, defaultMessages, localeMessages) {
+  i18n.global.setLocaleMessage('en', defaultMessages);
+  setI18nLocale(locale);
+  i18n.global.setLocaleMessage(locale, localeMessages);
+  sharedUtils.updateRelativeTimeLocale();
+}
+
 i18n.global.t = withI18nFallback('t');
 i18n.global.tc = withI18nFallback('tc');
 
 const sharedUtils = new Utils(i18n.global);
 let vueApp = null;
+let configLocaleApplied = false;
+
+async function preloadEnglishMessages() {
+  const { defaultMessages, localeMessages } = await loadLocaleMessages('en');
+  if (configLocaleApplied) {
+    return;
+  }
+  applyLocaleMessages('en', defaultMessages, localeMessages);
+}
 
 async function initConfig(rootProxy) {
   const proxy = rootProxy;
@@ -259,10 +276,8 @@ async function initConfig(rootProxy) {
 
   const cfg = await api.getServerConfig();
   const { defaultMessages, localeMessages } = await loadLocaleMessages(cfg.lang);
-  i18n.global.setLocaleMessage('en', defaultMessages);
-  setI18nLocale(cfg.lang);
-  i18n.global.setLocaleMessage(cfg.lang, localeMessages);
-  sharedUtils.updateRelativeTimeLocale();
+  applyLocaleMessages(cfg.lang, defaultMessages, localeMessages);
+  configLocaleApplied = true;
 
   proxy.$utils = sharedUtils;
   proxy.$api = api;
@@ -460,18 +475,13 @@ app.config.globalProperties.$canList = () => false;
 app.config.globalProperties.$docsUrl = docsUrl;
 
 const rootProxy = app.mount('#app');
+const englishReady = preloadEnglishMessages().catch(() => {
+  // Auth pages still render with fallback keys if language files are unavailable.
+});
 initConfig(rootProxy).catch(async (err) => {
   if (err && (err.status === 401 || (err.response && err.response.status === 401))) {
     if (isAuthPath() || (router.currentRoute.value.meta && router.currentRoute.value.meta.authPage)) {
-      try {
-        const { defaultMessages, localeMessages } = await loadLocaleMessages('en');
-        i18n.global.setLocaleMessage('en', defaultMessages);
-        setI18nLocale('en');
-        i18n.global.setLocaleMessage('en', localeMessages);
-        sharedUtils.updateRelativeTimeLocale();
-      } catch {
-        // Auth pages still render with fallback keys if language files are unavailable.
-      }
+      await englishReady;
       rootProxy.isLoaded = true;
       return;
     }

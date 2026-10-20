@@ -65,9 +65,13 @@ func (ev *Events) Unsubscribe(id string) {
 func (ev *Events) Publish(e Event) error {
 	ev.Lock()
 	hook := ev.publishHook
-	defer ev.Unlock()
-
+	chans := make([]chan Event, 0, len(ev.subs))
 	for _, ch := range ev.subs {
+		chans = append(chans, ch)
+	}
+	ev.Unlock()
+
+	for _, ch := range chans {
 		select {
 		case ch <- e:
 		default:

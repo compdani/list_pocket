@@ -40,14 +40,15 @@ type Store interface {
 	ScheduleCampaignBatch(campID int, sendAt time.Time) error
 	UpdateCampaignCounts(campID int, toSend int, sent int, lastSubID int) error
 	MarkCampaignLedgerSent(campaignID int, subscriberRecordID string) error
+	MarkCampaignLedgerSkipped(campaignID int, subscriberRecordID string) error
 	RollbackCampaignLedgerInflight(campaignID int, subscriberRecordID string) error
 	ResetCampaignLedgerInflight(campaignID int) (int64, error)
 	FinalizeCampaignLedgerStats(campaignID int) error
-	// MarkSMSUnsendable opts the subscriber (matched by normalized phone) out
-	// of all SMS list memberships. Used for permanent provider rejections like
-	// "international messaging not allowed". Phone-only matching keeps this
-	// callable without the subscriber record id.
-	MarkSMSUnsendable(phone string) (int64, error)
+	// MarkSMSUnsendable opts the subscriber out of all SMS list memberships.
+	// Record ID is preferred; phone is a fallback for other memberships sharing
+	// the number. Used for permanent provider rejections such as opted-out or
+	// international messaging not allowed.
+	MarkSMSUnsendable(subscriberRecordID, phone string) (int64, error)
 	CreateLink(url string) (string, error)
 	CreateTransactionalMessage(models.TransactionalMessage) (models.TransactionalMessage, error)
 	UpdateTransactionalMessageStatus(recordID, status, errorMessage string, sent bool) error
@@ -611,27 +612,31 @@ func (m *Manager) worker() {
 
 			// Push the message to the messenger.
 			err := m.messengers[msg.Campaign.Messenger].Push(out)
+			unsendable := err != nil &&
+				errors.Is(err, models.ErrUnsendableDestination) &&
+				models.IsTextMessenger(msg.Campaign.Messenger)
 			if err != nil {
 				m.log.Printf("error sending message in campaign %s: subscriber %d: %v", msg.Campaign.Name, msg.Subscriber.ID, err)
-				if msg.pipe != nil {
-					if rbErr := m.store.RollbackCampaignLedgerInflight(msg.Campaign.ID, msg.Subscriber.RecordID); rbErr != nil {
-						m.log.Printf("error rolling back campaign ledger inflight (campaign %d): %v", msg.Campaign.ID, rbErr)
-					}
-				}
 
 				// Provider rejected this specific recipient permanently
-				// (e.g. Quo "International Messaging Not Allowed").
-				// Mark the subscriber as SMS-unsubscribed across all of
-				// their lists so future campaigns skip them and the
-				// campaign doesn't keep burning errors on them.
-				if errors.Is(err, models.ErrUnsendableDestination) &&
-					models.IsTextMessenger(msg.Campaign.Messenger) &&
-					strings.TrimSpace(msg.Subscriber.Phone) != "" {
-					if n, mErr := m.store.MarkSMSUnsendable(msg.Subscriber.Phone); mErr != nil {
+				// (e.g. Quo opted-out, invalid number, international not allowed).
+				// Opt them out of SMS, skip the ledger row so they are not
+				// retried, and do not count this toward MaxSendErrors.
+				if unsendable {
+					if n, mErr := m.store.MarkSMSUnsendable(msg.Subscriber.RecordID, msg.Subscriber.Phone); mErr != nil {
 						m.log.Printf("error marking subscriber %d sms-unsendable: %v", msg.Subscriber.ID, mErr)
 					} else if n > 0 {
 						m.log.Printf("subscriber %d (%s): auto opted-out of SMS after provider rejection (%d list memberships)",
 							msg.Subscriber.ID, msg.Subscriber.Phone, n)
+					}
+					if msg.pipe != nil {
+						if skErr := m.store.MarkCampaignLedgerSkipped(msg.Campaign.ID, msg.Subscriber.RecordID); skErr != nil {
+							m.log.Printf("error marking campaign ledger skipped (campaign %d, subscriber %s): %v", msg.Campaign.ID, msg.Subscriber.RecordID, skErr)
+						}
+					}
+				} else if msg.pipe != nil {
+					if rbErr := m.store.RollbackCampaignLedgerInflight(msg.Campaign.ID, msg.Subscriber.RecordID); rbErr != nil {
+						m.log.Printf("error rolling back campaign ledger inflight (campaign %d): %v", msg.Campaign.ID, rbErr)
 					}
 				}
 			}
@@ -642,9 +647,11 @@ func (m *Manager) worker() {
 				msg.pipe.wg.Done()
 
 				if err != nil {
-					// Call the error callback, which keeps track of the error count
-					// and stops the campaign if the error count exceeds the threshold.
-					msg.pipe.OnError()
+					if !unsendable {
+						// Call the error callback, which keeps track of the error count
+						// and stops the campaign if the error count exceeds the threshold.
+						msg.pipe.OnError()
+					}
 				} else {
 					id := uint64(msg.Subscriber.ID)
 					if id > msg.pipe.lastID.Load() {

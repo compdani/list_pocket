@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/campaignledger"
@@ -27,7 +28,15 @@ type store struct {
 	log     *log.Logger
 	events  *events.Events
 	verbose bool
+
+	campRecMu  sync.Mutex
+	campRecIDs map[int]string
+
+	statsDebounceMu sync.Mutex
+	statsDebounce   map[int]*time.Timer
 }
+
+const campaignStatsLedgerDebounce = 200 * time.Millisecond
 
 const sqliteBatchCursorAttribKey = "_sqlite_batch_cursor"
 
@@ -64,6 +73,35 @@ func newManagerStore(db *pbdb.DB, c *core.Core, m media.Store, l *log.Logger, ev
 }
 
 func (s *store) publishCampaignStatsEvent(reason string, campaignID int) {
+	if reason == "ledger-sent" || reason == "ledger-skipped" {
+		s.scheduleDebouncedCampaignStats(campaignID)
+		return
+	}
+	s.publishCampaignStatsEventNow(reason, campaignID)
+}
+
+func (s *store) scheduleDebouncedCampaignStats(campaignID int) {
+	if s.events == nil {
+		return
+	}
+
+	s.statsDebounceMu.Lock()
+	defer s.statsDebounceMu.Unlock()
+	if s.statsDebounce == nil {
+		s.statsDebounce = make(map[int]*time.Timer)
+	}
+	if t, ok := s.statsDebounce[campaignID]; ok {
+		t.Stop()
+	}
+	s.statsDebounce[campaignID] = time.AfterFunc(campaignStatsLedgerDebounce, func() {
+		s.statsDebounceMu.Lock()
+		delete(s.statsDebounce, campaignID)
+		s.statsDebounceMu.Unlock()
+		s.publishCampaignStatsEventNow("ledger-progress", campaignID)
+	})
+}
+
+func (s *store) publishCampaignStatsEventNow(reason string, campaignID int) {
 	if s.events == nil {
 		return
 	}
@@ -150,10 +188,24 @@ func sqliteAdvanceBatchCursor(cursor sqliteBatchCursor, rows []sqliteStoreSubscr
 }
 
 func (s *store) sqliteCampaignRecordID(campID int) (string, error) {
+	s.campRecMu.Lock()
+	if recID, ok := s.campRecIDs[campID]; ok {
+		s.campRecMu.Unlock()
+		return recID, nil
+	}
+	s.campRecMu.Unlock()
+
 	var recID string
 	if err := s.db.Get(&recID, `SELECT id FROM campaigns WHERE rowid = ?`, campID); err != nil {
 		return "", err
 	}
+
+	s.campRecMu.Lock()
+	if s.campRecIDs == nil {
+		s.campRecIDs = make(map[int]string)
+	}
+	s.campRecIDs[campID] = recID
+	s.campRecMu.Unlock()
 	return recID, nil
 }
 
@@ -296,15 +348,62 @@ func (s *store) ResetCampaignLedgerInflight(campaignID int) (int64, error) {
 	return n, err
 }
 
-// MarkSMSUnsendable opts the subscriber (matched by normalized phone) out of
-// every list's SMS status, without touching email status. Used by the manager
-// when Quo (or another SMS provider) returns a permanent per-recipient error
-// such as "International Messaging Not Allowed".
-func (s *store) MarkSMSUnsendable(phone string) (int64, error) {
-	if strings.TrimSpace(phone) == "" {
-		return 0, nil
+// MarkCampaignLedgerSkipped records a permanent per-recipient skip in
+// campaign_send_ledger (inflight → skipped) so the subscriber is not retried.
+func (s *store) MarkCampaignLedgerSkipped(campaignID int, subscriberRecordID string) error {
+	if strings.TrimSpace(subscriberRecordID) == "" {
+		return nil
 	}
-	return s.core.SMSOptOutSubscriberByPhone(phone)
+	campaignRecID, err := s.sqliteCampaignRecordID(campaignID)
+	if err != nil {
+		return err
+	}
+	err = campaignledger.MarkSkipped(s.db, campaignRecID, subscriberRecordID)
+	if err == nil {
+		s.publishCampaignStatsEvent("ledger-skipped", campaignID)
+	}
+	return err
+}
+
+// MarkSMSUnsendable opts the subscriber out of every list's SMS status, without
+// touching email status. Record ID is preferred (exact subscriber). Exact stored
+// phone covers sibling subscriber records sharing the number without a last-10
+// table scan. Pending Quo ledger rows for those subscribers are skipped so other
+// SMS campaigns do not POST them again.
+func (s *store) MarkSMSUnsendable(subscriberRecordID, phone string) (int64, error) {
+	ids := make([]string, 0, 4)
+	seen := map[string]struct{}{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	add(subscriberRecordID)
+
+	if ph := strings.TrimSpace(phone); ph != "" {
+		siblingIDs, err := s.core.SubscriberIDsByExactPhone(ph)
+		if err != nil {
+			return 0, err
+		}
+		for _, id := range siblingIDs {
+			add(id)
+		}
+	}
+
+	n, err := s.core.SMSOptOutSubscribersByRecordIDs(ids)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := campaignledger.SkipPendingSMSForSubscribers(s.db, ids); err != nil {
+		return n, err
+	}
+	return n, nil
 }
 
 // FinalizeCampaignLedgerStats writes final to_send and sent from the ledger into campaigns (SQLite only).

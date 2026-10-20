@@ -38,6 +38,8 @@ type quoErrorResponse struct {
 func isUnsendableDestinationCode(code string) bool {
 	switch strings.TrimSpace(code) {
 	case
+		"0201400", // User has opted out of receiving messages.
+		"0202400", // Invalid `to` phone number.
 		"0203400", // Unreachable `to` phone number (not SMS-reachable per provider).
 		"0203403", // International Messaging Not Allowed.
 		"0203404", // Phone number is not messageable (landline/VoIP).

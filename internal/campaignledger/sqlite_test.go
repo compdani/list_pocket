@@ -69,6 +69,50 @@ func TestMarkSentOnlyInflight(t *testing.T) {
 	}
 }
 
+func TestMarkSkippedInflight(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	subRec := "sub_rec_1"
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, to_send, sent) VALUES (?, 'broadcast', 'running', 0, 0)`, campRec)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u1', 'a@b.c', 'enabled')`, subRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', ?, ?, 'inflight', '2026-01-01', '2026-01-01')`, campRec, subRec)
+
+	if err := MarkSkipped(db, campRec, subRec); err != nil {
+		t.Fatal(err)
+	}
+	var st string
+	mustGet(t, db, &st, `SELECT status FROM campaign_send_ledger WHERE campaign_id = ? AND subscriber_id = ?`, campRec, subRec)
+	if st != "skipped" {
+		t.Fatalf("status after MarkSkipped: %q", st)
+	}
+
+	stats, err := RecoveryStats(db, campRec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Skipped != 1 || stats.Inflight != 0 || stats.Sent != 0 {
+		t.Fatalf("unexpected stats after skip: %+v", stats)
+	}
+}
+
+func TestMarkSkippedOnlyInflight(t *testing.T) {
+	db := newTestLedgerDB(t)
+	campRec := "camp_rec_1"
+	subRec := "sub_rec_1"
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status) VALUES (?, 'broadcast', 'running')`, campRec)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u1', 'a@b.c', 'enabled')`, subRec)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', ?, ?, 'sent', '2026-01-01', '2026-01-01')`, campRec, subRec)
+
+	if err := MarkSkipped(db, campRec, subRec); err != nil {
+		t.Fatal(err)
+	}
+	var st string
+	mustGet(t, db, &st, `SELECT status FROM campaign_send_ledger WHERE campaign_id = ? AND subscriber_id = ?`, campRec, subRec)
+	if st != "sent" {
+		t.Fatalf("MarkSkipped should not update already-sent row; got status %q", st)
+	}
+}
+
 func TestFinalizeCampaignStats(t *testing.T) {
 	db := newTestLedgerDB(t)
 	campRec := "camp_rec_1"
@@ -88,14 +132,18 @@ func TestFinalizeCampaignStats(t *testing.T) {
 	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', ?, ?, 'pending', '2026-01-01', '2026-01-01')`, campRec, sub2)
 	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l3', ?, ?, 'inflight', '2026-01-01', '2026-01-01')`, campRec, sub3)
 
+	sub4 := "sub_4"
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u4', 'd@b.c', 'enabled')`, sub4)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l4', ?, ?, 'skipped', '2026-01-01', '2026-01-01')`, campRec, sub4)
+
 	if err := FinalizeCampaignStats(db, campRowID, campRec); err != nil {
 		t.Fatal(err)
 	}
 	var toSend, sent int
 	mustGet(t, db, &toSend, `SELECT to_send FROM campaigns WHERE rowid = ?`, campRowID)
 	mustGet(t, db, &sent, `SELECT sent FROM campaigns WHERE rowid = ?`, campRowID)
-	if toSend != 3 || sent != 1 {
-		t.Fatalf("FinalizeCampaignStats: to_send=%d sent=%d, want to_send=3 sent=1", toSend, sent)
+	if toSend != 4 || sent != 2 {
+		t.Fatalf("FinalizeCampaignStats: to_send=%d sent=%d, want to_send=4 sent=2 (sent+skipped)", toSend, sent)
 	}
 }
 
@@ -169,6 +217,79 @@ func TestCleanupSentOlderThan(t *testing.T) {
 	if remaining != 0 {
 		t.Fatalf("remaining ledger rows=%d, want 0", remaining)
 	}
+}
+
+func TestCleanupSentOlderThanDeletesSkipped(t *testing.T) {
+	pbdbDB := newTestLedgerPBDB(t)
+	campRec := "camp_finished"
+	var campRowID int
+	mustExec(t, pbdbDB, `INSERT INTO campaigns (id, type, status, to_send, sent) VALUES (?, 'broadcast', 'finished', 0, 0)`, campRec)
+	mustGet(t, pbdbDB, &campRowID, `SELECT rowid FROM campaigns WHERE id = ?`, campRec)
+
+	mustExec(t, pbdbDB, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s1', 'u1', 'a@b.c', 'enabled')`)
+	mustExec(t, pbdbDB, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('s2', 'u2', 'b@b.c', 'enabled')`)
+	mustExec(t, pbdbDB, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', ?, 's1', 'sent', '2026-01-01', '2026-01-01')`, campRec)
+	mustExec(t, pbdbDB, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', ?, 's2', 'skipped', '2026-01-01', '2026-01-01')`, campRec)
+
+	deleted, reconciled, err := CleanupSentOlderThan(pbdbDB, time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 2 {
+		t.Fatalf("deleted=%d, want 2", deleted)
+	}
+	if reconciled != 1 {
+		t.Fatalf("reconciled=%d, want 1", reconciled)
+	}
+
+	var toSend, sent, remaining int
+	mustGet(t, pbdbDB, &toSend, `SELECT to_send FROM campaigns WHERE rowid = ?`, campRowID)
+	mustGet(t, pbdbDB, &sent, `SELECT sent FROM campaigns WHERE rowid = ?`, campRowID)
+	mustGet(t, pbdbDB, &remaining, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ?`, campRec)
+	if toSend != 2 || sent != 2 {
+		t.Fatalf("campaign stats after cleanup: to_send=%d sent=%d, want 2/2", toSend, sent)
+	}
+	if remaining != 0 {
+		t.Fatalf("remaining ledger rows=%d, want 0", remaining)
+	}
+}
+
+func TestSkipPendingSMSForSubscribers(t *testing.T) {
+	db := newTestLedgerDB(t)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger) VALUES ('quo_a', 'broadcast', 'running', 'quo')`)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger) VALUES ('quo_b', 'broadcast', 'running', 'quo')`)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger) VALUES ('quo_c', 'broadcast', 'running', 'quo')`)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger) VALUES ('email_a', 'broadcast', 'running', 'email')`)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('sub_a', 'u-a', 'a@b.c', 'enabled')`)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('sub_other', 'u-o', 'o@b.c', 'enabled')`)
+
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', 'quo_a', 'sub_a', 'pending', '2026-01-01', '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', 'quo_b', 'sub_a', 'inflight', '2026-01-01', '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l3', 'email_a', 'sub_a', 'pending', '2026-01-01', '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l4', 'quo_a', 'sub_other', 'pending', '2026-01-01', '2026-01-01')`)
+	mustExec(t, db, `INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l5', 'quo_c', 'sub_a', 'sent', '2026-01-01', '2026-01-01')`)
+
+	n, err := SkipPendingSMSForSubscribers(db, []string{"sub_a", "sub_a", "  "})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("skipped %d rows, want 1 pending Quo row", n)
+	}
+
+	assertStatus := func(id, want string) {
+		t.Helper()
+		var st string
+		mustGet(t, db, &st, `SELECT status FROM campaign_send_ledger WHERE id = ?`, id)
+		if st != want {
+			t.Fatalf("ledger %s status = %q, want %q", id, st, want)
+		}
+	}
+	assertStatus("l1", "skipped")
+	assertStatus("l2", "inflight")
+	assertStatus("l3", "pending")
+	assertStatus("l4", "pending")
+	assertStatus("l5", "sent")
 }
 
 func TestCleanupSentOlderThanSkipsRunningAndPending(t *testing.T) {

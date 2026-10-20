@@ -2,6 +2,8 @@ package quo
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,5 +79,50 @@ func TestClient_GetMessageText_validation(t *testing.T) {
 	}
 	if _, err := (*Client)(nil).GetMessageText(context.Background(), "AC1"); err == nil {
 		t.Fatal("expected error for nil client")
+	}
+}
+
+func TestClient_SendText_unsendableCodes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		code     string
+		wantWrap bool
+	}{
+		{name: "opted_out", code: "0201400", wantWrap: true},
+		{name: "invalid_to", code: "0202400", wantWrap: true},
+		{name: "international", code: "0203403", wantWrap: true},
+		{name: "generic_bad_request", code: "0999999", wantWrap: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/v1/messages" {
+					t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(fmt.Sprintf(
+					`{"message":"fail","code":%q,"status":400,"title":"Fail"}`, tc.code)))
+			}))
+			t.Cleanup(srv.Close)
+
+			c := &Client{
+				APIKey:  "key123",
+				From:    "+15551234567",
+				BaseURL: srv.URL,
+				HTTP:    srv.Client(),
+			}
+			err := c.SendText(context.Background(), "+15555550100", []byte("hello"))
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if wrapped := errors.Is(err, ErrUnsendableDestination); wrapped != tc.wantWrap {
+				t.Fatalf("errors.Is(ErrUnsendableDestination)=%v want %v; err=%v", wrapped, tc.wantWrap, err)
+			}
+		})
 	}
 }

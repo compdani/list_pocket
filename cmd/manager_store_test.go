@@ -1,6 +1,16 @@
 package main
 
-import "testing"
+import (
+	"context"
+	"io"
+	"log"
+	"testing"
+
+	"github.com/compdani/list_pocket/internal/core"
+	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/jmoiron/sqlx"
+	_ "modernc.org/sqlite"
+)
 
 func TestSQLiteAdvanceBatchCursorUsesCreatedAndRecordID(t *testing.T) {
 	cursor := sqliteBatchCursor{}
@@ -88,4 +98,123 @@ func TestSQLiteAdvanceBatchCursorStaysMonotonicWhenLastSubscriberDropsOut(t *tes
 	if next.LastID != "sub-003" {
 		t.Fatalf("expected cursor to advance to sub-003, got last_id=%q", next.LastID)
 	}
+}
+
+func TestMarkSMSUnsendableExactPhoneAndSkipPending(t *testing.T) {
+	db, err := sqlx.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := db.Ping(); err != nil {
+		t.Fatalf("ping: %v", err)
+	}
+
+	ddl := `
+CREATE TABLE campaigns (
+  id TEXT NOT NULL PRIMARY KEY,
+  type TEXT,
+  status TEXT,
+  messenger TEXT DEFAULT 'email',
+  to_send INTEGER DEFAULT 0,
+  sent INTEGER DEFAULT 0,
+  updated TEXT
+);
+CREATE TABLE lists (id TEXT NOT NULL PRIMARY KEY);
+CREATE TABLE subscribers (
+  id TEXT NOT NULL PRIMARY KEY,
+  uuid TEXT,
+  email TEXT,
+  phone TEXT,
+  status TEXT
+);
+CREATE TABLE subscriber_lists (
+  subscriber_id TEXT NOT NULL,
+  list_id TEXT NOT NULL,
+  status TEXT,
+  sms_status TEXT,
+  updated TEXT
+);
+CREATE TABLE campaign_send_ledger (
+  id TEXT NOT NULL UNIQUE,
+  campaign_id TEXT NOT NULL,
+  subscriber_id TEXT NOT NULL,
+  message_id TEXT,
+  status TEXT NOT NULL,
+  created TEXT,
+  updated TEXT,
+  UNIQUE (campaign_id, subscriber_id)
+);
+`
+	if _, err := db.ExecContext(context.Background(), ddl); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+
+	mustStoreExec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := db.Exec(query, args...); err != nil {
+			t.Fatalf("exec: %v\nquery: %s", err, query)
+		}
+	}
+	mustStoreGet := func(dest any, query string, args ...any) {
+		t.Helper()
+		if err := db.Get(dest, query, args...); err != nil {
+			t.Fatalf("get: %v\nquery: %s", err, query)
+		}
+	}
+
+	mustStoreExec(`INSERT INTO subscribers (id, uuid, email, phone, status) VALUES ('sub_a', 'u-a', 'a@b.c', '+15551234567', 'enabled')`)
+	mustStoreExec(`INSERT INTO subscribers (id, uuid, email, phone, status) VALUES ('sub_b', 'u-b', 'b@b.c', '+15551234567', 'enabled')`)
+	mustStoreExec(`INSERT INTO subscribers (id, uuid, email, phone, status) VALUES ('sub_c', 'u-c', 'c@b.c', '(555) 123-4567', 'enabled')`)
+	mustStoreExec(`INSERT INTO lists (id) VALUES ('list_1')`)
+	mustStoreExec(`INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status) VALUES ('sub_a', 'list_1', 'confirmed', 'confirmed')`)
+	mustStoreExec(`INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status) VALUES ('sub_b', 'list_1', 'confirmed', 'confirmed')`)
+	mustStoreExec(`INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status) VALUES ('sub_c', 'list_1', 'confirmed', 'confirmed')`)
+	mustStoreExec(`INSERT INTO campaigns (id, type, status, messenger) VALUES ('quo_a', 'broadcast', 'running', 'quo')`)
+	mustStoreExec(`INSERT INTO campaigns (id, type, status, messenger) VALUES ('quo_b', 'broadcast', 'running', 'quo')`)
+	mustStoreExec(`INSERT INTO campaigns (id, type, status, messenger) VALUES ('email_a', 'broadcast', 'running', 'email')`)
+	mustStoreExec(`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l1', 'quo_a', 'sub_a', 'pending', '2026-01-01', '2026-01-01')`)
+	mustStoreExec(`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l2', 'quo_b', 'sub_a', 'inflight', '2026-01-01', '2026-01-01')`)
+	mustStoreExec(`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l3', 'email_a', 'sub_a', 'pending', '2026-01-01', '2026-01-01')`)
+	mustStoreExec(`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l4', 'quo_a', 'sub_b', 'pending', '2026-01-01', '2026-01-01')`)
+	mustStoreExec(`INSERT INTO campaign_send_ledger (id, campaign_id, subscriber_id, status, created, updated) VALUES ('l5', 'quo_a', 'sub_c', 'pending', '2026-01-01', '2026-01-01')`)
+
+	s := &store{
+		db:   pbdb.NewFromSQLX(db),
+		core: core.New(&core.Opt{DB: pbdb.NewFromSQLX(db), Log: log.New(io.Discard, "", 0)}, nil),
+		log:  log.New(io.Discard, "", 0),
+	}
+
+	n, err := s.MarkSMSUnsendable("sub_a", "+15551234567")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("opted out %d memberships, want 2 exact-phone siblings", n)
+	}
+
+	var smsA, smsB, smsC string
+	mustStoreGet(&smsA, `SELECT sms_status FROM subscriber_lists WHERE subscriber_id = 'sub_a'`)
+	mustStoreGet(&smsB, `SELECT sms_status FROM subscriber_lists WHERE subscriber_id = 'sub_b'`)
+	mustStoreGet(&smsC, `SELECT sms_status FROM subscriber_lists WHERE subscriber_id = 'sub_c'`)
+	if smsA != "unsubscribed" || smsB != "unsubscribed" {
+		t.Fatalf("siblings sms_status = %q/%q, want unsubscribed", smsA, smsB)
+	}
+	if smsC != "confirmed" {
+		t.Fatalf("last-10-only number should not be scanned on the worker path, got %q", smsC)
+	}
+
+	assertLedger := func(id, want string) {
+		t.Helper()
+		var st string
+		mustStoreGet(&st, `SELECT status FROM campaign_send_ledger WHERE id = ?`, id)
+		if st != want {
+			t.Fatalf("ledger %s status = %q, want %q", id, st, want)
+		}
+	}
+	assertLedger("l1", "skipped")
+	assertLedger("l2", "inflight")
+	assertLedger("l3", "pending")
+	assertLedger("l4", "skipped")
+	assertLedger("l5", "pending")
 }
