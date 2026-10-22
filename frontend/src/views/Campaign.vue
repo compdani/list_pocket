@@ -19,7 +19,7 @@
               {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
             </span>
           </div>
-          <h1 class="text-h4 font-weight-medium mb-0">
+          <h1 class="text-h5 font-weight-semibold mb-0">
             {{ isEditing ? data.name : $t('campaigns.newCampaign') }}
           </h1>
         </v-col>
@@ -133,7 +133,7 @@
       <v-row>
         <v-col cols="12" lg="8">
           <v-form @submit.prevent="() => onSubmit(isNew ? 'create' : 'update')">
-            <v-text-field
+            <v-text-field hide-details="auto"
               ref="focus"
               v-model="form.name"
               :label="$t('globals.fields.name')"
@@ -148,7 +148,7 @@
               class="mb-4"
             />
 
-            <v-text-field
+            <v-text-field hide-details="auto"
               v-if="!isSmsChannel"
               v-model="form.subject"
               :label="$t('campaigns.subject')"
@@ -194,7 +194,7 @@
               </p>
             </div>
 
-            <v-text-field
+            <v-text-field hide-details="auto"
               v-if="!isSmsChannel"
               v-model="form.preheader"
               label="Preheader"
@@ -208,7 +208,7 @@
               class="mb-4"
             />
 
-            <v-combobox
+            <v-combobox hide-details="auto"
               v-if="!isSmsChannel"
               v-model="form.fromEmail"
               :items="availableFromAddresses"
@@ -226,7 +226,7 @@
               class="mb-4"
             />
 
-            <v-text-field
+            <v-text-field hide-details="auto"
               v-if="isSmsChannel"
               v-model="form.fromEmail"
               :label="$t('campaigns.fromPhone')"
@@ -242,7 +242,7 @@
               class="mb-4"
             />
 
-            <v-select
+            <v-select hide-details="auto"
               :model-value="selectedListIds"
               :items="availableLists"
               :label="$t('globals.terms.lists')"
@@ -263,7 +263,7 @@
 
             <v-row>
               <v-col cols="12" md="6">
-                <v-select
+                <v-select hide-details="auto"
                   v-model="form.messenger"
                   :items="displayedMessengers"
                   :label="$tc('globals.terms.messenger')"
@@ -275,7 +275,7 @@
                 />
               </v-col>
               <v-col cols="12" md="6">
-                <v-select
+                <v-select hide-details="auto"
                   v-model="form.content.contentType"
                   :items="contentTypeOptions"
                   :label="$t('campaigns.format')"
@@ -289,7 +289,7 @@
               </v-col>
             </v-row>
 
-            <v-combobox
+            <v-combobox hide-details="auto"
               v-model="form.tags"
               :items="campaignTagOptions"
               :aria-label="$t('globals.terms.tags')"
@@ -307,7 +307,7 @@
               Campaign labels for organization and reporting. These are stored separately from subscriber tags (include/exclude below).
             </p>
 
-            <v-combobox
+            <v-combobox hide-details="auto"
               v-model="form.includeTags"
               :items="subscriberTagOptions"
               aria-label="Include subscriber tags"
@@ -323,7 +323,7 @@
             />
             <p class="form-help mb-4">Only subscribers with at least one of these tags will receive the campaign.</p>
 
-            <v-combobox
+            <v-combobox hide-details="auto"
               v-model="form.excludeTags"
               :items="subscriberTagOptions"
               aria-label="Exclude subscriber tags"
@@ -355,7 +355,7 @@
               </v-col>
               <v-col cols="12" md="8">
                 <div v-if="form.sendLater" data-cy="send_at" class="send-at-field">
-                  <v-text-field
+                  <v-text-field hide-details="auto"
                     :model-value="toDateTimeLocal(form.sendAtDate)"
                     :disabled="!canEdit"
                     required
@@ -385,7 +385,7 @@
                 <p class="form-help mb-3">{{ $t('campaigns.batchingHelp') }}</p>
                 <v-row v-if="form.batching.enabled">
                   <v-col cols="12" md="4">
-                    <v-text-field
+                    <v-text-field hide-details="auto"
                       v-model.number="form.batching.batchSize"
                       :disabled="!canEdit"
                       type="number"
@@ -395,7 +395,7 @@
                     />
                   </v-col>
                   <v-col cols="12" md="4">
-                    <v-text-field
+                    <v-text-field hide-details="auto"
                       v-model.number="form.batching.repeatValue"
                       :disabled="!canEdit"
                       type="number"
@@ -405,7 +405,7 @@
                     />
                   </v-col>
                   <v-col cols="12" md="4">
-                    <v-select
+                    <v-select hide-details="auto"
                       v-model="form.batching.repeatUnit"
                       :disabled="!canEdit"
                       :items="batchRepeatUnits"
@@ -433,7 +433,7 @@
                 </v-row>
                 <v-row v-if="form.batching.enabled" class="mt-2">
                   <v-col cols="12" md="6">
-                    <v-text-field
+                    <v-text-field hide-details="auto"
                       v-model="form.batching.startTime"
                       :disabled="!canEdit"
                       type="time"
@@ -442,7 +442,7 @@
                     />
                   </v-col>
                   <v-col cols="12" md="6">
-                    <v-text-field
+                    <v-text-field hide-details="auto"
                       v-model="form.batching.endTime"
                       :disabled="!canEdit"
                       type="time"
@@ -466,7 +466,7 @@
             </div>
 
             <div v-if="!isSmsChannel && (form.headersStr !== '[]' || isHeadersVisible)">
-              <v-textarea
+              <v-textarea hide-details="auto"
                 v-model="form.headersStr"
                 name="headers"
                 variant="outlined"
@@ -500,7 +500,7 @@
               {{ $t('campaigns.sendTest') }}
             </v-card-title>
             <v-card-text>
-              <v-textarea
+              <v-textarea hide-details="auto"
                 v-model="testEmailsInput"
                 :aria-label="$t('campaigns.testEmails')"
                 :disabled="isNew"
@@ -573,7 +573,7 @@
                     {{ item.filename }}
                   </v-chip>
                 </div>
-                <v-text-field
+                <v-text-field hide-details="auto"
                   ref="media"
                   :label="$t('campaigns.attachments')"
                   :disabled="!canEdit"
@@ -620,7 +620,7 @@
       </v-row>
 
       <div v-if="canEdit && form.content.contentType !== 'plain' && form.altbody !== null" class="mt-4">
-        <v-textarea
+        <v-textarea hide-details="auto"
           v-model="form.altbody"
           :disabled="!canEdit"
           variant="outlined"
@@ -631,12 +631,12 @@
     </section>
 
     <section v-show="activeTab === 'attribs'">
-      <v-textarea
+      <v-textarea hide-details="auto"
         v-model="form.attribsStr"
         :label="$t('globals.terms.attribs')"
         variant="outlined"
         :disabled="!canEdit"
-        rows="15"
+        rows="8"
         auto-grow
       />
       <p class="form-help">{{ $t('campaigns.attribsHelp') }}</p>
@@ -689,7 +689,7 @@
 
       <v-row class="mt-1">
         <v-col cols="12" md="6">
-          <v-select
+          <v-select hide-details="auto"
             v-model="form.archiveTemplateId"
             :items="archiveTemplates"
             item-title="name"
@@ -725,7 +725,7 @@
         </v-col>
       </v-row>
 
-      <v-text-field
+      <v-text-field hide-details="auto"
         ref="archiveSlug"
         v-model="form.archiveSlug"
         :label="$t('campaigns.archiveSlug')"
@@ -739,13 +739,13 @@
       />
       <p class="form-help">{{ $t('campaigns.archiveSlugHelp') }}</p>
 
-      <v-textarea
+      <v-textarea hide-details="auto"
         v-model="form.archiveMetaStr"
         :label="$t('campaigns.archiveMeta')"
         name="archive_meta"
         data-cy="archive-meta"
         :disabled="!canArchive || !form.archive"
-        rows="20"
+        rows="8"
         auto-grow
         variant="outlined"
       />
@@ -1896,6 +1896,7 @@ export default {
 .inline-meta {
   color: rgba(var(--v-theme-on-surface), 0.62);
   font-size: 0.8rem;
+  overflow-wrap: anywhere;
 }
 
 .send-at-field {
@@ -1911,7 +1912,8 @@ export default {
 .form-help {
   color: rgba(var(--v-theme-on-surface), 0.68);
   font-size: 0.875rem;
-  margin-top: 6px;
+  margin: 6px 0 20px;
+  line-height: 1.6;
 }
 
 .attachment-card {

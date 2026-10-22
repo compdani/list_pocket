@@ -55,6 +55,7 @@
         </v-toolbar-title>
 
         <v-spacer />
+        <v-btn icon="mdi-creation-outline" variant="text" aria-label="Open AI assistant" @click="assistantContext.open = !assistantContext.open" />
 
         <v-btn
           icon="mdi-refresh"
@@ -175,7 +176,8 @@
             </v-alert>
           </div>
 
-          <router-view :key="$route.name" />
+          <!-- Campaign initialization must rerun when moving from new to a saved ID. -->
+          <router-view :key="$route.name === 'campaign' ? `${$route.name}:${$route.params.id}` : $route.name" />
         </div>
 
         <v-overlay
@@ -205,6 +207,7 @@
       </div>
     </v-overlay>
 
+    <AIAssistant v-if="$root.isLoaded && !isAuthPage" />
     <confirm-dialog />
 
     <v-snackbar-queue
@@ -225,6 +228,8 @@ import logoLight from './assets/logo.svg';
 import logoDark from './assets/logo-dark.svg';
 import { uris } from './constants';
 import { pb } from './api';
+import AIAssistant from './components/AIAssistant.vue';
+import { assistantContext } from './assistant/context';
 import Navigation from './components/Navigation.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import { toastQueue } from './utils/toast';
@@ -235,6 +240,7 @@ export default {
 
   components: {
     Navigation,
+    AIAssistant,
     ConfirmDialog,
   },
 
@@ -271,6 +277,7 @@ export default {
   },
 
   computed: {
+    assistantContext() { return assistantContext; },
     ...mapState(['serverConfig', 'profile']),
 
     themeOptions() {
@@ -317,7 +324,9 @@ export default {
     $route: {
       immediate: true,
       handler(to) {
-        this.activeItem = { [to.name]: true };
+        const activeName = to.name === 'campaign' && to.params.id !== 'new'
+          ? 'campaigns' : to.name;
+        this.activeItem = { [activeName]: true };
         if (to.meta.group) {
           this.openedGroups = [to.meta.group];
         } else {
@@ -438,6 +447,7 @@ export default {
 
 <style lang="scss">
 @use "assets/style.scss";
+@use "assets/layout.scss";
 
 .skip-link {
   position: absolute;
@@ -529,10 +539,17 @@ export default {
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .app-shell {
   padding: 24px;
+  width: 100%;
+}
+
+.app-shell > :is(section, form, main) {
+  min-width: 0;
+  width: 100%;
 }
 
 /* Workflow builder root is <main>; let it fill the shell so inner grid gets height. */
@@ -546,6 +563,16 @@ export default {
 @media (max-width: 960px) {
   .app-shell {
     padding: 16px;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-shell {
+    padding: 16px 12px 24px;
+  }
+
+  .app-user-name {
+    display: none;
   }
 }
 </style>

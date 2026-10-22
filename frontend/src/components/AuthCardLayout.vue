@@ -1,7 +1,7 @@
 <template>
   <section class="auth-layout">
     <div class="auth-backdrop" />
-    <v-container class="fill-height d-flex align-center justify-center">
+    <v-container class="auth-container d-flex align-center justify-center">
       <v-card class="auth-card" elevation="8">
         <div class="auth-brand">
           <img :src="logo" alt="listpocket" class="auth-logo" />
@@ -61,6 +61,11 @@ defineProps({
     );
 }
 
+.auth-container {
+  min-height: 100dvh;
+  padding-block: 32px;
+}
+
 .auth-card {
   position: relative;
   z-index: 1;
@@ -96,5 +101,21 @@ defineProps({
 .auth-description {
   margin: 10px 0 0;
   color: rgba(var(--v-theme-on-surface), 0.7);
+}
+
+@media (max-width: 600px) {
+  .auth-container {
+    padding: 24px 16px;
+  }
+
+  .auth-card {
+    padding: 24px;
+    border-radius: 16px;
+  }
+
+  .auth-brand h1 {
+    font-size: 1.5rem;
+    line-height: 1.3;
+  }
 }
 </style>

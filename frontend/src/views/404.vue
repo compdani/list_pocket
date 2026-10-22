@@ -2,7 +2,7 @@
   <section class="page-404">
     <v-card class="page-404-card" variant="outlined">
       <v-card-text class="text-center py-12">
-        <h1 class="text-h4 font-weight-semibold mb-2">{{ $t('notFound.title') }}</h1>
+        <h1 class="text-h5 font-weight-semibold mb-2">{{ $t('notFound.title') }}</h1>
         <p class="text-medium-emphasis mb-6">{{ $t('notFound.help') }}</p>
         <v-btn color="primary" variant="flat" :to="{ name: 'dashboard' }">
           {{ $t('notFound.home') }}

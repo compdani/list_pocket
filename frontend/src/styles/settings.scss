@@ -6,6 +6,8 @@
 // The Material color pack is off too; the few palette colors in use are
 // registered as theme colors in plugins/vuetify.js instead.
 @use 'vuetify/settings' with (
+  $body-font-family: ('Inter', 'Helvetica Neue', sans-serif),
+  $heading-font-family: ('Inter', 'Helvetica Neue', sans-serif),
   $color-pack: false,
   $utilities: (
     "display": (responsive: false),

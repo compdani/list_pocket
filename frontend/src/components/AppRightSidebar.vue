@@ -1,6 +1,7 @@
 <template>
   <v-navigation-drawer
     :model-value="modelValue"
+    :disable-route-watcher="disableRouteWatcher"
     :location="location"
     :width="currentWidth"
     :border="border"
@@ -88,6 +89,7 @@ defineOptions({
 });
 
 const props = defineProps({
+  disableRouteWatcher: { type: Boolean, default: false },
   modelValue: { type: Boolean, default: false },
   width: { type: [Number, String], default: 520 },
   location: { type: String, default: 'right' },

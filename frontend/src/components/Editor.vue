@@ -1,7 +1,7 @@
 <template>
   <!-- Two-way Data-Binding -->
   <div class="editor">
-    <v-toolbar class="mb-1">
+    <v-toolbar class="editor-toolbar mb-3" color="transparent">
       <v-select v-model="contentTypeSel" :disabled="isContentTypeSelectDisabled" :label="$t('campaigns.format')"
         :items="Object.entries(contentTypes).map(([key, name]) => ({ value: key, title: name }))" item-title="title"
         item-value="value" name="content_type" hide-details class="mx-2" variant="outlined" density="compact" />
@@ -19,7 +19,7 @@
         aria-keyshortcuts="F9">
         <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
       </v-btn>
-      <v-btn color="primary" variant="outlined" prepend-icon="mdi-creation-outline" :disabled="disabled" @click="isAIDialogOpen = true">
+      <v-btn color="primary" variant="outlined" prepend-icon="mdi-creation-outline" :disabled="disabled" @click="openAssistant">
         {{ $t('campaigns.aiBuilder') }}
       </v-btn>
 
@@ -44,7 +44,7 @@
 
 
 
-    <richtext-editor v-if="self.contentType === 'richtext'" v-model="self.body" :disabled="disabled"
+    <richtext-editor ref="richtextEditor" v-if="self.contentType === 'richtext'" v-model="self.body" :disabled="disabled"
       key="editor-richtext" />
 
     <!-- visual editor //-->
@@ -55,10 +55,10 @@
       :data="self.body" height="65vh" @change="onGrapesEditorChange" />
 
     <!-- raw html editor //-->
-    <code-editor lang="html" v-if="self.contentType === 'html'" v-model="self.body" key="editor-html" />
+    <code-editor ref="codeEditor" lang="html" v-if="self.contentType === 'html'" v-model="self.body" key="editor-html" />
 
     <!-- markdown editor //-->
-    <code-editor lang="markdown" v-if="self.contentType === 'markdown'" v-model="self.body" key="editor-markdown" />
+    <code-editor ref="codeEditor" lang="markdown" v-if="self.contentType === 'markdown'" v-model="self.body" key="editor-markdown" />
 
     <!-- plain text //-->
     <v-textarea v-if="self.contentType === 'plain'" v-model="self.body" name="content" ref="plainEditor"
@@ -68,13 +68,7 @@
     <campaign-preview v-if="isPreviewing" is-post @close="onTogglePreview" type="campaign" :id="id" :title="title"
       :content-type="self.contentType" :template-id="templateId" :body="self.body" :preheader="preheader" />
 
-    <ai-campaign-builder-dialog
-      v-model="isAIDialogOpen"
-      :context="aiContext"
-      :current="aiCurrent"
-      :session-key="aiSessionKey"
-      @apply="onApplyAIResult"
-    />
+
   </div>
 </template>
 
@@ -86,7 +80,7 @@ import { mapState } from 'vuex';
 
 import CampaignPreview from './CampaignPreview.vue';
 import markdownToVisualBlock from './editor';
-import AICampaignBuilderDialog from './AICampaignBuilderDialog.vue';
+import { assistantContext, registerAssistantEditor } from '../assistant/context';
 
 const RichtextEditor = defineAsyncComponent(() => import('./RichtextEditor.vue'));
 const VisualEditor = defineAsyncComponent(() => import('./VisualEditor.vue'));
@@ -102,7 +96,7 @@ export default {
     'code-editor': CodeEditor,
     'visual-editor': VisualEditor,
     'grapes-mjml-editor': GrapesMjmlEditor,
-    'ai-campaign-builder-dialog': AICampaignBuilderDialog,
+
   },
 
   emits: ['update:modelValue', 'ai-generated'],
@@ -146,6 +140,8 @@ export default {
   },
 
   methods: {
+    openAssistant() { assistantContext.open = true; },
+    assistantSnapshot() { return { ...this.aiCurrent, contentType: this.self.contentType }; },
     onContentTypeChange(to, from) {
       if (!this.self.body.trim()) {
         this.convertContentType(to, from);
@@ -441,6 +437,17 @@ export default {
     this.contentTypeSel = this.modelValue.contentType;
     this.templateId = this.modelValue.templateId;
 
+    this.unregisterAssistant = registerAssistantEditor({
+      key: this.aiSessionKey,
+      label: 'Unsaved campaign editor',
+      snapshot: () => this.assistantSnapshot(),
+      selection: () => this.$refs.codeEditor?.getAssistantSelection?.()
+        || this.$refs.richtextEditor?.getAssistantSelection?.()
+        || this.$refs.grapesEditor?.getAssistantSelection?.()
+        || this.$refs.visualEditor?.getAssistantSelection?.()
+        || (() => { const input = this.$refs.plainEditor?.$el?.querySelector('textarea'); return input ? input.value.slice(input.selectionStart, input.selectionEnd) : window.getSelection()?.toString(); })(),
+      apply: (snapshot) => { if (this.disabled) throw new Error('Editor is read-only'); this.onApplyAIResult(snapshot); },
+    });
     window.addEventListener('keydown', this.onKeyboardShortcut);
 
     this.$events.$on('campaign.preview', () => {
@@ -449,6 +456,7 @@ export default {
   },
 
   beforeUnmount() {
+    this.unregisterAssistant?.();
     window.removeEventListener('keydown', this.onKeyboardShortcut);
     this.$events.$off('campaign.preview');
   },
@@ -588,3 +596,40 @@ export default {
 };
 
 </script>
+
+<style scoped>
+.editor-toolbar :deep(.v-toolbar__content) {
+  gap: 8px;
+}
+
+.editor-toolbar :deep(.v-select) {
+  max-width: 360px;
+  min-width: 160px;
+}
+
+.editor-toolbar :deep(.v-toolbar__extension) {
+  padding-top: 8px;
+  padding-bottom: 4px;
+}
+
+.editor-toolbar :deep(.v-toolbar__extension .v-select) {
+  max-width: none;
+}
+
+@media (max-width: 600px) {
+  .editor-toolbar :deep(.v-toolbar__content) {
+    height: auto !important;
+    flex-wrap: wrap;
+    padding-block: 8px;
+  }
+
+  .editor-toolbar :deep(.v-toolbar__content > .v-select) {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+
+  .editor-toolbar :deep(.v-toolbar__content > .v-spacer) {
+    display: none;
+  }
+}
+</style>

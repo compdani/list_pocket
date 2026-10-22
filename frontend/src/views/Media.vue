@@ -2,7 +2,7 @@
   <section class="media-files">
     <div class="media-header">
       <div>
-        <h1 class="text-h6 media-title">
+        <h1 class="media-title" :class="isModal ? 'text-h6' : 'text-h5'">
           {{ heading }}
           <span v-if="items.length > 0">({{ items.length }})</span>
           <span class="text-medium-emphasis"> / {{ providerLabel }}</span>

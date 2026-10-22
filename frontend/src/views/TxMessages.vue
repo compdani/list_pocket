@@ -2,7 +2,7 @@
   <section class="tx-messages-page">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4">
+        <h1 class="text-h5">
           Transactional Messages
           <span v-if="txMessages.total">({{ txMessages.total }})</span>
         </h1>
@@ -265,6 +265,11 @@ export default {
 .tx-messages-page {
   display: grid;
   gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.tx-messages-page > .page-header {
+  margin-bottom: 0;
 }
 
 .filters-bar {
@@ -275,14 +280,12 @@ export default {
 }
 
 .search-field {
-  min-width: min(100%, 420px);
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .table-wrap {
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 20px;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .table-pagination {

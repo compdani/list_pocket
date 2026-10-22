@@ -5,7 +5,7 @@
     :aria-label="$t('globals.buttons.copy')"
     @click="onClick"
   >
-    <template v-if="!hideText">{{ text }}</template>
+    <span v-if="!hideText" class="copy-text-label">{{ text }}</span>
     <v-icon icon="mdi-content-copy" size="small" />
   </button>
 </template>
@@ -58,9 +58,18 @@ export default {
   font: inherit;
   gap: 4px;
   padding: 0;
+  max-width: 100%;
+  vertical-align: middle;
+  text-align: start;
+}
+
+.copy-text-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .copy-text :deep(.v-icon) {
+  flex-shrink: 0;
   opacity: 0.7;
 }
 

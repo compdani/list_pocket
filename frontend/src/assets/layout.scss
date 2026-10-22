@@ -1,0 +1,161 @@
+/* Shared admin layout. Keep editor canvases and rendered message HTML isolated
+   from these rules by targeting the app shell and named UI components. */
+.font-weight-semibold {
+  font-weight: 600 !important;
+}
+
+.app-shell {
+  --page-gap: 24px;
+  --panel-gap: 16px;
+
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: var(--page-gap);
+  }
+
+  :is(.header-content, .page-header-main) {
+    flex: 1 1 240px;
+    min-width: 0;
+  }
+
+  :is(.header-actions, .page-header-actions) {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  :is(.page-header, .campaign-header, .settings-header, .import-header,
+      .logs-header, .profile-header, .media-header) h1 {
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  :is(.header-content, .page-header-main) > p {
+    max-width: 72ch;
+    line-height: 1.6;
+  }
+
+  .admin-data-table,
+  .inbox-table {
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    border-radius: 16px;
+    overflow: hidden;
+
+    th {
+      background: rgb(var(--v-theme-surface-light));
+      color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    td {
+      padding-block: 16px;
+      line-height: 1.5;
+    }
+
+    .v-table__wrapper {
+      overflow-x: auto;
+    }
+  }
+
+  .table-wrap,
+  .admin-table-shell {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .table-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-block: 16px;
+  }
+
+  .settings-section {
+    min-width: 0;
+    align-items: start;
+
+    > .v-btn {
+      justify-self: start;
+    }
+
+    .toggle-field > div:first-child {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .toggle-field > .v-switch {
+      flex: 0 0 auto;
+      margin: 0;
+    }
+
+    .text-body-2 {
+      line-height: 1.6;
+    }
+  }
+}
+
+/* These dialogs teleport outside the shell. Preserve a scrollable body while
+   keeping the heading and actions visible on short screens. */
+.v-overlay .admin-dialog-card {
+  max-height: calc(100dvh - 48px);
+
+  :is(.admin-dialog-head, .admin-dialog-foot) {
+    flex-shrink: 0;
+  }
+
+  .admin-dialog-body {
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+
+  :is(.dialog-meta-row, .admin-dialog-foot) {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .dialog-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 600px) {
+  .app-shell {
+    .page-header {
+      gap: 12px;
+    }
+
+    .page-header :is(.header-actions, .page-header-actions) {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .table-pagination {
+      justify-content: center;
+    }
+
+    .settings-section .toggle-field {
+      padding: 16px;
+      gap: 12px;
+    }
+  }
+
+  .v-overlay .admin-dialog-card {
+    max-height: calc(100dvh - 32px);
+
+    .admin-dialog-foot > .v-btn {
+      flex: 1 1 120px;
+      min-width: 0;
+    }
+  }
+}

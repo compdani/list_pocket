@@ -290,7 +290,9 @@ export default {
   max-width: 960px;
 }
 
-.page-header {
+.maintenance .page-header {
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 24px;
 }
 

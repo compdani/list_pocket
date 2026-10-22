@@ -36,6 +36,12 @@ export default {
   },
 
   methods: {
+    getAssistantSelection() {
+      const state = this.editor?.state;
+      if (!state) return '';
+      const { from, to } = state.selection.main;
+      return state.doc.sliceString(from, to);
+    },
   },
 
   mounted() {

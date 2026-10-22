@@ -790,6 +790,9 @@ func findWorkflowByWebhookPath(app core.App, hookPath string) (*core.Record, *co
 		if err != nil {
 			return nil, nil, err
 		}
+		if !workflow.GetBool("is_published") {
+			continue
+		}
 		return node, workflow, nil
 	}
 	return nil, nil, fmt.Errorf("workflow not found")

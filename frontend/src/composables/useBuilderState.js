@@ -624,6 +624,11 @@ export function useBuilderState(workflow) {
     clearSelection,
     connectNodes,
     edges,
+    replaceGraph(graph) {
+      nodes.value = toFlowNodes(graph);
+      edges.value = toFlowEdges(graph);
+      clearSelection();
+    },
     exportWorkflowGraph() {
       return {
         nodes: fromFlowNodes(nodes.value),

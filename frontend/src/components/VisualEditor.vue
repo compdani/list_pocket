@@ -43,6 +43,7 @@ export default {
   },
 
   methods: {
+    getAssistantSelection() { return this.$refs.visualEditor?.contentWindow?.getSelection()?.toString() || ''; },
     loadScript() {
       return new Promise((resolve, reject) => {
         const iframe = this.$refs.visualEditor;

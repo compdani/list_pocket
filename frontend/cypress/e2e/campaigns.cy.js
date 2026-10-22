@@ -22,7 +22,11 @@ describe('Campaigns', () => {
     cy.get('.list-selector .autocomplete a').eq(0).click();
 
     cy.get('button[data-cy=btn-continue]').click();
-    cy.wait(500);
+    cy.location('pathname').should('not.match', /\/campaigns\/new$/);
+    cy.location('hash').should('eq', '#content');
+    cy.get('.campaign-tabs [role="tab"]').eq(1)
+      .should('have.attr', 'aria-selected', 'true')
+      .and('not.be.disabled');
 
     cy.get('a[data-cy=btn-attach]').click();
     cy.get('button[data-cy=btn-toggle-upload]').click();

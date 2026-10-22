@@ -2,7 +2,7 @@
   <section class="templates-page">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4">
+        <h1 class="text-h5">
           {{ $t('globals.terms.templates') }}
           <span v-if="templates.length > 0">({{ templates.length }})</span>
         </h1>
@@ -383,14 +383,6 @@ export default {
 </script>
 
 <style scoped>
-.page-header {
-  align-items: center;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
 .header-content h1 {
   line-height: 1.25;
   margin: 0;

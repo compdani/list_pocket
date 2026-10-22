@@ -10,7 +10,7 @@
           (<slot name="count">{{ count }}</slot>)
         </span>
       </h1>
-      <div v-if="$slots.subtitle" class="text-caption mt-2">
+      <div v-if="$slots.subtitle" class="text-body-2 text-medium-emphasis mt-2">
         <slot name="subtitle" />
       </div>
     </div>
@@ -34,7 +34,7 @@ defineProps({
   flex-wrap: wrap;
   gap: 16px;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .page-header-main {

@@ -2,7 +2,7 @@
   <section class="admin-console">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4 font-weight-bold">
+        <h1 class="text-h5 font-weight-semibold">
           Admin API Console
         </h1>
         <p class="text-medium-emphasis mt-1">
@@ -274,10 +274,6 @@ export default {
   position: relative;
 }
 
-.page-header {
-  margin-bottom: 24px;
-}
-
 .console-card {
   padding: 4px;
 }
@@ -285,7 +281,7 @@ export default {
 .request-row {
   display: flex;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .method-field {
@@ -294,6 +290,7 @@ export default {
 
 .url-field {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .body-field :deep(textarea) {
@@ -304,6 +301,7 @@ export default {
 
 .helpers {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -315,6 +313,23 @@ export default {
 .response-meta {
   display: inline-flex;
   gap: 4px;
+}
+
+@media (max-width: 600px) {
+  .request-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .method-field {
+    flex: 0 0 auto;
+  }
+
+  .response-title {
+    flex-wrap: wrap;
+    gap: 8px;
+    white-space: normal;
+  }
 }
 
 .response-body {

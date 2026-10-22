@@ -1,26 +1,24 @@
 <template>
   <section class="subscriber-contact-page">
-    <header class="page-header mb-4">
-      <v-row align="center" class="ma-0">
-        <v-col cols="12" md="8" class="px-0">
-          <div class="header-top-row">
-            <v-btn
-              variant="text"
-              prepend-icon="mdi-arrow-left"
-              class="text-none px-0"
-              @click="goBack"
-            >
-              {{ $t('globals.terms.subscribers') }}
-            </v-btn>
-          </div>
-          <h1 class="text-h5 font-weight-semibold mb-1">
-            {{ subscriber.name || subscriber.email || $t('subscribers.newSubscriber') }}
-          </h1>
-          <p class="text-medium-emphasis mb-0" v-if="subscriber.id">
-            {{ $t('globals.fields.id') }}: {{ subscriber.id }}
-          </p>
-        </v-col>
-      </v-row>
+    <header class="page-header">
+      <div class="header-content">
+        <div class="header-top-row">
+          <v-btn
+            variant="text"
+            prepend-icon="mdi-arrow-left"
+            class="text-none px-0"
+            @click="goBack"
+          >
+            {{ $t('globals.terms.subscribers') }}
+          </v-btn>
+        </div>
+        <h1 class="text-h5 font-weight-semibold mb-1">
+          {{ subscriber.name || subscriber.email || $t('subscribers.newSubscriber') }}
+        </h1>
+        <p class="text-medium-emphasis mb-0" v-if="subscriber.id">
+          {{ $t('globals.fields.id') }}: {{ subscriber.id }}
+        </p>
+      </div>
     </header>
 
     <div v-if="isLoading" class="state-wrap">

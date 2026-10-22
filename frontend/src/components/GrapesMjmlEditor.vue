@@ -119,7 +119,9 @@ onBeforeUnmount(() => {
   }
 });
 
-defineExpose({ loadMjml, getMjml, getHTML, getCompiledContent });
+function getAssistantSelection() { return editor?.getSelected()?.toHTML() || ""; }
+
+defineExpose({ getAssistantSelection, loadMjml, getMjml, getHTML, getCompiledContent });
 </script>
 
 <style scoped>

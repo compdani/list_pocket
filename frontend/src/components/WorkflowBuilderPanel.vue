@@ -11,6 +11,9 @@ import { MiniMap } from "@vue-flow/minimap";
 import { useVueFlow, VueFlow } from "@vue-flow/core";
 import { useTheme } from "vuetify";
 import { useBuilderState } from "../composables/useBuilderState";
+import { useRouter } from "vue-router";
+import { registerAssistantEditor } from '../assistant/context';
+import { assistantJSON } from '../assistant/client';
 import NodeInspector from "./NodeInspector.vue";
 import AppRightSidebar from "./AppRightSidebar.vue";
 import WorkflowNodeCard from "./WorkflowNodeCard.vue";
@@ -28,6 +31,8 @@ const props = defineProps({
 
 const emit = defineEmits(["captureSchema", "createWorkflow", "deleteWorkflow", "publish", "run", "save", "updateWorkflowName", "validate"]);
 
+const assistantRouter = useRouter();
+let unregisterAssistant;
 const builder = useBuilderState(computed(() => props.workflow));
 const { fitView, setCenter, setViewport, viewport, zoomIn, zoomOut } = useVueFlow();
 
@@ -146,10 +151,25 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  unregisterAssistant?.();
   window.removeEventListener("keydown", onWindowKeydown);
 });
 
 onMounted(() => {
+  unregisterAssistant = registerAssistantEditor({
+    get key() { return `workflow:${props.workflow?.workflow?.id || 'new'}`; },
+    label: 'Unsaved workflow editor',
+    snapshot: () => ({ kind: 'workflow', workflowId: props.workflow?.workflow?.id, savedRevision: props.workflow?.workflow?.revision, ...builder.exportWorkflowGraph() }),
+    apply: async (graph) => {
+      const signature = currentSignature.value;
+      await assistantJSON('workflows/validate', { graph });
+      if (currentSignature.value !== signature) throw new Error('The workflow changed during validation. Request a fresh proposal.');
+      if (props.workflow?.workflow?.status === 'published') {
+        const draft = await assistantJSON('workflows/draft', { id: props.workflow.workflow.id, revision: graph.savedRevision, graph: { name: props.workflow.workflow.name, nodes: graph.nodes, edges: graph.edges } });
+        await assistantRouter.push({ name: 'workflowBuilder', params: { workflowId: draft.id } });
+      } else { builder.replaceGraph(graph); }
+    },
+  });
   window.addEventListener("keydown", onWindowKeydown);
 });
 

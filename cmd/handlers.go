@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/compdani/list_pocket/internal/workflow"
 	"net/http"
 	"path"
 	"regexp"
@@ -57,6 +58,12 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 	pmRE := a.auth.PermRE
 	api := se.Group("/mailapi").Bind(apis.RequireAuth()).BindFunc(hydrateAuthUser)
 
+	api.POST("/ai/assistant/workflows/draft", asHandler(workflow.AssistantSave))
+	api.POST("/ai/assistant/workflows/validate", asHandler(workflow.AssistantValidate))
+	api.POST("/ai/assistant/turns", asHandler(a.StartAssistantTurn))
+	api.GET("/ai/assistant/turns/{id}/stream", asHandler(a.StreamAssistantTurn))
+	api.POST("/ai/assistant/turns/{id}/cancel", asHandler(a.CancelAssistantTurn))
+	api.POST("/ai/assistant/turns/{id}/decision", asHandler(a.DecideAssistantProposal))
 	api.GET("/health", asHandler(a.HealthCheck))
 	api.GET("/config", asHandler(a.GetServerConfig))
 	api.GET("/dashboard/charts", asHandler(a.GetDashboardCharts))

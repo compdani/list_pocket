@@ -2,7 +2,7 @@
   <section class="users">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4">
+        <h1 class="text-h5">
           {{ $t('globals.terms.users') }}
           <span v-if="!isNaN(users.length)">({{ users.length }})</span>
         </h1>
@@ -299,13 +299,6 @@ export default {
   --users-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
-.page-header {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
 .query-card {
   border: 1px solid var(--users-border);
   border-radius: 18px;
@@ -327,19 +320,19 @@ export default {
 
 .users-table {
   border: 1px solid var(--users-border);
-  border-radius: 20px;
+  border-radius: 16px;
   overflow: hidden;
 }
 
 .users-table :deep(thead th) {
   background: var(--users-surface-soft);
   border-bottom: 1px solid var(--users-border-strong) !important;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .users-table :deep(tbody td) {
-  padding-top: 18px !important;
-  padding-bottom: 18px !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
   vertical-align: top;
 }
 

@@ -1,16 +1,16 @@
 <template>
   <section class="analytics">
     <v-container class="analytics-container">
-      <v-row>
-        <v-col cols="12">
-          <h1 class="text-h4 mb-1">
+      <header class="page-header">
+        <div class="header-content">
+          <h1 class="text-h5 mb-1">
             {{ $t('analytics.title') }}
           </h1>
-          <p class="text-body-2 text-medium-emphasis mb-6 analytics-subtitle">
+          <p class="text-body-2 text-medium-emphasis mt-2 analytics-subtitle">
             {{ $t('analytics.title') }} {{ $t('globals.terms.dashboard').toLowerCase() }}
           </p>
-        </v-col>
-      </v-row>
+        </div>
+      </header>
 
       <v-row v-if="serverConfig.privacy.disable_tracking || !serverConfig.privacy.individual_tracking">
         <v-col cols="12">
@@ -821,7 +821,8 @@ export default {
 
 <style scoped>
 .analytics-container {
-  max-width: 1280px;
+  max-width: none;
+  padding: 0;
 }
 
 .analytics-subtitle {
@@ -859,21 +860,12 @@ export default {
 }
 
 @media (max-width: 960px) {
-  .analytics-subtitle {
-    margin-bottom: 1.25rem !important;
-  }
-
   .analytics-chart-wrap {
     min-height: 280px;
   }
 }
 
 @media (max-width: 600px) {
-  .analytics-container {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-  }
-
   .analytics-filters-card :deep(.v-card-text),
   .analytics-section-card :deep(.v-card-text) {
     padding: 0.9rem;

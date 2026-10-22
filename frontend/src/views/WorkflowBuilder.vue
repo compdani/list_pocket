@@ -660,7 +660,7 @@ onBeforeUnmount(() => {
 
 
 
-.workflow-route .workflow-route .panel,
+.workflow-route .panel,
 .workflow-route .builder-shell,
 .workflow-route .login-card {
   border: 1px solid var(--wf-border);

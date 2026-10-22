@@ -348,13 +348,13 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .profile-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.35;
   margin: 0;
 }
 
@@ -373,6 +373,7 @@ export default {
 .twofa-card-head {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
   margin-bottom: 12px;

@@ -1,8 +1,7 @@
 <template>
   <section class="forms">
-    <header class="page-header mb-4">
-      <h1 class="text-h4">{{ $t('forms.title') }}</h1>
-      <v-divider class="mt-2" />
+    <header class="page-header">
+      <h1 class="text-h5">{{ $t('forms.title') }}</h1>
     </header>
 
     <v-progress-linear
@@ -229,6 +228,7 @@ const formHTML = computed(() => {
 }
 
 .form-link {
+  overflow-wrap: anywhere;
   color: rgb(var(--v-theme-primary));
   text-decoration: none;
 }

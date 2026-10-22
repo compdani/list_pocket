@@ -71,6 +71,7 @@ defineEmits(['update:modelValue', 'submit']);
 
 .query-input {
   flex: 1;
+  min-width: 0;
 }
 
 .query-input :deep(.v-field) {
@@ -83,6 +84,7 @@ defineEmits(['update:modelValue', 'submit']);
 }
 
 .query-submit {
+  flex-shrink: 0;
   border-radius: 12px;
   min-height: 44px;
   min-width: 44px;
@@ -95,6 +97,12 @@ defineEmits(['update:modelValue', 'submit']);
   }
 
   .query-submit {
+    width: 100%;
+  }
+
+  :deep(.query-tags) {
+    min-width: 0;
+    max-width: none;
     width: 100%;
   }
 }

@@ -79,7 +79,7 @@
       :items-per-page="campaigns.perPage || 20"
       :sort-by="tableSortBy"
       :model-value="bulk.checked"
-      class="campaigns-table"
+      class="admin-data-table campaigns-table"
       item-value="id"
       return-object
       show-select
@@ -173,7 +173,7 @@
       </template>
 
       <template #[`item.stats`]="{ item }">
-        <div class="fields stats">
+        <div class="fields stats campaign-stats">
           <div>
             <div class="text-caption font-weight-bold">{{ $t('analytics.uniqueConfirmedViews') }}</div>
             <div class="text-caption">
@@ -834,12 +834,32 @@ export default {
   --campaigns-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
-.page-header {
-  align-items: center;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 16px;
+.campaign-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  min-width: 220px;
+}
+
+.timestamps {
+  display: grid;
+  gap: 8px;
+  min-width: 125px;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  gap: 6px;
+  justify-content: end;
+}
+
+.actions :deep(.v-btn) {
+  color: rgb(var(--v-theme-primary));
+}
+
+.actions :deep([data-cy="btn-delete"]) {
+  color: rgb(var(--v-theme-error));
 }
 
 .header-content h1 {
@@ -901,35 +921,39 @@ export default {
   gap: 10px;
 }
 
-.campaigns-table {
+:deep(.campaigns-table) {
   background: rgb(var(--v-theme-surface));
   border: 1px solid var(--campaigns-border);
   border-radius: 16px;
   overflow: hidden;
 }
 
-.campaigns-table :deep(thead th) {
+:deep(.campaigns-table thead th) {
   background: var(--campaigns-surface-soft);
   border-bottom: 1px solid var(--campaigns-border-strong) !important;
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 600;
 }
 
-.campaigns-table :deep(tbody td) {
+:deep(.campaigns-table tbody td) {
   padding-bottom: 14px !important;
   padding-top: 14px !important;
   vertical-align: top;
 }
 
-.campaigns-table :deep(tbody tr:hover) {
+:deep(.campaigns-table td:nth-child(3)) {
+  min-width: 240px;
+}
+
+:deep(.campaigns-table tbody tr:hover) {
   background: rgb(var(--v-theme-surface-light));
 }
 
-.campaigns-table :deep(.v-data-table__tr--selected) {
+:deep(.campaigns-table .v-data-table__tr--selected) {
   background: rgba(var(--v-theme-primary), 0.08);
 }
 
-.campaigns-table :deep(td ul) {
+:deep(.campaigns-table td ul) {
   margin: 0;
   padding-left: 1rem;
 }

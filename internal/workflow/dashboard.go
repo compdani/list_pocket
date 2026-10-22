@@ -18,6 +18,7 @@ type dashboardPayload struct {
 }
 
 type workflowDTO struct {
+	Revision    string `json:"revision"`
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Version     int    `json:"version"`
@@ -151,6 +152,7 @@ func buildDashboardPayload(app core.App, activeWorkflowID string) (*dashboardPay
 	workflowNames := map[string]string{}
 	for _, workflow := range workflows {
 		dto := workflowDTO{
+
 			ID: workflow.Id, Name: workflow.GetString("name"), Version: workflow.GetInt("version"), Status: workflow.GetString("status"), TriggerType: workflow.GetString("trigger_type"),
 		}
 		payload.Workflows = append(payload.Workflows, dto)
@@ -186,6 +188,10 @@ func buildDashboardPayload(app core.App, activeWorkflowID string) (*dashboardPay
 }
 
 func buildActiveWorkflow(app core.App, workflow *core.Record) (*activeWorkflowDTO, error) {
+	revision, revisionErr := assistantWorkflowRevision(app, workflow)
+	if revisionErr != nil {
+		return nil, revisionErr
+	}
 	filter := fmt.Sprintf(`workflow="%s" && is_current=true`, workflow.Id)
 	nodes, err := app.FindRecordsByFilter("workflow_nodes", filter, "position_x", 100, 0)
 	if err != nil {
@@ -197,7 +203,7 @@ func buildActiveWorkflow(app core.App, workflow *core.Record) (*activeWorkflowDT
 	}
 
 	result := &activeWorkflowDTO{
-		Workflow: workflowDTO{ID: workflow.Id, Name: workflow.GetString("name"), Version: workflow.GetInt("version"), Status: workflow.GetString("status"), TriggerType: workflow.GetString("trigger_type")},
+		Workflow: workflowDTO{Revision: revision, ID: workflow.Id, Name: workflow.GetString("name"), Version: workflow.GetInt("version"), Status: workflow.GetString("status"), TriggerType: workflow.GetString("trigger_type")},
 		Nodes:    make([]workflowNodeDTO, 0, len(nodes)),
 		Edges:    make([]workflowEdgeDTO, 0, len(edges)),
 	}

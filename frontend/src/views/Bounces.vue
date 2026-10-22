@@ -2,7 +2,7 @@
   <section class="bounces">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4">
+        <h1 class="text-h5">
           {{ $t('globals.terms.bounces') }}
           <span v-if="bounces.total > 0">({{ bounces.total }})</span>
         </h1>
@@ -334,14 +334,6 @@ export default {
   --bounces-border: rgba(var(--v-border-color), var(--v-border-opacity));
   --bounces-border-strong: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
   --bounces-surface-soft: rgb(var(--v-theme-surface-light));
-}
-
-.page-header {
-  align-items: center;
-  display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 16px;
 }
 
 .bulk-actions-card {

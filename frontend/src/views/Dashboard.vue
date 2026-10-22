@@ -133,12 +133,18 @@
                 </span>
               </div>
               <chart type="line" v-if="openTrackingBreakdown" :data="openTrackingBreakdown" />
+              <p v-else-if="!isChartsLoading" class="chart-empty text-medium-emphasis">
+                {{ $t('globals.messages.emptyState') }}
+              </p>
             </div>
             <div class="chart-block">
               <h3 class="text-subtitle-1 font-weight-medium chart-title align-right">
                 {{ $t('dashboard.linkClicks') }}
               </h3>
               <chart type="line" v-if="campaignClicks" :data="campaignClicks" />
+              <p v-else-if="!isChartsLoading" class="chart-empty text-medium-emphasis">
+                {{ $t('globals.messages.emptyState') }}
+              </p>
             </div>
           </div>
         </article>
@@ -215,7 +221,7 @@ export default {
 
     makeChart(data) {
       if (!Array.isArray(data) || data.length === 0) {
-        return {};
+        return null;
       }
       return {
         labels: data.map((d) => dayjs(d.date).format('DD MMM')),
@@ -375,7 +381,7 @@ export default {
 .overview-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
   margin-bottom: 16px;
 }
 
@@ -494,6 +500,22 @@ export default {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 14px;
+  min-width: 0;
+}
+
+.chart-empty {
+  display: grid;
+  min-height: 200px;
+  place-content: center;
+  text-align: center;
+}
+
+.chart-block :deep(.chart) {
+  height: 280px;
+}
+
+.chart-block :deep(canvas) {
+  max-height: 280px;
 }
 
 .chart-title {

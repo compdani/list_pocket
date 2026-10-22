@@ -2,7 +2,7 @@
   <section class="inbox">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4">
+        <h1 class="text-h5">
           {{ $t('menu.inbox') }}
           <span v-if="total > 0">({{ total }})</span>
         </h1>
@@ -57,7 +57,7 @@
       :loading="loading"
       :page="page"
       :items-per-page="perPage"
-      class="inbox-table"
+      class="admin-data-table inbox-table"
       item-value="id"
       hide-default-footer
       @update:options="onTableOptionsChange"

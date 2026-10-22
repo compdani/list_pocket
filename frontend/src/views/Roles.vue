@@ -2,7 +2,7 @@
   <section class="roles">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h4">
+        <h1 class="text-h5">
           {{ $t(isUser ? 'users.userRoles' : 'users.listRoles') }}
           <span v-if="!isNaN(roles.length)">({{ roles.length }})</span>
         </h1>
@@ -271,28 +271,21 @@ export default {
   --roles-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
-.page-header {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
 .roles-table {
   border: 1px solid var(--roles-border);
-  border-radius: 20px;
+  border-radius: 16px;
   overflow: hidden;
 }
 
 .roles-table :deep(thead th) {
   background: var(--roles-surface-soft);
   border-bottom: 1px solid var(--roles-border-strong) !important;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .roles-table :deep(tbody td) {
-  padding-top: 18px !important;
-  padding-bottom: 18px !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
   vertical-align: top;
 }
 

@@ -1,7 +1,7 @@
 <template>
   <section class="logs-page">
     <div class="logs-header">
-      <h1 class="text-h4 font-weight-bold">
+      <h1 class="text-h5 font-weight-semibold">
         {{ $t('logs.title') }}
       </h1>
     </div>

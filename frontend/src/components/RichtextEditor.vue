@@ -178,6 +178,7 @@ export default {
   },
 
   methods: {
+    getAssistantSelection() { return this.assistantEditor?.selection?.getContent({ format: 'html' }) || ''; },
     encodeEditorValue(value) {
       return this.preserveGoTemplate ? encodeGoTemplates(value) : value;
     },
@@ -216,6 +217,7 @@ export default {
         urlconverter_callback: this.onEditorURLConvert,
 
         setup: (editor) => {
+          this.assistantEditor = editor;
           editor.addShortcut('ctrl+s', 'Save content', () => {
             this.$events.$emit('campaign.update', {});
           });

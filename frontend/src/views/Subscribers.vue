@@ -202,10 +202,12 @@
       >
         <template #[`item.email`]="{ item }">
           <div>
+            <div class="entity-line">
             <button type="button" class="link-button" @click.stop.prevent="openSubscriberPage(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
               {{ item.email }}
             </button>
             <copy-text :text="`${item.email}`" hide-text />
+            </div>
             <v-chip v-if="item.status !== 'enabled'" :class="['subscriber-status-chip', item.status]" size="small" variant="tonal" data-cy="blocklisted">
               {{ $t(`subscribers.status.${item.status}`) }}
             </v-chip>
@@ -226,7 +228,7 @@
         </template>
 
         <template #[`item.name`]="{ item }">
-          <div>
+          <div class="entity-line">
             <button type="button" class="link-button" @click.stop.prevent="openSubscriberPage(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
               {{ item.name }}
             </button>
@@ -1066,31 +1068,31 @@ export default {
   margin-top: 10px;
 }
 
-.subscribers-table {
+:deep(.subscribers-table) {
   background: rgb(var(--v-theme-surface));
   border: 1px solid var(--subscribers-border);
   border-radius: 16px;
   overflow: hidden;
 }
 
-.subscribers-table :deep(thead th) {
+:deep(.subscribers-table thead th) {
   background: var(--subscribers-surface-soft);
   border-bottom: 1px solid var(--subscribers-border-strong) !important;
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 600;
 }
 
-.subscribers-table :deep(tbody td) {
+:deep(.subscribers-table tbody td) {
   padding-bottom: 16px !important;
   padding-top: 16px !important;
   vertical-align: top;
 }
 
-.subscribers-table :deep(tbody tr:hover) {
+:deep(.subscribers-table tbody tr:hover) {
   background: rgb(var(--v-theme-surface-light));
 }
 
-.subscribers-table :deep(.v-data-table__tr--selected) {
+:deep(.subscribers-table .v-data-table__tr--selected) {
   background: rgba(var(--v-theme-primary), 0.08);
 }
 
@@ -1167,6 +1169,23 @@ export default {
 .link-button {
   color: inherit;
   font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.entity-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.entity-line > .link-button {
+  min-width: 0;
+}
+
+.entity-line > .copy-text {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .sort-button {

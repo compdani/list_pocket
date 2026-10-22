@@ -3,7 +3,7 @@
     <v-card class="workflow-hero" variant="outlined">
       <div class="workflow-hero-copy">
         <span class="workflow-eyebrow">{{ $t('menu.workflows') }}</span>
-        <h1 class="text-h4 font-weight-semibold">{{ $t('menu.workflows') }}</h1>
+        <h1 class="text-h5 font-weight-semibold">{{ $t('menu.workflows') }}</h1>
         <p>
           {{ $t('workflows.hubHelp') }}
         </p>
@@ -350,6 +350,7 @@ export default {
 
 .workflow-stat-card {
   display: grid;
+  align-content: start;
   gap: 8px;
   padding: 20px;
 }
@@ -368,12 +369,14 @@ export default {
 
 .workflow-grid {
   display: grid;
+  align-items: start;
   gap: 24px;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
 }
 
 .workflow-panel {
   display: grid;
+  align-content: start;
   gap: 18px;
   padding: 22px;
 }
@@ -399,6 +402,7 @@ export default {
 .workflow-card-list,
 .workflow-run-list {
   display: grid;
+  align-content: start;
   gap: 12px;
 }
 
@@ -408,6 +412,7 @@ export default {
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 16px;
   display: grid;
+  align-content: start;
   gap: 10px;
   padding: 16px;
   text-align: left;
@@ -415,6 +420,17 @@ export default {
 
 .workflow-record-card {
   cursor: pointer;
+}
+
+.workflow-stat-card:last-child strong {
+  font-size: 1.25rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.workflow-panel-header h2 {
+  font-size: 1.25rem;
+  line-height: 1.4;
 }
 
 .workflow-record-card-active {

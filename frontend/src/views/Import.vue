@@ -1,7 +1,7 @@
 <template>
   <section class="import import-page">
     <div class="import-header">
-      <h1 class="text-h4 font-weight-bold">
+      <h1 class="text-h5 font-weight-semibold">
         {{ $t('import.title') }}
       </h1>
     </div>
@@ -559,6 +559,7 @@ export default {
 
 .csv-headers {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

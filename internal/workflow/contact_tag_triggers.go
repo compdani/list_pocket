@@ -50,6 +50,9 @@ func dispatchContactTagRuns(app core.App, subscriber *core.Record, triggerMode s
 			if err != nil {
 				return err
 			}
+			if !workflow.GetBool("is_published") {
+				continue
+			}
 			nodes, edges, err := loadWorkflowGraph(app, workflow.Id)
 			if err != nil {
 				return err

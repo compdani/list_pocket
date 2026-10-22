@@ -534,8 +534,18 @@ export default {
   --lists-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
-.page-header {
-  margin-bottom: 16px;
+.stats p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .query-card {
@@ -575,31 +585,31 @@ export default {
   gap: 10px;
 }
 
-.lists-table {
+:deep(.lists-table) {
   background: rgb(var(--v-theme-surface));
   border: 1px solid var(--lists-border);
   border-radius: 16px;
   overflow: hidden;
 }
 
-.lists-table :deep(thead th) {
+:deep(.lists-table thead th) {
   background: var(--lists-surface-soft);
   border-bottom: 1px solid var(--lists-border-strong) !important;
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 600;
 }
 
-.lists-table :deep(tbody td) {
+:deep(.lists-table tbody td) {
   padding-bottom: 16px !important;
   padding-top: 16px !important;
   vertical-align: top;
 }
 
-.lists-table :deep(tbody tr:hover) {
+:deep(.lists-table tbody tr:hover) {
   background: rgb(var(--v-theme-surface-light));
 }
 
-.lists-table :deep(.v-data-table__tr--selected) {
+:deep(.lists-table .v-data-table__tr--selected) {
   background: rgba(var(--v-theme-primary), 0.08);
 }
 

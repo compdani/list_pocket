@@ -11,7 +11,7 @@
 
       <div class="settings-header">
         <div>
-          <h1 class="text-h4 font-weight-bold mb-1">
+          <h1 class="text-h5 font-weight-semibold mb-1">
             {{ $t('settings.title') }}
           </h1>
           <p class="text-medium-emphasis">
@@ -52,7 +52,7 @@
 
         <v-divider />
 
-        <v-card-text class="pa-6">
+        <v-card-text class="settings-body">
           <v-window v-model="tab" :touch="false">
             <v-window-item value="general">
               <general-settings :form="form" :key="key" />
@@ -430,11 +430,19 @@ export default {
   padding: 0 12px;
 }
 
+.settings-body {
+  padding: 24px;
+}
+
 :deep(.v-window-item) {
   padding-top: 12px;
 }
 
 @media (max-width: 768px) {
+  .settings-body {
+    padding: 16px;
+  }
+
   .settings-header {
     align-items: stretch;
     flex-direction: column;
