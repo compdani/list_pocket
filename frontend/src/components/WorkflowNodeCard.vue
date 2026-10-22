@@ -1,6 +1,7 @@
 <script setup>
 /* eslint-disable */
 import { computed } from "vue";
+import { nodePresentation } from "../workflow/nodeCatalog.mjs";
 import { Handle, Position } from "@vue-flow/core";
 
 const props = defineProps({
@@ -36,16 +37,16 @@ const badgeLabel = computed(() => {
 });
 
 const isTrigger = computed(() => props.data.type === "trigger");
-const isTerminal = computed(() => props.data.type === "pb_update");
+const presentation = computed(() => nodePresentation(props.data.type));
 const isCondition = computed(() => props.data.type === "condition");
 </script>
 
 <template>
   <div class="workflow-node-card" :data-kind="data.type">
     <Handle v-if="!isTrigger" type="target" :position="Position.Top" />
-    <span class="workflow-node-badge">{{ badgeLabel }}</span>
+    <span class="workflow-node-badge"><v-icon :icon="presentation.icon" size="13" />{{ badgeLabel }}</span>
     <strong>{{ data.label }}</strong>
-    <span>{{ data.contactMode }}</span>
+    <span class="workflow-node-description">{{ data.description || presentation.description }}</span>
     <template v-if="isCondition">
       <div class="branch-handle-labels">
         <span>Yes</span>
@@ -54,6 +55,6 @@ const isCondition = computed(() => props.data.type === "condition");
       <Handle id="yes" type="source" :position="Position.Bottom" :style="{ left: '32%' }" />
       <Handle id="no" type="source" :position="Position.Bottom" :style="{ left: '68%' }" />
     </template>
-    <Handle v-else-if="!isTerminal" type="source" :position="Position.Bottom" />
+    <Handle v-else type="source" :position="Position.Bottom" />
   </div>
 </template>

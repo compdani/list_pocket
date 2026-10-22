@@ -1,7 +1,7 @@
 <script setup>
 /* eslint-disable */
 import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import RunHistory from "../components/RunHistory.vue";
 import { openConfirm } from "../utils/confirmDialog";
@@ -267,7 +267,7 @@ async function saveWorkflow(payload, mode) {
     pendingSave.value = { payload, mode };
     saveState.value = "dirty";
     saveMessage.value = mode === "auto" ? "Changes queued for autosave..." : "Changes queued for save...";
-    return;
+    return false;
   }
 
   saveInFlight.value = true;
@@ -284,10 +284,12 @@ async function saveWorkflow(payload, mode) {
     saveMessage.value = `Saved ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
     validationErrors.value = [];
     validationFindings.value = [];
+    return true;
   } catch (nextError) {
     saveState.value = "error";
     saveMessage.value = `Unsaved: ${nextError instanceof Error ? nextError.message : "Failed to save workflow"}`;
     error.value = nextError instanceof Error ? nextError.message : "Failed to save workflow";
+    return false;
   } finally {
     saveInFlight.value = false;
     if (pendingSave.value) {
@@ -509,6 +511,7 @@ async function validateWorkflow(workflowId) {
 }
 
 async function createWorkflow() {
+  if (loading.value || saveState.value === "saving") return;
   saveState.value = "saving";
   saveMessage.value = "Creating workflow...";
   try {
@@ -561,6 +564,11 @@ async function deleteWorkflow(workflowId) {
   }
 }
 
+onBeforeRouteLeave(async () => {
+  if (!builderRef.value?.hasUnsavedChanges?.()) return true;
+  return await openConfirm({ message: 'Leave this workflow? Unsaved changes will be discarded.' });
+});
+
 onBeforeUnmount(() => {
   stopRealtimeSubscriptions();
   stopCapturePolling();
@@ -578,6 +586,7 @@ onBeforeUnmount(() => {
 
       <WorkflowBuilderPanel
         :contacts="contacts"
+        :loading="loading"
         :node-library="nodeLibrary"
         ref="builderRef"
         :key="activeWorkflow?.workflow?.id ?? 'empty'"
@@ -1565,5 +1574,62 @@ onBeforeUnmount(() => {
   .workflow-route .map-field-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Studio layout: bounded canvas, compact actions and a discoverable step rail. */
+.workflow-route .workspace-main.workflow-editor-shell { min-height: 640px; height: calc(100dvh - 112px); padding: 0; gap: 12px; }
+.workflow-route .workflow-editor-shell > .builder-shell { padding: 0; gap: 0; border-radius: 16px; background: rgb(var(--v-theme-surface)); box-shadow: 0 4px 24px rgba(15,23,42,.04); }
+.workflow-route .workflow-editor-shell .builder-toolbar-refresh { padding: 18px 20px 14px; gap: 12px; align-items: center; }
+.workflow-route .builder-eyebrow { font-size: .65rem; font-weight: 750; letter-spacing: .16em; color: rgb(var(--v-theme-primary)); }
+.workflow-route .builder-welcome-title { font-size: 1.35rem; margin: 5px 0; }
+.workflow-route .builder-meta { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+.workflow-route .builder-meta-caption { color: var(--wf-muted); font-size: .75rem; }
+.workflow-route .workflow-editor-shell .builder-heading { flex: 1 1 300px; }
+.workflow-route .builder-editing-bar { display: flex; align-items: center; gap: 3px; padding: 6px 14px; border-block: 1px solid var(--wf-border); background: rgba(var(--v-theme-on-surface), .02); flex-wrap: wrap; }
+.workflow-route .editing-divider { width: 1px; height: 20px; background: var(--wf-border); margin: 0 5px; }
+.workflow-route .builder-keyboard-hint { color: var(--wf-muted); font-size: .67rem; margin-left: 12px; }
+.workflow-route .workflow-editor-shell .builder-body.builder-workspace { display: grid; grid-template-columns: 232px minmax(0,1fr); min-height: 360px; }
+.workflow-route .workflow-editor-shell .builder-body.builder-workspace.library-hidden { grid-template-columns: minmax(0,1fr); }
+.workflow-route .workflow-step-library { min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px 12px; border-right: 1px solid var(--wf-border); background: rgb(var(--v-theme-surface)); overflow: hidden; }
+.workflow-route .step-library-heading { display: grid; gap: 3px; padding: 0 4px; font-size: .88rem; }
+.workflow-route .step-library-heading span { color: var(--wf-muted); font-size: .74rem; }
+.workflow-route .step-library-scroll { overflow: auto; min-height: 0; }
+.workflow-route .step-library-group h3 { text-transform: uppercase; letter-spacing: .09em; font-size: .63rem; color: var(--wf-muted); margin: 16px 6px 8px; }
+.workflow-route .step-library-group:first-child h3 { margin-top: 4px; }
+.workflow-route button.step-library-item { width: 100%; display: flex; text-align: left; align-items: flex-start; gap: 9px; padding: 10px 6px; border: 1px solid transparent; border-radius: 9px; color: rgb(var(--v-theme-on-surface)); transition: background .15s, border-color .15s; }
+.workflow-route button.step-library-item:hover:not(:disabled) { background: rgba(var(--v-theme-primary),.05); border-color: rgba(var(--v-theme-primary),.18); }
+.workflow-route button.step-library-item:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
+.workflow-route button.step-library-item:disabled { opacity: .4; cursor: not-allowed; }
+.workflow-route .step-library-item strong { display: block; font-size: .78rem; font-weight: 600; }
+.workflow-route .step-library-item small { display: block; font-size: .68rem; color: var(--wf-muted); line-height: 1.45; margin-top: 2px; }
+.workflow-route .step-library-icon { padding: 6px; background: rgba(var(--v-theme-primary),.08); color: rgb(var(--v-theme-primary)); border-radius: 8px; }
+.workflow-route .step-library-icon[data-color="success"] { color: rgb(var(--v-theme-success)); background: rgba(var(--v-theme-success),.1); }
+.workflow-route .step-library-icon[data-color="warning"] { color: rgb(var(--v-theme-warning)); background: rgba(var(--v-theme-warning),.1); }
+.workflow-route .step-library-plus { margin-left: auto; color: var(--wf-muted); font-size: 1rem; }
+.workflow-route .workflow-editor-shell .builder-workspace .canvas-frame { min-height: 360px; border: none !important; border-radius: 0; background: rgb(var(--v-theme-background)); }
+.workflow-route .workflow-editor-shell .workflow-canvas { background: rgba(var(--v-theme-primary), .018); }
+.workflow-route .canvas-action-dock { top: 12px; right: 12px; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
+.workflow-route .canvas-start-guide { position: absolute; z-index: 6; left: 50%; top: 48%; transform: translate(-50%,-50%); text-align: center; width: min(360px,85%); padding: 20px; border-radius: 16px; background: rgba(var(--v-theme-surface),.95); border: 1px solid var(--wf-border); }
+.workflow-route .canvas-start-guide h2 { font-size: 1.12rem; margin: 16px 0 8px; }
+.workflow-route .canvas-start-guide p { color: var(--wf-muted); font-size: .82rem; line-height: 1.6; margin-bottom: 20px; }
+.workflow-route .start-guide-icon { display: inline-flex; padding: 12px; border-radius: 14px; background: rgba(var(--v-theme-primary),.08); color: rgb(var(--v-theme-primary)); }
+.workflow-route .builder-empty-state { margin: 24px; background: linear-gradient(135deg, rgba(var(--v-theme-primary),.055), transparent); padding: 32px; border-style: dashed; }
+.workflow-route .builder-secondary-panels { max-height: 260px; overflow: auto; padding: 12px 16px; }
+.workflow-route .workflow-node-card { width: 240px; min-width: 240px; padding: 16px; border-radius: 12px; gap: 8px; box-shadow: 0 3px 10px rgba(15,23,42,.06); border-top: 3px solid rgba(var(--v-theme-primary),.65); }
+.workflow-route .workflow-node-card[data-kind="trigger"] { border-top-color: rgb(var(--v-theme-success)); }
+.workflow-route .workflow-node-card[data-kind="condition"] { border-top-color: rgb(var(--v-theme-warning)); }
+.workflow-route .workflow-node-card strong { font-size: .88rem; line-height: 1.4; }
+.workflow-route .workflow-node-card .workflow-node-description { font-size: .72rem; line-height: 1.5; color: var(--wf-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.workflow-route .workflow-node-card .workflow-node-badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; font-size: .63rem; }
+.workflow-route .vue-flow__edge-path { stroke-width: 2; }
+.workflow-route .vue-flow__handle { width: 12px; height: 12px; background: rgb(var(--v-theme-primary)); }
+@media (max-width: 1100px) { .workflow-route .builder-keyboard-hint { display: none; } }
+@media (max-width: 900px) {
+ .workflow-route .workspace-main.workflow-editor-shell { height: auto; min-height: 700px; }
+ .workflow-route .workflow-editor-shell .builder-body.builder-workspace { grid-template-columns: 1fr; }
+ .workflow-route .workflow-step-library { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--wf-border); }
+ .workflow-route .step-library-scroll { display: flex; gap: 12px; } .workflow-route .step-library-group { min-width: 200px; }
+ .workflow-route .workflow-editor-shell .builder-workspace .canvas-frame { min-height: 480px; }
+ .workflow-route .workflow-editor-shell .builder-toolbar-refresh { padding: 14px; }
 }
 </style>

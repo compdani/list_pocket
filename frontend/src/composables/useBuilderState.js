@@ -1,5 +1,6 @@
 /* eslint-disable */
 import { ref, shallowRef, watch } from "vue";
+import { canConnectWorkflowNodes } from "../workflow/graph.mjs";
 
 function toFlowNodes(workflow) {
   return (workflow?.nodes ?? []).map((node) => ({
@@ -22,8 +23,8 @@ function toFlowEdges(workflow) {
     id: edge.id,
     source: edge.sourceNodeId,
     target: edge.targetNodeId,
-    sourceHandle: edge.sourceHandle,
-    targetHandle: edge.targetHandle,
+    sourceHandle: edge.sourceHandle || undefined,
+    targetHandle: edge.targetHandle || undefined,
     label: edge.condition?.branch ?? edge.sourceHandle,
     data: {
       condition: edge.condition ?? {},
@@ -413,7 +414,7 @@ function fromFlowEdges(edges) {
     id: edge.id,
     sourceNodeId: edge.source,
     targetNodeId: edge.target,
-    sourceHandle: typeof edge.label === "string" ? edge.label : edge.sourceHandle ?? "",
+    sourceHandle: edge.sourceHandle ?? "",
     targetHandle: edge.targetHandle ?? "",
     condition: {
       ...((edge.data?.condition ?? {})),
@@ -530,6 +531,7 @@ export function useBuilderState(workflow) {
   }
 
   function addNode(type) {
+    if (type === "trigger" && nodes.value.some(node => node.data?.type === "trigger")) return null;
     const nextNode = buildNodeTemplate(type, nodes.value.length);
     nodes.value = [...nodes.value, nextNode];
     selectedNodeId.value = nextNode.id;
@@ -537,7 +539,7 @@ export function useBuilderState(workflow) {
   }
 
   function connectNodes(connection) {
-    if (!connection.source || !connection.target) {
+    if (!canConnectWorkflowNodes(nodes.value, edges.value, connection.source, connection.target, connection.sourceHandle)) {
       return;
     }
 
@@ -558,6 +560,15 @@ export function useBuilderState(workflow) {
         },
       },
     ];
+  }
+
+  function duplicateSelectedNode() {
+    const original = nodes.value.find(node => node.id === selectedNodeId.value);
+    if (!original || original.data?.type === "trigger") return null;
+    const duplicate = JSON.parse(JSON.stringify(original));
+    duplicate.id = generateGraphId(); duplicate.position = { x: original.position.x + 60, y: original.position.y + 80 };
+    duplicate.data.label = `${original.data.label} copy`;
+    nodes.value = [...nodes.value, duplicate]; selectNode(duplicate.id); return duplicate.id;
   }
 
   function updateNodePosition(nodeId, x, y) {
@@ -603,7 +614,7 @@ export function useBuilderState(workflow) {
       return {
         ...edge,
         label: field === "branch" ? value : edge.label,
-        sourceHandle: field === "branch" ? value : edge.sourceHandle,
+        sourceHandle: edge.sourceHandle,
         data: {
           ...(edge.data ?? {}),
           condition: nextCondition,
@@ -621,6 +632,7 @@ export function useBuilderState(workflow) {
 
   return {
     addNode,
+    duplicateSelectedNode,
     clearSelection,
     connectNodes,
     edges,

@@ -10,6 +10,9 @@ import { Controls } from "@vue-flow/controls";
 import { MiniMap } from "@vue-flow/minimap";
 import { useVueFlow, VueFlow } from "@vue-flow/core";
 import { useTheme } from "vuetify";
+import { arrangeWorkflowGraph, canConnectWorkflowNodes } from "../workflow/graph.mjs";
+import { nodePresentation } from "../workflow/nodeCatalog.mjs";
+import { openConfirm } from "../utils/confirmDialog";
 import { useBuilderState } from "../composables/useBuilderState";
 import { useRouter } from "vue-router";
 import { registerAssistantEditor } from '../assistant/context';
@@ -20,6 +23,7 @@ import WorkflowNodeCard from "./WorkflowNodeCard.vue";
 
 const props = defineProps({
   contacts: { type: Array, default: () => [] },
+  loading: { type: Boolean, default: false },
   nodeLibrary: { type: Array, default: () => [] },
   onSaveRequest: { type: Function, default: null },
   saveMessage: { type: String, default: "" },
@@ -50,11 +54,26 @@ const restoredViewport = ref({ x: 0, y: 0, zoom: 1 });
 const hasRestoredViewport = ref(false);
 const showNodeCommand = ref(false);
 const commandSearch = ref("");
+const librarySearch = ref("");
+const libraryOpen = ref(true);
+const pastGraphs = ref([]); const futureGraphs = ref([]); let restoringGraph = false;
+const actionBusy = ref(false);
+const editorNotice = ref("");
+const hasTrigger = computed(() => builder.nodes.value.some(node => node.data?.type === 'trigger'));
+const libraryGroups = computed(() => {
+  const needle = (librarySearch.value || "").toLowerCase();
+  return ['Start', 'Logic', 'Timing', 'Actions'].map(category => ({ category, nodes: props.nodeLibrary.filter(node => {
+    const presentation = nodePresentation(node.type);
+    return presentation.category === category && `${node.label} ${presentation.description}`.toLowerCase().includes(needle);
+  }) })).filter(group => group.nodes.length);
+});
+const operationDisabled = computed(() => !props.workflow || props.loading || props.saveState === 'saving' || actionBusy.value);
+const saveLabel = computed(() => isDirty.value ? 'Unsaved changes' : props.saveMessage || 'Ready');
 
 const selectedNode = computed(() => builder.nodes.value.find((node) => node.id === builder.selectedNodeId.value));
 const selectedEdge = computed(() => builder.edges.value.find((edge) => edge.id === builder.selectedEdgeId.value));
 const selectedNodeDescription = computed(() => selectedNode.value?.data?.description ?? "");
-const currentSignature = computed(() => builder.graphSignature());
+const currentSignature = computed(() => JSON.stringify({ ...builder.exportWorkflowGraph(), name: props.workflow?.workflow?.name || "" }));
 const selectedEdgeExpression = computed(() => selectedEdge.value?.data?.condition?.expression ?? "");
 const webhookEndpoint = computed(() => {
   const trigger = props.workflow?.nodes.find((node) => node.type === "trigger");
@@ -120,21 +139,8 @@ watch(
   { immediate: true }
 );
 
-watch(
-  () => props.saveState,
-  (state) => {
-    if (state === "saved") {
-      committedSignature.value = currentSignature.value;
-      isDirty.value = false;
-    }
-
-    if (state === "error") {
-      isDirty.value = true;
-    }
-  }
-);
-
-watch(currentSignature, (signature) => {
+watch(currentSignature, (signature, previous) => {
+  if (!restoringGraph && previous && previous !== signature) { pastGraphs.value.push(previous); if (pastGraphs.value.length > 50) pastGraphs.value.shift(); futureGraphs.value = []; }
   if (!props.workflow) {
     return;
   }
@@ -153,6 +159,7 @@ watch(
 onBeforeUnmount(() => {
   unregisterAssistant?.();
   window.removeEventListener("keydown", onWindowKeydown);
+  window.removeEventListener('beforeunload', warnBeforeUnload);
 });
 
 onMounted(() => {
@@ -171,6 +178,7 @@ onMounted(() => {
     },
   });
   window.addEventListener("keydown", onWindowKeydown);
+  window.addEventListener('beforeunload', warnBeforeUnload);
 });
 
 function saveNodeConfig(key, value) {
@@ -195,8 +203,18 @@ function removeSelectedNode() {
   builder.removeSelectedNode();
 }
 
-function closeNodeModal() {
+async function closeNodeModal() {
+  await nodeInspectorRef.value?.flushPendingChanges?.();
   builder.clearSelection();
+}
+function warnBeforeUnload(event) {
+  if (isDirty.value) { event.preventDefault(); event.returnValue = ''; }
+}
+async function selectCanvasNode(id) {
+  await nodeInspectorRef.value?.flushPendingChanges?.(); builder.selectNode(id);
+}
+async function selectCanvasEdge(id) {
+  await nodeInspectorRef.value?.flushPendingChanges?.(); builder.selectEdge(id);
 }
 
 function removeSelectedEdge() {
@@ -211,6 +229,7 @@ function updateSelectedEdgeField(field, event) {
 function focusFinding(finding) {
   if (finding.targetType === "node" && finding.targetId) {
     builder.selectNode(finding.targetId);
+    void focusNode(finding.targetId);
   }
 
   if (finding.targetType === "edge" && finding.targetId) {
@@ -307,10 +326,19 @@ function onWindowKeydown(event) {
   const target = event.target;
   const tag = target?.tagName ? String(target.tagName).toLowerCase() : "";
   const isTypingTarget = tag === "input" || tag === "textarea" || target?.isContentEditable;
-  if (isTypingTarget) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+    if (props.workflow) { event.preventDefault(); void saveWorkflow('manual'); } return;
+  }
+  if (isTypingTarget || showNodeCommand.value) {
     return;
   }
 
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+    event.preventDefault(); void restoreGraph(event.shiftKey ? 'redo' : 'undo'); return;
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd' && selectedNode.value) {
+    event.preventDefault(); void duplicateNode(); return;
+  }
   if ((event.metaKey || event.ctrlKey) && event.key === "0") {
     event.preventDefault();
     void clearSavedViewport();
@@ -362,11 +390,56 @@ async function saveWorkflow(mode = "manual") {
   };
 
   if (props.onSaveRequest) {
-    await props.onSaveRequest(payload, mode);
-    return;
+    const savedSignature = JSON.stringify({ ...graph, name: payload.workflow.name?.trim() || 'Untitled Workflow' });
+    const saved = await props.onSaveRequest(payload, mode);
+    if (saved !== false) {
+      committedSignature.value = savedSignature;
+      isDirty.value = currentSignature.value !== savedSignature;
+    }
+    return saved;
   }
 
   emit("save", payload, mode);
+}
+
+async function restoreGraph(direction) {
+  if (operationDisabled.value) return;
+  await nodeInspectorRef.value?.flushPendingChanges?.();
+  await nextTick();
+  const source = direction === 'undo' ? pastGraphs : futureGraphs;
+  const destination = direction === 'undo' ? futureGraphs : pastGraphs;
+  if (!source.value.length) return;
+  const graph = source.value.pop(); destination.value.push(currentSignature.value);
+  restoringGraph = true;
+  const restored = JSON.parse(graph); builder.replaceGraph(restored);
+  if (typeof restored.name === 'string') emit('updateWorkflowName', restored.name);
+  await nextTick(); restoringGraph = false;
+}
+async function duplicateNode() {
+  await nodeInspectorRef.value?.flushPendingChanges?.();
+  const id = builder.duplicateSelectedNode(); if (id) await focusNode(id);
+}
+async function arrangeNodes() {
+  builder.replaceGraph(arrangeWorkflowGraph(builder.exportWorkflowGraph())); await fitCanvasToGraph();
+}
+async function performAction(action) {
+  if (operationDisabled.value) return;
+  if (action === 'publish' && !(await openConfirm({ message: 'Publish this workflow and enable its automatic triggers?' }))) return;
+  actionBusy.value = true;
+  try {
+    const saved = await saveWorkflow('manual');
+    if (saved === false) return;
+    if (isDirty.value) { editorNotice.value = 'The graph changed while saving. Save your latest edits before continuing.'; return; }
+    editorNotice.value = '';
+    emit(action, props.workflow.workflow.id);
+  } finally { actionBusy.value = false; }
+}
+async function requestNewWorkflow() {
+  if (isDirty.value && !(await openConfirm({ message: 'Start a new workflow? Unsaved changes in this graph will be discarded.' }))) return;
+  emit('createWorkflow');
+}
+function isValidConnection(connection) {
+  return canConnectWorkflowNodes(builder.nodes.value, builder.edges.value, connection.source, connection.target, connection.sourceHandle, connection.id);
 }
 
 async function focusNode(nodeId) {
@@ -383,16 +456,19 @@ async function focusNode(nodeId) {
 }
 
 async function addNode(type) {
+  await nodeInspectorRef.value?.flushPendingChanges?.();
   const nodeId = builder.addNode(type);
   if (!nodeId) {
     return;
   }
 
+  if (type === 'trigger') builder.updateNodeConfig(nodeId, 'mode', 'manual');
   builder.selectNode(nodeId);
   await focusNode(nodeId);
 }
 
 defineExpose({
+  hasUnsavedChanges: () => isDirty.value,
   addNode,
   applyNodeConfigValues,
   openNodeCommand,
@@ -401,46 +477,71 @@ defineExpose({
 
 <template>
   <section class="builder-shell">
-    <v-sheet class="builder-toolbar" color="transparent">
+    <v-sheet class="builder-toolbar builder-toolbar-refresh" color="transparent">
       <div class="builder-heading">
+        <span class="builder-eyebrow">WORKFLOW STUDIO</span>
         <div class="builder-editor-bar">
-          <v-text-field class="workflow-title-input" :model-value="workflow?.workflow.name ?? ''" placeholder="Untitled workflow" :disabled="!workflow" hide-details @update:model-value="emit('updateWorkflowName', $event || '')" />
-          <v-chip class="save-indicator" :data-state="(isDirty && saveState !== 'saving' ? 'dirty' : saveState) ?? 'idle'">
-            <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-hidden="true" />
-            {{ saveMessage || (isDirty ? "Unsaved changes" : "Up to date") }}
-          </v-chip>
+          <v-text-field v-if="workflow" class="workflow-title-input" :model-value="workflow.workflow.name" placeholder="Untitled workflow" variant="plain" density="compact" hide-details aria-label="Workflow name" @update:model-value="emit('updateWorkflowName', $event || '')" />
+          <h2 v-else class="builder-welcome-title">Make your work flow.</h2>
+          <v-chip size="small" class="save-indicator" :color="saveState === 'error' ? 'error' : isDirty ? 'warning' : 'success'" variant="tonal" role="status">{{ saveLabel }}</v-chip>
         </div>
-        <div class="builder-meta">
-          <v-chip class="builder-meta-chip">{{ workflow?.workflow.status ?? "draft" }}</v-chip>
-          <v-chip class="builder-meta-chip">v{{ workflow?.workflow.version ?? 1 }}</v-chip>
-          <v-chip class="builder-meta-chip">{{ workflow?.workflow.triggerType ?? "manual" }} trigger</v-chip>
-          <v-chip v-if="webhookEndpoint" class="builder-meta-chip builder-meta-chip-wide">{{ webhookEndpoint }}</v-chip>
+        <div v-if="workflow" class="builder-meta">
+          <v-chip size="x-small" :color="workflow.workflow.status === 'published' ? 'success' : 'primary'" variant="tonal">{{ workflow.workflow.status }}</v-chip>
+          <span class="builder-meta-caption">Version {{ workflow.workflow.version }} · {{ builder.nodes.value.length }} {{ builder.nodes.value.length === 1 ? 'step' : 'steps' }} · {{ builder.edges.value.length }} {{ builder.edges.value.length === 1 ? 'connection' : 'connections' }}</span>
         </div>
       </div>
       <div class="toolbar-actions toolbar-actions-compact toolbar-actions-primary">
-        <v-btn variant="outlined" :disabled="saveState === 'saving'" @click="saveWorkflow('manual')">
-          <span v-if="isDirty && saveState !== 'saving'" class="save-dot" aria-label="Unsaved changes" />
-          {{ saveState === 'saving' ? "Saving..." : "Save" }}
-        </v-btn>
-        <v-btn color="primary" variant="flat" :disabled="!workflow" @click="workflow && emit('run', workflow.workflow.id)">Run Test</v-btn>
-      </div>
-      <div class="toolbar-actions toolbar-actions-compact toolbar-actions-secondary">
-        <v-btn variant="outlined" type="button" :disabled="!workflow" @click="emit('createWorkflow')">New workflow</v-btn>
-        <v-btn variant="outlined" :disabled="!selectedEdge" @click="removeSelectedEdge">Remove Edge</v-btn>
-        <v-btn variant="outlined" :disabled="!workflow" @click="workflow && emit('validate', workflow.workflow.id)">Validate</v-btn>
-        <v-btn variant="outlined" :disabled="!workflow" @click="workflow && emit('publish', workflow.workflow.id)">Publish</v-btn>
-        <v-btn color="error" variant="outlined" :disabled="!workflow || saveState === 'saving'" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)">Delete</v-btn>
+        <v-btn variant="text" type="button" :disabled="loading || saveState === 'saving'" @click="requestNewWorkflow">New workflow</v-btn>
+        <v-btn variant="outlined" :disabled="operationDisabled" @click="saveWorkflow('manual')">{{ saveState === 'saving' ? 'Saving...' : 'Save' }}</v-btn>
+        <v-btn variant="tonal" color="primary" :disabled="operationDisabled || !builder.nodes.value.length" @click="performAction('run')">Run Test</v-btn>
+        <v-btn color="primary" variant="flat" :disabled="operationDisabled || !builder.nodes.value.length" @click="performAction('publish')">Publish</v-btn>
+        <v-menu location="bottom end">
+          <template #activator="{ props: menuProps }"><v-btn v-bind="menuProps" icon="mdi-dots-vertical" size="small" variant="text" aria-label="More workflow actions" /></template>
+          <v-list density="compact"><v-list-item title="Delete workflow" prepend-icon="mdi-delete-outline" base-color="error" :disabled="operationDisabled" @click="workflow && emit('deleteWorkflow', workflow.workflow.id)" /></v-list>
+        </v-menu>
       </div>
     </v-sheet>
+    <v-alert v-if="editorNotice" type="warning" variant="tonal" closable @click:close="editorNotice = ''">{{ editorNotice }}</v-alert>
+    <div v-if="workflow" class="builder-editing-bar" role="toolbar" aria-label="Graph editing">
+      <v-btn size="small" variant="text" :aria-pressed="libraryOpen" @click="libraryOpen = !libraryOpen">{{ libraryOpen ? 'Hide steps' : 'Show steps' }}</v-btn>
+      <span class="editing-divider" />
+      <v-btn size="small" variant="text" :disabled="!pastGraphs.length || operationDisabled" aria-keyshortcuts="Control+Z Meta+Z" @click="restoreGraph('undo')">Undo</v-btn>
+      <v-btn size="small" variant="text" :disabled="!futureGraphs.length || operationDisabled" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" @click="restoreGraph('redo')">Redo</v-btn>
+      <v-btn size="small" variant="text" :disabled="!builder.nodes.value.length" @click="arrangeNodes">Auto-arrange</v-btn>
+      <v-spacer />
+      <v-btn size="small" variant="text" :color="validationErrors.length ? 'error' : undefined" :disabled="operationDisabled || !builder.nodes.value.length" @click="performAction('validate')">{{ validationErrors.length ? `Check issues (${validationErrors.length})` : 'Validate' }}</v-btn>
+      <span class="builder-keyboard-hint">A add · F fit · ⌘/Ctrl S save</span>
+    </div>
 
-    <div v-if="workflow" class="builder-body builder-body-single">
+    <div v-if="workflow" class="builder-body builder-body-single builder-workspace" :class="{ 'library-hidden': !libraryOpen }">
+      <aside v-if="libraryOpen" class="workflow-step-library" aria-label="Step library">
+        <div class="step-library-heading"><strong>Add a step</strong><span>Click to add, then connect.</span></div>
+        <v-text-field v-model="librarySearch" placeholder="Find a step…" aria-label="Search steps" prepend-inner-icon="mdi-magnify" variant="outlined" density="compact" hide-details clearable />
+        <div class="step-library-scroll">
+          <section v-for="group in libraryGroups" :key="group.category" class="step-library-group">
+            <h3>{{ group.category }}</h3>
+            <button v-for="node in group.nodes" :key="node.type" class="step-library-item" type="button" :disabled="node.type === 'trigger' && hasTrigger" :title="node.type === 'trigger' && hasTrigger ? 'This workflow already has a trigger' : nodePresentation(node.type).description" @click="addNode(node.type)">
+              <span class="step-library-icon" :data-color="nodePresentation(node.type).color"><v-icon :icon="nodePresentation(node.type).icon" size="19" /></span>
+              <span><strong>{{ node.label }}</strong><small>{{ nodePresentation(node.type).description }}</small></span>
+              <span class="step-library-plus">+</span>
+            </button>
+          </section>
+          <p v-if="!libraryGroups.length" class="text-caption pa-3">No matching steps. Try another search.</p>
+        </div>
+      </aside>
       <v-sheet class="canvas-frame" border>
         <v-sheet class="canvas-action-dock" role="toolbar" aria-label="Canvas actions" elevation="0">
           <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Add node (A)" @click="openNodeCommand">+ Add node</v-btn>
           <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Center selected node" @click="centerOnSelection">Center</v-btn>
           <v-btn type="button" size="small" variant="outlined" class="canvas-action-btn canvas-action-btn-wide" title="Reset saved view" @click="clearSavedViewport">Reset</v-btn>
         </v-sheet>
-        <VueFlow :node-types="nodeTypes" :nodes="decoratedNodes" :edges="decoratedEdges" :default-viewport="restoredViewport" :fit-view-on-init="!hasRestoredViewport" :min-zoom="0.2" :max-zoom="1.2" :pan-on-scroll="true" :pan-on-drag="true" :zoom-on-double-click="false" :zoom-on-scroll="true" :selection-on-drag="false" class="workflow-canvas" @connect="builder.connectNodes" @edge-click="({ edge }) => builder.selectEdge(edge.id)" @node-click="({ node }) => builder.selectNode(node.id)" @node-drag-stop="onNodeDragStop">
+        <div v-if="!builder.nodes.value.length" class="canvas-start-guide">
+          <div class="start-guide-icon"><v-icon icon="mdi-rocket-launch-outline" size="28" /></div>
+          <h2>Every good workflow starts somewhere.</h2>
+          <p>Add a trigger, connect your steps, and let the busywork take care of itself.</p>
+          <v-btn color="primary" @click="addNode('trigger')">Add trigger</v-btn>
+        </div>
+        <VueFlow :is-valid-connection="isValidConnection" :delete-key-code="null" @pane-click="closeNodeModal" :node-types="nodeTypes" :nodes="decoratedNodes" :edges="decoratedEdges" :default-viewport="restoredViewport" :fit-view-on-init="!hasRestoredViewport" :min-zoom="0.2" :max-zoom="1.2" :pan-on-scroll="true" :pan-on-drag="true" :zoom-on-double-click="false" :zoom-on-scroll="true" :selection-on-drag="false" class="workflow-canvas" @connect="builder.connectNodes" @edge-click="({ edge }) => selectCanvasEdge(edge.id)" @node-click="({ node }) => selectCanvasNode(node.id)" @node-drag-stop="onNodeDragStop">
           <MiniMap position="bottom-right" :pannable="true" :mask-color="canvasColors.mask" :node-color="canvasColors.node" />
           <Controls position="bottom-left" />
           <Background :gap="22" :size="1.2" :pattern-color="canvasColors.pattern" />
@@ -454,9 +555,9 @@ defineExpose({
             </div>
             <v-text-field v-model="commandSearch" class="node-command-input" placeholder="Search nodes (A)" autofocus hide-details />
             <v-list class="node-command-list">
-              <v-list-item v-for="node in filteredNodeLibrary" :key="node.type" class="node-command-item" @click="addNodeFromCommand(node.type)">
+              <v-list-item v-for="node in filteredNodeLibrary" :key="node.type" :disabled="node.type === 'trigger' && hasTrigger" class="node-command-item" @click="addNodeFromCommand(node.type)">
                 <v-list-item-title>{{ node.label }}</v-list-item-title>
-                <v-list-item-subtitle>{{ node.type }}</v-list-item-subtitle>
+                <v-list-item-subtitle>{{ nodePresentation(node.type).description }}</v-list-item-subtitle>
               </v-list-item>
               <p v-if="!filteredNodeLibrary.length" class="node-command-empty">No matching node types.</p>
             </v-list>
@@ -469,8 +570,9 @@ defineExpose({
       <v-card v-if="validationErrors?.length" class="panel validation-panel detail-panel" variant="outlined">
         <div class="panel-header">
           <h2>Validation</h2>
-          <p>Resolve these findings before publish.</p>
+          <p>Click an issue to find the step that needs attention.</p>
         </div>
+        <p v-if="!validationFindings.length" v-for="message in validationErrors" :key="message" class="pa-3 text-error">{{ message }}</p>
         <v-btn v-for="finding in validationFindings" :key="`${finding.code}:${finding.targetId}:${finding.message}`" class="validation-item" variant="text" @click="focusFinding(finding)">
           <span class="validation-severity" :data-severity="finding.severity">{{ finding.severity }}</span>
           {{ finding.message }}
@@ -480,7 +582,7 @@ defineExpose({
       <v-card v-if="selectedEdge" class="panel edge-panel detail-panel" variant="outlined">
         <div class="panel-header">
           <h2>Transition</h2>
-          <p>{{ selectedEdge.source }} -> {{ selectedEdge.target }}</p>
+          <p>{{ builder.nodes.value.find(node => node.id === selectedEdge.source)?.data?.label || selectedEdge.source }} → {{ builder.nodes.value.find(node => node.id === selectedEdge.target)?.data?.label || selectedEdge.target }}</p>
         </div>
         <label class="form-field">
           <span>Branch Label</span>
@@ -498,10 +600,11 @@ defineExpose({
       <div class="panel-header">
         <h2>No workflow selected</h2>
         <p>Create or select a workflow to start editing the graph.</p>
+        <v-btn class="mt-4" type="button" color="primary" :loading="!loading && saveState === 'saving'" :disabled="loading || saveState === 'saving'" @click="emit('createWorkflow')">Create workflow</v-btn>
       </div>
     </v-card>
 
-    <AppRightSidebar :model-value="showNodeModal" :width="700" @update:model-value="(next) => !next && closeNodeModal()" @close="closeNodeModal">
+    <AppRightSidebar :model-value="showNodeModal" :width="480" @update:model-value="(next) => !next && closeNodeModal()" @close="closeNodeModal">
       <template #header>
         <div class="modal-header mt-2 px-2">
           <div>
@@ -511,6 +614,7 @@ defineExpose({
           </div>
           <div class="node-modal-actions">
             <v-btn v-if="canCaptureSelectedNodeSchema" type="button" variant="outlined" size="small" @click="workflow && selectedNode && emit('captureSchema', workflow.workflow.id, selectedNode.id)">Infer Schema</v-btn>
+            <v-btn v-if="selectedNode?.data?.type !== 'trigger'" type="button" icon="mdi-content-copy" variant="text" aria-label="Duplicate node" title="Duplicate node (Ctrl/⌘ D)" @click="duplicateNode" />
             <v-btn type="button" icon="mdi-delete-outline" variant="text" color="error" aria-label="Delete node" title="Delete node" @click="removeSelectedNode" />
             <v-btn type="button" icon="mdi-close" variant="text" aria-label="Close node settings" title="Close" @click="closeNodeModal" />
           </div>
@@ -530,23 +634,8 @@ defineExpose({
   width: 100%;
 }
 
-.workflow-title-input {
-  flex: 1 1 200px;
-  min-width: 140px;
-  max-width: min(520px, 100%);
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
-  border-radius: 8px;
-  background: rgb(var(--v-theme-surface));
-  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
-  font-size: 0.98rem;
-  font-weight: 600;
-}
-
-.workflow-title-input:disabled {
-  opacity: 0.6;
-}
+.workflow-title-input { flex: 1 1 200px; min-width: 160px; max-width: 520px; }
+.workflow-title-input :deep(input) { font-size: 1.2rem; font-weight: 650; padding: 0; }
 
 .save-dot {
   display: inline-block;
