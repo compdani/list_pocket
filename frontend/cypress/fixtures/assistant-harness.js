@@ -18,10 +18,11 @@ if (new URLSearchParams(location.search).has('mock')) {
     if (url.endsWith('/turns')) { revision = JSON.parse(options.body).context.editor.revision; return Response.json({ data: { id: 'fixture-turn' } }); }
     if (url.includes('/stream')) {
       const events = [
-        { id: 1, type: 'text_delta', data: { text: '**Updated** CTA proposal' } },
-        { id: 2, type: 'tool', data: { id: 'tool1', name: 'propose_editor_patch', status: 'completed' } },
-        { id: 3, type: 'proposal', data: { id: 'proposal1', tool: 'propose_editor_patch', status: 'pending', arguments: { revision, summary: 'Shorten CTA', operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }] } } },
-        { id: 4, type: 'done', data: null },
+        { id: 1, type: 'tool', data: { id: 'tool1', name: 'campaigns', status: 'running' } },
+        { id: 2, type: 'tool', data: { id: 'tool1', name: 'campaigns', status: 'completed' } },
+        { id: 3, type: 'text_delta', data: { text: '## Campaign performance\n\n| Campaign | Sent |\n|---|---:|\n| Newsletter | **6,211** |\n\n**Updated** CTA proposal' } },
+        { id: 4, type: 'proposal', data: { id: 'proposal1', tool: 'propose_editor_patch', status: 'pending', arguments: { revision, summary: 'Shorten CTA', operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }] } } },
+        { id: 5, type: 'done', data: null },
       ];
       return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } });
     }

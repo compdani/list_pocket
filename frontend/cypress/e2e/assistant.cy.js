@@ -8,10 +8,11 @@ function setupTurn() {
   });
   cy.intercept('GET', '**/mailapi/ai/assistant/turns/test-turn/stream*', req => {
     const events = [
-      { id: 1, type: 'text_delta', data: { text: '**Updated** CTA proposal' } },
-      { id: 2, type: 'tool', data: { id: 'tool1', name: 'propose_editor_patch', status: 'completed' } },
-      { id: 3, type: 'proposal', data: { id: 'proposal1', tool: 'propose_editor_patch', status: 'pending', arguments: { revision, summary: 'Shorten CTA', operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }] } } },
-      { id: 4, type: 'done', data: null },
+      { id: 1, type: 'tool', data: { id: 'tool1', name: 'campaigns', status: 'running' } },
+      { id: 2, type: 'tool', data: { id: 'tool1', name: 'campaigns', status: 'completed' } },
+      { id: 3, type: 'text_delta', data: { text: '## Campaign performance\n\n| Campaign | Sent |\n|---|---:|\n| Newsletter | **6,211** |\n\n**Updated** CTA proposal' } },
+      { id: 4, type: 'proposal', data: { id: 'proposal1', tool: 'propose_editor_patch', status: 'pending', arguments: { revision, summary: 'Shorten CTA', operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }] } } },
+      { id: 5, type: 'done', data: null },
     ];
     const after = Number(new URL(req.url).searchParams.get('after'));
     req.reply({ headers: { 'Content-Type': 'text/event-stream' }, body: events.filter(event => event.id > after).map(event => `data: ${JSON.stringify(event)}\n\n`).join('') });
@@ -24,6 +25,13 @@ describe('Context-aware assistant', () => {
     setupTurn();
     cy.get('textarea').type('Shorten the CTA{enter}');
     cy.contains('strong', 'Updated').should('be.visible');
+    cy.contains('h2', 'Campaign performance').should('be.visible');
+    cy.get('.assistant-message table').should('be.visible');
+    cy.get('.assistant-scroll').then($scroll => {
+      const tool = $scroll[0].querySelector('[data-tool-id="tool1"]');
+      const answer = $scroll[0].querySelector('.assistant-message');
+      expect(Boolean(tool.compareDocumentPosition(answer) & 4)).to.eq(true);
+    });
     cy.contains('Shorten CTA').should('be.visible');
     cy.window().then(win => win.assistantFixture.navigate());
     cy.contains('/analytics').should('be.visible');

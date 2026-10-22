@@ -34,6 +34,7 @@
     "grapesjs-mjml": "^1.0.8",
     "indent.js": "^0.3.5",
     "js-beautify": "^1.15.4",
+    "markdown-it": "^15.0.3",
     "pocketbase": "^0.26.8",
     "prismjs": "^1.30.0",
     "qs": "^6.15.0",

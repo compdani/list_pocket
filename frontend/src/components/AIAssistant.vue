@@ -5,17 +5,21 @@ import AppRightSidebar from './AppRightSidebar.vue';
 import { pb } from '../api';
 import { assistantContext } from '../assistant/context';
 import { assistantJSON, streamAssistant } from '../assistant/client';
+import { anchorLegacyActivity, appendAssistantEvent, conversationTranscript } from '../assistant/transcript.mjs';
+import { renderAssistantMarkdown } from '../assistant/markdown.mjs';
 import { applyEditorPatch, revision } from '../assistant/patches.mjs';
 
 const route = useRoute();
 const threads = ref([]); const active = ref(''); const draft = ref(''); const running = ref(false);
 const files = ref([]);
 const scrollArea = ref(null);
+const followOutput = ref(true);
 const error = ref(''); const controller = ref(null); const busy = ref(false); const undo = shallowRef(null);
 const current = computed(() => threads.value.find((thread) => thread.id === active.value));
 const messages = computed(() => current.value?.messages || []);
 const tools = computed(() => current.value?.tools || []);
 const proposals = computed(() => current.value?.proposals || []);
+const transcript = computed(() => conversationTranscript(current.value));
 const editorLabel = computed(() => assistantContext.editor?.label || 'Saved application data');
 const key = () => `listpocket_assistant_v1:${pb.authStore.record?.id || 'signed-out'}`;
 function persist() {
@@ -29,6 +33,7 @@ function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(key()) || 'null'); threads.value = saved?.threads || []; active.value = saved?.active || '';
   } catch { threads.value = []; }
+  threads.value.forEach(anchorLegacyActivity);
   if (!threads.value.length) newThread();
   if (!current.value) active.value = threads.value[0]?.id;
 }
@@ -41,14 +46,12 @@ const unsubscribe = pb.authStore.onChange(() => {
   controller.value?.abort(); running.value = false; undo.value = null; files.value = []; load();
 });
 onBeforeUnmount(() => { controller.value?.abort(); unsubscribe(); });
-watch(active, persist);
-watch(() => [messages.value.at(-1)?.content, proposals.value.length, tools.value.length], async () => { await nextTick(); if (scrollArea.value) scrollArea.value.scrollTop = scrollArea.value.scrollHeight; });
-function escape(text = '') { return String(text).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;'); }
-// Render a deliberately small Markdown subset; raw HTML and unsafe links stay text.
-function markdown(text) {
-  return escape(text).replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+watch(active, () => { followOutput.value = true; persist(); });
+function trackScroll() {
+  const area = scrollArea.value;
+  if (area) followOutput.value = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
 }
+watch(() => [messages.value.at(-1)?.content, proposals.value.length, tools.value.length], async () => { await nextTick(); if (scrollArea.value && followOutput.value) scrollArea.value.scrollTop = scrollArea.value.scrollHeight; });
 async function listen(thread) {
   const epoch = sessionEpoch;
   controller.value = new AbortController(); running.value = true;
@@ -58,12 +61,7 @@ async function listen(thread) {
       await streamAssistant(thread.turn, thread.after || 0, (event) => {
         if (epoch !== sessionEpoch || event.id <= thread.after) return;
         thread.after = event.id;
-        if (event.type === 'text_delta') thread.messages[thread.messages.length - 1].content += event.data.text;
-        if (event.type === 'tool') {
-          const index = thread.tools.findIndex((tool) => tool.id === event.data.id);
-          if (index < 0) thread.tools.push(event.data); else thread.tools[index] = event.data;
-        }
-        if (event.type === 'proposal') thread.proposals.push({ ...event.data, turn: thread.turn, editorKey: thread.editorKey });
+        appendAssistantEvent(thread, event);
         if (event.type === 'error') error.value = event.data.message;
         if (event.type === 'done') { completed = true; thread.turn = null; }
         persist();
@@ -79,6 +77,7 @@ async function listen(thread) {
 async function send(text = draft.value) {
   if (!text.trim() || running.value) return;
   const epoch = sessionEpoch;
+  followOutput.value = true;
   const thread = current.value; error.value = ''; draft.value = ''; undo.value = null;
   thread.messages.push({ role: 'user', content: text });
   if (thread.title === 'New conversation') thread.title = text.slice(0, 50);
@@ -93,7 +92,7 @@ async function send(text = draft.value) {
     });
     if (epoch !== sessionEpoch) return;
     thread.attachments = [...(thread.attachments || []), ...files.value.map(({ data, ...file }) => file)];
-    thread.turn = result.id; thread.after = 0; thread.messages.push({ role: 'assistant', content: '' }); persist(); await listen(thread);
+    thread.turn = result.id; thread.after = 0; thread.messages.push({ role: 'assistant', content: '', parts: [] }); persist(); await listen(thread);
   } catch (err) { if (epoch !== sessionEpoch) return; error.value = err.message; running.value = false; persist(); }
 }
 async function stop() {
@@ -168,15 +167,27 @@ const suggestions = computed(() => route.path.includes('workflow')
         <v-btn size="x-small" variant="text" :disabled="running" @click="importLegacy">Import previous campaign chats</v-btn>
         <div class="d-flex flex-wrap ga-1 mt-2"><v-chip size="small">{{ route.path }}</v-chip><v-chip size="small" color="primary">{{ editorLabel }}</v-chip></div>
       </div>
-      <div ref="scrollArea" class="assistant-scroll pa-4" aria-live="polite">
+      <div ref="scrollArea" class="assistant-scroll pa-4" aria-live="polite" @scroll="trackScroll">
         <div v-if="!messages.length" class="text-medium-emphasis my-6">Ask about your data, plan a campaign, or edit what you’re working on.<v-btn v-for="suggestion in suggestions" :key="suggestion" block variant="tonal" class="mt-2" @click="send(suggestion)">{{ suggestion }}</v-btn></div>
-        <article v-for="(message, index) in messages" :key="index" class="mb-4"><div class="text-caption text-medium-emphasis">{{ message.role === 'user' ? 'You' : 'Assistant' }}</div><div class="assistant-message" v-html="markdown(message.content)" /></article>
-        <details v-for="tool in tools" :key="tool.id" class="assistant-tool mb-2"><summary>{{ tool.name }} · {{ tool.status }}</summary><pre>{{ JSON.stringify(tool.result, null, 2) }}</pre></details>
-        <v-card v-for="proposal in proposals" :key="proposal.id" variant="outlined" class="my-3">
-          <v-card-title class="text-body-1">{{ proposal.arguments.summary || proposal.tool }}</v-card-title>
-          <v-card-text><div v-for="(op, index) in proposal.arguments.operations || []" :key="index" class="mb-3"><strong>{{ op.field || op.blockId || op.id || op.op }}</strong><pre class="text-error">{{ op.before }}</pre><pre class="text-success">{{ op.after || JSON.stringify(op.value) }}</pre></div><details v-if="!proposal.arguments.operations"><summary>Review draft</summary><pre>{{ JSON.stringify(proposal.arguments, null, 2) }}</pre></details><div v-if="proposal.status !== 'pending'">{{ proposal.status }}</div><a v-if="proposal.status === 'applied' && proposal.result?.source?.href" :href="proposal.result.source.href">Open saved draft</a></v-card-text>
-          <v-card-actions v-if="proposal.status === 'pending'"><v-btn :disabled="busy || running" @click="decide(proposal, false)">Discard</v-btn><v-btn color="primary" :loading="busy" :disabled="running" @click="decide(proposal, true)">Apply</v-btn></v-card-actions>
+        <template v-for="entry in transcript" :key="entry.id">
+          <article v-if="entry.type === 'text'" class="mb-4" :data-role="entry.role">
+            <div class="text-caption text-medium-emphasis">{{ entry.role === 'user' ? 'You' : 'Assistant' }}</div>
+            <div v-if="entry.role === 'user'" class="assistant-user-message">{{ entry.content }}</div>
+            <div v-else class="assistant-message" v-html="renderAssistantMarkdown(entry.content)" />
+          </article>
+          <details v-else-if="entry.type === 'tool'" class="assistant-tool mb-3" :data-tool-id="entry.tool.id">
+            <summary>{{ entry.tool.name }} · {{ entry.tool.status }}</summary><pre>{{ JSON.stringify(entry.tool.result, null, 2) }}</pre>
+          </details>
+          <details v-else-if="entry.type === 'legacy_tools'" class="assistant-tool mb-3">
+            <summary>Earlier tool activity · {{ entry.tools.length }} calls</summary>
+            <details v-for="tool in entry.tools" :key="tool.id" class="mt-2"><summary>{{ tool.name }} · {{ tool.status }}</summary><pre>{{ JSON.stringify(tool.result, null, 2) }}</pre></details>
+          </details>
+        <v-card v-if="entry.type === 'proposal'" variant="outlined" class="my-3">
+          <v-card-title class="text-body-1">{{ entry.proposal.arguments.summary || entry.proposal.tool }}</v-card-title>
+          <v-card-text><div v-for="(op, index) in entry.proposal.arguments.operations || []" :key="index" class="mb-3"><strong>{{ op.field || op.blockId || op.id || op.op }}</strong><pre class="text-error">{{ op.before }}</pre><pre class="text-success">{{ op.after || JSON.stringify(op.value) }}</pre></div><details v-if="!entry.proposal.arguments.operations"><summary>Review draft</summary><pre>{{ JSON.stringify(entry.proposal.arguments, null, 2) }}</pre></details><div v-if="entry.proposal.status !== 'pending'">{{ entry.proposal.status }}</div><a v-if="entry.proposal.status === 'applied' && entry.proposal.result?.source?.href" :href="entry.proposal.result.source.href">Open saved draft</a></v-card-text>
+          <v-card-actions v-if="entry.proposal.status === 'pending'"><v-btn :disabled="busy || running" @click="decide(entry.proposal, false)">Discard</v-btn><v-btn color="primary" :loading="busy" :disabled="running" @click="decide(entry.proposal, true)">Apply</v-btn></v-card-actions>
         </v-card>
+        </template>
         <div v-if="running" class="text-caption text-medium-emphasis py-2"><v-progress-circular indeterminate size="14" width="2" class="mr-2" />Working…</div>
         <v-btn v-if="undo" variant="text" @click="undoEdit">Undo last edit</v-btn>
         <v-alert v-if="error" type="error" variant="tonal" class="my-2">{{ error }}</v-alert>
@@ -191,7 +202,17 @@ const suggestions = computed(() => route.path.includes('workflow')
 <style scoped>
 .assistant-panel { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .assistant-scroll { flex: 1; overflow-y: auto; min-height: 0; }
-.assistant-message { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.assistant-user-message { white-space: pre-wrap; overflow-wrap: anywhere; }
+.assistant-message { overflow-wrap: anywhere; line-height: 1.6; overflow-x: auto; }
+.assistant-message :deep(p), .assistant-message :deep(ul), .assistant-message :deep(ol), .assistant-message :deep(blockquote) { margin-bottom: 12px; }
+.assistant-message :deep(h1), .assistant-message :deep(h2), .assistant-message :deep(h3) { font-size: 1.1rem; line-height: 1.4; margin: 18px 0 10px; }
+.assistant-message :deep(:first-child) { margin-top: 0; }
+.assistant-message :deep(ul), .assistant-message :deep(ol) { padding-left: 24px; }
+.assistant-message :deep(table) { border-collapse: collapse; font-size: 0.85rem; width: 100%; margin: 12px 0; }
+.assistant-message :deep(th), .assistant-message :deep(td) { padding: 8px 10px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); vertical-align: top; }
+.assistant-message :deep(th) { background: rgba(var(--v-theme-on-surface), 0.04); font-weight: 600; }
+.assistant-message :deep(pre) { padding: 12px; background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 6px; }
+.assistant-message :deep(blockquote) { padding-left: 12px; border-left: 3px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
 .assistant-tool { padding: 10px; border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); border-radius: 8px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: 12px; }
 </style>
