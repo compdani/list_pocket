@@ -16,16 +16,18 @@ export function applyEditorPatch(snapshot, proposal) {
   const next = JSON.parse(JSON.stringify(snapshot));
   if (!Array.isArray(proposal.operations) || !proposal.operations.length) throw new Error('Empty proposal');
   for (const change of proposal.operations) {
-    if (['set', 'replace_text', 'replace_body', 'block'].includes(change.op)
-      && (typeof change.before !== 'string' || typeof change.after !== 'string')) throw new Error('Edits require original and replacement text');
+    // The revision already pins the whole snapshot, so whole-value edits only
+    // need their replacement; before is checked when it is supplied.
+    if (['set', 'replace_text', 'replace_body', 'block'].includes(change.op) && typeof change.after !== 'string') throw new Error('Edits require replacement text');
+    if (['replace_text', 'block'].includes(change.op) && typeof change.before !== 'string') throw new Error('Edits require original and replacement text');
     if (change.op === 'set' && ['subject', 'preheader'].includes(change.field)) {
-      if (next[change.field] !== change.before) throw new Error('Field changed');
+      if (typeof change.before === 'string' && (next[change.field] ?? '') !== change.before) throw new Error('Field changed');
       next[change.field] = change.after;
     } else if (change.op === 'replace_text') {
       if (!change.before || next.body.split(change.before).length !== 2) throw new Error('Text must match exactly once; select a more specific passage.');
       next.body = next.body.replace(change.before, () => change.after);
     } else if (change.op === 'replace_body') {
-      if (next.body !== change.before) throw new Error('Body changed');
+      if (typeof change.before === 'string' && next.body !== change.before) throw new Error('Body changed');
       next.body = change.after;
     } else if (change.op === 'block' && next.contentType === 'visual') {
       const document = JSON.parse(next.body);

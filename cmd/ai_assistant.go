@@ -299,7 +299,7 @@ func (a *App) assistantTools() []assistantTool {
 	for i := range tools {
 		tools[i].properties = query
 	}
-	tools = append(tools, assistantTool{name: "propose_editor_patch", description: "Propose targeted edits to the active unsaved editor. Never rewrite a whole body unless explicitly requested or creating new content. Copy revision verbatim from context editor.revision (a short token such as r1abc2def). Operations: set (subject/preheader), replace_text (body; exact unique before/after), block (visual JSON stable blockId; before/after JSON), replace_body (explicit rewrite only). Workflow editor operations: node_upsert,node_remove,edge_upsert,edge_remove with stable id and value. All changes require user review.", properties: map[string]any{"revision": stringProp("editor.revision token from the current context, copied verbatim"), "summary": stringProp("Short description"), "operations": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"op": stringProp("Operation"), "field": stringProp("Field"), "before": stringProp("Expected original value"), "after": stringProp("Replacement value"), "blockId": stringProp("Stable block ID"), "id": stringProp("Node or edge ID"), "value": map[string]any{"type": "object"}}, "required": []string{"op"}}}}, required: []string{"revision", "operations"}, mutation: true},
+	tools = append(tools, assistantTool{name: "propose_editor_patch", description: "Propose targeted edits to the active unsaved editor. Never rewrite a whole body unless explicitly requested or creating new content. Copy revision verbatim from context editor.revision (a short token such as r1abc2def). Operations: set (field subject/preheader; after required), replace_text (body; exact unique before and after required), block (visual JSON stable blockId; before/after JSON required), replace_body (explicit rewrite only; after is the complete new body, omit before). Workflow editor operations: node_upsert,node_remove,edge_upsert,edge_remove with stable id and value. All changes require user review.", properties: map[string]any{"revision": stringProp("editor.revision token from the current context, copied verbatim"), "summary": stringProp("Short description"), "operations": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"op": stringProp("Operation"), "field": stringProp("Field"), "before": stringProp("Expected original value"), "after": stringProp("Replacement value"), "blockId": stringProp("Stable block ID"), "id": stringProp("Node or edge ID"), "value": map[string]any{"type": "object"}}, "required": []string{"op"}}}}, required: []string{"revision", "operations"}, mutation: true},
 		assistantTool{name: "create_campaign_draft", description: "Propose a new campaign draft. Read a similar campaign first to learn fields. Preserve audience exclusions. Never send or schedule.", properties: map[string]any{"draft": map[string]any{"type": "object"}}, required: []string{"draft"}, mutation: true, handler: a.CreateCampaign, perms: []string{"campaigns:manage_all", "campaigns:manage"}},
 		assistantTool{name: "save_workflow_draft", description: "Propose a validated workflow draft. id empty creates; otherwise revision must match the revisions map returned by workflows. Supply name,nodes,edges in graph using existing node types. Never publishes or executes. Prefer targeted editor proposals when a workflow is open.", properties: map[string]any{"id": stringProp("Workflow ID or empty"), "revision": stringProp("Expected saved graph revision from workflows"), "graph": map[string]any{"type": "object", "description": "{name, nodes: [{id,type,label,description,config,schema,positionX,positionY,contactMode}], edges: [{id,sourceNodeId,targetNodeId,sourceHandle,targetHandle,condition}]}. Exactly one trigger. Types: trigger, transform, condition, event_start, wait_until, http_request, pb_update, send_transactional_email, campaign_launch. Trigger config mode=manual for new drafts."}}, required: []string{"graph"}, mutation: true, handler: workflow.AssistantSave})
 	return tools
@@ -535,6 +535,8 @@ func (a *App) runAssistant(ctx context.Context, re *pbcore.RequestEvent, t *assi
 			if mutation {
 				if !json.Valid([]byte(call.Function.Arguments)) {
 					toolErr = errors.New("invalid proposal JSON")
+				} else if err := validateAssistantProposal(call.Function.Name, json.RawMessage(call.Function.Arguments)); err != nil {
+					toolErr = err
 				} else {
 					p := &assistantProposal{ID: assistantID(), Tool: call.Function.Name, Arguments: json.RawMessage(call.Function.Arguments), Status: "pending"}
 					t.mu.Lock()
@@ -558,6 +560,69 @@ func (a *App) runAssistant(ctx context.Context, re *pbcore.RequestEvent, t *assi
 		}
 	}
 	return errors.New("tool limit reached; continue in another turn")
+}
+
+// validateAssistantProposal rejects editor operations the browser cannot apply,
+// so the model can correct them within the turn rather than after review.
+func validateAssistantProposal(tool string, raw json.RawMessage) error {
+	if tool != "propose_editor_patch" {
+		return nil
+	}
+	var args struct {
+		Revision   string `json:"revision"`
+		Operations []struct {
+			Op      string          `json:"op"`
+			Field   string          `json:"field"`
+			Before  *string         `json:"before"`
+			After   *string         `json:"after"`
+			BlockID string          `json:"blockId"`
+			ID      string          `json:"id"`
+			Value   json.RawMessage `json:"value"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal(raw, &args); err != nil {
+		return fmt.Errorf("invalid proposal: %w", err)
+	}
+	if args.Revision == "" {
+		return errors.New("revision is required; copy editor.revision from the context")
+	}
+	if len(args.Operations) == 0 {
+		return errors.New("operations must not be empty")
+	}
+	for i, op := range args.Operations {
+		n := i + 1
+		switch op.Op {
+		case "set":
+			if op.Field != "subject" && op.Field != "preheader" {
+				return fmt.Errorf("operation %d: set field must be subject or preheader", n)
+			}
+			if op.After == nil {
+				return fmt.Errorf("operation %d: set requires after", n)
+			}
+		case "replace_body":
+			if op.After == nil {
+				return fmt.Errorf("operation %d: replace_body requires after (the complete new body)", n)
+			}
+		case "replace_text", "block":
+			if op.Before == nil || *op.Before == "" || op.After == nil {
+				return fmt.Errorf("operation %d: %s requires non-empty before and after strings", n, op.Op)
+			}
+			if op.Op == "block" && op.BlockID == "" {
+				return fmt.Errorf("operation %d: block requires blockId", n)
+			}
+		case "node_upsert", "edge_upsert":
+			if op.ID == "" || len(op.Value) == 0 {
+				return fmt.Errorf("operation %d: %s requires id and value", n, op.Op)
+			}
+		case "node_remove", "edge_remove":
+			if op.ID == "" {
+				return fmt.Errorf("operation %d: %s requires id", n, op.Op)
+			}
+		default:
+			return fmt.Errorf("operation %d: unsupported op %q", n, op.Op)
+		}
+	}
+	return nil
 }
 
 type assistantCall struct {

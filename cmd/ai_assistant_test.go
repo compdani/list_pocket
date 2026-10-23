@@ -203,3 +203,25 @@ func TestAssistantToolLoopStreamsAndRecoversFromPermissionFailure(t *testing.T) 
 		t.Fatal("text was not streamed between tool calls")
 	}
 }
+
+func TestValidateAssistantProposal(t *testing.T) {
+	valid := `{"revision":"r1","operations":[{"op":"set","field":"subject","after":"New"},{"op":"replace_body","after":"<p>x</p>"},{"op":"replace_text","before":"a","after":"b"}]}`
+	if err := validateAssistantProposal("propose_editor_patch", json.RawMessage(valid)); err != nil {
+		t.Fatalf("valid proposal rejected: %v", err)
+	}
+	for name, raw := range map[string]string{
+		"no revision":         `{"operations":[{"op":"replace_body","after":"x"}]}`,
+		"no operations":       `{"revision":"r1","operations":[]}`,
+		"body without after":  `{"revision":"r1","operations":[{"op":"replace_body"}]}`,
+		"text without before": `{"revision":"r1","operations":[{"op":"replace_text","after":"b"}]}`,
+		"unknown field":       `{"revision":"r1","operations":[{"op":"set","field":"body","after":"b"}]}`,
+		"unknown op":          `{"revision":"r1","operations":[{"op":"rewrite","after":"b"}]}`,
+	} {
+		if err := validateAssistantProposal("propose_editor_patch", json.RawMessage(raw)); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+	if err := validateAssistantProposal("create_campaign_draft", json.RawMessage(`{}`)); err != nil {
+		t.Errorf("other tools are not validated here: %v", err)
+	}
+}

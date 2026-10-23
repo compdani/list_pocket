@@ -34,3 +34,13 @@ test('workflow edits retain stable IDs and other configurations', () => {
   assert.deepEqual(after.nodes[0], before.nodes[0]); assert.equal(after.nodes[1].config.days, 2);
   assert.throws(() => applyEditorPatch(before, proposal(before, [{ op: 'node_upsert', id: 'wait', value: { id: 'other' } }])), /Invalid graph ID/);
 });
+test('whole-body rewrites and field sets apply without echoing the original', () => {
+  const before = { subject: '', preheader: 'Old', contentType: 'html', body: '<p>Old article</p><p>Florida Deal Room</p>' };
+  const after = applyEditorPatch(before, proposal(before, [
+    { op: 'set', field: 'subject', after: 'October 23 brief' },
+    { op: 'replace_body', after: '<p>October 23</p><p>Florida Deal Room</p>' },
+  ]));
+  assert.equal(after.subject, 'October 23 brief'); assert.equal(after.body, '<p>October 23</p><p>Florida Deal Room</p>');
+  assert.throws(() => applyEditorPatch(before, proposal(before, [{ op: 'replace_body' }])), /replacement text/);
+  assert.throws(() => applyEditorPatch(before, proposal(before, [{ op: 'replace_text', after: 'x' }])), /original and replacement/);
+});
