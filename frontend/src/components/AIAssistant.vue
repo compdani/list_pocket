@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppRightSidebar from './AppRightSidebar.vue';
+import Media from '../views/Media.vue';
 import { pb } from '../api';
 import { assistantContext } from '../assistant/context';
 import { assistantJSON, streamAssistant } from '../assistant/client';
@@ -11,7 +12,7 @@ import { applyEditorPatch, revision } from '../assistant/patches.mjs';
 
 const route = useRoute();
 const threads = ref([]); const active = ref(''); const draft = ref(''); const running = ref(false);
-const files = ref([]);
+const files = ref([]); const mediaOpen = ref(false);
 const scrollArea = ref(null);
 const followOutput = ref(true);
 const error = ref(''); const controller = ref(null); const busy = ref(false); const undo = shallowRef(null);
@@ -138,6 +139,16 @@ async function attach(event) {
   } catch (err) { error.value = err.message; }
   event.target.value = '';
 }
+// Media library pictures go to the model as name + hosted URL, so it can place them in content.
+function addPicture(media) {
+  mediaOpen.value = false;
+  const thread = current.value;
+  if (!media?.url || !thread) return;
+  thread.pictures ||= [];
+  if (!thread.pictures.some((picture) => picture.url === media.url)) thread.pictures.push({ name: media.filename || '', url: media.url });
+  persist();
+}
+function removePicture(index) { current.value.pictures.splice(index, 1); persist(); }
 function importLegacy() {
   try {
     const ownerKey = 'listpocket_ai_builder_legacy_owner';
@@ -194,9 +205,10 @@ const suggestions = computed(() => route.path.includes('workflow')
         <v-btn v-if="current?.turn && !running" @click="listen(current)">Resume</v-btn>
         <v-btn v-if="error && !running" @click="send([...messages].reverse().find(m => m.role === 'user')?.content || '')">Retry</v-btn>
       </div>
-      <div class="px-3"><v-chip v-for="(file, index) in files" :key="index" closable size="small" @click:close="files.splice(index, 1)">{{ file.filename }}</v-chip></div>
-      <form class="pa-3 border-t" @submit.prevent="send()"><v-textarea v-model="draft" label="Message assistant" rows="3" auto-grow hide-details :disabled="running" @keydown.enter.exact.prevent="send()" /><label class="text-caption">Attach reference<input type="file" multiple accept="image/*,application/pdf,text/*" :disabled="running" @change="attach" /></label><div class="d-flex justify-space-between mt-2"><span class="text-caption text-medium-emphasis">Changes are reviewed before applying.</span><v-btn v-if="running" variant="tonal" @click="stop">Stop</v-btn><v-btn v-else type="submit" color="primary" :disabled="!draft.trim()">Send</v-btn></div></form>
+      <div class="px-3"><v-chip v-for="(file, index) in files" :key="index" closable size="small" @click:close="files.splice(index, 1)">{{ file.filename }}</v-chip><v-chip v-for="(picture, index) in current?.pictures || []" :key="picture.url" closable size="small" prepend-icon="mdi-image-outline" :title="picture.url" @click:close="removePicture(index)">{{ picture.name || picture.url.split('/').pop() }}</v-chip></div>
+      <form class="pa-3 border-t" @submit.prevent="send()"><v-textarea v-model="draft" label="Message assistant" rows="3" auto-grow hide-details :disabled="running" @keydown.enter.exact.prevent="send()" /><div class="d-flex align-center ga-3"><label class="text-caption">Attach reference<input type="file" multiple accept="image/*,application/pdf,text/*" :disabled="running" @change="attach" /></label><v-btn size="x-small" variant="outlined" prepend-icon="mdi-image-plus" :disabled="running" @click="mediaOpen = true">Add picture</v-btn></div><div class="d-flex justify-space-between mt-2"><span class="text-caption text-medium-emphasis">Changes are reviewed before applying.</span><v-btn v-if="running" variant="tonal" @click="stop">Stop</v-btn><v-btn v-else type="submit" color="primary" :disabled="!draft.trim()">Send</v-btn></div></form>
     </div>
+    <v-dialog v-model="mediaOpen" max-width="900"><v-card><v-card-text class="pt-0"><Media is-modal type="pictures" @selected="addPicture" @close="mediaOpen = false" /></v-card-text></v-card></v-dialog>
   </AppRightSidebar>
 </template>
 <style scoped>

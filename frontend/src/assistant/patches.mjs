@@ -1,4 +1,16 @@
-export function revision(value) { return JSON.stringify(value); }
+// A short content hash the model can echo back verbatim; the full JSON of a
+// long body cannot be reproduced reliably.
+export function revision(value) {
+  const text = JSON.stringify(value) ?? '';
+  let h1 = 0xdeadbeef; let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761); h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `r${(h2 >>> 0).toString(36)}${(h1 >>> 0).toString(36)}`;
+}
 export function applyEditorPatch(snapshot, proposal) {
   if (proposal.revision !== revision(snapshot)) throw new Error('The editor changed. Ask the assistant to refresh its proposal.');
   const next = JSON.parse(JSON.stringify(snapshot));
