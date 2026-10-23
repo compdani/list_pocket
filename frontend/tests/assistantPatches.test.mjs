@@ -41,6 +41,12 @@ test('whole-body rewrites and field sets apply without echoing the original', ()
     { op: 'replace_body', after: '<p>October 23</p><p>Florida Deal Room</p>' },
   ]));
   assert.equal(after.subject, 'October 23 brief'); assert.equal(after.body, '<p>October 23</p><p>Florida Deal Room</p>');
+  const empty = applyEditorPatch(before, proposal(before, [
+    { op: 'set', field: 'preheader', before: '', after: 'New preview' },
+    { op: 'replace_body', before: '', after: '<p>New</p>' },
+  ]));
+  assert.equal(empty.preheader, 'New preview'); assert.equal(empty.body, '<p>New</p>');
+  assert.throws(() => applyEditorPatch(before, proposal(before, [{ op: 'replace_body', before: '<p>Other</p>', after: 'x' }])), /Body changed/);
   assert.throws(() => applyEditorPatch(before, proposal(before, [{ op: 'replace_body' }])), /replacement text/);
   assert.throws(() => applyEditorPatch(before, proposal(before, [{ op: 'replace_text', after: 'x' }])), /original and replacement/);
 });
