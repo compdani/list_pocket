@@ -323,13 +323,26 @@ export default {
       this.createUser();
     },
 
-    createUser() {
-      const form = {
-        ...this.form,
+    // Builds an explicit snake_case payload. Spreading the camelCase form would send
+    // both passwordLogin and password_login, which the server's JSON decoder rejects
+    // as duplicate members (it matches names ignoring case and underscores).
+    payload() {
+      return {
+        username: this.form.username,
+        email: this.form.email,
+        name: this.form.name,
+        password: this.form.password,
+        password2: this.form.password2,
+        type: this.form.type,
+        status: this.form.status,
         password_login: this.form.passwordLogin,
         user_role_id: this.form.userRoleId,
         list_role_id: this.form.listRoleId || null,
       };
+    },
+
+    createUser() {
+      const form = this.payload();
 
       this.$api.createUser(form).then((data) => {
         this.$emit('finished');
@@ -348,11 +361,8 @@ export default {
 
     updateUser() {
       const form = {
-        ...this.form,
+        ...this.payload(),
         id: this.identity,
-        password_login: this.form.passwordLogin,
-        user_role_id: this.form.userRoleId,
-        list_role_id: this.form.listRoleId || null,
       };
 
       this.$api.updateUser(form).then((data) => {
