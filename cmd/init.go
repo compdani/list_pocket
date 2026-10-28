@@ -474,6 +474,7 @@ func initAuth(co *core.Core, pb *pocketbase.PocketBase, ko *config.Conf) *auth.A
 		GetUser:           func(recordID string) (auth.User, error) { return co.GetUser(recordID, "", "") },
 		GetUsers:          co.GetUsers,
 		GetUserByUsername: func(username string) (auth.User, error) { return co.GetUser("", username, "") },
+		GetUserByEmail:    func(email string) (auth.User, error) { return co.GetUser("", "", email) },
 	}
 
 	a, err := auth.New(auth.Config{AuthCollection: "users"}, nil, pb, callbacks, lo)

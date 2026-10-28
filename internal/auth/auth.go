@@ -33,6 +33,7 @@ type Callbacks struct {
 	GetUser           func(recordID string) (User, error)
 	GetUsers          func() ([]User, error)
 	GetUserByUsername func(username string) (User, error)
+	GetUserByEmail    func(email string) (User, error)
 }
 
 type Auth struct {
@@ -213,7 +214,12 @@ func (o *Auth) LoginUser(username, password string) (User, error) {
 		return User{}, apperr.Internal("user lookup callback missing")
 	}
 
+	// The identifier may be a username or an e-mail. Usernames can contain '@',
+	// so an exact username match always wins over an e-mail match.
 	user, err := o.cb.GetUserByUsername(username)
+	if err != nil && strings.Contains(username, "@") && o.cb.GetUserByEmail != nil {
+		user, err = o.cb.GetUserByEmail(strings.ToLower(username))
+	}
 	if err != nil {
 		return User{}, apperr.Forbidden("invalid credentials")
 	}

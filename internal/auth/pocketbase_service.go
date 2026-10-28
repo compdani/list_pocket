@@ -4,12 +4,26 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
+
+var reAPIEmailInvalid = regexp.MustCompile(`[^a-z0-9_\-]+`)
+
+// APIUserEmail returns the placeholder e-mail stored for API users, which have
+// no real address. The username may itself contain '@' or dots, so it is
+// reduced to characters that always form a valid local part.
+func APIUserEmail(username string) string {
+	local := strings.Trim(reAPIEmailInvalid.ReplaceAllString(strings.ToLower(username), "_"), "_")
+	if local == "" {
+		local = "api"
+	}
+	return local + "@api.local"
+}
 
 // PocketBaseAuthService wraps auth-record operations used by the auth module.
 // It centralizes direct PocketBase interactions so login and token flows
@@ -41,7 +55,7 @@ func (s *PocketBaseAuthService) UpsertUser(u User, lookupUsername string) (*pbco
 
 	email := strings.TrimSpace(u.Email.String)
 	if email == "" {
-		email = fmt.Sprintf("%s@api.local", strings.ToLower(u.Username))
+		email = APIUserEmail(u.Username)
 	}
 
 	roleID := u.UserRoleID

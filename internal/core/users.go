@@ -68,7 +68,7 @@ func (c *Core) CreateUser(u auth.User) (auth.User, error) {
 			return auth.User{}, err
 		}
 
-		u.Email = null.String{String: u.Username + "@api", Valid: true}
+		u.Email = null.String{String: auth.APIUserEmail(u.Username), Valid: true}
 		u.PasswordLogin = false
 		u.Password = null.String{String: tk, Valid: true}
 	}
@@ -298,7 +298,7 @@ func (c *Core) nextLegacyUserID() (int, error) {
 func (c *Core) applyUserToRecord(rec *pbcore.Record, u auth.User, create bool) error {
 	email := strings.TrimSpace(u.Email.String)
 	if email == "" {
-		email = fmt.Sprintf("%s@api.local", strings.ToLower(u.Username))
+		email = auth.APIUserEmail(u.Username)
 	}
 
 	roleID := u.UserRoleID
