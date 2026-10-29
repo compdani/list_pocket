@@ -80,6 +80,15 @@ func parsePermissions(raw any) []string {
 		}
 
 		return []string{value}
+	case []byte:
+		return parsePermissions(string(value))
+	case json.Marshaler:
+		// PocketBase JSON fields come back as types.JSONRaw, not []string.
+		encoded, err := value.MarshalJSON()
+		if err != nil {
+			return []string{}
+		}
+		return parsePermissions(string(encoded))
 	default:
 		return []string{}
 	}
@@ -549,6 +558,11 @@ func (c *Core) UpsertListPermissions(roleRecordID string, lp []auth.ListPermissi
 				return apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
 			}
 			rec = pbcore.NewRecord(col)
+			legacyID, nextErr := c.nextRoleLegacyID()
+			if nextErr != nil {
+				return apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", nextErr.Error()))
+			}
+			rec.Set("legacy_id", legacyID)
 			rec.Set("type", auth.RoleTypeList)
 			rec.Set("parent_id", parent.Id)
 			rec.Set("list_record_id", permission.ID)

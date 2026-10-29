@@ -483,6 +483,15 @@ func normalizeStringArray(raw any) []string {
 		}
 
 		return []string{value}
+	case []byte:
+		return normalizeStringArray(string(value))
+	case json.Marshaler:
+		// PocketBase JSON fields come back as types.JSONRaw, not []string.
+		encoded, err := value.MarshalJSON()
+		if err != nil {
+			return nil
+		}
+		return normalizeStringArray(string(encoded))
 	default:
 		return nil
 	}
