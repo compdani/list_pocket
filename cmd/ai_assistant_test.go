@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/compdani/list_pocket/internal/auth"
+	"github.com/compdani/list_pocket/internal/flow/llm"
+	"github.com/compdani/list_pocket/internal/plugins"
 	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
@@ -14,29 +16,26 @@ import (
 	"testing"
 )
 
-func TestAssistantStreamDeltasAndFragmentedCalls(t *testing.T) {
-	stream := `data: {"choices":[{"delta":{"content":"Hello "}}]}
-
-data: {"choices":[{"delta":{"content":"there","tool_calls":[{"index":0,"id":"call1","function":{"name":"campaigns","arguments":"{\"id\":"}}]}}]}
-
-data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"123\"}"}}]},"finish_reason":"tool_calls"}]}
-
-data: [DONE]
-
-`
-	var deltas []string
-	calls, text, err := consumeAssistantStream(strings.NewReader(stream), func(d string) { deltas = append(deltas, d) })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(deltas) != 2 || text != "Hello there" || len(calls) != 1 || calls[0].Function.Arguments != `{"id":"123"}` {
-		t.Fatalf("unexpected result: %q %#v", text, calls)
-	}
-}
-func TestAssistantRejectsIncompleteProviderStream(t *testing.T) {
-	for _, stream := range []string{`data: {"choices":[{"delta":{"content":"partial"}}]}` + "\n", `data: {"error":{"message":"failure"}}` + "\n", `data: {"choices":[{"finish_reason":"length"}]}` + "\n"} {
-		if _, _, err := consumeAssistantStream(strings.NewReader(stream), func(string) {}); err == nil {
-			t.Fatal("expected incomplete/error stream to fail")
+func TestAssistantRejectsIncompleteProviderReply(t *testing.T) {
+	t.Setenv("LISTPOCKET_AI_API_KEY", "fixture-key")
+	original := http.DefaultClient
+	defer func() { http.DefaultClient = original }()
+	for name, stream := range map[string]string{
+		"ended early":  `data: {"choices":[{"delta":{"content":"partial"}}]}` + "\n",
+		"stream error": `data: {"error":{"message":"failure"}}` + "\n",
+		"cut short":    `data: {"choices":[{"finish_reason":"length"}]}` + "\n",
+	} {
+		http.DefaultClient = &http.Client{Transport: assistantRoundTrip(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(stream)), Header: http.Header{}}, nil
+		})}
+		app := &App{auth: &auth.Auth{}}
+		re := &pbcore.RequestEvent{}
+		re.Request = httptest.NewRequest("POST", "/", nil)
+		re.Set(auth.UserHTTPCtxKey, auth.User{})
+		turn := &assistantTurn{proposals: map[string]*assistantProposal{}}
+		err := app.runAssistant(context.Background(), re, turn, assistantRequest{Messages: []assistantMessage{{Role: "user", Content: "hi"}}, Context: json.RawMessage(`{}`)}, "m")
+		if err == nil {
+			t.Errorf("%s: expected a failure", name)
 		}
 	}
 }
@@ -223,5 +222,122 @@ func TestValidateAssistantProposal(t *testing.T) {
 	}
 	if err := validateAssistantProposal("create_campaign_draft", json.RawMessage(`{}`)); err != nil {
 		t.Errorf("other tools are not validated here: %v", err)
+	}
+}
+
+// Plugins run with full access, so other roles can't see or call these tools, whatever
+// the model asks for.
+func TestAssistantPluginToolsAreSuperAdminOnly(t *testing.T) {
+	app := &App{auth: &auth.Auth{}, plugins: &plugins.Manager{}}
+	staff := &pbcore.RequestEvent{}
+	staff.Request = httptest.NewRequest("POST", "/", nil)
+	staff.Set(auth.UserHTTPCtxKey, auth.User{UserRoleID: auth.SuperAdminRoleID + 1})
+	admin := &pbcore.RequestEvent{}
+	admin.Request = httptest.NewRequest("POST", "/", nil)
+	admin.Set(auth.UserHTTPCtxKey, auth.User{UserRoleID: auth.SuperAdminRoleID})
+
+	names := func(re *pbcore.RequestEvent) map[string]bool {
+		out := map[string]bool{}
+		for _, tool := range app.assistantToolsFor(re) {
+			out[tool.name] = true
+		}
+		return out
+	}
+	for _, name := range []string{"plugin_reference", "plugins", "plugin_files", "plugin_draft_write", "plugin_draft_edit", "propose_plugin"} {
+		if names(staff)[name] {
+			t.Errorf("%s is visible to staff", name)
+		}
+		if !names(admin)[name] {
+			t.Errorf("%s is missing for a super admin", name)
+		}
+		if _, err := app.executeAssistantTool(staff, name, json.RawMessage(`{}`), true); err == nil || err.Error() != "unknown tool" {
+			t.Errorf("%s ran for staff: %v", name, err)
+		}
+	}
+	// A super admin still needs a person's approval to install.
+	if _, err := app.executeAssistantTool(admin, "propose_plugin", json.RawMessage(`{}`), false); err == nil || err.Error() != "approval required" {
+		t.Errorf("install without approval: %v", err)
+	}
+	if out, err := app.executeAssistantTool(admin, "plugin_reference", json.RawMessage(`{}`), false); err != nil || !strings.Contains(fmt.Sprint(out), "plugin.tool") {
+		t.Errorf("the reference should hold the plugin guide: %v", err)
+	}
+}
+
+func TestAssistantTokenLimit(t *testing.T) {
+	t.Setenv("LISTPOCKET_AI_MAX_OUTPUT_TOKENS", "")
+	if got := assistantTokenLimit()["max_completion_tokens"]; got != assistantMaxOutputTokens {
+		t.Fatalf("default: %v", got)
+	}
+	t.Setenv("LISTPOCKET_AI_MAX_OUTPUT_TOKENS", "500000")
+	if got := assistantTokenLimit()["max_completion_tokens"]; got != 500000 {
+		t.Fatalf("configured: %v", got)
+	}
+	t.Setenv("LISTPOCKET_AI_MAX_OUTPUT_TOKENS", "0")
+	if assistantTokenLimit() != nil {
+		t.Fatal("0 should ask for no limit")
+	}
+	t.Setenv("LISTPOCKET_AI_MAX_OUTPUT_TOKENS", "lots")
+	if got := assistantTokenLimit()["max_completion_tokens"]; got != assistantMaxOutputTokens {
+		t.Fatalf("invalid: %v", got)
+	}
+}
+
+// A model that allows fewer tokens than we ask for must still work.
+func TestAssistantFallsBackWhenModelRefusesTokenLimit(t *testing.T) {
+	t.Setenv("LISTPOCKET_AI_API_KEY", "fixture-key")
+	t.Setenv("LISTPOCKET_AI_MAX_OUTPUT_TOKENS", "")
+	original := http.DefaultClient
+	defer func() { http.DefaultClient = original }()
+	var sent []bool
+	http.DefaultClient = &http.Client{Transport: assistantRoundTrip(func(req *http.Request) (*http.Response, error) {
+		var payload map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		_, limited := payload["max_completion_tokens"]
+		sent = append(sent, limited)
+		if limited {
+			body := `{"error":{"message":"max_completion_tokens is too large: 128000. This model supports at most 16384"}}`
+			return &http.Response{StatusCode: 400, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
+		}
+		stream := `data: {"choices":[{"delta":{"content":"Done."},"finish_reason":"stop"}]}` + "\n\ndata: [DONE]\n\n"
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(stream)), Header: http.Header{}}, nil
+	})}
+	app := &App{auth: &auth.Auth{}}
+	re := &pbcore.RequestEvent{}
+	re.Request = httptest.NewRequest("POST", "/", nil)
+	re.Set(auth.UserHTTPCtxKey, auth.User{})
+	turn := &assistantTurn{proposals: map[string]*assistantProposal{}}
+	if err := app.runAssistant(context.Background(), re, turn, assistantRequest{Messages: []assistantMessage{{Role: "user", Content: "hi"}}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(sent) != "[true false]" {
+		t.Fatalf("requests with a limit: %v", sent)
+	}
+}
+
+func TestExpandPluginProposal(t *testing.T) {
+	app := &App{plugins: nil}
+	raw := json.RawMessage(`{"summary":"s"}`)
+	if got, err := app.expandAssistantProposal("propose_reply", raw); err != nil || string(got) != string(raw) {
+		t.Fatalf("other proposals pass through: %s, %v", got, err)
+	}
+	if got, err := app.expandAssistantProposal("propose_plugin", raw); err != nil || string(got) != string(raw) {
+		t.Fatalf("files sent directly pass through: %s, %v", got, err)
+	}
+	if _, err := app.expandAssistantProposal("propose_plugin", json.RawMessage(`{"plugin":"a","files":[{"path":"x.js","content":""}]}`)); err == nil {
+		t.Fatal("a draft and files together should be refused")
+	}
+}
+
+func TestAssistantProviderErrorExplainsCredentials(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		err := assistantProviderError(&llm.StatusError{Status: status, Body: "secret detail from the provider"})
+		if !strings.Contains(err.Error(), "credentials") || strings.Contains(err.Error(), "secret detail") {
+			t.Errorf("%d: %v", status, err)
+		}
+	}
+	if err := assistantProviderError(&llm.StatusError{Status: 500}); err.Error() != "AI provider returned HTTP 500" {
+		t.Errorf("other statuses: %v", err)
 	}
 }

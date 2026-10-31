@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -29,10 +28,11 @@ import (
 	"github.com/compdani/list_pocket/internal/media"
 	"github.com/compdani/list_pocket/internal/messenger/email"
 	"github.com/compdani/list_pocket/internal/messenger/quo"
+	"github.com/compdani/list_pocket/internal/messenger/whatsapp"
 	"github.com/compdani/list_pocket/internal/paginator"
 	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/internal/plugins"
 	"github.com/compdani/list_pocket/internal/subimporter"
-	"github.com/compdani/list_pocket/internal/workflow"
 	"github.com/compdani/list_pocket/models"
 	"github.com/joho/godotenv"
 	"github.com/pocketbase/pocketbase"
@@ -54,16 +54,22 @@ type App struct {
 	auth       *auth.Auth
 	media      media.Store
 	bounce     *bounce.Manager
-	captcha    *captcha.Captcha
-	i18n       *i18n.I18n
-	pg         *paginator.Paginator
-	events     *events.Events
-	aiBuilder  *aiBuilderService
-	log        *log.Logger
-	bufLog     *buflog.BufLog
-	pb         *pocketbase.PocketBase
-	tpl        *template.Template
-	renderer   *tplRenderer
+	plugins    *plugins.Manager
+	whatsapp   *whatsapp.Messenger
+	flows      *flowEngine
+	chatgpt    *chatgptService
+
+	whatsappTemplates whatsAppTemplateCache
+	captcha           *captcha.Captcha
+	i18n              *i18n.I18n
+	pg                *paginator.Paginator
+	events            *events.Events
+	aiBuilder         *aiBuilderService
+	log               *log.Logger
+	bufLog            *buflog.BufLog
+	pb                *pocketbase.PocketBase
+	tpl               *template.Template
+	renderer          *tplRenderer
 
 	about         about
 	fnOptinNotify func(models.Subscriber, []int) (int, error)
@@ -196,33 +202,6 @@ func main() {
 
 	campaignledger.RegisterHooks(pb)
 
-	workflow.Register(pb, workflow.Config{
-		FrontendDir: "../frontend/dist",
-		SendTransactional: func(ctx context.Context, req workflow.ExecutorTransactionalEmailRequest) (workflow.ExecutorTransactionalEmailResult, error) {
-			_ = ctx
-			appMu.Lock()
-			a := app
-			appMu.Unlock()
-			if a == nil {
-				return workflow.ExecutorTransactionalEmailResult{}, fmt.Errorf("app not ready")
-			}
-			record, err := a.newTransactionalSender().Send(txRequestFromWorkflow(req))
-			if err != nil {
-				return workflow.ExecutorTransactionalEmailResult{}, err
-			}
-			return workflow.ExecutorTransactionalEmailResult{
-				RecordID:        record.RecordID,
-				UUID:            record.UUID,
-				SubscriberID:    record.SubscriberID,
-				SubscriberEmail: record.SubscriberEmail,
-				TemplateID:      record.TemplateID,
-				TemplateName:    record.TemplateName,
-				Status:          record.Status,
-				Subject:         record.Subject,
-			}, nil
-		},
-	})
-
 	chReload := make(chan os.Signal, 1)
 	signal.Notify(chReload, syscall.SIGHUP)
 	startSIGHUPReload(chReload, func() {
@@ -296,6 +275,25 @@ func wireApp(chReload chan os.Signal) *App {
 		}
 	}
 
+	// WhatsApp is always registered, before the manager starts, so saving its settings
+	// never has to add a messenger while workers are running. The channel's behaviour
+	// depends on the provider, which is why changing it restarts the app.
+	waSettings := loadWhatsAppSettingsFromPB(pb)
+	models.RegisterChannel(models.WhatsAppChannelSpec(waSettings))
+	whatsappMsgr := whatsapp.NewMessenger(func() models.WhatsAppSettings {
+		return loadWhatsAppSettingsFromPB(pb)
+	}, coreSvc, lo)
+	if err := mgr.AddMessenger(whatsappMsgr); err != nil {
+		lo.Printf("register whatsapp messenger: %v", err)
+	} else {
+		msgrs = append(msgrs, whatsappMsgr)
+	}
+
+	// Plugins load before the manager starts, so registering their messengers
+	// can't race its workers.
+	pluginMgr, pluginMsgrs := initPlugins(ko, pb, coreSvc, mgr, cfg)
+	msgrs = append(msgrs, pluginMsgrs...)
+
 	if ko.Bool("bounce.enabled") {
 		bounceMgr = initBounceManager(coreSvc.RecordBounce, lo, ko)
 	}
@@ -315,10 +313,15 @@ func wireApp(chReload chan os.Signal) *App {
 
 	initCron(pb, coreSvc, db, mgr)
 
+	if !ko.Bool("passive") {
+		if err := pb.Cron().Add("whatsapp-channel-posts", "* * * * *", whatsappMsgr.PublishDuePosts); err != nil {
+			lo.Printf("error initializing WhatsApp channel posts cron: %v", err)
+		}
+	}
+
 	if ko.Bool("passive") {
 		lo.Println("running in passive mode. won't process campaigns or workflow runs.")
 	} else {
-		workflow.StartRunWorker(pb)
 		go mgr.Run()
 	}
 
@@ -347,6 +350,8 @@ func wireApp(chReload chan os.Signal) *App {
 		auth:       authn,
 		media:      mediaStore,
 		bounce:     bounceMgr,
+		plugins:    pluginMgr,
+		whatsapp:   whatsappMsgr,
 		captcha:    initCaptcha(),
 		i18n:       i18n,
 		log:        lo,
@@ -371,6 +376,9 @@ func wireApp(chReload chan os.Signal) *App {
 		needsUserSetup: !hasUser,
 	}
 	evStream.SetPublishHook(app.publishRealtimeEvent)
+	app.chatgpt = newChatGPTService(pb)
+	app.initFlows(ko.Bool("passive"))
+	app.aiBuilder.provider = &aiBuilderRouter{app: app, fallback: app.aiBuilder.provider}
 
 	if ko.Bool("app.check_updates") {
 		go app.checkUpdates(versionString, time.Hour*24)
@@ -382,6 +390,9 @@ func wireApp(chReload chan os.Signal) *App {
 func shutdownApp(app *App) {
 	if app == nil {
 		return
+	}
+	if app.flows != nil && app.flows.cancel != nil {
+		app.flows.cancel()
 	}
 	if app.manager != nil {
 		app.manager.Close()

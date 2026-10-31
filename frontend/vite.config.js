@@ -75,6 +75,9 @@ export default defineConfig(({ _, mode }) => {
         '^/admin/setup': {
           target: apiTarget,
         },
+        '^/admin/plugin-assets': {
+          target: apiTarget,
+        },
         '^/(admin\/custom\.(css|js))': {
           target: apiTarget,
         },

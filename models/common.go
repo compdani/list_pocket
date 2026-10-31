@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
@@ -114,6 +115,16 @@ var regTplFuncs = []regTplFunc{
 		regExp:  regexp.MustCompile(`{{\s*contact\.NAME\s*}}`),
 		replace: `{{ .Subscriber.Name }}`,
 	},
+}
+
+// MarkdownToHTML renders Markdown to HTML. Raw HTML in the source passes through,
+// so callers handling untrusted text must sanitize the result.
+func MarkdownToHTML(src []byte) ([]byte, error) {
+	var b bytes.Buffer
+	if err := markdown.Convert(src, &b); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }
 
 // markdown is a global instance of Markdown parser and renderer.

@@ -72,6 +72,12 @@
             <v-window-item value="textMessaging">
               <text-messaging-settings />
             </v-window-item>
+            <v-window-item value="whatsapp">
+              <whatsapp-settings />
+            </v-window-item>
+            <v-window-item value="ai">
+              <ai-settings />
+            </v-window-item>
             <v-window-item value="bounces">
               <bounce-settings :form="form" :key="key" />
             </v-window-item>
@@ -80,6 +86,9 @@
             </v-window-item>
             <v-window-item value="appearance">
               <appearance-settings :form="form" :key="key" />
+            </v-window-item>
+            <v-window-item v-for="item in pluginTabs" :key="item.key" :value="item.key">
+              <component :is="item.component" v-bind="item.props" />
             </v-window-item>
           </v-window>
         </v-card-text>
@@ -99,6 +108,10 @@ import PrivacySettings from './settings/privacy.vue';
 import SecuritySettings from './settings/security.vue';
 import SmtpSettings from './settings/smtp.vue';
 import TextMessagingSettings from './settings/text-messaging.vue';
+import WhatsappSettings from './settings/whatsapp.vue';
+import AiSettings from './settings/ai.vue';
+import PluginSettingsTab from '../pluginHost/PluginSettingsTab.vue';
+import { pluginRegistry } from '../pluginHost';
 
 const SETTINGS_TAB_KEYS = [
   'general',
@@ -107,6 +120,8 @@ const SETTINGS_TAB_KEYS = [
   'security',
   'smtp',
   'textMessaging',
+  'whatsapp',
+  'ai',
   'bounces',
   'messengers',
   'appearance',
@@ -120,6 +135,8 @@ export default {
     SecuritySettings,
     SmtpSettings,
     TextMessagingSettings,
+    WhatsappSettings,
+    AiSettings,
     BounceSettings,
     MessengerSettings,
     AppearanceSettings,
@@ -358,6 +375,19 @@ export default {
   computed: {
     ...mapState(['serverConfig', 'loading']),
 
+    // Each plugin with manifest settings gets a generated tab, plus any tabs it adds.
+    pluginTabs() {
+      const generated = pluginRegistry.manifests
+        .filter((m) => Array.isArray(m.settings) && m.settings.length > 0)
+        .map((m) => ({
+          key: `plugin:${m.id}`,
+          label: m.name,
+          component: PluginSettingsTab,
+          props: { pluginId: m.id, fields: m.settings },
+        }));
+      return [...generated, ...pluginRegistry.settingsTabs];
+    },
+
     settingsTabs() {
       return [
         { key: 'general', label: this.$t('settings.general.name') },
@@ -366,9 +396,12 @@ export default {
         { key: 'security', label: this.$t('settings.security.name') },
         { key: 'smtp', label: this.$t('settings.smtp.name') },
         { key: 'textMessaging', label: this.$t('settings.textMessaging.name') },
+        { key: 'whatsapp', label: this.$t('settings.whatsapp.name') },
+        { key: 'ai', label: this.$t('settings.ai.name') },
         { key: 'bounces', label: this.$t('settings.bounces.name') },
         { key: 'messengers', label: this.$t('settings.messengers.name') },
         { key: 'appearance', label: this.$t('settings.appearance.name') },
+        ...this.pluginTabs.map(({ key, label }) => ({ key, label })),
       ];
     },
 
@@ -395,7 +428,7 @@ export default {
 
   mounted() {
     const storedTab = this.$utils.getPref('settings.tab');
-    this.tab = SETTINGS_TAB_KEYS.includes(storedTab)
+    this.tab = SETTINGS_TAB_KEYS.includes(storedTab) || this.pluginTabs.some((t) => t.key === storedTab)
       ? storedTab
       : SETTINGS_TAB_KEYS[Number.isInteger(storedTab) ? storedTab : 0] || 'general';
     this.getSettings();

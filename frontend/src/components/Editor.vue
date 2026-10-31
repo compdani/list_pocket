@@ -1,6 +1,6 @@
 <template>
   <!-- Two-way Data-Binding -->
-  <div class="editor">
+  <div class="editor" :class="{ 'editor--embedded': embedded }">
     <v-toolbar class="editor-toolbar mb-3" color="transparent">
       <v-select v-model="contentTypeSel" :disabled="isContentTypeSelectDisabled" :label="$t('campaigns.format')"
         :items="Object.entries(contentTypes).map(([key, name]) => ({ value: key, title: name }))" item-title="title"
@@ -11,7 +11,7 @@
         :disabled="disabled" @click="onUnlockContentTypeSelect">
         {{ $t('campaigns.unlockFormat') }}
       </v-btn>
-      <v-btn v-if="!isVisualTplSelector && self.contentType === 'visual'" @click="onShowVisualTplSelector"
+      <v-btn v-if="!embedded && !isVisualTplSelector && self.contentType === 'visual'" @click="onShowVisualTplSelector"
         variant="text" prepend-icon="mdi-file-find-outline" data-cy="btn-select-visual-tpl">
         {{ $t('campaigns.importVisualTemplate') }}
       </v-btn>
@@ -19,15 +19,15 @@
         aria-keyshortcuts="F9">
         <span class="has-kbd">{{ $t('campaigns.preview') }} <span class="kbd">F9</span></span>
       </v-btn>
-      <v-btn color="primary" variant="outlined" prepend-icon="mdi-creation-outline" :disabled="disabled" @click="openAssistant">
+      <v-btn v-if="!embedded" color="primary" variant="outlined" prepend-icon="mdi-creation-outline" :disabled="disabled" @click="openAssistant">
         {{ $t('campaigns.aiBuilder') }}
       </v-btn>
 
-      <template #extension v-if="self.contentType !== 'visual'">
+      <template #extension v-if="!embedded && self.contentType !== 'visual'">
         <v-select v-model="templateId" :label="$tc('globals.terms.template')" :placeholder="$t('globals.terms.none')"
           :items="validTemplates" item-title="name" item-value="id" name="template" :disabled="disabled" clearable hide-details variant="outlined" density="compact" class="mx-2" />
       </template>
-      <template #extension v-if="isVisualTplSelector">
+      <template #extension v-if="!embedded && isVisualTplSelector">
 
           <v-select v-model="visualTemplateId" @update:model-value="() => isVisualTplDisabled = false"
             :label="$tc('globals.terms.template')" :placeholder="$t('globals.terms.none')" :items="validTemplates"
@@ -45,14 +45,14 @@
 
 
     <richtext-editor ref="richtextEditor" v-if="self.contentType === 'richtext'" v-model="self.body" :disabled="disabled"
-      key="editor-richtext" />
+      :fill="embedded" key="editor-richtext" />
 
     <!-- visual editor //-->
     <visual-editor v-if="self.contentType === 'visual'" :source="self.bodySource" @change="onVisualEditorChange"
-      height="65vh" ref="visualEditor" />
+      :height="embedded ? '100%' : '65vh'" ref="visualEditor" />
 
     <grapes-mjml-editor v-if="self.contentType === 'grapes_mjml'" ref="grapesEditor" :source="self.bodySource"
-      :data="self.body" height="65vh" @change="onGrapesEditorChange" />
+      :data="self.body" :height="embedded ? '100%' : '65vh'" @change="onGrapesEditorChange" />
 
     <!-- raw html editor //-->
     <code-editor ref="codeEditor" lang="html" v-if="self.contentType === 'html'" v-model="self.body" key="editor-html" />
@@ -81,6 +81,7 @@ import { mapState } from 'vuex';
 import CampaignPreview from './CampaignPreview.vue';
 import markdownToVisualBlock from './editor';
 import { assistantContext, registerAssistantEditor } from '../assistant/context';
+import { isTextMessenger } from '../utils/channels';
 
 const RichtextEditor = defineAsyncComponent(() => import('./RichtextEditor.vue'));
 const VisualEditor = defineAsyncComponent(() => import('./VisualEditor.vue'));
@@ -99,13 +100,15 @@ export default {
 
   },
 
-  emits: ['update:modelValue', 'ai-generated'],
+  emits: ['update:modelValue', 'ai-generated', 'preview'],
 
   props: {
     contentTypes: { type: Object, default: () => ({}) },
     id: { type: [String, Number], default: '' },
     title: { type: String, default: '' },
     disabled: { type: Boolean, default: false },
+    // Embedded in another form: only the formats and editors, and the parent shows the preview.
+    embedded: { type: Boolean, default: false },
     templates: { type: Array, default: null },
     preheader: { type: String, default: '' },
     subject: { type: String, default: '' },
@@ -236,7 +239,7 @@ export default {
       } else if (from === 'markdown' && (to === 'richtext' || to === 'html')) {
         skip = true;
         this.$api.convertCampaignContent({
-          id: 1, body, from, to,
+          id: '1', body, from, to,
         }).then((data) => {
           this.$nextTick(() => {
             // Both type + body should be updated in one cycle to avoid firing
@@ -244,6 +247,10 @@ export default {
             this.self.contentType = to;
             this.self.body = this.beautifyHTML(data.trim());
           });
+        }).catch((err) => {
+          // The body is unchanged, so the dropdown goes back to the format it's in.
+          this.contentTypeSel = from;
+          this.$utils.toast(err.message, 'error');
         });
 
         // Plain to an HTML type, change plain line breaks to HTML breaks.
@@ -280,6 +287,10 @@ export default {
 
     onTogglePreview() {
       this.syncGrapesHtml();
+      if (this.embedded) {
+        this.$emit('preview');
+        return;
+      }
       this.isPreviewing = !this.isPreviewing;
     },
 
@@ -437,7 +448,7 @@ export default {
     this.contentTypeSel = this.modelValue.contentType;
     this.templateId = this.modelValue.templateId;
 
-    this.unregisterAssistant = registerAssistantEditor({
+    this.unregisterAssistant = this.embedded ? null : registerAssistantEditor({
       key: this.aiSessionKey,
       label: 'Unsaved campaign editor',
       snapshot: () => this.assistantSnapshot(),
@@ -482,8 +493,10 @@ export default {
       const hasContentPlaceholder = (body = '') => /\{\{(\s+)?template\s+?"content"(\s+)?\.(\s+)?}}/.test(String(body || ''));
 
       // SMS campaigns only accept plain-text templates (`campaign_sms`).
-      if (this.messenger === 'quo') {
-        return templates.filter((t) => t.type === 'campaign_sms' && hasContentPlaceholder(t.body));
+      if (isTextMessenger(this.serverConfig?.channels, this.messenger)) {
+        return templates.filter((t) => t.type === 'campaign_sms'
+          && (!t.channel || t.channel === this.messenger)
+          && hasContentPlaceholder(t.body));
       }
 
       if (this.self.contentType === 'visual') {
@@ -598,6 +611,33 @@ export default {
 </script>
 
 <style scoped>
+/* In a modal, the editor takes all the room it's given. */
+.editor--embedded {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor--embedded > :not(.editor-toolbar) {
+  flex: 1;
+  min-height: 0;
+}
+
+.editor--embedded > .editor-toolbar {
+  flex: none;
+}
+
+.editor--embedded :deep(.code-editor),
+.editor--embedded :deep(.cm-editor),
+.editor--embedded :deep(.plain-editor .v-input__control),
+.editor--embedded :deep(.plain-editor .v-field),
+.editor--embedded :deep(.plain-editor .v-field__field),
+.editor--embedded :deep(.plain-editor textarea),
+.editor--embedded :deep(.grapes-editor-wrapper),
+.editor--embedded :deep(.grapes-editor-root) {
+  height: 100%;
+}
+
 .editor-toolbar :deep(.v-toolbar__content) {
   gap: 8px;
 }

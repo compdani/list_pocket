@@ -29,8 +29,8 @@
               :label="$t('subscribers.email')"
               maxlength="200"
               name="email"
-              :placeholder="$t('subscribers.email')"
-              required
+              :placeholder="hasPlaceholderEmail ? $t('plugins.noEmail') : $t('subscribers.email')"
+              :required="!hasPlaceholderEmail"
               type="email"
               variant="outlined"
               density="comfortable"
@@ -307,6 +307,9 @@
         </a>
       </section>
 
+      <subscriber-whatsapp v-if="isEditing && form.id && hasWhatsApp" :subscriber-id="form.id" />
+      <subscriber-channels v-if="isEditing && form.id" :subscriber-id="form.id" />
+      <plugin-slot name="subscriber.form.after" :context="{ subscriber: form }" />
       <footer class="admin-dialog-foot modal-card-foot">
         <v-btn type="button" variant="outlined" class="dialog-action" @click="$emit('close')">
           {{ closeLabel || $t('globals.buttons.close') }}
@@ -340,6 +343,9 @@ import {
 import { useStore } from 'vuex';
 import CopyText from '../components/CopyText.vue';
 import SubscriberActivity from '../components/SubscriberActivity.vue';
+import SubscriberChannels from '../components/SubscriberChannels.vue';
+import SubscriberWhatsapp from '../components/SubscriberWhatsApp.vue';
+import { isPlaceholderEmail } from '../utils/channels';
 
 const props = defineProps({
   data: {
@@ -371,6 +377,8 @@ const store = useStore();
 
 const data = toRef(props, 'data');
 const isEditing = toRef(props, 'isEditing');
+const hasWhatsApp = computed(() => Boolean(store.state.serverConfig?.whatsapp));
+const hasPlaceholderEmail = computed(() => isPlaceholderEmail(props.data && props.data.email));
 
 const form = ref({
   lists: [],
@@ -472,7 +480,8 @@ function initForm() {
   form.value = {
     ...baseForm,
     ...source,
-    email: source.email || '',
+    // A channel-only contact's placeholder is a storage detail, so show it as blank.
+    email: isPlaceholderEmail(source.email) ? '' : (source.email || ''),
     phone: source.phone || '',
     firstName: source.firstName || '',
     lastName: source.lastName || '',

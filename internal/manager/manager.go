@@ -550,12 +550,16 @@ func (m *Manager) worker() {
 			}
 
 			// Pause on hitting the message rate (SMS uses typed send_limits).
+			spec := models.ChannelFor(msg.Campaign.Messenger)
 			rateCap := m.cfg.MessageRate
-			if models.IsTextMessenger(msg.Campaign.Messenger) {
+			if spec.SMSLimits {
 				lim := m.smsSendLimits()
 				if lim.MaxMessagesPerSecond > 0 {
 					rateCap = lim.MaxMessagesPerSecond
 				}
+			}
+			if spec.MaxPerSecond > 0 {
+				rateCap = spec.MaxPerSecond
 			}
 			if rateCap < 1 {
 				rateCap = 1
@@ -567,9 +571,13 @@ func (m *Manager) worker() {
 			numMsg++
 
 			// Outgoing message.
+			to := []string{msg.to}
+			if spec.Address == models.AddressSourceChannel {
+				to = msg.Subscriber.Addresses
+			}
 			out := models.Message{
 				From:        msg.from,
-				To:          []string{msg.to},
+				To:          to,
 				Subject:     msg.subject,
 				ContentType: msg.Campaign.ContentType,
 				Body:        msg.body,
@@ -581,7 +589,7 @@ func (m *Manager) worker() {
 			}
 
 			h := textproto.MIMEHeader{}
-			if !models.IsTextMessenger(msg.Campaign.Messenger) {
+			if spec.EmailHeaders {
 				if mid := strings.TrimSpace(msg.messageID); mid != "" {
 					if !strings.HasPrefix(mid, "<") {
 						mid = "<" + mid
@@ -614,7 +622,7 @@ func (m *Manager) worker() {
 			err := m.messengers[msg.Campaign.Messenger].Push(out)
 			unsendable := err != nil &&
 				errors.Is(err, models.ErrUnsendableDestination) &&
-				models.IsTextMessenger(msg.Campaign.Messenger)
+				spec.Unsendable != models.UnsendableNone
 			if err != nil {
 				m.log.Printf("error sending message in campaign %s: subscriber %d: %v", msg.Campaign.Name, msg.Subscriber.ID, err)
 
@@ -623,11 +631,13 @@ func (m *Manager) worker() {
 				// Opt them out of SMS, skip the ledger row so they are not
 				// retried, and do not count this toward MaxSendErrors.
 				if unsendable {
-					if n, mErr := m.store.MarkSMSUnsendable(msg.Subscriber.RecordID, msg.Subscriber.Phone); mErr != nil {
-						m.log.Printf("error marking subscriber %d sms-unsendable: %v", msg.Subscriber.ID, mErr)
-					} else if n > 0 {
-						m.log.Printf("subscriber %d (%s): auto opted-out of SMS after provider rejection (%d list memberships)",
-							msg.Subscriber.ID, msg.Subscriber.Phone, n)
+					if spec.Unsendable == models.UnsendableSMSOptOut {
+						if n, mErr := m.store.MarkSMSUnsendable(msg.Subscriber.RecordID, msg.Subscriber.Phone); mErr != nil {
+							m.log.Printf("error marking subscriber %d sms-unsendable: %v", msg.Subscriber.ID, mErr)
+						} else if n > 0 {
+							m.log.Printf("subscriber %d (%s): auto opted-out of SMS after provider rejection (%d list memberships)",
+								msg.Subscriber.ID, msg.Subscriber.Phone, n)
+						}
 					}
 					if msg.pipe != nil {
 						if skErr := m.store.MarkCampaignLedgerSkipped(msg.Campaign.ID, msg.Subscriber.RecordID); skErr != nil {
@@ -671,8 +681,20 @@ func (m *Manager) worker() {
 				return
 			}
 
-			// Push the message to the messenger.
-			if err := m.messengers[msg.Messenger].Push(msg); err != nil {
+			// Push the message to the messenger. It may be unknown here: a workflow
+			// node can name one, or a plugin channel can have been disabled.
+			messenger, ok := m.messengers[msg.Messenger]
+			if !ok {
+				err := fmt.Errorf("unknown messenger %q", msg.Messenger)
+				m.log.Printf("error sending message '%s': %v", msg.Subject, err)
+				if msg.TxMessage != nil {
+					if updateErr := m.store.UpdateTransactionalMessageStatus(msg.TxMessage.RecordID, "failed", err.Error(), false); updateErr != nil {
+						m.log.Printf("error updating transactional message status '%s': %v", msg.TxMessage.RecordID, updateErr)
+					}
+				}
+				continue
+			}
+			if err := messenger.Push(msg); err != nil {
 				m.log.Printf("error sending message '%s': %v", msg.Subject, err)
 				if msg.TxMessage != nil {
 					if updateErr := m.store.UpdateTransactionalMessageStatus(msg.TxMessage.RecordID, "failed", err.Error(), false); updateErr != nil {

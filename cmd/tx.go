@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
@@ -154,6 +155,9 @@ func (a *App) SendTxMessage(re *pbcore.RequestEvent) error {
 			Attachments:      m.Attachments,
 		}); err != nil {
 			a.log.Printf("error sending transactional message (%s): %v", sub.Email, err)
+			if errors.Is(err, txemail.ErrNoChannelConsent) {
+				return apperr.BadRequest(err.Error())
+			}
 			return err
 		}
 	}

@@ -186,7 +186,7 @@ func (a *App) CreateTemplate(re *pbcore.RequestEvent) error {
 	}
 
 	// Create the template the in the DB.
-	out, err := a.core.CreateTemplate(o.Name, o.Type, o.Subject, []byte(o.Body), o.BodySource)
+	out, err := a.core.CreateTemplate(o.Name, o.Type, o.Subject, []byte(o.Body), o.BodySource, o.Channel)
 	if err != nil {
 		return err
 	}
@@ -231,7 +231,7 @@ func (a *App) UpdateTemplate(re *pbcore.RequestEvent) error {
 	if err != nil {
 		return err
 	}
-	out, err := a.core.UpdateTemplate(recordID, o.Name, o.Subject, []byte(o.Body), o.BodySource)
+	out, err := a.core.UpdateTemplate(recordID, o.Name, o.Subject, []byte(o.Body), o.BodySource, o.Channel)
 	if err != nil {
 		return err
 	}

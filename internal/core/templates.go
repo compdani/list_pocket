@@ -45,6 +45,7 @@ func (c *Core) sqliteTemplateFromRecord(rec *pbcore.Record) models.Template {
 		Type:       rec.GetString("type"),
 		Body:       rec.GetString("body"),
 		BodySource: bodySource,
+		Channel:    rec.GetString("channel"),
 		IsDefault:  rec.GetBool("is_default"),
 	}
 }
@@ -93,7 +94,7 @@ func (c *Core) GetTemplate(recordID string, noBody bool) (models.Template, error
 }
 
 // CreateTemplate creates a new template.
-func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource null.String) (models.Template, error) {
+func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource null.String, channel string) (models.Template, error) {
 	pb := c.db.PocketBase()
 	col, err := pb.FindCollectionByNameOrId("templates")
 	if err != nil {
@@ -105,6 +106,7 @@ func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource
 	rec.Set("subject", subject)
 	rec.Set("body", string(body))
 	rec.Set("body_source", bodySource.String)
+	rec.Set("channel", channel)
 	rec.Set("is_default", false)
 	if err := pb.Save(rec); err != nil {
 		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.template}", "error", dbErr(err)))
@@ -113,7 +115,7 @@ func (c *Core) CreateTemplate(name, typ, subject string, body []byte, bodySource
 }
 
 // UpdateTemplate updates a given template.
-func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte, bodySource null.String) (models.Template, error) {
+func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte, bodySource null.String, channel string) (models.Template, error) {
 	pb := c.db.PocketBase()
 	rec, err := pb.FindRecordById("templates", recordID)
 	if err != nil {
@@ -123,6 +125,7 @@ func (c *Core) UpdateTemplate(recordID string, name, subject string, body []byte
 	rec.Set("subject", subject)
 	rec.Set("body", string(body))
 	rec.Set("body_source", bodySource.String)
+	rec.Set("channel", channel)
 	if err := pb.Save(rec); err != nil {
 		return models.Template{}, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.template}", "error", dbErr(err)))
 	}

@@ -249,3 +249,79 @@ func TestNextBatchScheduleTimeWithInvalidStartTimeStillSchedules(t *testing.T) {
 		t.Fatalf("expected next batch at %s, got %s", want, next)
 	}
 }
+
+func TestNewCampaignMessageAddressesByChannel(t *testing.T) {
+	m := New(Config{UnsubURL: "https://example.com/s/%s/%s"}, testStore{}, nil, log.New(io.Discard, "", 0))
+	sub := models.Subscriber{
+		Base:  models.Base{RecordID: "subrid012345678"},
+		Email: "person@example.com",
+		Phone: " +15550100 ",
+	}
+
+	quoCamp := models.Campaign{
+		Base:      models.Base{RecordID: "camprid01234501"},
+		Messenger: models.CampaignMessengerQuo,
+		FromEmail: "legacy@example.com",
+		Body:      "hello",
+	}
+	if err := quoCamp.CompileTemplate(m.TemplateFuncs(&quoCamp)); err != nil {
+		t.Fatalf("compile failed: %v", err)
+	}
+	msg, err := m.NewCampaignMessage(&quoCamp, sub)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	if msg.to != "+15550100" {
+		t.Fatalf("quo should send to the trimmed phone, got %q", msg.to)
+	}
+	if msg.from != "" {
+		t.Fatalf("quo should drop an email-shaped from, got %q", msg.from)
+	}
+
+	mailCamp := models.Campaign{
+		Base:        models.Base{RecordID: "camprid01234502"},
+		Messenger:   "email",
+		FromEmail:   "team@example.com",
+		ContentType: models.CampaignContentTypeVisual,
+		Body:        "hello",
+	}
+	if err := mailCamp.CompileTemplate(m.TemplateFuncs(&mailCamp)); err != nil {
+		t.Fatalf("compile failed: %v", err)
+	}
+	msg, err = m.NewCampaignMessage(&mailCamp, sub)
+	if err != nil {
+		t.Fatalf("render failed: %v", err)
+	}
+	if msg.to != sub.Email || msg.from != "team@example.com" {
+		t.Fatalf("email should keep address and from, got to=%q from=%q", msg.to, msg.from)
+	}
+}
+
+type statusRecordingStore struct {
+	testStore
+	status string
+}
+
+func (s *statusRecordingStore) UpdateCampaignStatus(_ int, status string) error {
+	s.status = status
+	return nil
+}
+
+func TestNewPipePausesCampaignOnMissingPluginChannel(t *testing.T) {
+	store := &statusRecordingStore{}
+	m := New(Config{}, store, nil, log.New(io.Discard, "", 0))
+	if _, err := m.newPipe(&models.Campaign{Messenger: "ch:gone"}); err == nil {
+		t.Fatal("expected an error for a missing plugin channel")
+	}
+	if store.status != models.CampaignStatusPaused {
+		t.Fatalf("status = %q, want paused so the campaign can resume", store.status)
+	}
+
+	store.status = ""
+	if _, err := m.newPipe(&models.Campaign{Messenger: "no-such-postback"}); err == nil {
+		t.Fatal("expected an error for an unknown messenger")
+	}
+	if store.status != models.CampaignStatusCancelled {
+		t.Fatalf("status = %q, want the existing cancel behaviour", store.status)
+	}
+}

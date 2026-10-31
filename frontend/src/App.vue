@@ -12,10 +12,9 @@
         v-model="drawer"
         :rail="!isMobile && rail"
         :rail-width="72"
-        :expand-on-hover="!isMobile && rail"
         :temporary="isMobile"
         :permanent="!isMobile"
-        width="280"
+        width="264"
         color="surface"
         border="end"
         class="app-drawer"
@@ -34,6 +33,20 @@
           @updateOpenedGroups="updateOpenedGroups"
           @navigate="onNavigate"
         />
+
+        <template v-if="!isMobile" #append>
+          <div class="app-drawer-foot">
+            <v-btn
+              :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+              variant="text"
+              size="small"
+              :aria-label="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
+              :title="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
+              data-cy="nav-collapse"
+              @click="toggleRail"
+            />
+          </div>
+        </template>
       </v-navigation-drawer>
 
       <v-app-bar v-if="$root.isLoaded" flat color="surface" border="b" class="app-bar">
@@ -41,13 +54,6 @@
           v-if="isMobile"
           :aria-label="$t('globals.buttons.openMenu')"
           @click="drawer = !drawer"
-        />
-        <v-btn
-          v-else
-          icon="mdi-dock-left"
-          variant="text"
-          :aria-label="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
-          @click="rail = !rail"
         />
 
         <v-toolbar-title class="app-title">
@@ -235,6 +241,16 @@ import ConfirmDialog from './components/ConfirmDialog.vue';
 import { toastQueue } from './utils/toast';
 import { events } from './utils/events';
 
+const RAIL_KEY = 'listpocket_nav_collapsed';
+
+function savedRail() {
+  try {
+    return localStorage.getItem(RAIL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 export default {
   name: 'App',
 
@@ -269,7 +285,7 @@ export default {
       openedGroups: [],
       accountMenuOpen: false,
       drawer: true,
-      rail: false,
+      rail: savedRail(),
       railBeforeAI: undefined,
       eventsTopic: 'events/error',
       toastQueue,
@@ -325,7 +341,7 @@ export default {
       immediate: true,
       handler(to) {
         const activeName = to.name === 'campaign' && to.params.id !== 'new'
-          ? 'campaigns' : to.name;
+          ? 'campaigns' : (to.meta.nav || to.name);
         this.activeItem = { [activeName]: true };
         if (to.meta.group) {
           this.openedGroups = [to.meta.group];
@@ -345,6 +361,17 @@ export default {
   },
 
   methods: {
+    toggleRail() {
+      this.rail = !this.rail;
+      // Remembered unless the assistant collapsed it for now.
+      this.railBeforeAI = undefined;
+      try {
+        localStorage.setItem(RAIL_KEY, this.rail ? '1' : '0');
+      } catch {
+        // It just won't be remembered.
+      }
+    },
+
     updateOpenedGroups(groups) {
       this.openedGroups = groups;
     },
@@ -473,7 +500,18 @@ export default {
 }
 
 .app-drawer-brand {
-  padding: 8px 8px 20px;
+  padding: 8px 8px 16px;
+}
+
+.app-drawer-foot {
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+}
+
+.app-drawer.v-navigation-drawer--rail .app-drawer-foot {
+  justify-content: center;
 }
 
 .app-brand-link {

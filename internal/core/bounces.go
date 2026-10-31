@@ -106,7 +106,7 @@ func (c *Core) BlocklistBouncedSubscribers() error {
 	if _, err := c.db.Exec(`
 			UPDATE subscribers
 			SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE id IN (SELECT DISTINCT subscriber_id FROM bounces)
+			WHERE id IN (SELECT DISTINCT subscriber_id FROM bounces WHERE source NOT LIKE '` + models.ChannelMessengerPrefix + `%')
 		`); err != nil {
 		c.log.Printf("error blocklisting bounced subscribers: %v", err)
 		return apperr.Internal(c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
@@ -115,7 +115,7 @@ func (c *Core) BlocklistBouncedSubscribers() error {
 	if _, err := c.db.Exec(`
 			UPDATE subscriber_lists
 			SET status='unsubscribed', updated=(strftime('%Y-%m-%d %H:%M:%fZ'))
-			WHERE subscriber_id IN (SELECT DISTINCT subscriber_id FROM bounces)
+			WHERE subscriber_id IN (SELECT DISTINCT subscriber_id FROM bounces WHERE source NOT LIKE '` + models.ChannelMessengerPrefix + `%')
 		`); err != nil {
 		c.log.Printf("error unsubscribing bounced subscriber lists: %v", err)
 		return apperr.Internal(c.i18n.Ts("subscribers.errorBlocklisting", "error", err.Error()))
@@ -236,8 +236,11 @@ func (c *Core) queryBouncesSQLite(campRecordID, subRecordID, source, orderBy, or
 }
 
 func (c *Core) recordBounceSQLite(b models.Bounce) error {
+	// A plugin channel's bounce says nothing about the subscriber's email, so the
+	// email bounce actions must not run for it. It's only recorded.
+	channelBounce := strings.HasPrefix(b.Source, models.ChannelMessengerPrefix)
 	action, ok := c.consts.BounceActions[b.Type]
-	if !ok {
+	if !ok && !channelBounce {
 		return apperr.BadRequest(c.i18n.Ts("globals.messages.invalidData") + ": " + b.Type)
 	}
 
@@ -287,7 +290,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 		return err
 	}
 
-	if sub.Status != models.SubscriberStatusBlockListed && num >= action.Count {
+	if !channelBounce && sub.Status != models.SubscriberStatusBlockListed && num >= action.Count {
 		switch action.Action {
 		case "blocklist":
 			if _, err := tx.Exec(`UPDATE subscribers SET status='blocklisted', updated=(strftime('%Y-%m-%d %H:%M:%fZ')) WHERE id = ?`, sub.ID); err != nil {
@@ -305,7 +308,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 	}
 
 	// Same behavior as legacy query: don't insert if already blocklisted or if over threshold.
-	if sub.Status != models.SubscriberStatusBlockListed && num <= action.Count {
+	if channelBounce || (sub.Status != models.SubscriberStatusBlockListed && num <= action.Count) {
 		meta := b.Meta
 		if len(meta) == 0 {
 			meta = json.RawMessage(`{}`)
@@ -315,7 +318,7 @@ func (c *Core) recordBounceSQLite(b models.Bounce) error {
 			createdAt = time.Now()
 		}
 
-		if campID == "" && (b.Source == "sendgrid" || b.Source == "brevo") {
+		if campID == "" && (b.Source == "sendgrid" || b.Source == "brevo" || channelBounce) {
 			// campaign_id is required by schema; skip unresolved provider records.
 			c.log.Printf("skipping bounce: missing/unknown campaign_id (source=%q campaign_uuid=%q subscriber=%q)", b.Source, b.CampaignUUID, b.Email)
 		} else {

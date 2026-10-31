@@ -27,6 +27,13 @@ type pipe struct {
 
 // newPipe adds a campaign to the process queue.
 func (m *Manager) newPipe(c *models.Campaign) (*pipe, error) {
+	// A plugin channel can be missing because its plugin failed to load or the app
+	// is in safe mode. Pause rather than cancel, so the campaign can resume later.
+	if models.ChannelFor(c.Messenger).Disabled {
+		m.store.UpdateCampaignStatus(c.ID, models.CampaignStatusPaused)
+		return nil, fmt.Errorf("channel %s is not available; paused campaign %s", c.Messenger, c.Name)
+	}
+
 	// Validate messenger.
 	if _, ok := m.messengers[c.Messenger]; !ok {
 		m.store.UpdateCampaignStatus(c.ID, models.CampaignStatusCancelled)
@@ -109,7 +116,7 @@ func (p *pipe) NextSubscribers() (bool, error) {
 		hasSliding       bool
 		slidingDur       time.Duration
 		slidingMax       int
-		useSMSWindow     = models.IsTextMessenger(p.camp.Messenger)
+		useSMSWindow     = models.ChannelFor(p.camp.Messenger).SMSLimits
 	)
 	if useSMSWindow {
 		lim := p.m.smsSendLimits()
@@ -198,7 +205,7 @@ func (p *pipe) NextSubscribers() (bool, error) {
 // and pauses the campaign if the error threshold is met.
 func (p *pipe) OnError() {
 	maxErr := p.m.cfg.MaxSendErrors
-	if models.IsTextMessenger(p.camp.Messenger) {
+	if models.ChannelFor(p.camp.Messenger).SMSLimits {
 		lim := p.m.smsSendLimits()
 		if lim.MaxSendErrors > 0 {
 			maxErr = lim.MaxSendErrors

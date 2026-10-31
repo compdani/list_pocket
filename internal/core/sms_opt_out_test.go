@@ -215,6 +215,15 @@ CREATE TABLE subscriber_lists (
   sms_status TEXT,
   updated TEXT
 );
+CREATE TABLE subscriber_channel_consent (
+  subscriber TEXT NOT NULL,
+  list TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  status TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  updated TEXT,
+  PRIMARY KEY (subscriber, list, channel)
+);
 `
 	if _, err := db.ExecContext(context.Background(), ddl); err != nil {
 		t.Fatalf("schema: %v", err)

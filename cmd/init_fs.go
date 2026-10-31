@@ -51,6 +51,7 @@ func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
 
 	se.Router.GET("/public/static/{path...}", apis.Static(mustSubFS(app.fs, "/public/static"), false))
 	se.Router.GET("/admin/static/{path...}", apis.Static(mustSubFS(app.fs, "/admin/static"), false))
+	se.Router.GET("/admin/plugin-assets/{plugin}/{version}/{path...}", app.plugins.ServeAsset)
 
 	var (
 		uploadProvider = ko.String("upload.provider")

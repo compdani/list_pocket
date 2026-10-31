@@ -150,6 +150,8 @@
         </article>
       </div>
     </section>
+
+    <plugin-slot name="dashboard.widgets" />
   </section>
 </template>
 

@@ -110,6 +110,13 @@ func (e *Emailer) Name() string {
 
 // Push pushes a message to the server.
 func (e *Emailer) Push(m models.Message) error {
+	// The send queries exclude placeholders. This is the last line of defence.
+	for _, to := range m.To {
+		if models.IsPlaceholderEmail(to) {
+			return models.ErrUnsendableDestination
+		}
+	}
+
 	// If there are more than one SMTP servers, send to a random
 	// one from the list.
 	var (

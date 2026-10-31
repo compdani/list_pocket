@@ -1,6 +1,7 @@
 package txemail
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/textproto"
@@ -48,19 +49,42 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 		return models.TransactionalMessage{}, fmt.Errorf("transactional sender is not initialized")
 	}
 
+	messengerName := strings.TrimSpace(req.Messenger)
+	if messengerName == "" {
+		messengerName = "email"
+	}
+	pluginChannel := strings.HasPrefix(messengerName, models.ChannelMessengerPrefix)
+
 	email := strings.TrimSpace(req.SubscriberEmail)
-	if email == "" {
+	if email == "" && !pluginChannel {
 		return models.TransactionalMessage{}, fmt.Errorf("subscriber email is required")
+	}
+	if models.IsPlaceholderEmail(email) && !pluginChannel {
+		return models.TransactionalMessage{}, fmt.Errorf("subscriber has no email address")
+	}
+
+	// A plugin channel sends to the subscriber's own addresses, and only with consent.
+	var channelTo []string
+	if pluginChannel {
+		stored, found, err := s.Core.GetSubscriberForChannel(strings.TrimSpace(req.SubscriberID))
+		if err != nil {
+			return models.TransactionalMessage{}, err
+		}
+		if !found {
+			return models.TransactionalMessage{}, fmt.Errorf("channel %s needs an existing subscriber", messengerName)
+		}
+		channelTo, err = s.Core.ChannelRecipients(stored, messengerName)
+		if err != nil {
+			return models.TransactionalMessage{}, err
+		}
+		if len(channelTo) == 0 {
+			return models.TransactionalMessage{}, fmt.Errorf("%w: %s", ErrNoChannelConsent, messengerName)
+		}
 	}
 
 	contentType := strings.TrimSpace(req.ContentType)
 	if contentType == "" {
 		contentType = "html"
-	}
-
-	messengerName := strings.TrimSpace(req.Messenger)
-	if messengerName == "" {
-		messengerName = "email"
 	}
 
 	fromEmail := strings.TrimSpace(req.FromEmail)
@@ -70,7 +94,7 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 	if fromEmail == "" {
 		fromEmail = s.DefaultFromEmail
 	}
-	if fromEmail == "" {
+	if fromEmail == "" && !pluginChannel {
 		return models.TransactionalMessage{}, fmt.Errorf("no from email configured for messenger %q", messengerName)
 	}
 
@@ -163,7 +187,7 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 
 	msg := models.Message{
 		Subscriber:  sub,
-		To:          []string{sub.Email},
+		To:          recipients(channelTo, sub.Email),
 		From:        fromEmail,
 		Subject:     tx.Subject,
 		ContentType: contentType,
@@ -198,4 +222,15 @@ func headersJSON(headers models.Headers) models.JSON {
 		return models.JSON{}
 	}
 	return models.JSON{"sets": headers}
+}
+
+// ErrNoChannelConsent means the subscriber hasn't agreed to a plugin channel, or
+// has no address on it. Callers should report it as a bad request, not a failure.
+var ErrNoChannelConsent = errors.New("subscriber has no consent or address on channel")
+
+func recipients(channelTo []string, email string) []string {
+	if len(channelTo) > 0 {
+		return channelTo
+	}
+	return []string{email}
 }

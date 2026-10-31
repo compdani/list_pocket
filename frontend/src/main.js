@@ -10,6 +10,8 @@ import { docsUrl } from './utils/docs';
 import { isSuperAdmin } from './utils/auth';
 import { events } from './utils/events';
 import vuetify from './plugins/vuetify';
+import { initPluginHost, mergePluginMessages } from './pluginHost';
+import PluginSlot from './pluginHost/PluginSlot.vue';
 
 const i18n = createI18n({
   legacy: false,
@@ -247,6 +249,7 @@ function applyLocaleMessages(locale, defaultMessages, localeMessages) {
   i18n.global.setLocaleMessage('en', defaultMessages);
   setI18nLocale(locale);
   i18n.global.setLocaleMessage(locale, localeMessages);
+  mergePluginMessages(locale);
   sharedUtils.updateRelativeTimeLocale();
 }
 
@@ -464,6 +467,13 @@ const Root = {
 
 const app = createApp(Root);
 vueApp = app;
+initPluginHost({
+  app,
+  router,
+  i18n,
+  normalizeMessages: (raw) => normalizeLocaleMessages(raw, raw),
+});
+app.component('PluginSlot', PluginSlot);
 app.use(router);
 app.use(store);
 app.use(i18n);

@@ -31,6 +31,8 @@ type Template struct {
 	Body       string      `db:"body" json:"body,omitempty"`
 	BodySource null.String `db:"body_source" json:"body_source,omitempty"`
 	IsDefault  bool        `db:"is_default" json:"is_default"`
+	// Channel limits a campaign_sms template to one plugin channel. Blank means any.
+	Channel string `db:"channel" json:"channel,omitempty"`
 
 	// Only relevant to tx (transactional) templates.
 	SubjectTpl *txttpl.Template   `json:"-"`

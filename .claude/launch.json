@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "go",
+      "runtimeArgs": [
+        "run",
+        "./cmd"
+      ],
+      "port": 9000
+    }
+  ]
+}

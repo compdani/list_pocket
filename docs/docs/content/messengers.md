@@ -47,3 +47,7 @@ Following is a list of HTTP messenger servers that connect to various backends.
 | [listmonk-push-messenger](https://github.com/shyamkrishna21/listmonk-push-messenger) | Google FCM       |
 
 These community projects target upstream listmonk’s messenger protocol; List Pocket keeps the same JSON payload shape where possible.
+
+## WhatsApp
+
+WhatsApp is built in, and doesn't use a postback messenger. See [WhatsApp](whatsapp.md).

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"github.com/compdani/list_pocket/internal/apperr"
 	pbcore "github.com/pocketbase/pocketbase/core"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/compdani/list_pocket/internal/captcha"
+	"github.com/compdani/list_pocket/internal/messenger/whatsapp"
 	"github.com/compdani/list_pocket/models"
 	null "gopkg.in/volatiletech/null.v6"
 )
@@ -31,6 +33,8 @@ type serverConfig struct {
 	} `json:"privacy"`
 	MediaProvider string          `json:"media_provider"`
 	Messengers    []string        `json:"messengers"`
+	Channels      []channelConfig `json:"channels"`
+	WhatsApp      *whatsAppConfig `json:"whatsapp,omitempty"`
 	Langs         []i18nLang      `json:"langs"`
 	Lang          string          `json:"lang"`
 	Permissions   json.RawMessage `json:"permissions"`
@@ -45,6 +49,51 @@ type smtpSenderConfig struct {
 	Name             string   `json:"name"`
 	FromAddresses    []string `json:"from_addresses"`
 	DefaultFromEmail string   `json:"default_from_email"`
+}
+
+// whatsAppConfig tells the admin UI which WhatsApp features apply. It's only present
+// when WhatsApp is set up.
+type whatsAppConfig struct {
+	Provider     string                `json:"provider"`
+	Capabilities whatsapp.Capabilities `json:"capabilities"`
+}
+
+// channelConfig tells the admin UI how a messenger behaves.
+type channelConfig struct {
+	ID             string               `json:"id"`
+	Label          string               `json:"label"`
+	Icon           string               `json:"icon"`
+	Kind           string               `json:"kind"`
+	AddressSource  models.AddressSource `json:"address_source"`
+	AddressLabel   string               `json:"address_label"`
+	ContentTypes   []string             `json:"content_types"`
+	TemplateType   string               `json:"template_type"`
+	CampaignFields json.RawMessage      `json:"campaign_fields,omitempty"`
+	CampaignBody   string               `json:"campaign_body,omitempty"`
+}
+
+func buildChannelConfigs(messengers []string) []channelConfig {
+	out := make([]channelConfig, 0, len(messengers))
+	for _, name := range messengers {
+		spec := models.ChannelFor(name)
+		kind := "email"
+		if spec.TextPipeline {
+			kind = "text"
+		}
+		out = append(out, channelConfig{
+			ID:             name,
+			Label:          spec.Label,
+			Icon:           spec.Icon,
+			Kind:           kind,
+			AddressSource:  spec.Address,
+			AddressLabel:   spec.AddressLabel,
+			ContentTypes:   spec.ContentTypes,
+			TemplateType:   spec.TemplateType,
+			CampaignFields: spec.CampaignFields,
+			CampaignBody:   spec.CampaignBody,
+		})
+	}
+	return out
 }
 
 // GetServerConfig returns general server config.
@@ -131,6 +180,16 @@ func (a *App) GetServerConfig(re *pbcore.RequestEvent) error {
 			out.Messengers = append(out.Messengers, models.CampaignMessengerQuo)
 		}
 	}
+	// WhatsApp is always registered, but it's only offered once it's set up.
+	if wa := loadWhatsAppSettingsFromPB(a.pb); wa.Configured() {
+		out.WhatsApp = &whatsAppConfig{
+			Provider:     wa.Provider,
+			Capabilities: whatsapp.NewProvider(wa, nil).Capabilities(),
+		}
+	} else {
+		out.Messengers = slices.DeleteFunc(out.Messengers, func(name string) bool { return name == models.ChannelWhatsApp })
+	}
+	out.Channels = buildChannelConfigs(out.Messengers)
 
 	a.Lock()
 	out.NeedsRestart = a.needsRestart

@@ -32,11 +32,6 @@ const (
 	CampaignMessengerQuo = "quo"
 )
 
-// IsTextMessenger reports whether the campaign messenger uses SMS/text pipeline (ledger + consent + throttling).
-func IsTextMessenger(messenger string) bool {
-	return strings.TrimSpace(messenger) == CampaignMessengerQuo
-}
-
 // Campaigns represents a slice of Campaigns.
 type Campaigns []Campaign
 
@@ -124,7 +119,7 @@ func (camps Campaigns) GetIDs() []int {
 // CompileTemplate compiles a campaign body template into its base
 // template and sets the resultant template to Campaign.Tpl.
 func (c *Campaign) CompileTemplate(f template.FuncMap) error {
-	if IsTextMessenger(c.Messenger) {
+	if ChannelFor(c.Messenger).TextPipeline {
 		return c.compileTextTemplate(f)
 	}
 	// If the subject line has a template string, compile it.

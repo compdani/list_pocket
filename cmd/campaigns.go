@@ -39,8 +39,7 @@ type campReq struct {
 	MediaIDs       []int    `json:"media"`
 	MediaRecordIDs []string `json:"media_record_ids"`
 
-	DripEnabled bool                `json:"drip_enabled"`
-	Batching    campaignBatchingReq `json:"batching"`
+	Batching campaignBatchingReq `json:"batching"`
 
 	// This is only relevant to campaign test requests.
 	SubscriberEmails []string `json:"subscribers"`
@@ -457,10 +456,6 @@ func (a *App) CreateCampaign(re *pbcore.RequestEvent) error {
 		a.log.Printf("create campaign: core create failed name=%q error=%v", o.Name, err)
 		return err
 	}
-	out, err = a.syncCampaignDripAutomation(out, o.DripEnabled, campaignDripMetadata{})
-	if err != nil {
-		return err
-	}
 	a.log.Printf("create campaign: success name=%q campaign_record_id=%q uuid=%q", out.Name, out.RecordID, out.UUID)
 
 	return okJSON(re, out)
@@ -485,7 +480,6 @@ func (a *App) UpdateCampaign(re *pbcore.RequestEvent) error {
 	if err != nil {
 		return err
 	}
-	existingDripMeta := parseCampaignDripMetadata(cm.Attribs)
 	user := auth.GetUserRE(re)
 
 	if !canEditCampaign(cm.Status) {
@@ -525,10 +519,6 @@ func (a *App) UpdateCampaign(re *pbcore.RequestEvent) error {
 	}
 
 	out, err := a.core.UpdateCampaign(recordID, o.Campaign, o.ListIDs, mediaRecordIDs)
-	if err != nil {
-		return err
-	}
-	out, err = a.syncCampaignDripAutomation(out, o.DripEnabled, existingDripMeta)
 	if err != nil {
 		return err
 	}
@@ -844,7 +834,20 @@ func (a *App) TestCampaign(re *pbcore.RequestEvent) error {
 	}
 
 	var subs models.Subscribers
-	if models.IsTextMessenger(req.Messenger) {
+	if models.ChannelFor(req.Messenger).Address == models.AddressSourceChannel {
+		// A test send goes to the addresses typed in, which must belong to subscribers.
+		for _, raw := range req.SubscriberEmails {
+			address := strings.TrimSpace(string(raw))
+			sub, ok, findErr := a.core.FindSubscriberByChannelAddress(req.Messenger, address)
+			if findErr != nil {
+				return findErr
+			}
+			if ok {
+				sub.Addresses = []string{address}
+				subs = append(subs, sub)
+			}
+		}
+	} else if models.ChannelFor(req.Messenger).Address == models.AddressSourcePhone {
 		digits := make([]string, 0, len(req.SubscriberEmails))
 		for _, raw := range req.SubscriberEmails {
 			d := phoneutil.NormalizeDigits(string(raw))
@@ -1027,7 +1030,7 @@ func (a *App) defaultCampaignFromEmail(messenger string) string {
 
 // validateCampaignFields validates incoming campaign field values.
 func (a *App) validateCampaignFields(c campReq) (campReq, error) {
-	if models.IsTextMessenger(c.Messenger) {
+	if models.ChannelFor(c.Messenger).TextPipeline {
 		// SMS reuses from_email as an optional sender phone override.
 		// Accept any non-empty trimmed value (leave real E.164 formatting
 		// to the user / provider). Blank means fall back to the provider
@@ -1048,7 +1051,7 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 	}
 
 	// SMS campaigns don't use a subject line; clear it and skip the length check.
-	if models.IsTextMessenger(c.Messenger) {
+	if models.ChannelFor(c.Messenger).TextPipeline {
 		c.Subject = ""
 	} else if !strHasLen(c.Subject, 1, 5000) {
 		// Larger char limit for subject as it can contain {{ go templating }} logic.
@@ -1140,7 +1143,7 @@ func (a *App) validateCampaignFields(c campReq) (campReq, error) {
 }
 
 func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
-	if models.IsTextMessenger(c.Messenger) {
+	if models.ChannelFor(c.Messenger).TextPipeline {
 		c.FromEmail = strings.TrimSpace(c.FromEmail)
 	} else if c.FromEmail == "" {
 		c.FromEmail = a.defaultCampaignFromEmail(c.Messenger)
@@ -1156,7 +1159,7 @@ func (a *App) validateCampaignFieldsForTest(c campReq) (campReq, error) {
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidName"))
 	}
 
-	if models.IsTextMessenger(c.Messenger) {
+	if models.ChannelFor(c.Messenger).TextPipeline {
 		c.Subject = ""
 	} else if !strHasLen(c.Subject, 1, 5000) {
 		return c, errors.New(a.i18n.T("campaigns.fieldInvalidSubject"))

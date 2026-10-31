@@ -21,8 +21,16 @@ func (m *Manager) NewCampaignMessage(c *models.Campaign, s models.Subscriber) (C
 		to:       s.Email,
 		unsubURL: fmt.Sprintf(m.cfg.UnsubURL, c.RecordID, s.RecordID),
 	}
-	if models.IsTextMessenger(c.Messenger) {
-		msg.to = strings.TrimSpace(s.Phone)
+	spec := models.ChannelFor(c.Messenger)
+	if spec.TextPipeline {
+		switch {
+		case spec.Address == models.AddressSourcePhone:
+			msg.to = strings.TrimSpace(s.Phone)
+		case len(s.Addresses) > 0:
+			msg.to = s.Addresses[0]
+		default:
+			msg.to = ""
+		}
 		// For SMS, campaigns.from_email doubles as the sender phone override.
 		// Leave blank here if it doesn't look like a phone (e.g. legacy email
 		// value from converted campaigns); the messenger falls back to the

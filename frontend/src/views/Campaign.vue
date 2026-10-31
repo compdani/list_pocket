@@ -118,7 +118,7 @@
       <v-tab value="campaign" prepend-icon="mdi-rocket-launch-outline">
         {{ $tc('globals.terms.campaign') }}
       </v-tab>
-      <v-tab value="content" prepend-icon="mdi-text" :disabled="isNew">
+      <v-tab v-if="!hidesContentTab" value="content" prepend-icon="mdi-text" :disabled="isNew">
         {{ $t('campaigns.content') }}
       </v-tab>
       <v-tab value="attribs" prepend-icon="mdi-code-tags" :disabled="isNew">
@@ -185,14 +185,36 @@
                 >
                   {{ $t('campaigns.channelSms') }}
                 </v-btn>
+                <v-btn
+                  v-for="channel in pluginChannelOptions"
+                  :key="channel.id"
+                  :value="channel.id"
+                >
+                  {{ channel.label }}
+                </v-btn>
               </v-btn-toggle>
-              <p v-if="!smsChannelSelectable" class="form-help mt-2 text-medium-emphasis">
+              <p v-if="!smsChannelSelectable && !isPluginChannel" class="form-help mt-2 text-medium-emphasis">
                 {{ $t('campaigns.channelSmsConfigureHint') }}
               </p>
               <p v-else-if="campaignChannel === 'sms'" class="form-help mt-2">
                 {{ $t('campaigns.channelSmsHelp') }}
               </p>
             </div>
+
+            <whatsapp-template-picker
+              v-if="usesWhatsAppTemplates"
+              v-model="form.channelFields"
+              :disabled="!canEdit"
+            />
+            <whatsapp-campaign-stats v-if="isWhatsApp && !isNew" :campaign-id="data.id" />
+
+            <schema-form
+              v-if="channelFieldDefs.length > 0"
+              v-model="form.channelFields"
+              :fields="channelFieldDefs"
+              :disabled="!canEdit"
+              data-cy="channel-fields"
+            />
 
             <v-text-field hide-details="auto"
               v-if="!isSmsChannel"
@@ -227,7 +249,7 @@
             />
 
             <v-text-field hide-details="auto"
-              v-if="isSmsChannel"
+              v-if="isSmsChannel && !isPluginChannel"
               v-model="form.fromEmail"
               :label="$t('campaigns.fromPhone')"
               :hint="$t('campaigns.fromPhoneHelp')"
@@ -491,6 +513,8 @@
                 {{ $t('campaigns.continue') }}
               </v-btn>
             </div>
+
+            <plugin-slot name="campaign.form.after" :context="{ campaign: form, messenger: form.messenger }" />
           </v-form>
         </v-col>
 
@@ -504,13 +528,13 @@
                 v-model="testEmailsInput"
                 :aria-label="$t('campaigns.testEmails')"
                 :disabled="isNew"
-                :placeholder="isSmsChannel ? $t('campaigns.testPhonesHelp') : $t('campaigns.testEmails')"
+                :placeholder="testRecipientHelp"
                 rows="3"
                 auto-grow
                 variant="outlined"
               />
               <p class="form-help">
-                {{ isSmsChannel ? $t('campaigns.testPhonesHelp') : $t('campaigns.sendTestHelp') }}
+                {{ isSmsChannel ? testRecipientHelp : $t('campaigns.sendTestHelp') }}
               </p>
               <v-btn
                 type="button"
@@ -789,9 +813,25 @@ import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import Editor from '../components/Editor.vue';
 import Media from './Media.vue';
+import SchemaForm from '../pluginHost/SchemaForm.vue';
+import WhatsappCampaignStats from '../components/WhatsAppCampaignStats.vue';
+import WhatsappTemplatePicker from '../components/WhatsAppTemplatePicker.vue';
+import {
+  channelGroup,
+  EMAIL_GROUP,
+  findChannel,
+  isTextMessenger,
+  messengersInGroup,
+  pluginChannels,
+  SMS_GROUP,
+  templateTypeFor,
+} from '../utils/channels';
 
 export default {
   components: {
+    SchemaForm,
+    WhatsappCampaignStats,
+    WhatsappTemplatePicker,
     Editor,
     Media,
     CopyText,
@@ -832,6 +872,7 @@ export default {
         headersStr: '[]',
         headers: [],
         attribsStr: '{}',
+        channelFields: {},
         messenger: 'email',
         lists: [],
         tags: [],
@@ -988,12 +1029,9 @@ export default {
       return this.smtpSenders.find((item) => item.messenger === messenger) || null;
     },
 
+    // True for every text pipeline messenger: Quo and plugin channels.
     isSmsMessenger(messenger) {
-      const normalized = String(messenger || '').trim();
-      if (!normalized) {
-        return false;
-      }
-      return !this.emailMessengerSet.has(normalized);
+      return isTextMessenger(this.channels, messenger);
     },
 
     applyDefaultFromEmailForMessenger(force = false) {
@@ -1094,6 +1132,7 @@ export default {
       const next = { ...attribs };
       delete next.dripAutomation;
       delete next.batching;
+      delete next.channel_fields;
       return next;
     },
 
@@ -1138,7 +1177,7 @@ export default {
         return;
       }
 
-      this.activeTab = requestedTab;
+      this.activeTab = requestedTab === 'content' && this.hidesContentTab ? 'campaign' : requestedTab;
     },
 
     onFillArchiveMeta() {
@@ -1193,6 +1232,9 @@ export default {
       if (!attribs || typeof attribs !== 'object') {
         attribs = {};
       }
+      if (this.isPluginChannel) {
+        attribs.channel_fields = { ...this.form.channelFields };
+      }
       const preheader = String(this.form.preheader || '').trim();
       if (preheader) {
         attribs.preheader = preheader;
@@ -1228,6 +1270,7 @@ export default {
           headersStr: JSON.stringify(data.headers, null, 4),
           archiveMetaStr: data.archiveMeta ? JSON.stringify(data.archiveMeta, null, 4) : '{}',
           attribsStr: JSON.stringify(userAttribs, null, 4),
+          channelFields: (data.attribs && data.attribs.channel_fields) || {},
           preheader,
           batching,
 
@@ -1258,7 +1301,7 @@ export default {
     },
 
     syncCampaignChannelFromMessenger() {
-      this.campaignChannel = this.isSmsMessenger(this.form.messenger) ? 'sms' : 'email';
+      this.campaignChannel = channelGroup(this.channels, this.form.messenger);
     },
 
     sendTest() {
@@ -1530,23 +1573,54 @@ export default {
       return messengers.length > 0 ? messengers : ['email'];
     },
 
-    emailMessengerSet() {
-      const set = new Set(['email']);
-      this.smtpSenders.forEach((sender) => {
-        const messenger = String(sender.messenger || '').trim();
-        if (messenger) {
-          set.add(messenger);
-        }
-      });
-      return set;
+    channels() {
+      return this.serverConfig?.channels || [];
+    },
+
+    currentChannel() {
+      return findChannel(this.channels, this.form.messenger);
+    },
+
+    isPluginChannel() {
+      return String(this.form.messenger || '').startsWith('ch:');
+    },
+
+    isWhatsApp() {
+      return this.form.messenger === 'ch:whatsapp';
+    },
+
+    usesWhatsAppTemplates() {
+      return this.isWhatsApp && Boolean(this.serverConfig?.whatsapp?.capabilities?.templates);
+    },
+
+    // Some channels send something else, such as a provider-side template.
+    hidesContentTab() {
+      return (this.currentChannel && this.currentChannel.campaign_body) === 'none';
+    },
+
+    channelFieldDefs() {
+      return (this.currentChannel && this.currentChannel.campaign_fields) || [];
+    },
+
+    testRecipientHelp() {
+      if (this.isPluginChannel) {
+        return this.$t('campaigns.testChannelHelp', {
+          label: (this.currentChannel && this.currentChannel.address_label) || this.$t('plugins.address'),
+        });
+      }
+      return this.isSmsChannel ? this.$t('campaigns.testPhonesHelp') : this.$t('campaigns.testEmails');
+    },
+
+    pluginChannelOptions() {
+      return pluginChannels(this.channels);
     },
 
     emailMessengerOptions() {
-      return this.availableMessengers.filter((messenger) => this.emailMessengerSet.has(messenger));
+      return messengersInGroup(this.channels, this.availableMessengers, EMAIL_GROUP);
     },
 
     smsMessengerOptions() {
-      return this.availableMessengers.filter((messenger) => !this.emailMessengerSet.has(messenger));
+      return messengersInGroup(this.channels, this.availableMessengers, SMS_GROUP);
     },
 
     displayedMessengers() {
@@ -1554,24 +1628,13 @@ export default {
         return this.availableMessengers;
       }
 
-      const options = this.campaignChannel === 'sms'
-        ? this.smsMessengerOptions
-        : this.emailMessengerOptions;
+      const options = messengersInGroup(this.channels, this.availableMessengers, this.campaignChannel);
 
       return options.length > 0 ? options : this.availableMessengers;
     },
 
     defaultEmailMessenger() {
       return this.emailMessengerOptions[0] || this.availableMessengers[0] || 'email';
-    },
-
-    defaultSmsMessenger() {
-      return this.smsMessengerOptions[0] || '';
-    },
-
-    hasQuoMessenger() {
-      return Array.isArray(this.serverConfig?.messengers)
-        && this.serverConfig.messengers.includes('quo');
     },
 
     hasSmsMessengers() {
@@ -1738,14 +1801,13 @@ export default {
       }
       this.applyDefaultFromEmailForMessenger(true);
       if (this.showChannelPicker) {
-        this.campaignChannel = this.isSmsMessenger(nextMessenger) ? 'sms' : 'email';
+        this.campaignChannel = channelGroup(this.channels, nextMessenger);
       }
 
       // Swap the template to one matching the new channel so a stale
       // HTML-email template isn't carried over into an SMS campaign (or
       // vice-versa).
-      const isSms = this.isSmsMessenger(nextMessenger);
-      const desiredType = isSms ? 'campaign_sms' : 'campaign';
+      const desiredType = templateTypeFor(this.channels, nextMessenger);
       const templates = Array.isArray(this.templates) ? this.templates : [];
       const current = templates.find((t) => t.id === this.form.content.templateId);
       if (current && current.type !== desiredType) {
@@ -1766,11 +1828,11 @@ export default {
       if (this.isHydratingCampaignForm || val === prev) {
         return;
       }
-      if (val === 'sms') {
-        if (!this.isSmsMessenger(this.form.messenger)) {
-          const nextSmsMessenger = this.defaultSmsMessenger;
-          if (nextSmsMessenger) {
-            this.form.messenger = nextSmsMessenger;
+      if (val !== EMAIL_GROUP) {
+        if (channelGroup(this.channels, this.form.messenger) !== val) {
+          const [nextMessenger] = messengersInGroup(this.channels, this.availableMessengers, val);
+          if (nextMessenger) {
+            this.form.messenger = nextMessenger;
           }
         }
         this.form.content.contentType = 'plain';
@@ -1831,8 +1893,7 @@ export default {
       if (this.form.content.templateId) {
         return;
       }
-      const isSms = this.form.messenger === 'quo';
-      const desiredType = isSms ? 'campaign_sms' : 'campaign';
+      const desiredType = templateTypeFor(this.channels, this.form.messenger);
       const tpl = data.find((i) => i.isDefault === true && i.type === desiredType);
       if (tpl) {
         this.form.content.templateId = tpl.id;
@@ -1851,10 +1912,12 @@ export default {
     }
 
     this.$nextTick(() => {
-      if (this.isNew && this.hasSmsMessengers && this.$route.query.channel === 'sms') {
+      const queryChannel = String(this.$route.query.channel || '');
+      const [queryMessenger] = messengersInGroup(this.channels, this.availableMessengers, queryChannel);
+      if (this.isNew && queryChannel !== EMAIL_GROUP && queryMessenger) {
         this.isHydratingCampaignForm = true;
-        this.campaignChannel = 'sms';
-        this.form.messenger = this.defaultSmsMessenger || this.form.messenger;
+        this.campaignChannel = queryChannel;
+        this.form.messenger = queryMessenger;
         this.form.content.contentType = 'plain';
         this.$nextTick(() => {
           this.isHydratingCampaignForm = false;

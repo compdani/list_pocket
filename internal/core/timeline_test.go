@@ -61,6 +61,20 @@ CREATE TABLE link_clicks (
   link_id TEXT,
   created TEXT
 );
+CREATE TABLE board_card_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subscriber TEXT NOT NULL,
+  board_name TEXT NOT NULL,
+  from_stage_name TEXT NOT NULL DEFAULT '',
+  to_stage_name TEXT NOT NULL DEFAULT '',
+  actor_name TEXT NOT NULL DEFAULT '',
+  created TEXT NOT NULL
+);
+CREATE TABLE channel_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  channel TEXT, direction TEXT, kind TEXT, status TEXT, provider_msg_id TEXT,
+  subscriber TEXT, campaign TEXT, address TEXT, body TEXT, payload TEXT, occurred_at TEXT
+);
 CREATE TABLE inbound_sms_events (
   id TEXT NOT NULL PRIMARY KEY,
   subscriber_id TEXT,

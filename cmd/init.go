@@ -316,6 +316,11 @@ func initCore(fnNotify func(sub models.Subscriber, listIDs []int) (int, error), 
 	// Initialize the CRUD core.
 	return core.New(opt, &core.Hooks{
 		SendOptinConfirmation: fnNotify,
+		OnChannelInbound: func(e core.ChannelEvent) {
+			if channelInboundReceived != nil {
+				channelInboundReceived(e)
+			}
+		},
 	})
 }
 

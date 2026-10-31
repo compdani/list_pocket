@@ -152,6 +152,8 @@ export default {
   props: {
     disabled: { type: Boolean, default: false },
     preserveGoTemplate: { type: Boolean, default: false },
+    // Fills its container, where the page's default is to grow with the content.
+    fill: { type: Boolean, default: false },
     modelValue: {
       type: String,
       default: '',
@@ -249,14 +251,15 @@ export default {
 
         license_key: 'gpl',
         browser_spellcheck: true,
-        min_height: 500,
-        toolbar_sticky: true,
+        min_height: this.fill ? 300 : 500,
+        ...(this.fill ? { height: '100%' } : {}),
+        toolbar_sticky: !this.fill,
         entity_encoding: 'raw',
         convert_urls: true,
         verify_html: !this.preserveGoTemplate,
         extended_valid_elements: this.preserveGoTemplate ? '*[*]' : undefined,
         plugins: [
-          'anchor', 'autoresize', 'autolink', 'charmap', 'emoticons', 'fullscreen',
+          'anchor', ...(this.fill ? [] : ['autoresize']), 'autolink', 'charmap', 'emoticons', 'fullscreen',
           'help', 'image', 'link', 'lists', 'searchreplace',
           'table', 'visualblocks', 'visualchars', 'wordcount',
         ],

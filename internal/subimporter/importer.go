@@ -692,7 +692,7 @@ func (im *Importer) SanitizeEmail(email string) (string, error) {
 	// here we check if incoming email string is same as the parsed email.Address. So this eliminates
 	// any valid email address with name and also valid address with empty name like `<abc@example.com>`.
 	em, err := mail.ParseAddress(email)
-	if err != nil || em.Address != email {
+	if err != nil || em.Address != email || models.IsPlaceholderEmail(em.Address) {
 		return "", errors.New(im.i18n.T("subscribers.invalidEmail"))
 	}
 

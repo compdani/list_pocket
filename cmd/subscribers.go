@@ -381,10 +381,18 @@ func (a *App) UpdateSubscriber(re *pbcore.RequestEvent) error {
 		return err
 	}
 
-	// Sanitize and validate the email field.
-	if em, err := a.importer.SanitizeEmail(req.Email); err != nil {
-		return apperr.BadRequest(err.Error())
-	} else {
+	// A channel-only contact can keep its placeholder email: saving the form with it
+	// unchanged, or blank, leaves it as it is. A real address replaces it.
+	current, found, err := a.core.GetSubscriberForChannel(pathParam(re, "id"))
+	switch {
+	case err == nil && found && models.IsPlaceholderEmail(current.Email) &&
+		(strings.TrimSpace(req.Email) == "" || strings.EqualFold(strings.TrimSpace(req.Email), current.Email)):
+		req.Email = current.Email
+	default:
+		em, err := a.importer.SanitizeEmail(req.Email)
+		if err != nil {
+			return apperr.BadRequest(err.Error())
+		}
 		req.Email = em
 	}
 	req.Phone = utils.NormalizePhone(req.Phone)
@@ -954,6 +962,10 @@ func formatSQLExp(q string) string {
 // created via `core.CreateSubscriber()`.
 func makeOptinNotifyHook(unsubHeader bool, u *UrlConfig, db *pbdb.DB, i *i18n.I18n) func(sub models.Subscriber, listIDs []int) (int, error) {
 	return func(sub models.Subscriber, listIDs []int) (int, error) {
+		if models.IsPlaceholderEmail(sub.Email) {
+			return 0, nil
+		}
+
 		// Fetch double opt-in lists from the given list IDs.
 		// Get the list of subscription lists where the subscriber hasn't confirmed.
 		var lists []models.List

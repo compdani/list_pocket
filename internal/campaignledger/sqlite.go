@@ -88,14 +88,44 @@ func RecipientMembershipSQL() string {
       ))
     ) AND trim(COALESCE(s.phone, '')) != '')
     OR
-    (trim(COALESCE(c.messenger, '')) != '` + models.CampaignMessengerQuo + `' AND (
+    (trim(COALESCE(c.messenger, '')) != '` + models.CampaignMessengerQuo + `'
+      AND trim(COALESCE(c.messenger, '')) NOT LIKE '` + models.ChannelMessengerPrefix + `%'
+      AND s.email NOT LIKE '%@` + models.PlaceholderEmailDomain + `' AND (
       (c.type = 'optin' AND sl.status = 'unconfirmed' AND l.optin = 'double') OR
       ((c.type != 'optin' OR c.type IS NULL OR c.type = '') AND (
         (l.optin = 'double' AND sl.status = 'confirmed') OR
         (l.optin != 'double' AND sl.status != 'unsubscribed')
       ))
     ))
+    OR
+    (trim(COALESCE(c.messenger, '')) LIKE '` + models.ChannelMessengerPrefix + `%'
+      AND (c.type != 'optin' OR c.type IS NULL OR c.type = '')
+      AND EXISTS (
+        SELECT 1 FROM subscriber_channel_consent cc
+        WHERE cc.subscriber = sl.subscriber_id AND cc.list = sl.list_id
+          AND cc.channel = trim(c.messenger) AND cc.status = 'confirmed'
+      )
+      AND (` + channelAddressSQL() + `))
   )`
+}
+
+// channelAddressSQL requires somewhere to send: the phone column for phone-sourced
+// plugin channels, or an active row in subscriber_addresses for the rest. It's
+// built per call because channels are registered at boot.
+func channelAddressSQL() string {
+	own := `EXISTS (
+        SELECT 1 FROM subscriber_addresses sa
+        WHERE sa.subscriber = sl.subscriber_id AND sa.channel = trim(c.messenger) AND sa.status = 'active'
+      )`
+	phoneChannels := models.PhoneSourcedChannels()
+	if len(phoneChannels) == 0 {
+		return own
+	}
+	return own + ` OR (trim(c.messenger) IN ('` + strings.Join(phoneChannels, `','`) + `') AND trim(COALESCE(s.phone, '')) != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM subscriber_addresses bad
+          WHERE bad.channel = trim(c.messenger) AND bad.address = trim(s.phone) AND bad.status = 'invalid'
+        ))`
 }
 
 func eligibleDistinctSQL(missingOnly bool) string {

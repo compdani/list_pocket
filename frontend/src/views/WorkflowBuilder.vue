@@ -1,1635 +1,651 @@
+<template>
+  <section class="builder" data-cy="flow-builder">
+    <div v-if="loadError" class="pa-6">
+      <v-alert type="error" variant="tonal">{{ loadError }}</v-alert>
+    </div>
+    <div v-else-if="!definition" class="d-flex justify-center pa-12">
+      <v-progress-circular indeterminate color="primary" />
+    </div>
+    <template v-else>
+      <header class="builder-bar">
+        <v-btn :to="{ name: 'workflows' }" :aria-label="$t('workflows.back')" icon="mdi-arrow-left" size="small" variant="text" />
+        <div class="builder-title">
+          <div class="font-weight-medium text-truncate">{{ definition.name }}</div>
+          <div class="text-caption text-medium-emphasis text-truncate" data-cy="flow-save-state">{{ saveLabel }}</div>
+        </div>
+        <v-chip size="small" label :color="statusColor" data-cy="flow-status">{{ statusLabel }}</v-chip>
+        <v-spacer />
+        <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-creation-outline" data-cy="flow-ask-ai" @click="askAssistant">
+          {{ $t('workflows.askAI') }}
+        </v-btn>
+        <v-btn v-if="canEnroll" size="small" variant="tonal" class="text-none" prepend-icon="mdi-account-plus-outline" data-cy="flow-enroll-open" @click="enrollOpen = true">{{ $t('workflows.enroll.title') }}</v-btn>
+        <template v-if="canManage">
+          <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-auto-fix" @click="tidy">{{ $t('workflows.tidy') }}</v-btn>
+          <v-btn size="small" variant="tonal" class="text-none" prepend-icon="mdi-play-outline" :disabled="hasErrors" data-cy="flow-test" @click="testOpen = true">{{ $t('workflows.test') }}</v-btn>
+          <v-btn size="small" color="primary" variant="flat" class="text-none" :disabled="hasErrors || !hasUnpublished" :loading="publishing" data-cy="flow-publish" @click="publish">{{ $t('workflows.publish') }}</v-btn>
+        </template>
+        <v-switch
+          v-if="canManage && workflow.published_version > 0"
+          :model-value="workflow.enabled"
+          :label="$t('workflows.enabled')"
+          density="compact"
+          color="primary"
+          hide-details
+          class="ml-2 flex-grow-0"
+          @update:model-value="setEnabled"
+        />
+      </header>
+
+      <v-alert v-if="validation.errors?.length" type="warning" variant="tonal" density="compact" class="builder-alert" data-cy="flow-errors">
+        <div class="font-weight-medium">{{ $t('workflows.fixBefore') }}</div>
+        <ul class="builder-issues"><li v-for="item in validation.errors" :key="item">{{ item }}</li></ul>
+      </v-alert>
+      <v-alert v-else-if="validation.warnings?.length" type="info" variant="tonal" density="compact" class="builder-alert">
+        <ul class="builder-issues"><li v-for="item in validation.warnings" :key="item">{{ item }}</li></ul>
+      </v-alert>
+
+      <div class="builder-frame"><div class="builder-main">
+        <aside v-if="canManage" class="builder-palette" :aria-label="$t('workflows.addStep')">
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('workflows.addStep') }}</div>
+          <button
+            v-for="type in paletteTypes"
+            :key="type"
+            type="button"
+            class="palette-item"
+            :data-cy="`flow-add-${type}`"
+            @click="addNode(type)"
+          >
+            <span class="palette-icon" :style="{ background: nodeTypes[type].color }"><v-icon :icon="nodeTypes[type].icon" size="14" color="white" /></span>
+            <span>
+              <span class="palette-label">{{ nodeTypes[type].label }}</span>
+              <span class="palette-hint">{{ nodeTypes[type].hint }}</span>
+            </span>
+          </button>
+          <button
+            v-for="(step, tool) in toolSteps"
+            :key="tool"
+            type="button"
+            class="palette-item"
+            :data-cy="`flow-add-${step.id}`"
+            @click="addNode('tool', tool)"
+          >
+            <span class="palette-icon" :style="{ background: step.color }"><v-icon :icon="step.icon" size="14" color="white" /></span>
+            <span>
+              <span class="palette-label">{{ step.label }}</span>
+              <span class="palette-hint">{{ step.hint }}</span>
+            </span>
+          </button>
+        </aside>
+
+        <div class="builder-canvas">
+          <VueFlow
+            :nodes="flow.nodes"
+            :edges="flow.edges"
+            :node-types="canvasNodeTypes"
+            :min-zoom="0.25"
+            :max-zoom="1.4"
+            :nodes-connectable="canManage"
+            :nodes-draggable="canManage"
+            :delete-key-code="null"
+            fit-view-on-init
+            @connect="onConnect"
+            @node-click="({ node }) => (selectedId = node.id)"
+            @pane-click="selectedId = ''"
+            @edge-click="onEdgeClick"
+            @node-drag-stop="onDragStop"
+          >
+            <Background :gap="22" :size="1.2" />
+            <Controls position="bottom-left" />
+          </VueFlow>
+          <v-chip v-if="selectedEdge" class="builder-edge-action" closable prepend-icon="mdi-link-variant-off" data-cy="flow-edge-remove" @click="removeEdge" @click:close="selectedEdge = ''">
+            {{ $t('workflows.removeConnection') }}
+          </v-chip>
+        </div>
+
+        <aside class="builder-side">
+          <flow-inspector
+            v-if="selectedNode"
+            :key="selectedNode.id"
+            :node="selectedNode"
+            :definition="definition"
+            :catalog="catalog"
+            :webhook-url="workflow.webhook_url || ''"
+            :readonly="!canManage"
+            @remove="deleteNode"
+            @rename="rename"
+          />
+          <div v-else class="pa-4">
+            <h2 class="text-subtitle-2 mb-2">{{ $t('workflows.recentRuns') }}</h2>
+            <p v-if="!runs.length" class="text-body-2 text-medium-emphasis">{{ $t('workflows.noRuns') }}</p>
+            <router-link v-for="run in runs" :key="run.id" :to="{ name: 'workflowRun', params: { id: run.id } }" class="side-run">
+              <v-chip size="x-small" label :color="runColors[run.status]">{{ run.status }}</v-chip>
+              <span class="text-caption text-medium-emphasis">{{ run.source === 'test' ? $t('workflows.testRun') : `v${run.version}` }} · {{ shortStamp(run.created) }}</span>
+            </router-link>
+            <template v-if="canManage">
+              <v-divider class="my-3" />
+              <v-textarea v-model="definition.description" :label="$t('workflows.field.description')" rows="2" auto-grow density="compact" variant="outlined" />
+              <json-field v-model="budget" :label="$t('workflows.field.budget')" hint='{"max_usd_per_run": 0.5, "max_usd_per_day": 5}' class="mb-3" />
+              <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-content-copy" @click="duplicate">{{ $t('workflows.duplicate') }}</v-btn>
+              <v-btn size="small" variant="text" color="error" class="text-none" prepend-icon="mdi-trash-can-outline" @click="removeWorkflow">{{ $t('globals.buttons.delete') }}</v-btn>
+            </template>
+          </div>
+        </aside>
+      </div></div>
+
+      <v-dialog v-model="testOpen" max-width="560">
+        <v-card>
+          <v-card-title>{{ $t('workflows.testTitle') }}</v-card-title>
+          <v-card-text>
+            <v-alert type="warning" variant="tonal" density="compact" class="mb-3">{{ $t('workflows.testWarning') }}</v-alert>
+            <json-field v-model="testInput" :label="$t('workflows.field.input')" :rows="5" data-cy="flow-test-input" />
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer />
+            <v-btn @click="testOpen = false">{{ $t('globals.buttons.cancel') }}</v-btn>
+            <v-btn color="primary" variant="flat" :loading="testing" data-cy="flow-test-run" @click="runTest">{{ $t('workflows.runTest') }}</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
+
+      <flow-enroll-dialog v-model="enrollOpen" :workflow-id="workflow.id" @enrolled="loadRuns" />
+    </template>
+  </section>
+</template>
+
 <script setup>
-/* eslint-disable */
-import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
-import RunHistory from "../components/RunHistory.vue";
-import { openConfirm } from "../utils/confirmDialog";
 import {
-  armWorkflowWebhookCapture,
-  cancelWorkflowRun as cancelWorkflowRunRequest,
-  createWorkflow as createWorkflowRequest,
-  deleteWorkflow as deleteWorkflowRequest,
-  getWorkflowDashboard,
-  getWorkflowRunDetail,
-  getWorkflowWebhookCapture,
-  isAuthenticated as hasAuth,
-  pb,
-  publishWorkflow as publishWorkflowRequest,
-  runWorkflow as runWorkflowRequest,
-  saveWorkflowGraph,
-  validateWorkflow as validateWorkflowRequest,
-} from "../api";
+  computed, getCurrentInstance, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch,
+} from 'vue';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import '@vue-flow/core/dist/style.css';
+import '@vue-flow/core/dist/theme-default.css';
+import '@vue-flow/controls/dist/style.css';
+import { Background } from '@vue-flow/background';
+import { Controls } from '@vue-flow/controls';
+import { VueFlow, useVueFlow } from '@vue-flow/core';
+import {
+  deleteFlow, duplicateFlow, getFlow, getFlowCatalog, getFlowRuns, publishFlow, saveFlowDraft, setFlowEnabled, testFlow,
+} from '../api';
+import { assistantContext } from '../assistant/context';
+import FlowEnrollDialog from '../components/flow/FlowEnrollDialog.vue';
+import FlowInspector from '../components/flow/FlowInspector.vue';
+import FlowNode from '../components/flow/FlowNode.vue';
+import JsonField from '../components/flow/JsonField.vue';
+import {
+  connect, disconnect, ensureLayout, errorNodeIds, newNode, NODE_TYPES, PALETTE_TYPES, removeNode, renameNode, RUN_STATUS_COLORS, sameDefinition, tidyLayout, toFlow, TOOL_STEPS,
+} from '../utils/flowGraph.mjs';
+import { shortStamp } from '../utils/crm.mjs';
 
-const WorkflowBuilderPanel = defineAsyncComponent(() => import("../components/WorkflowBuilderPanel.vue"));
-const { t } = useI18n();
+const SAVE_DELAY_MS = 700;
 
-const builderRef = ref(null);
+const { proxy } = getCurrentInstance();
 const route = useRoute();
 const router = useRouter();
-const authenticated = ref(hasAuth());
-const saveMessage = ref("Loading workflow...");
-const saveState = ref("idle");
-const validationErrors = ref([]);
-const validationFindings = ref([]);
-const pendingSave = ref(null);
-const saveInFlight = ref(false);
-const capturePollTimer = ref(undefined);
-const activeCapture = ref(null);
-const selectedRunId = ref("");
-const selectedRunDetail = ref(null);
-const selectedRunLoading = ref(false);
-const refreshTimer = ref(undefined);
-const dashboard = ref({
-  workflows: [],
-  activeWorkflow: null,
-  contacts: [],
-  companies: [],
-  runLogs: [],
+const { fitView } = useVueFlow();
+
+const nodeTypes = NODE_TYPES;
+const paletteTypes = PALETTE_TYPES;
+const toolSteps = TOOL_STEPS;
+const runColors = RUN_STATUS_COLORS;
+const canvasNodeTypes = { flow: markRaw(FlowNode) };
+
+const workflow = ref({});
+const definition = ref(null);
+const validation = ref({ errors: [], warnings: [] });
+const catalog = ref({});
+const runs = ref([]);
+const loadError = ref('');
+const selectedId = ref('');
+const selectedEdge = ref('');
+const saveState = ref('saved');
+const publishing = ref(false);
+const testOpen = ref(false);
+const testing = ref(false);
+const testInput = ref({});
+const enrollOpen = ref(false);
+let saveTimer = null;
+let applying = false;
+
+const canManage = computed(() => proxy.$can('workflows:manage'));
+const canEnroll = computed(() => proxy.$can('workflows:run', 'workflows:manage') && workflow.value.published_version > 0);
+const selectedNode = computed(() => definition.value?.nodes.find((n) => n.id === selectedId.value) || null);
+const hasErrors = computed(() => (validation.value.errors || []).length > 0);
+const hasUnpublished = computed(() => {
+  const published = workflow.value.published;
+  return !published || !sameDefinition(published, definition.value);
 });
-const loading = ref(true);
-const error = ref("");
-const currentWorkflowId = ref(typeof route.params.workflowId === "string" ? route.params.workflowId : "");
-const realtimeCollections = ["workflows", "workflow_nodes", "workflow_edges", "workflow_runs", "node_runs", "subscribers"];
-const nodeLibrary = [
-  { label: "Trigger", type: "trigger" },
-  { label: "Transform", type: "transform" },
-  { label: "Condition", type: "condition" },
-  { label: "Event Start", type: "event_start" },
-  { label: "Wait", type: "wait_until" },
-  { label: "HTTP", type: "http_request" },
-  { label: "PocketBase", type: "pb_update" },
-  { label: "Transactional Email", type: "send_transactional_email" },
-  { label: "Launch Campaign", type: "campaign_launch" },
-];
-
-const workflows = computed(() => dashboard.value.workflows || []);
-const contacts = computed(() => dashboard.value.contacts || []);
-const runLogs = computed(() => dashboard.value.runLogs || []);
-const activeWorkflow = computed(() => dashboard.value.activeWorkflow);
-
-const RUN_HISTORY_COLLAPSED_KEY = "workflow-builder:run-history-collapsed";
-const runHistoryCollapsed = ref(true);
-
-const runHistoryCount = computed(() => {
-  const id = activeWorkflow.value?.workflow?.id;
-  if (!id) {
-    return runLogs.value.length;
-  }
-  const matching = runLogs.value.filter((run) => run.workflowId === id);
-  return matching.length;
+const statusLabel = computed(() => {
+  if (!workflow.value.published_version) return proxy.$t('workflows.status.draft');
+  if (hasUnpublished.value) return proxy.$t('workflows.status.changed', { n: workflow.value.published_version });
+  return workflow.value.enabled
+    ? proxy.$t('workflows.status.live', { n: workflow.value.published_version })
+    : proxy.$t('workflows.status.paused', { n: workflow.value.published_version });
 });
+const statusColor = computed(() => {
+  if (!workflow.value.published_version) return 'default';
+  if (hasUnpublished.value) return 'warning';
+  return workflow.value.enabled ? 'success' : 'default';
+});
+const saveLabel = computed(() => proxy.$t(`workflows.save.${saveState.value}`));
 
-onMounted(() => {
-  try {
-    const stored = window.localStorage.getItem(RUN_HISTORY_COLLAPSED_KEY);
-    if (stored === "0") {
-      runHistoryCollapsed.value = false;
-    } else if (stored === "1") {
-      runHistoryCollapsed.value = true;
+const errorIds = computed(() => errorNodeIds(validation.value.errors));
+const flow = computed(() => toFlow(definition.value, { errors: errorIds.value }));
+
+const budget = computed({
+  get: () => definition.value.ai?.budget,
+  set(value) {
+    if (value) {
+      definition.value.ai = { ...(definition.value.ai || {}), budget: value };
+    } else if (definition.value.ai) {
+      delete definition.value.ai.budget;
     }
-  } catch (_error) {
-    /* ignore */
-  }
+  },
 });
 
-function toggleRunHistory() {
-  runHistoryCollapsed.value = !runHistoryCollapsed.value;
+function errorText(err) {
+  return (err.response && err.response.message) || err.message;
+}
+
+function adopt(data) {
+  workflow.value = data;
+  applying = true;
+  const def = reactive(data.draft || {});
+  def.nodes ||= [];
+  def.trigger ||= { type: 'manual' };
+  ensureLayout(def);
+  definition.value = def;
+  validation.value = data.validation || { errors: [], warnings: [] };
+  testInput.value = def.default_input || {};
+  queueMicrotask(() => { applying = false; });
+}
+
+async function load() {
+  loadError.value = '';
   try {
-    window.localStorage.setItem(RUN_HISTORY_COLLAPSED_KEY, runHistoryCollapsed.value ? "1" : "0");
-  } catch (_error) {
-    /* ignore */
+    const [data, cat] = await Promise.all([getFlow(route.params.id), getFlowCatalog()]);
+    catalog.value = cat;
+    adopt(data);
+    await loadRuns();
+  } catch (err) {
+    loadError.value = errorText(err);
   }
 }
 
-function setRunHistoryExpanded(expanded) {
-  const nextCollapsed = !expanded;
-  runHistoryCollapsed.value = nextCollapsed;
+async function loadRuns() {
   try {
-    window.localStorage.setItem(RUN_HISTORY_COLLAPSED_KEY, runHistoryCollapsed.value ? "1" : "0");
-  } catch (_error) {
-    /* ignore */
+    const data = await getFlowRuns({ workflow: route.params.id, limit: 15 });
+    runs.value = Array.isArray(data) ? data : [];
+  } catch {
+    // The recent runs panel isn't worth interrupting editing over.
   }
 }
 
-watch(
-  workflows,
-  (nextWorkflows) => {
-    if (!nextWorkflows.length) {
-      return;
-    }
-
-    if (!currentWorkflowId.value) {
-      currentWorkflowId.value = nextWorkflows[0].id;
-    }
-  },
-  { immediate: true }
-);
-
-watch(
-  () => route.params.workflowId,
-  async (workflowId) => {
-    const nextWorkflowId = typeof workflowId === "string" ? workflowId : "";
-    if (nextWorkflowId === currentWorkflowId.value) {
-      return;
-    }
-
-    currentWorkflowId.value = nextWorkflowId;
-    validationErrors.value = [];
-    validationFindings.value = [];
-    saveState.value = "idle";
-    saveMessage.value = nextWorkflowId ? "Loading workflow..." : "No workflow selected";
-    await refreshDashboard(nextWorkflowId);
+async function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (!canManage.value || !definition.value) return;
+  saveState.value = 'saving';
+  try {
+    const out = await saveFlowDraft(workflow.value.id, definition.value);
+    validation.value = out.validation;
+    saveState.value = saveTimer ? 'unsaved' : 'saved';
+  } catch (err) {
+    saveState.value = 'failed';
+    proxy.$utils.toast(errorText(err), 'error');
   }
-);
+}
 
-watch(
-  [activeWorkflow, runLogs],
-  ([workflow, runs]) => {
-    if (loading.value || error.value) {
-      selectedRunId.value = "";
-      selectedRunDetail.value = null;
-      return;
-    }
+watch(definition, () => {
+  if (applying || !definition.value || !canManage.value) return;
+  saveState.value = 'unsaved';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, SAVE_DELAY_MS);
+}, { deep: true });
 
-    if (!workflow) {
-      selectedRunId.value = "";
-      selectedRunDetail.value = null;
-      return;
-    }
-
-    const matchingRuns = runs.filter((run) => run.workflowId === workflow.workflow.id);
-    if (!matchingRuns.length) {
-      selectedRunId.value = "";
-      selectedRunDetail.value = null;
-      return;
-    }
-
-    if (!selectedRunId.value || !matchingRuns.some((run) => run.id === selectedRunId.value)) {
-      void selectRun(matchingRuns[0].id);
-    }
-  },
-  { immediate: true }
-);
-
-watch(runLogs, () => {
-  if (selectedRunId.value && !loading.value && !error.value) {
-    void loadRunDetail(selectedRunId.value);
+function addNode(type, tool = '') {
+  const def = definition.value;
+  const anchor = selectedNode.value || def.nodes[def.nodes.length - 1];
+  const position = anchor?.ui ? { x: anchor.ui.x + 40, y: anchor.ui.y + 150 } : { x: 0, y: 0 };
+  const node = newNode(def, type, position, tool);
+  def.nodes.push(node);
+  // Adding after a step with an open exit joins them, which is what's wanted nearly always.
+  if (anchor && !anchor.next && !['branch', 'end', 'foreach', 'loop'].includes(anchor.type)) {
+    anchor.next = node.id;
   }
-});
+  selectedId.value = node.id;
+}
 
-watch(
-  authenticated,
-  (next) => {
-    if (next) {
-      void refreshDashboard(currentWorkflowId.value);
-      void startRealtimeSubscriptions();
-      return;
-    }
+function deleteNode(id) {
+  removeNode(definition.value, id);
+  selectedId.value = '';
+}
 
-    stopRealtimeSubscriptions();
-  },
-  { immediate: true }
-);
-
-async function refreshDashboard(workflowId = currentWorkflowId.value) {
-  if (!authenticated.value) {
-    loading.value = false;
+function rename(oldId, newId) {
+  const next = renameNode(definition.value, oldId, String(newId).trim());
+  if (!next) {
+    proxy.$utils.toast(proxy.$t('workflows.field.idInvalid'), 'error');
     return;
   }
+  definition.value = reactive(next);
+  selectedId.value = newId.trim();
+}
 
-  loading.value = true;
+function onConnect(params) {
+  connect(definition.value, params);
+}
 
+function onEdgeClick({ edge }) {
+  if (canManage.value) selectedEdge.value = edge.id;
+}
+
+function removeEdge() {
+  disconnect(definition.value, selectedEdge.value);
+  selectedEdge.value = '';
+}
+
+function onDragStop({ node }) {
+  const target = definition.value.nodes.find((n) => n.id === node.id);
+  if (target) target.ui = { x: Math.round(node.position.x), y: Math.round(node.position.y) };
+}
+
+function tidy() {
+  tidyLayout(definition.value);
+  setTimeout(() => fitView({ padding: 0.2 }), 50);
+}
+
+async function publish() {
+  publishing.value = true;
   try {
-    const payload = await getWorkflowDashboard(workflowId);
-    dashboard.value = payload;
-    currentWorkflowId.value = payload.activeWorkflow?.workflow?.id || workflowId || "";
-    syncWorkflowRoute(currentWorkflowId.value);
-    error.value = "";
-    saveState.value = "idle";
-    saveMessage.value = payload.activeWorkflow ? "Workflow loaded" : "No workflow selected";
-  } catch (nextError) {
-    error.value = nextError instanceof Error ? nextError.message : "Failed to load dashboard";
-    saveState.value = "error";
-    saveMessage.value = error.value;
+    await saveNow();
+    const out = await publishFlow(workflow.value.id);
+    proxy.$utils.toast(proxy.$t('workflows.published', { n: out.version }));
+    adopt(await getFlow(workflow.value.id));
+  } catch (err) {
+    proxy.$utils.toast(errorText(err), 'error');
   } finally {
-    loading.value = false;
+    publishing.value = false;
   }
 }
 
-function replaceDashboard(next) {
-  dashboard.value = next;
-  currentWorkflowId.value = next.activeWorkflow?.workflow?.id || "";
-  syncWorkflowRoute(currentWorkflowId.value);
-  error.value = "";
-  loading.value = false;
-  saveState.value = "idle";
-}
-
-function updateWorkflowName(value) {
-  const nextName = value;
-  if (!dashboard.value.activeWorkflow?.workflow) {
-    return;
-  }
-
-  dashboard.value = {
-    ...dashboard.value,
-    workflows: (dashboard.value.workflows || []).map((workflow) => (
-      workflow.id === dashboard.value.activeWorkflow.workflow.id
-        ? { ...workflow, name: nextName }
-        : workflow
-    )),
-    activeWorkflow: {
-      ...dashboard.value.activeWorkflow,
-      workflow: {
-        ...dashboard.value.activeWorkflow.workflow,
-        name: nextName,
-      },
-    },
-  };
-}
-
-function syncWorkflowRoute(workflowId) {
-  const nextWorkflowId = workflowId || undefined;
-  const currentRouteWorkflowId = typeof route.params.workflowId === "string" ? route.params.workflowId : undefined;
-  if (currentRouteWorkflowId === nextWorkflowId) {
-    return;
-  }
-
-  router.replace({
-    name: "workflowBuilder",
-    params: nextWorkflowId ? { workflowId: nextWorkflowId } : {},
-  });
-}
-
-async function saveWorkflow(payload, mode) {
-  if (saveInFlight.value) {
-    pendingSave.value = { payload, mode };
-    saveState.value = "dirty";
-    saveMessage.value = mode === "auto" ? "Changes queued for autosave..." : "Changes queued for save...";
-    return false;
-  }
-
-  saveInFlight.value = true;
-  saveState.value = "saving";
-  saveMessage.value = mode === "auto" ? "Autosaving..." : "Saving workflow...";
-
+async function setEnabled(enabled) {
   try {
-    replaceDashboard(await saveWorkflowGraph(payload.workflow.id, {
-      name: payload.workflow.name,
-      nodes: payload.nodes,
-      edges: payload.edges,
-    }));
-    saveState.value = "saved";
-    saveMessage.value = `Saved ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
-    validationErrors.value = [];
-    validationFindings.value = [];
-    return true;
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = `Unsaved: ${nextError instanceof Error ? nextError.message : "Failed to save workflow"}`;
-    error.value = nextError instanceof Error ? nextError.message : "Failed to save workflow";
-    return false;
+    const out = await setFlowEnabled(workflow.value.id, Boolean(enabled));
+    workflow.value = { ...workflow.value, enabled: out.enabled };
+  } catch (err) {
+    proxy.$utils.toast(errorText(err), 'error');
+  }
+}
+
+async function runTest() {
+  testing.value = true;
+  try {
+    await saveNow();
+    const out = await testFlow(workflow.value.id, testInput.value || {});
+    testOpen.value = false;
+    router.push({ name: 'workflowRun', params: { id: out.run_id } });
+  } catch (err) {
+    proxy.$utils.toast(errorText(err), 'error');
   } finally {
-    saveInFlight.value = false;
-    if (pendingSave.value) {
-      const queued = pendingSave.value;
-      pendingSave.value = null;
-      await saveWorkflow(queued.payload, queued.mode);
-    }
+    testing.value = false;
   }
 }
 
-async function publishWorkflow(workflowId) {
-  saveState.value = "saving";
-  saveMessage.value = "Publishing workflow...";
+async function duplicate() {
   try {
-    replaceDashboard(await publishWorkflowRequest(workflowId));
-    saveState.value = "saved";
-    saveMessage.value = "Workflow published";
-    validationErrors.value = [];
-    validationFindings.value = [];
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = nextError instanceof Error ? nextError.message : "Failed to publish workflow";
-    error.value = nextError instanceof Error ? nextError.message : "Failed to publish workflow";
-    const message = nextError instanceof Error ? nextError.message : "";
-    validationErrors.value = message.includes(": ") ? message.split(": ").slice(1).join(": ").split("; ") : [];
+    const out = await duplicateFlow(workflow.value.id);
+    router.push({ name: 'workflowBuilder', params: { id: out.id } });
+  } catch (err) {
+    proxy.$utils.toast(errorText(err), 'error');
   }
 }
 
-async function runWorkflow(workflowId) {
-  const trigger = activeWorkflow.value?.nodes.find((node) => node.type === "trigger");
-  const triggerMode = String(trigger?.config?.mode ?? "manual");
-  if (triggerMode === "webhook") {
-    await armWebhookCapture(workflowId, "test_run");
-    return;
-  }
-
-  saveState.value = "saving";
-  saveMessage.value = "Queueing test run...";
-  try {
-    const runPayload = {};
-    if (triggerMode === "tag_added" || triggerMode === "tag_removed") {
-      const demoContactId = String(trigger?.config?.demoContactId ?? "").trim();
-      if (demoContactId) {
-        runPayload.contactId = demoContactId;
-      }
-    }
-    replaceDashboard(await runWorkflowRequest(workflowId, runPayload));
-    saveState.value = "saved";
-    saveMessage.value = "Test run queued";
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = nextError instanceof Error ? nextError.message : "Failed to queue test run";
-    error.value = nextError instanceof Error ? nextError.message : "Failed to queue test run";
-  }
-}
-
-async function armWebhookCapture(workflowId, mode, nodeId = "") {
-  stopCapturePolling();
-  saveState.value = "saving";
-  saveMessage.value = mode === "infer_schema" ? "Waiting for webhook to infer schema..." : "Waiting for webhook test payload...";
-
-  try {
-    activeCapture.value = await armWorkflowWebhookCapture(workflowId, mode);
-    saveMessage.value = `${mode === "infer_schema" ? "Send a webhook to" : "Trigger a webhook test at"} ${activeCapture.value.endpoint}`;
-    startCapturePolling(mode, nodeId);
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = nextError instanceof Error ? nextError.message : "Failed to arm webhook capture";
-  }
-}
-
-function startCapturePolling(mode, nodeId) {
-  stopCapturePolling();
-  capturePollTimer.value = window.setInterval(async () => {
-    if (!activeCapture.value) {
-      stopCapturePolling();
-      return;
-    }
-
+function removeWorkflow() {
+  proxy.$utils.confirm(proxy.$t('workflows.deleteConfirm', { name: definition.value.name }), async () => {
     try {
-      const next = await getWorkflowWebhookCapture(activeCapture.value.id);
-      activeCapture.value = next;
-
-      if (next.status === "waiting") {
-        return;
-      }
-
-      stopCapturePolling();
-
-      if (next.status === "captured" && mode === "infer_schema") {
-        if (nodeId && next.payloadJson && next.schemaJson) {
-          builderRef.value?.applyNodeConfigValues(nodeId, {
-            samplePayload: next.payloadJson,
-            payloadSchema: next.schemaJson,
-          });
-        }
-        saveState.value = "saved";
-        saveMessage.value = "Schema inferred from incoming webhook";
-        return;
-      }
-
-      if (next.status === "executed" && mode === "test_run") {
-        await refreshDashboard();
-        saveState.value = "saved";
-        saveMessage.value = "Webhook test run executed";
-        return;
-      }
-
-      saveState.value = "error";
-      saveMessage.value = next.error || `Webhook capture ${next.status}`;
-    } catch (nextError) {
-      stopCapturePolling();
-      saveState.value = "error";
-      saveMessage.value = nextError instanceof Error ? nextError.message : "Failed to poll webhook capture";
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      await deleteFlow(workflow.value.id);
+      router.push({ name: 'workflows' });
+    } catch (err) {
+      proxy.$utils.toast(errorText(err), 'error');
     }
-  }, 1500);
-}
-
-function stopCapturePolling() {
-  if (capturePollTimer.value) {
-    window.clearInterval(capturePollTimer.value);
-    capturePollTimer.value = undefined;
-  }
-}
-
-function queueDashboardRefresh() {
-  if (refreshTimer.value) {
-    window.clearTimeout(refreshTimer.value);
-  }
-
-  refreshTimer.value = window.setTimeout(async () => {
-    refreshTimer.value = undefined;
-    await refreshDashboard(currentWorkflowId.value);
-    if (selectedRunId.value) {
-      await loadRunDetail(selectedRunId.value);
-    }
-  }, 150);
-}
-
-async function startRealtimeSubscriptions() {
-  stopRealtimeSubscriptions();
-
-  await Promise.all(realtimeCollections.map((collectionName) =>
-    pb.collection(collectionName).subscribe("*", () => {
-      queueDashboardRefresh();
-    })));
-}
-
-function stopRealtimeSubscriptions() {
-  realtimeCollections.forEach((collectionName) => {
-    pb.collection(collectionName).unsubscribe("*");
   });
-
-  if (refreshTimer.value) {
-    window.clearTimeout(refreshTimer.value);
-    refreshTimer.value = undefined;
-  }
 }
 
-async function selectWorkflow(workflowId) {
-  currentWorkflowId.value = workflowId;
-  validationErrors.value = [];
-  validationFindings.value = [];
-  saveState.value = "idle";
-  saveMessage.value = "Loading workflow...";
-  syncWorkflowRoute(workflowId);
+function askAssistant() {
+  assistantContext.open = true;
 }
 
-async function loadRunDetail(runId) {
-  selectedRunLoading.value = true;
+// The assistant changes drafts on the server, so pick its changes up when one's applied.
+async function onAssistantApplied() {
+  if (saveTimer) await saveNow();
   try {
-    selectedRunDetail.value = await getWorkflowRunDetail(runId);
-  } catch (nextError) {
-    error.value = nextError instanceof Error ? nextError.message : "Failed to load run detail";
-  } finally {
-    selectedRunLoading.value = false;
-  }
-}
-
-async function selectRun(runId) {
-  selectedRunId.value = runId;
-  await loadRunDetail(runId);
-}
-
-async function cancelRun(runId) {
-  if (!runId || !(await openConfirm({ message: t("workflows.stopRunConfirm") }))) {
-    return;
-  }
-
-  try {
-    selectedRunLoading.value = true;
-    selectedRunDetail.value = await cancelWorkflowRunRequest(runId);
-    saveMessage.value = "Run cancelled";
-    saveState.value = "saved";
-    queueDashboardRefresh();
-  } catch (nextError) {
-    error.value = nextError instanceof Error ? nextError.message : "Failed to cancel run";
-    saveMessage.value = error.value;
-    saveState.value = "error";
-  } finally {
-    selectedRunLoading.value = false;
-  }
-}
-
-async function validateWorkflow(workflowId) {
-  saveState.value = "saving";
-  saveMessage.value = "Validating workflow...";
-  try {
-    const result = await validateWorkflowRequest(workflowId);
-    validationErrors.value = result.errors;
-    validationFindings.value = result.findings;
-    saveState.value = result.valid ? "saved" : "error";
-    saveMessage.value = result.valid ? "Workflow is valid" : "Validation failed";
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = nextError instanceof Error ? nextError.message : "Validation failed";
-    error.value = nextError instanceof Error ? nextError.message : "Validation failed";
-  }
-}
-
-async function createWorkflow() {
-  if (loading.value || saveState.value === "saving") return;
-  saveState.value = "saving";
-  saveMessage.value = "Creating workflow...";
-  try {
-    replaceDashboard(await createWorkflowRequest());
-    validationErrors.value = [];
-    validationFindings.value = [];
-    saveState.value = "saved";
-    saveMessage.value = "Workflow created";
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = nextError instanceof Error ? nextError.message : "Failed to create workflow";
-    error.value = nextError instanceof Error ? nextError.message : "Failed to create workflow";
-  }
-}
-
-async function deleteWorkflow(workflowId) {
-  if (!workflowId || !(await openConfirm({ message: t("workflows.deleteConfirm", { name: "this workflow" }) }))) {
-    return;
-  }
-
-  saveState.value = "saving";
-  saveMessage.value = "Deleting workflow...";
-
-  try {
-    const payload = await deleteWorkflowRequest(workflowId);
-    validationErrors.value = [];
-    validationFindings.value = [];
-    activeCapture.value = null;
-    selectedRunId.value = "";
-    selectedRunDetail.value = null;
-
-    if (payload.activeWorkflow?.workflow?.id) {
-      replaceDashboard(payload);
-      saveState.value = "saved";
-      saveMessage.value = "Workflow deleted";
-      return;
-    }
-
-    dashboard.value = payload;
-    currentWorkflowId.value = "";
-    error.value = "";
-    loading.value = false;
-    saveState.value = "idle";
-    saveMessage.value = "Workflow deleted";
-    await router.replace({ name: "workflows" });
-  } catch (nextError) {
-    saveState.value = "error";
-    saveMessage.value = nextError instanceof Error ? nextError.message : "Failed to delete workflow";
-    error.value = nextError instanceof Error ? nextError.message : "Failed to delete workflow";
+    adopt(await getFlow(workflow.value.id));
+    await loadRuns();
+    setTimeout(() => fitView({ padding: 0.2 }), 50);
+  } catch (err) {
+    proxy.$utils.toast(errorText(err), 'error');
   }
 }
 
 onBeforeRouteLeave(async () => {
-  if (!builderRef.value?.hasUnsavedChanges?.()) return true;
-  return await openConfirm({ message: 'Leave this workflow? Unsaved changes will be discarded.' });
+  if (saveTimer) await saveNow();
+});
+
+watch(() => route.params.id, (id, old) => {
+  if (id && id !== old) {
+    definition.value = null;
+    selectedId.value = '';
+    load();
+  }
+});
+
+onMounted(() => {
+  load();
+  window.addEventListener('assistant-applied', onAssistantApplied);
 });
 
 onBeforeUnmount(() => {
-  stopRealtimeSubscriptions();
-  stopCapturePolling();
+  window.removeEventListener('assistant-applied', onAssistantApplied);
+  if (saveTimer) saveNow();
 });
 </script>
 
-<template>
-  <main v-if="authenticated" class="c-shell workflow-route">
-    <section class="workspace-main workspace-main-wide workflow-editor-shell">
-      <div class="workflow-editor-shell-top">
-        <p v-if="error" class="workflow-editor-error" role="alert">
-          Live API unavailable. {{ error }}
-        </p>
-      </div>
-
-      <WorkflowBuilderPanel
-        :contacts="contacts"
-        :loading="loading"
-        :node-library="nodeLibrary"
-        ref="builderRef"
-        :key="activeWorkflow?.workflow?.id ?? 'empty'"
-        :on-save-request="saveWorkflow"
-        :save-message="saveMessage"
-        :save-state="saveState"
-        :validation-errors="validationErrors"
-        :validation-findings="validationFindings"
-        :workflow="activeWorkflow"
-        @capture-schema="(workflowId, nodeId) => armWebhookCapture(workflowId, 'infer_schema', nodeId)"
-        @create-workflow="createWorkflow"
-        @delete-workflow="deleteWorkflow"
-        @publish="publishWorkflow"
-        @run="runWorkflow"
-        @save="saveWorkflow"
-        @update-workflow-name="updateWorkflowName"
-        @validate="validateWorkflow"
-      />
-
-      <v-expansion-panels
-        class="workflow-run-history-dock"
-        :model-value="runHistoryCollapsed ? [] : [0]"
-        multiple
-        variant="accordion"
-        @update:model-value="setRunHistoryExpanded(Array.isArray($event) && $event.includes(0))"
-      >
-        <v-expansion-panel>
-          <v-expansion-panel-title>
-            <span class="workflow-run-history-toggle-label">Run history</span>
-            <v-chip v-if="runHistoryCount" class="workflow-run-history-toggle-count" size="small">{{ runHistoryCount }}</v-chip>
-          </v-expansion-panel-title>
-          <v-expansion-panel-text class="workflow-run-history-body">
-            <RunHistory
-              :active-workflow-id="activeWorkflow?.workflow.id"
-              :runs="runLogs"
-              :selected-run-detail="selectedRunDetail"
-              :selected-run-id="selectedRunId"
-              :selected-run-loading="selectedRunLoading"
-              compact
-              @cancel-run="cancelRun"
-              @select-run="selectRun"
-            />
-          </v-expansion-panel-text>
-        </v-expansion-panel>
-      </v-expansion-panels>
-    </section>
-  </main>
-
-  <main v-else class="c-shell workflow-route">
-    <v-card class="login-card" variant="outlined">
-      <div class="panel-header">
-        <span class="eyebrow">Workflow Control Plane</span>
-        <h1>Admin session required.</h1>
-        <p>Sign in to the admin first, then reopen the builder.</p>
-      </div>
-    </v-card>
-  </main>
-</template>
-
-<style>
-.workflow-route {
-  --wf-border: rgba(var(--v-border-color), var(--v-border-opacity));
-  --wf-muted: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  --wf-panel: rgba(var(--v-theme-surface), 0.94);
-}
-
-.workflow-route button,
-.workflow-route input,
-.workflow-route select,
-.workflow-route textarea {
-  font: inherit;
-}
-
-.workflow-route .c-shell {
-  min-height: 100vh;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-
-
-
-.workflow-route .panel,
-.workflow-route .builder-shell,
-.workflow-route .login-card {
-  border: 1px solid var(--wf-border);
-  border-radius: 16px;
-  background: var(--wf-panel);
-  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
-}
-
-.workflow-route .workspace-topbar,
-.workflow-route .builder-toolbar,
-.workflow-route .modal-header,
-.workflow-route .run-row,
-.workflow-route .workspace-session {
-  display: flex;
-  gap: 12px;
-}
-
-.workflow-route .workspace-session strong,
-.workflow-route .panel-header h2,
-.workflow-route .workspace-topbar h1 {
-  margin: 0;
-}
-
-.workflow-route .workspace-section,
-.workflow-route .panel-header,
-.workflow-route .workspace-session,
-.workflow-route .workspace-main,
-.workflow-route .builder-shell,
-.workflow-route .detail-panel,
-.workflow-route .contact-card,
-.workflow-route .run-card,
-.workflow-route .login-card,
-.workflow-route .builder-heading,
-.workflow-route .form-grid,
-.workflow-route .record-grid div,
-.workflow-route .trace-step-card,
-.workflow-route .trace-logs {
-  display: grid;
-  gap: 6px;
-}
-
-.workflow-route .workspace-section-label,
-.workflow-route .builder-eyebrow,
-.workflow-route .eyebrow,
-.workflow-route .field-help,
-.workflow-route .builder-summary-label {
-  color: var(--wf-muted);
-  font-size: 0.76rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.workflow-route .workflow-nav-list,
-.workflow-route .library-list,
-.workflow-route .contact-list,
-.workflow-route .run-list,
-.workflow-route .builder-details,
-.workflow-route .trace-step-list,
-.workflow-route .map-field-list {
-  display: grid;
-  gap: 8px;
-}
-
-.workflow-route .run-history-layout {
-  display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: 14px;
-}
-
-.workflow-route .workspace-main-wide {
-  max-width: 100%;
-  margin: 0 auto;
-  width: 100%;
-}
-
-/* Grid: error strip (optional) + editor + run history. Tight padding — session lives in app bar. */
-.workflow-route .workflow-editor-shell-top {
-  min-height: 0;
-}
-
-.workflow-route .workflow-editor-error {
-  margin: 0;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: rgba(var(--v-theme-error), 0.12);
-  color: rgb(var(--v-theme-error));
-  font-size: 0.84rem;
-}
-
-.workflow-route .workspace-main.workflow-editor-shell {
-  display: grid;
-  grid-template-rows: auto minmax(280px, 1fr) auto;
-  gap: 8px;
-  align-content: stretch;
-  min-height: calc(100dvh - 96px);
-  max-width: none;
-  width: 100%;
-  flex: 1 1 auto;
-}
-
-.workflow-route .workflow-editor-shell > .builder-shell {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 8px 10px;
-  gap: 8px;
-}
-
-.workflow-route .workflow-editor-shell .builder-toolbar {
-  flex-wrap: wrap;
-  row-gap: 6px;
-  padding: 0;
-  align-items: flex-start;
-}
-
-.workflow-route .workflow-editor-shell .toolbar-actions.toolbar-actions-compact {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  justify-content: flex-end;
-}
-
-.workflow-route .workflow-editor-shell .save-indicator {
-  padding: 6px 10px;
-  font-size: 0.78rem;
-}
-
-.workflow-route .workflow-editor-shell .builder-meta-chip {
-  min-height: 24px;
-  padding: 0 8px;
-  font-size: 0.76rem;
-}
-
-.workflow-route .workflow-editor-shell .builder-body {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.workflow-route .workflow-editor-shell .builder-body-single {
-  min-height: 0;
-}
-
-.workflow-route .workflow-editor-shell .canvas-frame {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  min-height: min(280px, 40vh);
-}
-
-.workflow-route .workflow-editor-shell .workflow-canvas {
-  flex: 1 1 0;
-  min-height: 0;
-  height: 100%;
-}
-
-.workflow-route .workflow-editor-shell .vue-flow {
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 280px;
-  height: 100%;
-}
-
-.workflow-route .workflow-run-history-dock {
-  flex: 0 0 auto;
-  border: 1px solid var(--wf-border);
+<style scoped>
+.builder {
+  --builder-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid var(--builder-border);
   border-radius: 12px;
-  background: var(--wf-panel);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 112px);
+  min-height: 560px;
   overflow: hidden;
 }
 
-.workflow-route .workflow-run-history-toggle {
-  width: 100%;
-  display: flex;
+.builder-bar {
   align-items: center;
+  border-bottom: 1px solid var(--builder-border);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px 12px;
-  border: none;
-  background: rgb(var(--v-theme-surface-light));
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
 }
 
-.workflow-route .workflow-run-history-dock:not(.workflow-run-history-dock--collapsed) .workflow-run-history-toggle {
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+.builder-title {
+  max-width: 280px;
+  min-width: 0;
 }
 
-.workflow-route .workflow-run-history-toggle-label {
+.builder-alert {
+  border-radius: 0;
+  flex: none;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.builder-issues {
+  font-size: 13px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.builder-main {
+  display: flex;
   flex: 1;
-  text-align: left;
+  min-height: 0;
 }
 
-.workflow-route .workflow-run-history-toggle-count {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgb(var(--v-theme-surface-light));
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-}
-
-.workflow-route .workflow-run-history-body {
-  max-height: min(38vh, 440px);
-  overflow: auto;
-  padding: 0 10px 12px;
-}
-
-.workflow-route .workflow-run-history-body .run-history-card--compact {
-  border: none !important;
-  box-shadow: none !important;
-  background: transparent !important;
-}
-
-.workflow-route .builder-controls {
-  display: grid;
-  gap: 12px;
-  padding: 16px 18px;
-}
-
-.workflow-route .builder-controls-header {
+.builder-frame {
+  container: builder / inline-size;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.workflow-route .builder-controls-copy {
-  display: grid;
-  gap: 4px;
-}
-
-.workflow-route .builder-controls-copy h2 {
-  margin: 0;
-  font-size: 1.45rem;
-}
-
-.workflow-route .workflow-name-input {
-  width: min(420px, 100%);
-  min-height: 46px;
-  padding: 10px 14px;
-  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
-  border-radius: 14px;
-  background: rgb(var(--v-theme-surface));
-  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-
-.workflow-route .builder-controls-row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.workflow-route .builder-controls-row-compact {
-  align-items: flex-start;
-}
-
-.workflow-route .builder-controls-label {
-  color: var(--wf-muted);
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding-top: 10px;
-}
-
-.workflow-route .workflow-chip-list,
-.workflow-route .quick-add-list {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.workflow-route .workflow-chip-list-scroll {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
-}
-
-.workflow-route .workflow-chip,
-.workflow-route .quick-add-chip {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 999px;
-  background: rgb(var(--v-theme-surface-light));
-  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
-  cursor: pointer;
-  padding: 9px 14px;
-  white-space: nowrap;
-}
-
-.workflow-route .workflow-chip-active {
-  background: #111827;
-  border-color: #111827;
-  color: #fff;
-}
-
-.workflow-route .workflow-nav-item,
-.workflow-route .library-button {
-  width: 100%;
-  text-align: left;
-  border: 1px solid transparent;
-  border-radius: 14px;
-  cursor: pointer;
-}
-
-.workflow-route .run-card-button,
-.workflow-route .validation-item {
-  padding: 10px 12px;
-  background: rgb(var(--v-theme-surface-light));
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.workflow-route .builder-toolbar p,
-.workflow-route .panel-header p,
-.workflow-route .contact-meta,
-.workflow-route .run-row.subtle,
-.workflow-route .workflow-node-card span,
-.workflow-route .topbar-note {
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  margin: 0;
-}
-
-.workflow-route .workflow-chip:hover,
-.workflow-route .quick-add-chip:hover {
-  background: rgb(var(--v-theme-surface-light));
-}
-
-.workflow-route .workspace-main,
-.workflow-route .builder-shell {
-  padding: 14px;
-  align-content: start;
-  gap: 14px;
-}
-
-.workflow-route .builder-toolbar {
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  padding: 4px 2px 0;
-}
-
-.workflow-route .builder-heading {
-  min-width: 0;
-  flex: 1 1 420px;
-}
-
-.workflow-route .workspace-topbar {
-  align-items: center;
-  justify-content: space-between;
-  padding: 2px 2px 0;
-}
-
-.workflow-route .workspace-session {
-  justify-items: end;
-  text-align: right;
-}
-
-.workflow-route .toolbar-actions {
-  display: grid;
-  grid-template-columns: repeat(3, max-content);
-  justify-content: flex-end;
-  gap: 10px;
-  align-content: start;
-}
-
-.workflow-route .toolbar-actions-compact {
-  flex: 0 0 auto;
-  max-width: none;
-}
-
-.workflow-route .builder-title-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.workflow-route .builder-meta {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.workflow-route .builder-meta-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgb(var(--v-theme-surface-light));
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  font-size: 0.84rem;
-}
-
-.workflow-route .builder-meta-chip-wide {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.workflow-route .save-indicator,
-.workflow-route .status-pill,
-.workflow-route .validation-severity,
-.workflow-route .workflow-node-badge {
-  border-radius: 999px;
-}
-
-.workflow-route .save-indicator {
-  align-self: flex-start;
-  padding: 10px 14px;
-  background: rgb(var(--v-theme-surface-light));
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  white-space: nowrap;
-}
-
-.workflow-route .save-indicator[data-state="saving"],
-.workflow-route .validation-severity[data-severity="warning"] {
-  background: rgba(var(--v-theme-warning), 0.12);
-  color: rgb(var(--v-theme-warning));
-}
-
-.workflow-route .save-indicator[data-state="saved"],
-.workflow-route .status-pill[data-status="success"] {
-  background: rgba(var(--v-theme-success), 0.12);
-  color: rgb(var(--v-theme-success));
-}
-
-.workflow-route .save-indicator[data-state="error"],
-.workflow-route .status-pill[data-status="failed"],
-.workflow-route .validation-severity[data-severity="error"] {
-  background: rgba(var(--v-theme-error), 0.12);
-  color: rgb(var(--v-theme-error));
-}
-
-.workflow-route .save-indicator[data-state="dirty"] {
-  background: rgba(var(--v-theme-warning), 0.12);
-  color: rgb(var(--v-theme-warning));
-}
-
-.workflow-route .builder-body,
-.workflow-route .bottom-grid {
-  display: grid;
-  gap: 16px;
-  width: 100%;
-}
-
-.workflow-route .builder-empty-state {
-  min-height: 140px;
-  align-content: center;
-}
-
-.workflow-route .builder-body {
-  grid-template-columns: 320px minmax(0, 1fr);
-  min-height: 680px;
-}
-
-.workflow-route .builder-body-single {
-  grid-template-columns: minmax(0, 1fr);
-  min-width: 0;
-}
-
-.workflow-route .bottom-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.workflow-route .modal-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.workflow-route .modal-header h2 {
-  font-size: 1.55rem;
-}
-
-.workflow-route .modal-header > div:first-child {
-  min-width: 0;
-}
-
-.workflow-route .node-modal-actions,
-.workflow-route .template-picker-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.workflow-route .node-inspector {
-  border: none;
-  box-shadow: none;
-  background: transparent;
-  padding: 0;
-}
-
-.workflow-route .inspector-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.workflow-route .form-field-card,
-.workflow-route .context-help {
-  display: grid;
-  gap: 10px;
-  padding: 16px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 18px;
-  background: rgba(var(--v-theme-surface), 0.92);
-  box-shadow: inset 0 1px 0 rgba(var(--v-theme-surface), 0.75);
-}
-
-.workflow-route .form-field-card-wide {
-  grid-column: 1 / -1;
-}
-
-.workflow-route .form-field-header {
-  display: grid;
-  gap: 6px;
-}
-
-.workflow-route .form-field-label {
-  font-size: 0.98rem;
-  font-weight: 700;
-  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
-}
-
-.workflow-route .field-help {
-  margin: 0;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  font-size: 0.9rem;
-  line-height: 1.45;
-  letter-spacing: normal;
-  text-transform: none;
-}
-
-.workflow-route .context-help-header {
-  display: grid;
-  gap: 4px;
-}
-
-.workflow-route .context-help-header p {
-  margin: 0;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  font-size: 0.9rem;
-}
-
-.workflow-route .context-token-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.workflow-route .detail-panel,
-.workflow-route .panel {
-  padding: 16px;
-}
-
-.workflow-route .record-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.workflow-route .record-grid div,
-.workflow-route .contact-card,
-.workflow-route .trace-step-card,
-.workflow-route .run-trace-panel,
-.workflow-route .trace-json-block {
+.builder-palette {
+  border-right: 1px solid var(--builder-border);
+  flex: none;
+  overflow-y: auto;
   padding: 12px;
-  border-radius: 14px;
-  background: rgb(var(--v-theme-surface-light));
+  width: 200px;
 }
 
-.workflow-route .canvas-frame {
-  min-height: 680px;
-  width: 100%;
-  min-width: 0;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  background: rgb(var(--v-theme-surface-light));
-}
-
-.workflow-route .workflow-canvas {
-  height: 100%;
-  width: 100%;
-  min-width: 0;
-  background: linear-gradient(180deg, rgba(var(--v-theme-surface), 0.98), rgba(var(--v-theme-surface), 0.98));
-}
-
-.workflow-route .vue-flow {
-  min-height: 640px;
-  width: 100%;
-}
-
-.workflow-route .workflow-node-card {
-  min-width: 180px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  background: rgb(var(--v-theme-surface));
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
-  display: grid;
-  gap: 4px;
-}
-
-.workflow-route .workflow-node-badge {
-  justify-self: start;
-  padding: 2px 8px;
-  background: rgba(var(--v-theme-success), 0.12);
-  color: rgb(var(--v-theme-success));
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-
-.workflow-route .workflow-node-card[data-kind="transform"] .workflow-node-badge {
-  background: rgb(var(--v-theme-surface-light));
-  color: rgb(var(--v-theme-primary));
-}
-
-.workflow-route .workflow-node-card[data-kind="condition"] .workflow-node-badge {
-  background: rgba(var(--v-theme-success), 0.12);
-  color: rgb(var(--v-theme-success));
-}
-
-.workflow-route .workflow-node-card[data-kind="event_start"] .workflow-node-badge {
-  background: rgba(var(--v-theme-error), 0.12);
-  color: rgb(var(--v-theme-error));
-}
-
-.workflow-route .workflow-node-card[data-kind="pb_update"] .workflow-node-badge {
-  background: rgba(var(--v-theme-warning), 0.12);
-  color: rgb(var(--v-theme-warning));
-}
-
-.workflow-route .workflow-node-card[data-kind="send_transactional_email"] .workflow-node-badge {
-  background: rgba(var(--v-theme-warning), 0.12);
-  color: rgb(var(--v-theme-warning));
-}
-
-.workflow-route .workflow-node-card[data-kind="campaign_launch"] .workflow-node-badge {
-  background: rgba(var(--v-theme-primary), 0.08);
-  color: rgb(var(--v-theme-primary));
-}
-
-.workflow-route .workflow-node-card[data-kind="wait_until"] .workflow-node-badge {
-  background: rgba(124, 58, 237, 0.14);
-  color: #8b5cf6;
-}
-
-.workflow-route .branch-handle-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 2px;
-  padding: 0 18px 8px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-}
-
-.workflow-route .vue-flow__node.selected .workflow-node-card,
-.workflow-route .flow-node-invalid .workflow-node-card {
-  box-shadow: 0 0 0 3px rgba(59, 92, 204, 0.14), 0 6px 18px rgba(15, 23, 42, 0.08);
-}
-
-.workflow-route .flow-node-invalid .workflow-node-card {
-  box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.18), 0 6px 18px rgba(15, 23, 42, 0.08);
-}
-
-.workflow-route .vue-flow__handle {
-  width: 10px;
-  height: 10px;
-  background: rgba(var(--v-theme-on-surface), 0.16);
-  border: 2px solid rgb(var(--v-theme-surface));
-}
-
-.workflow-route .vue-flow__controls {
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-}
-
-.workflow-route .vue-flow__controls-button {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: rgba(var(--v-theme-surface), 0.96);
-  color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
-}
-
-.workflow-route .vue-flow__minimap {
-  background: rgba(var(--v-theme-surface), 0.9);
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+.palette-item {
+  align-items: center;
+  background: none;
+  border: 0;
   border-radius: 8px;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-}
-
-.workflow-route .vue-flow__controls-button svg {
-  fill: currentColor;
-}
-
-.workflow-route .vue-flow__edge-textbg {
-  fill: rgb(var(--v-theme-surface));
-}
-
-.workflow-route .vue-flow__edge-text {
-  fill: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-}
-
-.workflow-route .status-pill,
-.workflow-route .validation-severity {
-  display: inline-flex;
-  justify-content: center;
-  width: fit-content;
-  padding: 4px 10px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.workflow-route .status-pill[data-status="queued"],
-.workflow-route .status-pill[data-status="running"],
-.workflow-route .status-pill[data-status="waiting"] {
-  background: rgba(var(--v-theme-primary), 0.08);
-  color: rgb(var(--v-theme-primary));
-}
-
-.workflow-route .status-pill[data-status="cancelled"] {
-  background: rgb(var(--v-theme-surface-light));
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-}
-
-.workflow-route .run-card-button,
-.workflow-route .validation-item {
+  color: inherit;
   cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  margin-bottom: 2px;
+  padding: 6px;
   text-align: left;
-  border-radius: 14px;
-}
-
-.workflow-route .run-card-active {
-  background: rgb(var(--v-theme-surface-light));
-  border-color: rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
-}
-
-.workflow-route .run-row {
-  align-items: center;
-  justify-content: space-between;
-}
-
-.workflow-route .trace-error {
-  color: rgb(var(--v-theme-error));
-  font-weight: 600;
-  margin: 0;
-}
-
-.workflow-route .trace-json-block pre {
-  margin: 12px 0 0;
-  overflow: auto;
-}
-
-.workflow-route .context-help {
-  grid-column: 1 / -1;
-  background: linear-gradient(180deg, rgb(var(--v-theme-surface-light)), rgb(var(--v-theme-surface-light)));
-}
-
-.workflow-route .demo-contact-hint {
-  padding: 10px 14px;
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  font-size: 0.9rem;
-}
-
-.workflow-route .demo-contact-selection {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-}
-
-.workflow-route .form-field-card .v-input {
   width: 100%;
 }
 
-.workflow-route .context-token {
-  display: inline-flex;
+.palette-item:hover {
+  background: rgb(var(--v-theme-surface-light));
+}
+
+.palette-item:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+}
+
+.palette-icon {
   align-items: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  background: rgb(var(--v-theme-surface));
+  border-radius: 6px;
+  display: flex;
+  flex: none;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.palette-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.palette-hint {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-  font-size: 0.82rem;
+  display: block;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
-.workflow-route .form-field > input,
-.workflow-route .form-field > select,
-.workflow-route .form-field > textarea,
-.workflow-route .map-field-row > input {
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 2));
-  border-radius: 12px;
-  font: inherit;
-  min-height: 42px;
-  padding: 10px 12px;
+.builder-canvas {
+  flex: 1;
+  min-width: 0;
+  position: relative;
 }
 
-.workflow-route .form-field > textarea {
-  min-height: 160px;
-  resize: vertical;
+.builder-edge-action {
+  left: 50%;
+  position: absolute;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
 }
 
-.workflow-route .map-field-row {
-  display: grid;
+.builder-side {
+  border-left: 1px solid var(--builder-border);
+  flex: none;
+  overflow-y: auto;
+  width: 340px;
+}
+
+.side-run {
+  align-items: center;
+  color: inherit;
+  display: flex;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  padding: 4px 0;
+  text-decoration: none;
 }
 
-.workflow-route .login-card {
-  max-width: 640px;
-  margin: 48px auto 0;
+.side-run:hover {
+  text-decoration: underline;
 }
 
-@media (max-width: 1200px) {
-  .workflow-route .builder-body,
-  .workflow-route .bottom-grid,
-  .workflow-route .run-history-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .workflow-route .workspace-main.workflow-editor-shell {
-    grid-template-rows: auto minmax(220px, 1fr) auto;
-    gap: 6px;
-    min-height: calc(100dvh - 84px);
-  }
-
-  .workflow-route .workflow-editor-shell > .builder-shell {
+/* Sized by the space the builder really has, because the assistant can take half the screen. */
+@container builder (max-width: 1000px) {
+  .builder-palette {
     padding: 8px;
-    gap: 6px;
+    width: 52px;
   }
 
-  .workflow-route .workspace-topbar,
-  .workflow-route .builder-toolbar,
-  .workflow-route .modal-header,
-  .workflow-route .run-row,
-  .workflow-route .workspace-session {
-    flex-direction: column;
-    align-items: flex-start;
+  .builder-palette > .text-caption,
+  .palette-item > span:last-child {
+    display: none;
   }
 
-  .workflow-route .builder-controls-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .palette-item {
+    justify-content: center;
+    padding: 6px 0;
   }
 
-  .workflow-route .workflow-editor-shell .toolbar-actions {
-    grid-template-columns: 1fr;
-    justify-content: stretch;
-    width: 100%;
-  }
-
-  .workflow-route .workflow-editor-shell .builder-toolbar {
-    width: 100%;
-    gap: 8px;
-    justify-content: flex-start;
-    align-items: stretch;
-  }
-
-  .workflow-route .workflow-editor-shell .builder-heading,
-  .workflow-route .workflow-editor-shell .builder-editor-bar,
-  .workflow-route .workflow-editor-shell .builder-meta {
-    width: 100%;
-  }
-
-  .workflow-route .workflow-editor-shell .builder-heading {
-    flex: 0 0 auto;
-  }
-
-  .workflow-route .workflow-editor-shell .builder-meta {
-    gap: 6px;
-  }
-
-  .workflow-route .inspector-fields,
-  .workflow-route .record-grid,
-  .workflow-route .map-field-row {
-    grid-template-columns: 1fr;
+  .builder-side {
+    width: 280px;
   }
 }
 
-/* Studio layout: bounded canvas, compact actions and a discoverable step rail. */
-.workflow-route .workspace-main.workflow-editor-shell { min-height: 640px; height: calc(100dvh - 112px); padding: 0; gap: 12px; }
-.workflow-route .workflow-editor-shell > .builder-shell { padding: 0; gap: 0; border-radius: 16px; background: rgb(var(--v-theme-surface)); box-shadow: 0 4px 24px rgba(15,23,42,.04); }
-.workflow-route .workflow-editor-shell .builder-toolbar-refresh { padding: 18px 20px 14px; gap: 12px; align-items: center; }
-.workflow-route .builder-eyebrow { font-size: .65rem; font-weight: 750; letter-spacing: .16em; color: rgb(var(--v-theme-primary)); }
-.workflow-route .builder-welcome-title { font-size: 1.35rem; margin: 5px 0; }
-.workflow-route .builder-meta { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
-.workflow-route .builder-meta-caption { color: var(--wf-muted); font-size: .75rem; }
-.workflow-route .workflow-editor-shell .builder-heading { flex: 1 1 300px; }
-.workflow-route .builder-editing-bar { display: flex; align-items: center; gap: 3px; padding: 6px 14px; border-block: 1px solid var(--wf-border); background: rgba(var(--v-theme-on-surface), .02); flex-wrap: wrap; }
-.workflow-route .editing-divider { width: 1px; height: 20px; background: var(--wf-border); margin: 0 5px; }
-.workflow-route .builder-keyboard-hint { color: var(--wf-muted); font-size: .67rem; margin-left: 12px; }
-.workflow-route .workflow-editor-shell .builder-body.builder-workspace { display: grid; grid-template-columns: 232px minmax(0,1fr); min-height: 360px; }
-.workflow-route .workflow-editor-shell .builder-body.builder-workspace.library-hidden { grid-template-columns: minmax(0,1fr); }
-.workflow-route .workflow-step-library { min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px 12px; border-right: 1px solid var(--wf-border); background: rgb(var(--v-theme-surface)); overflow: hidden; }
-.workflow-route .step-library-heading { display: grid; gap: 3px; padding: 0 4px; font-size: .88rem; }
-.workflow-route .step-library-heading span { color: var(--wf-muted); font-size: .74rem; }
-.workflow-route .step-library-scroll { overflow: auto; min-height: 0; }
-.workflow-route .step-library-group h3 { text-transform: uppercase; letter-spacing: .09em; font-size: .63rem; color: var(--wf-muted); margin: 16px 6px 8px; }
-.workflow-route .step-library-group:first-child h3 { margin-top: 4px; }
-.workflow-route button.step-library-item { width: 100%; display: flex; text-align: left; align-items: flex-start; gap: 9px; padding: 10px 6px; border: 1px solid transparent; border-radius: 9px; color: rgb(var(--v-theme-on-surface)); transition: background .15s, border-color .15s; }
-.workflow-route button.step-library-item:hover:not(:disabled) { background: rgba(var(--v-theme-primary),.05); border-color: rgba(var(--v-theme-primary),.18); }
-.workflow-route button.step-library-item:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); outline-offset: -2px; }
-.workflow-route button.step-library-item:disabled { opacity: .4; cursor: not-allowed; }
-.workflow-route .step-library-item strong { display: block; font-size: .78rem; font-weight: 600; }
-.workflow-route .step-library-item small { display: block; font-size: .68rem; color: var(--wf-muted); line-height: 1.45; margin-top: 2px; }
-.workflow-route .step-library-icon { padding: 6px; background: rgba(var(--v-theme-primary),.08); color: rgb(var(--v-theme-primary)); border-radius: 8px; }
-.workflow-route .step-library-icon[data-color="success"] { color: rgb(var(--v-theme-success)); background: rgba(var(--v-theme-success),.1); }
-.workflow-route .step-library-icon[data-color="warning"] { color: rgb(var(--v-theme-warning)); background: rgba(var(--v-theme-warning),.1); }
-.workflow-route .step-library-plus { margin-left: auto; color: var(--wf-muted); font-size: 1rem; }
-.workflow-route .workflow-editor-shell .builder-workspace .canvas-frame { min-height: 360px; border: none !important; border-radius: 0; background: rgb(var(--v-theme-background)); }
-.workflow-route .workflow-editor-shell .workflow-canvas { background: rgba(var(--v-theme-primary), .018); }
-.workflow-route .canvas-action-dock { top: 12px; right: 12px; box-shadow: 0 2px 10px rgba(15,23,42,.05); }
-.workflow-route .canvas-start-guide { position: absolute; z-index: 6; left: 50%; top: 48%; transform: translate(-50%,-50%); text-align: center; width: min(360px,85%); padding: 20px; border-radius: 16px; background: rgba(var(--v-theme-surface),.95); border: 1px solid var(--wf-border); }
-.workflow-route .canvas-start-guide h2 { font-size: 1.12rem; margin: 16px 0 8px; }
-.workflow-route .canvas-start-guide p { color: var(--wf-muted); font-size: .82rem; line-height: 1.6; margin-bottom: 20px; }
-.workflow-route .start-guide-icon { display: inline-flex; padding: 12px; border-radius: 14px; background: rgba(var(--v-theme-primary),.08); color: rgb(var(--v-theme-primary)); }
-.workflow-route .builder-empty-state { margin: 24px; background: linear-gradient(135deg, rgba(var(--v-theme-primary),.055), transparent); padding: 32px; border-style: dashed; }
-.workflow-route .builder-secondary-panels { max-height: 260px; overflow: auto; padding: 12px 16px; }
-.workflow-route .workflow-node-card { width: 240px; min-width: 240px; padding: 16px; border-radius: 12px; gap: 8px; box-shadow: 0 3px 10px rgba(15,23,42,.06); border-top: 3px solid rgba(var(--v-theme-primary),.65); }
-.workflow-route .workflow-node-card[data-kind="trigger"] { border-top-color: rgb(var(--v-theme-success)); }
-.workflow-route .workflow-node-card[data-kind="condition"] { border-top-color: rgb(var(--v-theme-warning)); }
-.workflow-route .workflow-node-card strong { font-size: .88rem; line-height: 1.4; }
-.workflow-route .workflow-node-card .workflow-node-description { font-size: .72rem; line-height: 1.5; color: var(--wf-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.workflow-route .workflow-node-card .workflow-node-badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; font-size: .63rem; }
-.workflow-route .vue-flow__edge-path { stroke-width: 2; }
-.workflow-route .vue-flow__handle { width: 12px; height: 12px; background: rgb(var(--v-theme-primary)); }
-@media (max-width: 1100px) { .workflow-route .builder-keyboard-hint { display: none; } }
-@media (max-width: 900px) {
- .workflow-route .workspace-main.workflow-editor-shell { height: auto; min-height: 700px; }
- .workflow-route .workflow-editor-shell .builder-body.builder-workspace { grid-template-columns: 1fr; }
- .workflow-route .workflow-step-library { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--wf-border); }
- .workflow-route .step-library-scroll { display: flex; gap: 12px; } .workflow-route .step-library-group { min-width: 200px; }
- .workflow-route .workflow-editor-shell .builder-workspace .canvas-frame { min-height: 480px; }
- .workflow-route .workflow-editor-shell .builder-toolbar-refresh { padding: 14px; }
+/* The canvas needs room, so when it's tight the panels stack beneath it. */
+@container builder (max-width: 680px) {
+  .builder-main {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .builder-palette {
+    border-right: 0;
+    border-bottom: 1px solid var(--builder-border);
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: 100%;
+  }
+
+  .palette-item {
+    width: 36px;
+  }
+
+  .builder-canvas {
+    flex: none;
+    height: 420px;
+  }
+
+  .builder-side {
+    border-left: 0;
+    border-top: 1px solid var(--builder-border);
+    width: 100%;
+  }
 }
 </style>

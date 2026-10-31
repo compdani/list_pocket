@@ -167,10 +167,11 @@
         <v-divider />
         <v-card-text>
           <!-- HTML body -->
-          <div v-if="selectedEmail.bodyHtml" class="email-body">
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div v-html="selectedEmail.bodyHtml" class="email-html-body" />
-          </div>
+          <email-body-frame
+            v-if="selectedEmail.bodyHtml"
+            :html="selectedEmail.bodyHtml"
+            :title="selectedEmail.subject || 'Email'"
+          />
           <!-- Plain text fallback -->
           <pre v-else-if="selectedEmail.bodyText" class="email-body-text">{{ selectedEmail.bodyText }}</pre>
           <p v-else class="text-medium-emphasis">(no body)</p>
@@ -247,6 +248,7 @@ import {
   getInboundSpamRules,
   deleteInboundSpamRule,
 } from '../api/index.js';
+import EmailBodyFrame from '../components/EmailBodyFrame.vue';
 
 const emails = ref([]);
 const total = ref(0);
@@ -363,11 +365,6 @@ onMounted(fetchEmails);
 </script>
 
 <style scoped>
-.email-html-body {
-  max-width: 100%;
-  overflow-x: auto;
-  font-size: 0.9rem;
-}
 .email-body-text {
   white-space: pre-wrap;
   font-size: 0.9rem;

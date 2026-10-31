@@ -40,7 +40,8 @@ func initSMTPMessengers() []manager.Messenger {
 		}
 
 		servers = append(servers, s)
-		lo.Printf("initialized email (SMTP) messenger: %s@%s", item.String("username"), item.String("host"))
+		// SMTP usernames can be access key IDs, so they stay out of the logs.
+		lo.Printf("initialized email (SMTP) messenger: name=%q host=%s", s.Name, item.String("host"))
 
 		// If the server has a name, initialize it as a standalone e-mail messenger
 		// allowing campaigns to select individual SMTPs. In the UI and config, it'll appear as `email / $name`.

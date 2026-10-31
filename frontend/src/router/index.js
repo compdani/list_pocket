@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { isAuthenticated } from '../api';
 import { isCurrentUserSuperAdmin } from '../utils/auth';
 import { toRouterPath } from '../utils/authRoutes';
+import { ensurePluginsLoaded } from '../pluginHost';
 
 const routes = [
   {
@@ -55,7 +56,7 @@ const routes = [
   {
     path: '/lists/:id',
     name: 'list',
-    meta: { title: 'globals.terms.lists', group: 'lists' },
+    meta: { nav: 'lists', title: 'globals.terms.lists', group: 'lists' },
     component: () => import('../views/Lists.vue'),
   },
   {
@@ -79,13 +80,13 @@ const routes = [
   {
     path: '/subscribers/lists/:listID',
     name: 'subscribers_list',
-    meta: { title: 'globals.terms.subscribers', group: 'subscribers' },
+    meta: { nav: 'subscribers', title: 'globals.terms.subscribers', group: 'subscribers' },
     component: () => import('../views/Subscribers.vue'),
   },
   {
     path: '/subscribers/:id',
     name: 'subscriber',
-    meta: { title: 'globals.terms.subscribers', group: 'subscribers' },
+    meta: { nav: 'subscribers', title: 'globals.terms.subscribers', group: 'subscribers' },
     component: () => import('../views/SubscriberContact.vue'),
   },
   {
@@ -99,6 +100,12 @@ const routes = [
     name: 'media',
     meta: { title: 'globals.terms.media', group: 'campaigns' },
     component: () => import('../views/Media.vue'),
+  },
+  {
+    path: '/campaigns/whatsapp-channel',
+    name: 'whatsappChannelPosts',
+    meta: { title: 'whatsapp.posts.title', group: 'campaigns' },
+    component: () => import('../views/WhatsAppChannelPosts.vue'),
   },
   {
     path: '/campaigns/templates',
@@ -175,20 +182,72 @@ const routes = [
   {
     path: '/workflows',
     name: 'workflows',
-    meta: { title: 'menu.workflows', group: 'workflows' },
-    component: () => import('../views/Workflow.vue'),
+    meta: { title: 'menu.workflows' },
+    component: () => import('../views/Workflows.vue'),
   },
   {
-    path: '/workflows/builder/:workflowId?',
+    path: '/workflows/approvals',
+    name: 'workflowApprovals',
+    meta: { title: 'workflows.approvals' },
+    component: () => import('../views/WorkflowApprovals.vue'),
+  },
+  {
+    path: '/workflows/runs/:id',
+    name: 'workflowRun',
+    meta: { nav: 'workflows', title: 'menu.workflows' },
+    component: () => import('../views/WorkflowRun.vue'),
+  },
+  {
+    path: '/workflows/:id',
     name: 'workflowBuilder',
-    meta: { title: 'menu.workflowBuilder', group: 'workflows' },
+    meta: { nav: 'workflows', title: 'menu.workflows' },
     component: () => import('../views/WorkflowBuilder.vue'),
+  },
+  {
+    path: '/settings/plugins',
+    name: 'plugins',
+    meta: { title: 'menu.plugins', group: 'settings', superAdmin: true },
+    component: () => import('../views/Plugins.vue'),
+  },
+  {
+    path: '/agent/:id?',
+    name: 'agent',
+    meta: { title: 'menu.agent' },
+    component: () => import('../views/Agent.vue'),
   },
   {
     path: '/inbox',
     name: 'inbox',
-    meta: { title: 'menu.inbox', group: 'inbox' },
+    meta: { title: 'menu.inbox' },
+    component: () => import('../views/Conversations.vue'),
+  },
+  {
+    path: '/inbox/email',
+    name: 'inboundEmail',
+    meta: { nav: 'inbox', title: 'conversations.emailLog' },
     component: () => import('../views/InboundEmailInbox.vue'),
+  },
+  {
+    path: '/crm/pipeline',
+    redirect: { name: 'boards' },
+  },
+  {
+    path: '/crm/boards',
+    name: 'boards',
+    meta: { title: 'menu.boards' },
+    component: () => import('../views/Boards.vue'),
+  },
+  {
+    path: '/crm/boards/:board',
+    name: 'board',
+    meta: { nav: 'boards', title: 'menu.boards' },
+    component: () => import('../views/Board.vue'),
+  },
+  {
+    path: '/crm/tasks',
+    name: 'tasks',
+    meta: { title: 'menu.tasks',  },
+    component: () => import('../views/Tasks.vue'),
   },
 ];
 
@@ -213,11 +272,18 @@ const router = createRouter({
   },
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  const authenticated = isAuthenticated();
+  if (authenticated) {
+    // Plugin routes don't exist until here, so resolve deep links to them again.
+    const justLoaded = await ensurePluginsLoaded();
+    if (justLoaded && to.matched.length === 0) {
+      return to.fullPath;
+    }
+  }
   if (to.matched.length === 0) {
     return '/404';
   }
-  const authenticated = isAuthenticated();
   if (to.meta && to.meta.guestOnly) {
     if (authenticated) {
       const next = typeof to.query.next === 'string' && to.query.next ? to.query.next : '/';

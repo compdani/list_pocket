@@ -34,6 +34,10 @@ type Subscriber struct {
 	Attribs   JSON           `db:"attribs" json:"attribs"`
 	Status    string         `db:"status" json:"status"`
 	Lists     types.JSONText `db:"lists" json:"lists"`
+
+	// Addresses holds active addresses on the campaign's channel, for channels
+	// with their own address table. It's only set on the send path.
+	Addresses []string `db:"-" json:"-"`
 }
 
 // GetIDs returns the list of subscriber IDs.

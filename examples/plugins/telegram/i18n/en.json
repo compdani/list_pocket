@@ -1,0 +1,9 @@
+{
+  "globals.terms.plugin_telegram": "Telegram",
+  "telegram.contacts": "Telegram contacts",
+  "telegram.contactsEmpty": "Nobody has started the bot yet.",
+  "telegram.chatId": "Chat ID",
+  "telegram.name": "Name",
+  "telegram.subscribed": "Subscribed",
+  "telegram.note": "Reaches this contact on Telegram if they have started the bot."
+}

@@ -107,6 +107,7 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 		models.TimelineEventLinkClick:         {},
 		models.TimelineEventInboundSMS:        {},
 		models.TimelineEventInboundEmailReply: {},
+		models.TimelineEventBoardMove:         {},
 	}
 	requestedTypes := map[string]struct{}{}
 	if len(params.EventTypes) > 0 {
@@ -241,8 +242,37 @@ func (c *Core) GetUnifiedContactTimeline(ctx context.Context, params TimelineQue
 		args = append(args, dargs...)
 	}
 
+	if includeType(models.TimelineEventBoardMove) {
+		df, dargs := dateClause(`created`)
+		branches = append(branches, `
+			SELECT '`+models.TimelineEventBoardMove+`' AS event_type,
+				created AS occurred_at,
+				id AS event_rowid,
+				CAST(id AS TEXT) AS ref1,
+				'' AS ref2
+			FROM board_card_events
+			WHERE subscriber = ?`+df)
+		args = append(args, subscriberRecordID)
+		args = append(args, dargs...)
+	}
+
 	if len(branches) == 0 {
 		return empty(), nil
+	}
+
+	if includeType(models.TimelineEventChannel) {
+		df, dargs := dateClause(`ce.occurred_at`)
+		branches = append(branches, `
+			SELECT '`+models.TimelineEventChannel+`' AS event_type,
+				ce.occurred_at AS occurred_at,
+				ce.id AS event_rowid,
+				CAST(ce.id AS TEXT) AS ref1,
+				'' AS ref2
+			FROM channel_events ce
+			JOIN subscribers s ON s.id = ce.subscriber
+			WHERE s.rowid = ?`+df)
+		args = append(args, params.SubscriberID)
+		args = append(args, dargs...)
 	}
 
 	unionSQL := strings.Join(branches, " UNION ALL ")
@@ -290,6 +320,16 @@ func (c *Core) hydrateTimelinePage(subscriberRowID int, subscriberRecordID strin
 	events := make([]models.TimelineEvent, 0, len(keys))
 	if len(keys) == 0 {
 		return events, nil
+	}
+
+	channelEvents, err := c.timelineChannelEvents(keys)
+	if err != nil {
+		return nil, err
+	}
+
+	boardMoves, err := c.timelineBoardMoves(keys)
+	if err != nil {
+		return nil, err
 	}
 
 	sendRowIDs := make([]int64, 0)
@@ -425,6 +465,40 @@ func (c *Core) hydrateTimelinePage(subscriberRowID int, subscriberRecordID strin
 				},
 				Status:   "clicked",
 				Metadata: marshalTimelineMetadata(row.Meta),
+			})
+		case models.TimelineEventChannel:
+			e, ok := channelEvents[k.Ref1]
+			if !ok {
+				continue
+			}
+			events = append(events, models.TimelineEvent{
+				EventType:  models.TimelineEventChannel,
+				Channel:    e.Channel,
+				OccurredAt: occurredAt,
+				Source:     "channel_events",
+				Actor: models.TimelineActor{
+					Type:  "provider",
+					ID:    e.Channel,
+					Label: models.ChannelFor(e.Channel).Label,
+				},
+				Status:   e.Status,
+				Metadata: marshalTimelineMetadata(e.TimelineEventChannelMetadata),
+			})
+		case models.TimelineEventBoardMove:
+			e, ok := boardMoves[k.Ref1]
+			if !ok {
+				continue
+			}
+			events = append(events, models.TimelineEvent{
+				EventType:  models.TimelineEventBoardMove,
+				OccurredAt: occurredAt,
+				Source:     "board_card_events",
+				Actor: models.TimelineActor{
+					Type:  "user",
+					Label: e.Actor,
+				},
+				Status:   e.status(),
+				Metadata: marshalTimelineMetadata(e.TimelineEventBoardMoveMetadata),
 			})
 		case models.TimelineEventInboundSMS:
 			e, ok := smsByID[k.Ref1]
@@ -817,4 +891,73 @@ func marshalTimelineMetadata(v any) json.RawMessage {
 		return json.RawMessage("{}")
 	}
 	return b
+}
+
+type timelineChannelEvent struct {
+	models.TimelineEventChannelMetadata
+	ID      string `db:"id"`
+	Channel string `db:"channel"`
+	Status  string `db:"status"`
+}
+
+func (c *Core) timelineChannelEvents(keys []timelineKeyRow) (map[string]timelineChannelEvent, error) {
+	args := make([]any, 0)
+	for _, k := range keys {
+		if k.EventType == models.TimelineEventChannel {
+			args = append(args, k.Ref1)
+		}
+	}
+	out := make(map[string]timelineChannelEvent, len(args))
+	if len(args) == 0 {
+		return out, nil
+	}
+	var rows []timelineChannelEvent
+	if err := c.db.Select(&rows, `
+SELECT CAST(id AS TEXT) AS id, channel, status, direction, kind, address, body, provider_msg_id
+FROM channel_events WHERE id IN (`+sqlitePlaceholders(len(args))+`)`, args...); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = row
+	}
+	return out, nil
+}
+
+type timelineBoardMove struct {
+	models.TimelineEventBoardMoveMetadata
+	ID    string `db:"id"`
+	Actor string `db:"actor_name"`
+}
+
+func (m timelineBoardMove) status() string {
+	switch {
+	case m.FromStage == "":
+		return "added"
+	case m.ToStage == "":
+		return "removed"
+	}
+	return "moved"
+}
+
+func (c *Core) timelineBoardMoves(keys []timelineKeyRow) (map[string]timelineBoardMove, error) {
+	args := make([]any, 0)
+	for _, k := range keys {
+		if k.EventType == models.TimelineEventBoardMove {
+			args = append(args, k.Ref1)
+		}
+	}
+	out := make(map[string]timelineBoardMove, len(args))
+	if len(args) == 0 {
+		return out, nil
+	}
+	var rows []timelineBoardMove
+	if err := c.db.Select(&rows, `
+SELECT CAST(id AS TEXT) AS id, board_name, from_stage_name, to_stage_name, actor_name
+FROM board_card_events WHERE id IN (`+sqlitePlaceholders(len(args))+`)`, args...); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = row
+	}
+	return out, nil
 }

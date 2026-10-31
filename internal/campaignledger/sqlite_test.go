@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/compdani/list_pocket/internal/pbdb"
+	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite"
 )
@@ -804,6 +805,20 @@ CREATE TABLE campaign_send_ledger (
   updated TEXT,
   UNIQUE (campaign_id, subscriber_id)
 );
+CREATE TABLE subscriber_addresses (
+  subscriber TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  address TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  UNIQUE (channel, address)
+);
+CREATE TABLE subscriber_channel_consent (
+  subscriber TEXT NOT NULL,
+  list TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  status TEXT NOT NULL,
+  PRIMARY KEY (subscriber, list, channel)
+);
 CREATE INDEX idx_campaign_ledger_campaign_status ON campaign_send_ledger (campaign_id, status);
 CREATE UNIQUE INDEX idx_campaign_ledger_message_id ON campaign_send_ledger (message_id) WHERE message_id IS NOT NULL AND message_id != '';
 `
@@ -826,5 +841,95 @@ func mustGet(t *testing.T, db sqlx.QueryerContext, dest any, query string, args 
 	t.Helper()
 	if err := sqlx.GetContext(context.Background(), db, dest, query, args...); err != nil {
 		t.Fatalf("get: %v", err)
+	}
+}
+
+func backfillCount(t *testing.T, db *sqlx.DB, campRec string) int {
+	t.Helper()
+	var rowID, n int
+	mustGet(t, db, &rowID, `SELECT rowid FROM campaigns WHERE id = ?`, campRec)
+	if _, err := BackfillIfEmpty(db, rowID, campRec); err != nil {
+		t.Fatal(err)
+	}
+	mustGet(t, db, &n, `SELECT COUNT(1) FROM campaign_send_ledger WHERE campaign_id = ?`, campRec)
+	return n
+}
+
+func TestPluginChannelEligibility(t *testing.T) {
+	const (
+		channel = "ch:test"
+		campRec = "camp_rec_1"
+		listRec = "list_rec_1"
+		subRec  = "sub_rec_1"
+	)
+	cases := []struct {
+		name  string
+		setup func(t *testing.T, db *sqlx.DB)
+		want  int
+	}{
+		{"nothing set up fails closed", func(*testing.T, *sqlx.DB) {}, 0},
+		{"address without consent", func(t *testing.T, db *sqlx.DB) {
+			mustExec(t, db, `INSERT INTO subscriber_addresses (subscriber, channel, address) VALUES (?, ?, 'a1')`, subRec, channel)
+		}, 0},
+		{"consent without address", func(t *testing.T, db *sqlx.DB) {
+			mustExec(t, db, `INSERT INTO subscriber_channel_consent VALUES (?, ?, ?, 'confirmed')`, subRec, listRec, channel)
+		}, 0},
+		{"consent and address", func(t *testing.T, db *sqlx.DB) {
+			mustExec(t, db, `INSERT INTO subscriber_addresses (subscriber, channel, address) VALUES (?, ?, 'a1')`, subRec, channel)
+			mustExec(t, db, `INSERT INTO subscriber_channel_consent VALUES (?, ?, ?, 'confirmed')`, subRec, listRec, channel)
+		}, 1},
+		{"withdrawn consent", func(t *testing.T, db *sqlx.DB) {
+			mustExec(t, db, `INSERT INTO subscriber_addresses (subscriber, channel, address) VALUES (?, ?, 'a1')`, subRec, channel)
+			mustExec(t, db, `INSERT INTO subscriber_channel_consent VALUES (?, ?, ?, 'unsubscribed')`, subRec, listRec, channel)
+		}, 0},
+		{"invalid address", func(t *testing.T, db *sqlx.DB) {
+			mustExec(t, db, `INSERT INTO subscriber_addresses (subscriber, channel, address, status) VALUES (?, ?, 'a1', 'invalid')`, subRec, channel)
+			mustExec(t, db, `INSERT INTO subscriber_channel_consent VALUES (?, ?, ?, 'confirmed')`, subRec, listRec, channel)
+		}, 0},
+		{"consent on another channel", func(t *testing.T, db *sqlx.DB) {
+			mustExec(t, db, `INSERT INTO subscriber_addresses (subscriber, channel, address) VALUES (?, ?, 'a1')`, subRec, channel)
+			mustExec(t, db, `INSERT INTO subscriber_channel_consent VALUES (?, ?, 'ch:other', 'confirmed')`, subRec, listRec)
+		}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := newTestLedgerDB(t)
+			mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger, to_send, sent) VALUES (?, 'regular', 'running', ?, 0, 0)`, campRec, channel)
+			mustExec(t, db, `INSERT INTO lists (id, optin) VALUES (?, 'single')`, listRec)
+			mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES (?, 'u1', 'real@example.com', 'enabled')`, subRec)
+			mustExec(t, db, `INSERT INTO campaign_lists (campaign_id, list_id) VALUES (?, ?)`, campRec, listRec)
+			// A confirmed email subscription must not leak into channel eligibility.
+			mustExec(t, db, `INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status) VALUES (?, ?, 'confirmed', 'confirmed')`, subRec, listRec)
+			tc.setup(t, db)
+			if got := backfillCount(t, db, campRec); got != tc.want {
+				t.Fatalf("eligible = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPhoneSourcedChannelUsesPhoneColumn(t *testing.T) {
+	models.RegisterChannel(models.ChannelSpec{ID: "ch:phonetest", Address: models.AddressSourcePhone, Consent: models.ConsentSourceChannel, TextPipeline: true})
+	db := newTestLedgerDB(t)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger, to_send, sent) VALUES ('c1', 'regular', 'running', 'ch:phonetest', 0, 0)`)
+	mustExec(t, db, `INSERT INTO lists (id, optin) VALUES ('l1', 'single')`)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, phone, status) VALUES ('with', 'u1', 'a@example.com', '+15550100', 'enabled'), ('without', 'u2', 'b@example.com', '', 'enabled')`)
+	mustExec(t, db, `INSERT INTO campaign_lists (campaign_id, list_id) VALUES ('c1', 'l1')`)
+	mustExec(t, db, `INSERT INTO subscriber_lists (subscriber_id, list_id, status) VALUES ('with', 'l1', 'confirmed'), ('without', 'l1', 'confirmed')`)
+	mustExec(t, db, `INSERT INTO subscriber_channel_consent VALUES ('with', 'l1', 'ch:phonetest', 'confirmed'), ('without', 'l1', 'ch:phonetest', 'confirmed')`)
+	if got := backfillCount(t, db, "c1"); got != 1 {
+		t.Fatalf("eligible = %d, want only the subscriber with a phone", got)
+	}
+}
+
+func TestEmailCampaignSkipsPlaceholdersAndChannelConsentIsSeparate(t *testing.T) {
+	db := newTestLedgerDB(t)
+	mustExec(t, db, `INSERT INTO campaigns (id, type, status, messenger, to_send, sent) VALUES ('c1', 'regular', 'running', 'email', 0, 0)`)
+	mustExec(t, db, `INSERT INTO lists (id, optin) VALUES ('l1', 'single')`)
+	mustExec(t, db, `INSERT INTO subscribers (id, uuid, email, status) VALUES ('real', 'u1', 'a@example.com', 'enabled'), ('ghost', 'u2', ?, 'enabled')`, models.NewPlaceholderEmail())
+	mustExec(t, db, `INSERT INTO campaign_lists (campaign_id, list_id) VALUES ('c1', 'l1')`)
+	mustExec(t, db, `INSERT INTO subscriber_lists (subscriber_id, list_id, status) VALUES ('real', 'l1', 'confirmed'), ('ghost', 'l1', 'confirmed')`)
+	if got := backfillCount(t, db, "c1"); got != 1 {
+		t.Fatalf("eligible = %d, want the placeholder contact excluded", got)
 	}
 }

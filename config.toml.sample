@@ -17,3 +17,8 @@ address = "localhost:9000"
 # List Pocket uses embedded PocketBase for storage, auth, and realtime. Application
 # data lives in PocketBase’s SQLite database (default directory: pb_data/). There is
 # no separate PostgreSQL server to configure.
+
+[plugins]
+# Start without loading any plugin, for when a plugin stops the app from starting.
+# Can also be set with LISTPOCKET_plugins__safe_mode=true.
+safe_mode = false

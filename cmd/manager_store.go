@@ -271,6 +271,9 @@ func (s *store) UpdateCampaignStatus(campID int, status string) error {
 		status, status, campID)
 	if err == nil {
 		s.publishCampaignStatsEvent("status", campID)
+		if campaignStatusChanged != nil {
+			campaignStatusChanged(campID, status)
+		}
 	}
 	return err
 }
@@ -613,6 +616,9 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		return nil, false, err
 	}
 	out := sqliteLedgerRowsToModels(rows)
+	if err := s.attachChannelAddresses(campaignRecID, out); err != nil {
+		return nil, false, err
+	}
 	if s.verbose {
 		s.log.Printf(
 			"manager store sqlite: next subscribers (ledger) campaign_id=%d campaign_rec=%s fetched=%d limit=%d has_more=%v",
@@ -624,6 +630,33 @@ func (s *store) nextSubscribersSQLite(campID, limit int) ([]models.Subscriber, b
 		)
 	}
 	return out, hasMore, nil
+}
+
+// attachChannelAddresses batch-loads addresses for channels with their own address
+// table, so the send path doesn't run a query per subscriber.
+func (s *store) attachChannelAddresses(campaignRecID string, subs []models.Subscriber) error {
+	if len(subs) == 0 {
+		return nil
+	}
+	var messenger string
+	if err := s.db.Get(&messenger, `SELECT COALESCE(messenger, '') FROM campaigns WHERE id = ?`, campaignRecID); err != nil {
+		return err
+	}
+	if models.ChannelFor(messenger).Address != models.AddressSourceChannel {
+		return nil
+	}
+	ids := make([]string, 0, len(subs))
+	for _, sub := range subs {
+		ids = append(ids, sub.RecordID)
+	}
+	addresses, err := s.core.GetChannelAddresses(strings.TrimSpace(messenger), ids)
+	if err != nil {
+		return err
+	}
+	for i := range subs {
+		subs[i].Addresses = addresses[subs[i].RecordID]
+	}
+	return nil
 }
 
 func sqliteLedgerRowsToModels(rows []campaignledger.SubscriberRow) []models.Subscriber {

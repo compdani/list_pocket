@@ -82,5 +82,31 @@
             "inbox:get",
             "inbox:manage"
         ]
+    },
+    {
+        "group": "boards",
+        "permissions":
+        [
+            "boards:get",
+            "boards:manage"
+        ]
+    },
+    {
+        "group": "workflows",
+        "permissions":
+        [
+            "workflows:get",
+            "workflows:manage",
+            "workflows:run",
+            "workflows:approve"
+        ]
+    },
+    {
+        "group": "whatsapp",
+        "permissions":
+        [
+            "whatsapp:reply",
+            "whatsapp:post"
+        ]
     }
 ]

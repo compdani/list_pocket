@@ -53,6 +53,8 @@ type Constants struct {
 // Hooks contains external function hooks that are required by the core package.
 type Hooks struct {
 	SendOptinConfirmation func(models.Subscriber, []int) (int, error)
+	// OnChannelInbound is told about each new inbound message on a plugin channel.
+	OnChannelInbound func(ChannelEvent)
 }
 
 // Opt contains the controllers required to start the core.

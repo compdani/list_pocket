@@ -21,6 +21,18 @@
         >
           {{ $t('campaigns.newSmsCampaign') }}
         </v-btn>
+        <template v-if="$can('campaigns:manage')">
+          <v-btn
+            v-for="channel in pluginChannelList"
+            :key="channel.id"
+            :to="{ name: 'campaign', params: { id: 'new' }, query: { channel: channel.id } }"
+            variant="tonal"
+            color="primary"
+            :prepend-icon="channel.icon || 'mdi-puzzle-outline'"
+          >
+            {{ channel.label }}
+          </v-btn>
+        </template>
       </template>
     </page-header>
 
@@ -407,6 +419,7 @@ import QueryBar from '../components/QueryBar.vue';
 import BulkActionBar from '../components/BulkActionBar.vue';
 import AdminDataTable from '../components/AdminDataTable.vue';
 import { events } from '../utils/events';
+import { messengersInGroup, pluginChannels, SMS_GROUP } from '../utils/channels';
 
 export default {
   campaignStatsTopic: 'events/campaign-stats',
@@ -769,9 +782,16 @@ export default {
   computed: {
     ...mapState(['campaigns', 'loading', 'serverConfig']),
 
+    pluginChannelList() {
+      return pluginChannels(this.serverConfig?.channels);
+    },
+
     hasQuoMessenger() {
-      return Array.isArray(this.serverConfig?.messengers)
-        && this.serverConfig.messengers.includes('quo');
+      return messengersInGroup(
+        this.serverConfig?.channels,
+        this.serverConfig?.messengers,
+        SMS_GROUP,
+      ).length > 0;
     },
 
     tableHeaders() {

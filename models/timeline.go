@@ -40,6 +40,31 @@ const (
 	ChannelSMS   = "sms"
 )
 
+// TimelineEventChannel is an inbound or outbound event on a plugin channel. Its
+// Channel field holds the channel ID, such as ch:telegram.
+const TimelineEventChannel = "channel_event"
+
+// TimelineEventChannelMetadata is the metadata payload for channel_event events.
+type TimelineEventChannelMetadata struct {
+	Direction     string `db:"direction" json:"direction"`
+	Kind          string `db:"kind" json:"kind"`
+	Address       string `db:"address" json:"address"`
+	Body          string `db:"body" json:"body"`
+	ProviderMsgID string `db:"provider_msg_id" json:"provider_msg_id"`
+}
+
+// TimelineEventBoardMove is a contact being added to, moved on or removed from a board.
+const TimelineEventBoardMove = "board_move"
+
+// TimelineEventBoardMoveMetadata is the metadata payload for board_move events. FromStage
+// is empty for an add, and ToStage is empty for a removal. It holds names, so it still
+// reads correctly after a board or stage is renamed or deleted.
+type TimelineEventBoardMoveMetadata struct {
+	Board     string `db:"board_name" json:"board"`
+	FromStage string `db:"from_stage_name" json:"from_stage"`
+	ToStage   string `db:"to_stage_name" json:"to_stage"`
+}
+
 // TimelineEvent is the unified event type for contact timeline (replacing disparate SubscriberActivity fields)
 // All timeline events share this base contract for consistent sorting and filtering.
 //

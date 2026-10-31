@@ -34,13 +34,14 @@ func sqliteCampaignStringValue(v null.String) string {
 }
 
 func validateQuoCampaign(messenger, campType, contentType string) error {
-	if !models.IsTextMessenger(messenger) {
+	spec := models.ChannelFor(messenger)
+	if !spec.TextPipeline {
 		return nil
 	}
-	if campType == models.CampaignTypeOptin {
+	if campType == models.CampaignTypeOptin && !spec.AllowOptin {
 		return errors.New("text messaging campaigns cannot use opt-in type")
 	}
-	if contentType != models.CampaignContentTypePlain {
+	if !spec.SupportsContentType(contentType) {
 		return errors.New("text messaging campaigns require plain content type")
 	}
 	return nil
@@ -53,10 +54,11 @@ func validateCampaignTemplateType(messenger, tplType string) error {
 	if strings.TrimSpace(tplType) == "" {
 		return nil
 	}
-	if models.IsTextMessenger(messenger) && tplType != models.TemplateTypeCampaignSMS {
+	textPipeline := models.ChannelFor(messenger).TextPipeline
+	if textPipeline && tplType != models.TemplateTypeCampaignSMS {
 		return errors.New("text messaging campaigns require a campaign_sms template")
 	}
-	if !models.IsTextMessenger(messenger) && tplType == models.TemplateTypeCampaignSMS {
+	if !textPipeline && tplType == models.TemplateTypeCampaignSMS {
 		return errors.New("email campaigns cannot use campaign_sms templates")
 	}
 	return nil
@@ -1015,7 +1017,7 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 		COALESCE(
 			t.body,
 			CASE
-				WHEN c.messenger = 'quo' THEN (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+				WHEN c.messenger = 'quo' OR c.messenger LIKE 'ch:%' THEN (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
 				ELSE (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
 			END,
 			''
@@ -1023,7 +1025,7 @@ func (c *Core) getCampaignSQLite(recordID, uuid, archiveSlug string, tplType str
 		COALESCE(
 			t.type,
 			CASE
-				WHEN c.messenger = 'quo' THEN (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+				WHEN c.messenger = 'quo' OR c.messenger LIKE 'ch:%' THEN (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
 				ELSE (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
 			END,
 			''
@@ -1125,7 +1127,7 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			COALESCE(
 				t.body,
 				CASE
-					WHEN c.messenger = 'quo' THEN (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+					WHEN c.messenger = 'quo' OR c.messenger LIKE 'ch:%' THEN (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
 					ELSE (SELECT body FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
 				END,
 				''
@@ -1133,7 +1135,7 @@ func (c *Core) getArchivedCampaignsSQLite(offset, limit int) (models.Campaigns, 
 			COALESCE(
 				t.type,
 				CASE
-					WHEN c.messenger = 'quo' THEN (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
+					WHEN c.messenger = 'quo' OR c.messenger LIKE 'ch:%' THEN (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign_sms' LIMIT 1)
 					ELSE (SELECT type FROM templates WHERE is_default = 1 AND type = 'campaign' LIMIT 1)
 				END,
 				''
@@ -1201,7 +1203,7 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaRecor
 	var tpl tplInfo
 	if o.TemplateID.Valid && strings.TrimSpace(o.TemplateID.String) != "" {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE id = ? LIMIT 1`, o.TemplateID.String)
-	} else if models.IsTextMessenger(messenger) {
+	} else if models.ChannelFor(messenger).TextPipeline {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 AND type = ? LIMIT 1`, models.TemplateTypeCampaignSMS)
 	} else if o.ContentType != models.CampaignContentTypeVisual {
 		_ = c.db.Get(&tpl, `SELECT id, type, body, body_source FROM templates WHERE is_default = 1 AND type = ? LIMIT 1`, models.TemplateTypeCampaign)
@@ -1209,7 +1211,7 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaRecor
 	c.log.Printf("create campaign sqlite: template resolved name=%q tpl_type=%q tpl_id_valid=%v", o.Name, tpl.Type, tpl.ID.Valid)
 
 	contentType := o.ContentType
-	if models.IsTextMessenger(messenger) {
+	if models.ChannelFor(messenger).TextPipeline {
 		contentType = models.CampaignContentTypePlain
 	} else if contentType == "" {
 		contentType = models.CampaignContentTypeRichtext
@@ -1218,7 +1220,7 @@ func (c *Core) createCampaignSQLite(o models.Campaign, listIDs []int, mediaRecor
 	bodySource := o.BodySource
 	templateID := o.TemplateID
 
-	if tpl.Type == models.TemplateTypeCampaignVisual && !models.IsTextMessenger(messenger) {
+	if tpl.Type == models.TemplateTypeCampaignVisual && !models.ChannelFor(messenger).TextPipeline {
 		contentType = models.CampaignContentTypeVisual
 		templateID.Valid = false
 		templateID.String = ""
@@ -1399,7 +1401,7 @@ func (c *Core) updateCampaignSQLite(recordID string, o models.Campaign, listIDs 
 		msgr = "email"
 	}
 	contentType := o.ContentType
-	if models.IsTextMessenger(msgr) {
+	if models.ChannelFor(msgr).TextPipeline {
 		contentType = models.CampaignContentTypePlain
 	}
 	if err := validateQuoCampaign(msgr, campType, contentType); err != nil {

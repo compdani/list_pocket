@@ -53,6 +53,10 @@ nav:
     - "Querying and segmenting subscribers": querying-and-segmentation.md
     - "Bounce processing": bounces.md
     - "Messengers": "messengers.md"
+    - "WhatsApp": "whatsapp.md"
+    - "Workflows": "workflows.md"
+    - "AI and the agent": "ai.md"
+    - "Plugins": "plugins.md"
     - "Archives": "archives.md"
     - "Internationalization": "i18n.md"
     - "Integrating with external systems": external-integration.md

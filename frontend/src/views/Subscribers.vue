@@ -163,6 +163,30 @@
         {{ $t('subscribers.manageLists') }}
       </v-btn>
       <v-btn
+        v-if="canEnroll"
+        variant="text"
+        size="small"
+        prepend-icon="mdi-source-branch"
+        :disabled="bulk.all"
+        :title="bulk.all ? $t('workflows.enroll.noSelectAll') : undefined"
+        data-cy="btn-add-to-workflow"
+        @click="isEnrollVisible = true"
+      >
+        {{ $t('workflows.enroll.addToWorkflow') }}
+      </v-btn>
+      <v-btn
+        v-if="canAddToBoard"
+        variant="text"
+        size="small"
+        prepend-icon="mdi-view-column-outline"
+        :disabled="bulk.all"
+        :title="bulk.all ? $t('boards.add.noSelectAll') : undefined"
+        data-cy="btn-add-to-board"
+        @click="isAddToBoardVisible = true"
+      >
+        {{ $t('boards.add.title') }}
+      </v-btn>
+      <v-btn
         variant="text"
         size="small"
         prepend-icon="mdi-trash-can-outline"
@@ -204,9 +228,9 @@
           <div>
             <div class="entity-line">
             <button type="button" class="link-button" @click.stop.prevent="openSubscriberPage(item)" :class="{ blocklisted: item.status === 'blocklisted' }">
-              {{ item.email }}
+              {{ isPlaceholderEmail(item.email) ? $t('plugins.noEmail') : item.email }}
             </button>
-            <copy-text :text="`${item.email}`" hide-text />
+            <copy-text v-if="!isPlaceholderEmail(item.email)" :text="`${item.email}`" hide-text />
             </div>
             <v-chip v-if="item.status !== 'enabled'" :class="['subscriber-status-chip', item.status]" size="small" variant="tonal" data-cy="blocklisted">
               {{ $t(`subscribers.status.${item.status}`) }}
@@ -305,6 +329,9 @@
       />
     </v-dialog>
 
+    <flow-enroll-dialog v-if="canEnroll" v-model="isEnrollVisible" :preset-subscribers="bulk.checked" />
+    <add-to-board-dialog v-if="canAddToBoard" v-model="isAddToBoardVisible" :preset-subscribers="bulk.checked" />
+
     <v-dialog
       :model-value="isFormVisible"
       max-width="920"
@@ -324,11 +351,14 @@
 </template>
 
 <script>
+import { isPlaceholderEmail } from '../utils/channels';
 import { mapState } from 'vuex';
 import EmptyPlaceholder from '../components/EmptyPlaceholder.vue';
 import PageHeader from '../components/PageHeader.vue';
 import QueryBar from '../components/QueryBar.vue';
 import BulkActionBar from '../components/BulkActionBar.vue';
+import AddToBoardDialog from '../components/AddToBoardDialog.vue';
+import FlowEnrollDialog from '../components/flow/FlowEnrollDialog.vue';
 import AdminDataTable from '../components/AdminDataTable.vue';
 import SubscriberFilterBuilder from '../components/SubscriberFilterBuilder.vue';
 import { uris } from '../constants';
@@ -355,6 +385,8 @@ export default {
     PageHeader,
     QueryBar,
     BulkActionBar,
+    AddToBoardDialog,
+    FlowEnrollDialog,
     AdminDataTable,
   },
 
@@ -369,6 +401,9 @@ export default {
       filterBuilder: emptyFilterGroup(),
       appliedFiltersJson: null,
       subscriberTagOptions: [],
+
+      isEnrollVisible: false,
+      isAddToBoardVisible: false,
 
       // Table bulk row selection states.
       bulk: {
@@ -395,6 +430,8 @@ export default {
   },
 
   methods: {
+    isPlaceholderEmail,
+
     subscriberValue(subscriber) {
       if (!subscriber) {
         return '';
@@ -837,6 +874,15 @@ export default {
   },
 
   computed: {
+    canAddToBoard() {
+      return this.$can('boards:manage');
+    },
+
+    // Choosing a workflow needs the list of them, which workflows:run alone can't read.
+    canEnroll() {
+      return this.$can('workflows:manage') || (this.$can('workflows:run') && this.$can('workflows:get'));
+    },
+
     ...mapState(['subscribers', 'lists', 'loading']),
 
     subscriberRows() {

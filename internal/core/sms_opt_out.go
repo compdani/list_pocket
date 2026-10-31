@@ -110,6 +110,23 @@ WHERE COALESCE(sms_status, status) != 'unsubscribed'
 	if err != nil {
 		return 0, err
 	}
+
+	// Channel consent copied from SMS falls with the SMS consent it came from.
+	if _, err := c.db.Exec(`
+UPDATE subscriber_channel_consent
+SET status = 'unsubscribed', updated = strftime('%Y-%m-%d %H:%M:%fZ', 'now')
+WHERE source = ? AND status = 'confirmed'
+  AND subscriber IN (
+  SELECT id FROM subscribers
+  WHERE `+normalizePhoneSQL+` = ?
+     OR (
+       LENGTH(`+normalizePhoneSQL+`) >= 10
+       AND LENGTH(?) >= 10
+       AND SUBSTR(`+normalizePhoneSQL+`, -10) = SUBSTR(?, -10)
+     )
+)`, ConsentSourceSMSCopy, d, d, d); err != nil {
+		return 0, err
+	}
 	return res.RowsAffected()
 }
 

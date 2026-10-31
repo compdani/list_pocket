@@ -159,6 +159,20 @@
           </div>
         </div>
 
+        <v-select
+          v-if="isSmsTemplate && pluginChannelItems.length > 0"
+          v-model="form.channel"
+          :items="pluginChannelItems"
+          :label="$t('templates.channel')"
+          :hint="$t('templates.channelHelp')"
+          persistent-hint
+          clearable
+          variant="outlined"
+          density="comfortable"
+          class="mt-3"
+          data-cy="template-channel"
+        />
+
         <p class="form-help mt-3">
           <template v-if="form.type === 'campaign' || isSmsTemplate">
             {{ $t('templates.placeholderHelp', { placeholder: egPlaceholder }) }}
@@ -172,6 +186,7 @@
         </p>
       </section>
 
+      <plugin-slot name="template.form.after" :context="{ template: form }" />
       <footer class="admin-dialog-foot modal-card-foot">
         <v-btn
           type="button"
@@ -216,6 +231,7 @@
 </template>
 
 <script>
+import { pluginChannels } from '../utils/channels';
 import { defineAsyncComponent } from 'vue';
 import { mapState } from 'vuex';
 import CampaignPreview from '../components/CampaignPreview.vue';
@@ -236,6 +252,7 @@ const baseForm = () => ({
   optin: '',
   body: '',
   bodySource: '',
+  channel: '',
 });
 
 export default {
@@ -278,6 +295,11 @@ export default {
         { title: this.$tc('templates.typeCampaignSMS'), value: 'campaign_sms' },
         { title: this.$tc('templates.typeTransactional'), value: 'tx' },
       ];
+    },
+
+    pluginChannelItems() {
+      return pluginChannels(this.$store.state.serverConfig?.channels)
+        .map((c) => ({ title: c.label, value: c.id }));
     },
 
     isSmsTemplate() {
@@ -388,6 +410,7 @@ export default {
         ...data,
         body: data.body ?? '',
         bodySource: data.bodySource ?? '',
+        channel: data.channel ?? '',
         editorMode: initialEditorMode,
       };
     },
@@ -450,6 +473,7 @@ export default {
         subject: this.form.subject,
         body: this.form.body,
         body_source: this.form.bodySource,
+        channel: this.isSmsTemplate ? (this.form.channel || '') : '',
       };
 
       this.$api.createTemplate(payload).then((resp) => {
@@ -469,6 +493,7 @@ export default {
         subject: this.form.subject,
         body: this.form.body,
         body_source: this.form.bodySource,
+        channel: this.isSmsTemplate ? (this.form.channel || '') : '',
       };
 
       this.$api.updateTemplate(payload).then((resp) => {

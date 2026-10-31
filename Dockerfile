@@ -31,6 +31,7 @@ COPY models/ ./models/
 COPY i18n/ ./i18n/
 COPY static/ ./static/
 COPY permissions.json config.toml.sample embedded.go ./
+COPY docs/docs/content/plugins.md ./docs/docs/content/plugins.md
 
 RUN go build -trimpath -ldflags="-s -w" -o /out/listpocket ./cmd
 

@@ -5,59 +5,28 @@
     </div>
 
     <div v-else>
-      <v-row class="mb-6">
-        <v-col cols="12" sm="4">
-          <v-card class="text-center">
-            <v-card-text>
-              <p class="text-uppercase text-caption font-weight-bold">Total</p>
-              <p class="text-h4">{{ total }}</p>
-            </v-card-text>
-          </v-card>
-        </v-col>
-        <v-col cols="12" sm="4">
-          <v-card class="text-center">
-            <v-card-text>
-              <p class="text-uppercase text-caption font-weight-bold">Shown</p>
-              <p class="text-h4">{{ events.length }}</p>
-            </v-card-text>
-          </v-card>
-        </v-col>
-        <v-col cols="12" sm="4">
-          <v-card class="text-center">
-            <v-card-text>
-              <p class="text-uppercase text-caption font-weight-bold">Inbound</p>
-              <p class="text-h4">{{ inboundCount }}</p>
-            </v-card-text>
-          </v-card>
-        </v-col>
-      </v-row>
-
       <div v-if="events.length > 0" class="timeline-stack">
-        <v-card
+        <article
           v-for="(event, idx) in events"
           :key="`${event.eventType}-${event.occurredAt}-${idx}`"
           class="timeline-item"
-          elevation="0"
         >
-          <v-card-text>
+          <span class="timeline-dot" :class="`text-${eventTypeColor(event.eventType)}`">
+            <v-icon :icon="eventTypeIcon(event)" size="16" />
+          </span>
+          <div class="timeline-item-body">
             <div class="timeline-item-head">
-              <div class="d-flex align-center ga-2">
-                <v-chip size="small" label :color="eventTypeColor(event.eventType)">
-                  {{ eventTypeLabel(event.eventType) }}
-                </v-chip>
-                <v-chip size="small" variant="outlined" label>
-                  {{ event.channel }}
-                </v-chip>
-              </div>
+              <span class="text-caption font-weight-medium">{{ eventTypeLabel(event) }}</span>
               <span class="text-caption text-medium-emphasis">{{ formatActivityTimestamp(event.occurredAt) }}</span>
             </div>
 
-            <p class="mb-1 font-weight-medium">{{ eventTitle(event) }}</p>
-            <p v-if="eventSubtitle(event)" class="mb-2 text-body-2 text-medium-emphasis">{{ eventSubtitle(event) }}</p>
+            <p class="mb-0 timeline-title">{{ eventTitle(event) }}</p>
+            <plugin-slot name="subscriber.activity.item" :context="{ event }" />
+            <p v-if="eventSubtitle(event)" class="mb-0 text-body-2 text-medium-emphasis">{{ eventSubtitle(event) }}</p>
 
             <div
               v-if="event.eventType === 'inbound_email_reply' && emailAttachments(event).length > 0"
-              class="d-flex flex-wrap ga-2 mb-2"
+              class="d-flex flex-wrap ga-2 mt-1"
             >
               <a
                 v-for="(attachment, attachmentIdx) in emailAttachments(event)"
@@ -70,13 +39,8 @@
                 {{ attachmentLabel(attachment) }}
               </a>
             </div>
-
-            <details>
-              <summary class="text-caption text-medium-emphasis">Details</summary>
-              <pre class="event-metadata">{{ prettyMetadata(event.metadata) }}</pre>
-            </details>
-          </v-card-text>
-        </v-card>
+          </div>
+        </article>
 
         <div v-if="hasMore" class="d-flex justify-center py-4">
           <v-btn :loading="isLoadingMore" variant="outlined" @click="loadMore">Load more</v-btn>
@@ -93,6 +57,7 @@
 <script>
 import dayjs from 'dayjs';
 import { legacyActivityToTimeline } from './subscriberActivityTransform';
+import { channelIcon } from '../utils/crm.mjs';
 
 export default {
   props: {
@@ -112,12 +77,6 @@ export default {
       limit: 25,
       hasMore: false,
     };
-  },
-
-  computed: {
-    inboundCount() {
-      return this.events.filter((e) => e.eventType === 'inbound_sms' || e.eventType === 'inbound_email_reply').length;
-    },
   },
 
   mounted() {
@@ -166,20 +125,48 @@ export default {
       }
     },
 
-    eventTypeLabel(eventType) {
-      switch (eventType) {
+    eventTypeIcon(event) {
+      switch (event.eventType) {
         case 'campaign_send':
-          return 'Campaign Sent';
+          return 'mdi-bullhorn-outline';
         case 'campaign_view':
-          return 'Campaign View';
+          return 'mdi-eye-outline';
         case 'link_click':
-          return 'Link Click';
+          return 'mdi-cursor-default-click-outline';
         case 'inbound_sms':
-          return 'Inbound SMS';
+          return 'mdi-cellphone-message';
         case 'inbound_email_reply':
-          return 'Inbound Email';
+          return 'mdi-email-open-outline';
+        case 'channel_event':
+          return channelIcon(event.channel);
+        case 'board_move':
+          return 'mdi-view-column-outline';
         default:
-          return eventType || 'Event';
+          return 'mdi-comment-text-outline';
+      }
+    },
+
+    eventTypeLabel(event) {
+      switch (event.eventType) {
+        case 'campaign_send':
+          return 'Campaign sent';
+        case 'campaign_view':
+          return 'Campaign viewed';
+        case 'link_click':
+          return 'Link clicked';
+        case 'inbound_sms':
+          return 'SMS received';
+        case 'inbound_email_reply':
+          return 'Email received';
+        case 'channel_event': {
+          const direction = (event.metadata || {}).direction;
+          const key = direction === 'outbound' ? 'Sent' : 'Received';
+          return `${key} · ${String(event.channel || '').replace(/^ch:/, '')}`;
+        }
+        case 'board_move':
+          return 'Board';
+        default:
+          return event.eventType || 'Event';
       }
     },
 
@@ -190,6 +177,14 @@ export default {
       }
       if (event.eventType === 'inbound_email_reply') {
         return md.subject || md.fromAddress || 'Inbound email reply';
+      }
+      if (event.eventType === 'channel_event') {
+        return md.body || `${md.direction || ''} ${md.kind || ''}`.trim() || md.address;
+      }
+      if (event.eventType === 'board_move') {
+        if (event.status === 'added') return `Added to ${md.toStage} on ${md.board}`;
+        if (event.status === 'removed') return `Removed from ${md.fromStage} on ${md.board}`;
+        return `Moved from ${md.fromStage} to ${md.toStage} on ${md.board}`;
       }
       if (event.eventType === 'campaign_send') {
         return md.subject || md.campaignName || 'Campaign send';
@@ -219,6 +214,9 @@ export default {
       }
       if (event.eventType === 'inbound_email_reply') {
         return md.fromAddress || '';
+      }
+      if (event.eventType === 'board_move') {
+        return (event.actor || {}).label || '';
       }
       return '';
     },
@@ -265,20 +263,12 @@ export default {
       }));
     },
 
-    prettyMetadata(metadata) {
-      try {
-        return JSON.stringify(metadata || {}, null, 2);
-      } catch {
-        return '{}';
-      }
-    },
-
     formatActivityTimestamp(value) {
       if (!value) {
         return '';
       }
 
-      return dayjs(value).format('MM-DD-YY hh:mm A');
+      return dayjs(value).format('MMM D, YYYY h:mm A');
     },
 
     async getActivity() {
@@ -328,29 +318,54 @@ export default {
 
 <style scoped>
 .timeline-stack {
-  display: grid;
-  gap: 12px;
+  position: relative;
 }
 
 .timeline-item {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 12px;
+  display: flex;
+  gap: 12px;
+  padding-bottom: 16px;
+  position: relative;
+}
+
+/* The line joining one event to the next. */
+.timeline-item:not(:last-of-type)::before {
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+  bottom: 0;
+  content: '';
+  left: 15px;
+  position: absolute;
+  top: 32px;
+  width: 1px;
+}
+
+.timeline-dot {
+  align-items: center;
+  background: rgb(var(--v-theme-surface-light));
+  border-radius: 50%;
+  display: flex;
+  flex: none;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.timeline-item-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .timeline-item-head {
-  align-items: center;
+  align-items: baseline;
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   justify-content: space-between;
-  margin-bottom: 8px;
 }
 
-.event-metadata {
-  background: rgb(var(--v-theme-surface-light));
-  border-radius: 8px;
-  margin-top: 8px;
-  overflow-x: auto;
-  padding: 10px;
-  white-space: pre-wrap;
+.timeline-title {
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .attachment-link {

@@ -614,7 +614,15 @@ func (c *Core) unsubscribeSubscriberAllPublicLists(subRecID string, blocklist bo
 		}
 		messenger = ""
 	}
-	smsChannel := models.IsTextMessenger(messenger)
+	smsChannel := models.ChannelFor(messenger).Consent == models.ConsentSourceSMSStatus
+	if strings.HasPrefix(strings.TrimSpace(messenger), models.ChannelMessengerPrefix) {
+		// A plugin channel's consent is separate. Unsubscribing leaves email and SMS alone.
+		if _, err := c.OptOutChannelSubscriber(subRecID, strings.TrimSpace(messenger)); err != nil {
+			c.log.Printf("error unsubscribing: %v", err)
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
+		}
+		return nil
+	}
 
 	tx, err := c.db.Beginx()
 	if err != nil {
@@ -716,7 +724,15 @@ func (c *Core) UnsubscribeByCampaign(subUUID, campUUID string, blocklist bool) e
 		c.log.Printf("error unsubscribing: %v", err)
 		return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
 	}
-	smsChannel := models.IsTextMessenger(messenger)
+	smsChannel := models.ChannelFor(messenger).Consent == models.ConsentSourceSMSStatus
+	if strings.HasPrefix(strings.TrimSpace(messenger), models.ChannelMessengerPrefix) {
+		// A plugin channel's consent is separate. Unsubscribing leaves email and SMS alone.
+		if _, err := c.OptOutChannelSubscriber(subRecID, strings.TrimSpace(messenger)); err != nil {
+			c.log.Printf("error unsubscribing: %v", err)
+			return apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
+		}
+		return nil
+	}
 
 	tx, err := c.db.Beginx()
 	if err != nil {
@@ -1431,7 +1447,8 @@ func (c *Core) exportSubscribersSQLite(searchStr, query string, filters json.Raw
 		if err != nil {
 			return nil, err
 		}
-		whereSQL = `subscribers.rowid > ? AND ` + whereSQL
+		// Channel-only contacts have no real email to export.
+		whereSQL = `subscribers.rowid > ? AND subscribers.email NOT LIKE '%@` + models.PlaceholderEmailDomain + `' AND ` + whereSQL
 		args = append([]any{id}, args...)
 
 		if len(subIDs) > 0 {

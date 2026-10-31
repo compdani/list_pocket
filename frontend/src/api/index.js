@@ -394,70 +394,42 @@ export const getDashboardCharts = () => http.get(
   { params: { tz: getUserTimeZone() || undefined }, loading: models.dashboard },
 );
 
-export const getWorkflowDashboard = (workflowId) => sendControlPlane(
-  'GET',
-  `/api/control-plane/dashboard${workflowId ? `?${qs.stringify({ workflowId })}` : ''}`,
-  undefined,
-  { disableToast: true },
-);
+// Workflows. Definitions round-trip unchanged, so their keys stay as sent.
+const flowOptions = { disableToast: true, camelCase: false };
 
-export const createWorkflow = (data = {}) => sendControlPlane(
-  'POST',
-  '/api/control-plane/workflows',
-  data,
-);
+export const getFlows = async () => http.get('/api/flows', flowOptions);
 
-export const deleteWorkflow = (workflowId) => sendControlPlane(
-  'DELETE',
-  `/api/control-plane/workflows/${workflowId}`,
-);
+export const getFlow = async (id) => http.get(`/api/flows/${id}`, flowOptions);
 
-export const saveWorkflowGraph = (workflowId, data) => sendControlPlane(
-  'POST',
-  `/api/control-plane/workflows/${workflowId}/save`,
-  data,
-);
+export const getFlowCatalog = async () => http.get('/api/flows/catalog', flowOptions);
 
-export const publishWorkflow = (workflowId) => sendControlPlane(
-  'POST',
-  `/api/control-plane/workflows/${workflowId}/publish`,
-);
+export const createFlow = async (data) => http.post('/api/flows', data, flowOptions);
 
-export const validateWorkflow = (workflowId) => sendControlPlane(
-  'POST',
-  `/api/control-plane/workflows/${workflowId}/validate`,
-);
+export const saveFlowDraft = async (id, definition) => http.put(`/api/flows/${id}/draft`, { definition }, flowOptions);
 
-export const runWorkflow = (workflowId, data = {}) => sendControlPlane(
-  'POST',
-  `/api/control-plane/workflows/${workflowId}/run`,
-  data,
-);
+export const publishFlow = async (id, note = '') => http.post(`/api/flows/${id}/publish`, { note }, flowOptions);
 
-export const armWorkflowWebhookCapture = (workflowId, mode) => sendControlPlane(
-  'POST',
-  `/api/control-plane/workflows/${workflowId}/webhook-capture`,
-  { mode },
-);
+export const setFlowEnabled = async (id, enabled) => http.put(`/api/flows/${id}/enabled`, { enabled }, flowOptions);
 
-export const getWorkflowWebhookCapture = (sessionId) => sendControlPlane(
-  'GET',
-  `/api/control-plane/webhook-captures/${sessionId}`,
-  undefined,
-  { disableToast: true },
-);
+export const duplicateFlow = async (id, title = '') => http.post(`/api/flows/${id}/duplicate`, { title }, flowOptions);
 
-export const getWorkflowRunDetail = (runId) => sendControlPlane(
-  'GET',
-  `/api/control-plane/runs/${runId}`,
-  undefined,
-  { disableToast: true },
-);
+export const deleteFlow = async (id) => http.delete(`/api/flows/${id}`, flowOptions);
 
-export const cancelWorkflowRun = (runId) => sendControlPlane(
-  'POST',
-  `/api/control-plane/runs/${runId}/cancel`,
-);
+export const runFlow = async (id, input) => http.post(`/api/flows/${id}/run`, { input }, flowOptions);
+
+export const enrollFlowSubscribers = async (id, subscribers) => http.post(`/api/flows/${id}/enroll`, { subscribers }, flowOptions);
+
+export const testFlow = async (id, input) => http.post(`/api/flows/${id}/test`, { input }, flowOptions);
+
+export const getFlowRuns = async (params) => http.get('/api/flow-runs', { ...flowOptions, params });
+
+export const getFlowRun = async (id) => http.get(`/api/flow-runs/${id}`, flowOptions);
+
+export const cancelFlowRun = async (id) => http.post(`/api/flow-runs/${id}/cancel`, {}, flowOptions);
+
+export const getFlowApprovals = async (params) => http.get('/api/flow-approvals', { ...flowOptions, params });
+
+export const decideFlowApproval = async (id, approved, edited) => http.post(`/api/flow-approvals/${id}/decide`, { approved, edited }, flowOptions);
 
 // Lists.
 export const getLists = (params) => http.get(
@@ -679,9 +651,12 @@ export const getCampaigns = async (params) => http.get('/api/campaigns', {
   camelCase: (keyPath) => !keyPath.startsWith('.results.*.headers'),
 });
 
+// A channel's options go back to the server unchanged, so their keys stay as sent.
+const keepChannelFields = (keyPath) => !keyPath.startsWith('.attribs.channel_fields');
+
 export const getCampaign = async (idOrRecordId) => http.get(`/api/campaigns/${idOrRecordId}`, {
   loading: models.campaigns,
-  camelCase: (keyPath) => !keyPath.startsWith('.headers'),
+  camelCase: (keyPath) => !keyPath.startsWith('.headers') && keepChannelFields(keyPath),
 });
 
 export const getCampaignStats = async () => http.get('/api/campaigns/running/stats', {});
@@ -689,7 +664,7 @@ export const getCampaignStats = async () => http.get('/api/campaigns/running/sta
 export const createCampaign = async (data) => http.post(
   '/api/campaigns',
   data,
-  { loading: models.campaigns },
+  { loading: models.campaigns, camelCase: keepChannelFields },
 );
 
 export const getCampaignViewCounts = async (params) => http.get(
@@ -777,7 +752,7 @@ export const testCampaign = async (data) => http.post(
 export const updateCampaign = async (idOrRecordId, data) => http.put(
   `/api/campaigns/${idOrRecordId}`,
   data,
-  { loading: models.campaigns },
+  { loading: models.campaigns, camelCase: keepChannelFields },
 );
 
 export const changeCampaignStatus = async (idOrRecordId, status) => http.put(
@@ -1102,6 +1077,91 @@ export const updateAIBuilderSettings = async (data) => http.put(
   { loading: models.settings },
 );
 
+// Plugin responses keep their keys as sent: settings keys and i18n message keys
+// are data, and camelCasing them would break the lookups.
+export const getPluginsUI = async () => http.get('/api/plugins/ui', { disableToast: true, camelCase: false });
+
+export const getPlugins = async () => http.get('/api/plugins', { disableToast: true, camelCase: false });
+
+export const installPlugin = async (file) => {
+  const data = new FormData();
+  data.append('file', file);
+  return http.post('/api/plugins', data, { disableToast: true, camelCase: false });
+};
+
+export const enablePlugin = async (id) => http.post(`/api/plugins/${id}/enable`, {}, { disableToast: true, camelCase: false });
+
+export const disablePlugin = async (id) => http.post(`/api/plugins/${id}/disable`, {}, { disableToast: true, camelCase: false });
+
+export const uninstallPlugin = async (id, purge = false) => http.delete(
+  `/api/plugins/${id}${purge ? '?purge=1' : ''}`,
+  { disableToast: true, camelCase: false },
+);
+
+export const getSubscriberChannels = async (id) => http.get(
+  `/api/subscribers/${id}/channels`,
+  { disableToast: true, camelCase: false },
+);
+
+export const addSubscriberChannelAddress = async (id, channel, address) => http.post(
+  `/api/subscribers/${id}/channels/address`,
+  { channel, address },
+  { disableToast: true },
+);
+
+export const removeSubscriberChannelAddress = async (id, channel, address) => http.delete(
+  `/api/subscribers/${id}/channels/address`,
+  { disableToast: true, data: { channel, address } },
+);
+
+export const setSubscriberChannelConsent = async (id, channel, listId, status) => http.put(
+  `/api/subscribers/${id}/channels/consent`,
+  { channel, list_id: listId, status },
+  { disableToast: true },
+);
+
+export const getPluginSettings = async (id) => http.get(`/api/plugins/${id}/settings`, { disableToast: true, camelCase: false });
+
+export const updatePluginSettings = async (id, values) => http.put(
+  `/api/plugins/${id}/settings`,
+  values,
+  { disableToast: true, camelCase: false },
+);
+
+// WhatsApp responses keep their keys as sent, because they're passed back unchanged.
+const whatsAppOptions = { disableToast: true, camelCase: false };
+
+export const getWhatsAppSettings = async () => http.get('/api/settings/whatsapp', whatsAppOptions);
+
+export const updateWhatsAppSettings = async (data) => http.put('/api/settings/whatsapp', data, whatsAppOptions);
+
+export const testWhatsAppSettings = async () => http.post('/api/settings/whatsapp/test', {}, whatsAppOptions);
+
+export const copyWhatsAppConsent = async (data) => http.post('/api/settings/whatsapp/consent-copy', data, whatsAppOptions);
+
+export const getWhatsAppTemplates = async (refresh = false) => http.get(
+  `/api/whatsapp/templates${refresh ? '?refresh=1' : ''}`,
+  whatsAppOptions,
+);
+
+export const getWhatsAppCampaignStats = async (id) => http.get(`/api/campaigns/${id}/whatsapp-stats`, whatsAppOptions);
+
+export const getWhatsAppThread = async (id) => http.get(`/api/subscribers/${id}/whatsapp`, whatsAppOptions);
+
+export const sendWhatsAppReply = async (id, body) => http.post(`/api/subscribers/${id}/whatsapp/reply`, { body }, whatsAppOptions);
+
+export const getWhatsAppChannels = async () => http.get('/api/whatsapp/channels', whatsAppOptions);
+
+export const getWhatsAppChannelPosts = async () => http.get('/api/whatsapp/channel-posts', whatsAppOptions);
+
+export const createWhatsAppChannelPost = async (data) => http.post('/api/whatsapp/channel-posts', data, whatsAppOptions);
+
+export const updateWhatsAppChannelPost = async (id, data) => http.put(`/api/whatsapp/channel-posts/${id}`, data, whatsAppOptions);
+
+export const deleteWhatsAppChannelPost = async (id) => http.delete(`/api/whatsapp/channel-posts/${id}`, whatsAppOptions);
+
+export const retryWhatsAppChannelPost = async (id) => http.post(`/api/whatsapp/channel-posts/${id}/retry`, {}, whatsAppOptions);
+
 export const getTextMessagingSettings = async () => http.get(
   '/api/settings/text-messaging',
   { disableToast: true },
@@ -1287,3 +1347,67 @@ export const deleteInboundSpamRule = (id) => http.delete(
 export const deleteGCSpamInboundEmails = () => http.delete(
   '/api/maintenance/inbound-emails/spam',
 );
+
+// CRM. These show their own errors, because most are shown next to the control that
+// caused them.
+const crmOptions = { disableToast: true };
+
+export const getContactProfile = async (id) => http.get(`/api/subscribers/${id}/profile`, crmOptions);
+
+export const updateContactProfile = async (id, data) => http.put(`/api/subscribers/${id}/profile`, data, crmOptions);
+
+export const getCRMAssignees = async () => http.get('/api/crm/assignees', crmOptions);
+
+export const getBoards = async () => http.get('/api/boards', crmOptions);
+
+export const getBoard = async (board) => http.get(`/api/boards/${board}`, crmOptions);
+
+export const createBoard = async (data) => http.post('/api/boards', data, crmOptions);
+
+export const updateBoard = async (board, data) => http.put(`/api/boards/${board}`, data, crmOptions);
+
+export const deleteBoard = async (board) => http.delete(`/api/boards/${board}`, crmOptions);
+
+export const createBoardStage = async (board, data) => http.post(`/api/boards/${board}/stages`, data, crmOptions);
+
+export const updateBoardStage = async (board, stage, data) => http.put(`/api/boards/${board}/stages/${stage}`, data, crmOptions);
+
+export const reorderBoardStages = async (board, stages) => http.put(`/api/boards/${board}/stages/order`, { stages }, crmOptions);
+
+export const deleteBoardStage = async (board, stage, moveTo) => http.delete(`/api/boards/${board}/stages/${stage}`, { ...crmOptions, params: moveTo ? { move_to: moveTo } : {} });
+
+export const addBoardCards = async (board, subscribers, stage) => http.post(`/api/boards/${board}/cards`, { subscribers, stage }, crmOptions);
+
+export const moveBoardCard = async (board, subscriber, data) => http.put(`/api/boards/${board}/cards/${subscriber}`, data, crmOptions);
+
+export const removeBoardCard = async (board, subscriber) => http.delete(`/api/boards/${board}/cards/${subscriber}`, crmOptions);
+
+export const getContactBoards = async (id) => http.get(`/api/subscribers/${id}/boards`, crmOptions);
+
+export const getContactNotes = async (id) => http.get(`/api/subscribers/${id}/notes`, crmOptions);
+
+export const createContactNote = async (id, body) => http.post(`/api/subscribers/${id}/notes`, { body }, crmOptions);
+
+export const updateContactNote = async (id, noteId, data) => http.put(`/api/subscribers/${id}/notes/${noteId}`, data, crmOptions);
+
+export const deleteContactNote = async (id, noteId) => http.delete(`/api/subscribers/${id}/notes/${noteId}`, crmOptions);
+
+export const getContactTasks = async (id) => http.get(`/api/subscribers/${id}/tasks`, crmOptions);
+
+export const getAllContactTasks = async (params) => http.get('/api/crm/tasks', { ...crmOptions, params });
+
+export const createContactTask = async (id, data) => http.post(`/api/subscribers/${id}/tasks`, data, crmOptions);
+
+export const updateContactTask = async (id, taskId, data) => http.put(`/api/subscribers/${id}/tasks/${taskId}`, data, crmOptions);
+
+export const deleteContactTask = async (id, taskId) => http.delete(`/api/subscribers/${id}/tasks/${taskId}`, crmOptions);
+
+export const getConversations = async (params) => http.get('/api/conversations', { ...crmOptions, params });
+
+export const getConversationThread = async (key) => http.get('/api/conversations/thread', { ...crmOptions, params: { key } });
+
+export const markConversationRead = async (key) => http.post('/api/conversations/read', { key }, crmOptions);
+
+export const setConversationClosed = async (key, closed) => http.put('/api/conversations/closed', { key, closed }, crmOptions);
+
+export const sendConversationReply = async (data) => http.post('/api/conversations/reply', data, crmOptions);
