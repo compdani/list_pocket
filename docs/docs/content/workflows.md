@@ -78,10 +78,22 @@ Environment: `input` (run input), `nodes.<id>` (a finished node's output),
 | `subworkflow` | `workflow` (name), `input`, `next`, `detach` | the child run's output; with `detach: true`, `{run_id}` right away (the child runs on its own). Input keys that render to `nil` are left out, so the child's `default_input` applies |
 | `notify` | `message`, `next` | `{message}` |
 | `transform` | `value` (template), `next` | the rendered value |
+| `code` | `code` (JavaScript), `next` | the value the code returns, as JSON |
 | `end` | `output` (template) | sets the run output |
 
 Every node also accepts `name` (label), `on_error: "continue"` (failure
 becomes output `{error}` and the path continues), and `retries` (0–5).
+
+Code nodes: the `code` field is the body of a JavaScript function, so use
+`return`. `input`, `nodes`, `item`, `index`, `loop`, `now` and `run` are globals
+holding copies of the run data, for example
+`return nodes.search.results.filter((r) => r.score > input.min).length;`. `item`,
+`index` and `loop` are `undefined` outside a body. Code isn't a template, so `{{ }}`
+isn't expanded. It can't reach the network or files and can't call tools, and each
+run gets 10 seconds and at most 1 MB of output. `console.log` writes to the app log.
+
+Anyone with `workflows:manage` can write code nodes. The 10-second limit is the only
+limit on memory, so code that allocates without stopping can use up the server's memory.
 
 Agent nodes: the system prompt is a Go template over `{"input": …}` — use
 `{{ .input.market }}` (with a dot) there, not expr. Give agents only the tools

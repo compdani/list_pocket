@@ -1244,6 +1244,7 @@
     "workflows.field.message": "Message",
     "workflows.field.notifyHelp": "Goes to the notification addresses in Settings.",
     "workflows.field.value": "Value",
+    "workflows.field.codeHelp": "Use return to set this step's output. input, nodes, item, index, loop, now and run hold the run data. Code can't reach the network or call tools, and has 10 seconds to finish.",
     "workflows.field.ifFails": "If this step fails",
     "workflows.field.onError": "Then",
     "workflows.field.errorFail": "Fail the run",

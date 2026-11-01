@@ -25,6 +25,7 @@ export default {
     modelValue: { type: String, default: '' },
     lang: { type: String, default: 'html' },
     disabled: Boolean,
+    autofocus: { type: Boolean, default: true },
   },
 
   data() {
@@ -112,11 +113,13 @@ export default {
       parent: this.$refs.editor,
     });
 
-    this.$nextTick(() => {
-      window.setTimeout(() => {
-        this.editor.focus();
-      }, 100);
-    });
+    if (this.autofocus) {
+      this.$nextTick(() => {
+        window.setTimeout(() => {
+          this.editor.focus();
+        }, 100);
+      });
+    }
   },
 
   beforeUnmount() {

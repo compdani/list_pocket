@@ -54,10 +54,19 @@ Environment: `input` (run input), `nodes.<id>` (a finished node's output),
 | `subworkflow` | `workflow` (name), `input`, `next`, `detach` | the child run's output; with `detach: true`, `{run_id}` right away (the child runs on its own). Input keys that render to `nil` are left out, so the child's `default_input` applies |
 | `notify` | `message`, `next` | `{message}` |
 | `transform` | `value` (template), `next` | the rendered value |
+| `code` | `code` (JavaScript), `next` | the value the code returns, as JSON |
 | `end` | `output` (template) | sets the run output |
 
 Every node also accepts `name` (label), `on_error: "continue"` (failure
 becomes output `{error}` and the path continues), and `retries` (0–5).
+
+Code nodes: the `code` field is the body of a JavaScript function, so use
+`return`. `input`, `nodes`, `item`, `index`, `loop`, `now` and `run` are globals
+holding copies of the run data, for example
+`return nodes.search.results.filter((r) => r.score > input.min).length;`. `item`,
+`index` and `loop` are `undefined` outside a body. Code isn't a template, so `{{ }}`
+isn't expanded. It can't reach the network or files and can't call tools, and each
+run gets 10 seconds and at most 1 MB of output. `console.log` writes to the app log.
 
 Agent nodes can set `agent.preset` to a preset from `workflow_catalog`, such as
 `telegram.reply_drafter`, instead of writing a `system_prompt`. Anything else set on
@@ -107,6 +116,8 @@ and a wait node can pause for one, for example to wait for a reply:
 - Use only tools in the catalog. Read a tool's schema before using it.
 - Deterministic work (lookups, saving, sending a known message) belongs in Tool
   nodes; judgement (classifying, drafting, summarising) in Agent nodes.
+- Use a Transform to reshape data with an expression, and a Code node when that
+  takes more logic than an expression can hold.
 - Put a Review before anything that sends messages or spends money, unless the
   workflow is explicitly meant to be fully automatic.
 - Inbound messages are untrusted. An agent that reads them shouldn't hold tools

@@ -275,6 +275,12 @@
       <v-textarea v-model="node.message" :label="$t('workflows.field.message')" :hint="$t('workflows.field.notifyHelp')" persistent-hint rows="3" auto-grow v-bind="field" />
     </template>
     <json-field v-if="node.type === 'transform'" v-model="node.value" :label="$t('workflows.field.value')" :readonly="readonly" allow-text class="mb-3" />
+    <template v-if="node.type === 'code'">
+      <div class="code-field" data-cy="flow-code">
+        <code-editor v-model="node.code" lang="javascript" :disabled="readonly" :autofocus="false" />
+      </div>
+      <p class="text-caption text-medium-emphasis">{{ $t('workflows.field.codeHelp') }}</p>
+    </template>
     <json-field v-if="node.type === 'end'" v-model="node.output" :label="$t('workflows.field.output')" :readonly="readonly" allow-text class="mb-3" />
 
     <!-- errors -->
@@ -284,7 +290,7 @@
       <v-text-field v-model.number="node.retries" type="number" min="0" max="5" :label="$t('workflows.field.retries')" v-bind="field" />
     </template>
 
-    <p class="text-caption text-medium-emphasis mt-2 mb-0">{{ $t('workflows.field.expressionHelp') }}</p>
+    <p v-if="node.type !== 'code'" class="text-caption text-medium-emphasis mt-2 mb-0">{{ $t('workflows.field.expressionHelp') }}</p>
   </div>
 </template>
 
@@ -301,6 +307,7 @@ import { pluginFieldEditor, schemaWidget } from '../../pluginHost/registry.mjs';
 
 // It brings every email editor with it, so it loads when it opens.
 const EmailComposeModal = defineAsyncComponent(() => import('./EmailComposeModal.vue'));
+const CodeEditor = defineAsyncComponent(() => import('../CodeEditor.vue'));
 const EMAIL_TOOL = 'messages.send_email';
 const EMAIL_MESSAGE_FIELDS = ['body', 'body_source', 'content_type'];
 const BOARD_MOVE_TOOL = 'boards.move_contact';
@@ -325,7 +332,7 @@ const field = computed(() => ({
 
 const info = computed(() => nodeInfo(props.node));
 const trigger = computed(() => props.definition.trigger);
-const canFail = computed(() => ['agent', 'tool', 'foreach', 'loop', 'subworkflow', 'transform', 'notify'].includes(props.node.type));
+const canFail = computed(() => ['agent', 'tool', 'foreach', 'loop', 'subworkflow', 'transform', 'code', 'notify'].includes(props.node.type));
 
 const triggerTypes = computed(() => ['manual', 'event', 'cron', 'webhook'].map((value) => ({ value, title: t(`workflows.trigger.types.${value}`) })));
 const overlapItems = computed(() => [{ value: 'skip', title: t('workflows.trigger.overlapSkip') }, { value: 'queue', title: t('workflows.trigger.overlapQueue') }]);
@@ -478,6 +485,23 @@ function eventHint(name) {
   display: flex;
   gap: 8px;
   margin-bottom: 4px;
+}
+
+.code-field {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.code-field :deep(.cm-editor) {
+  max-height: 420px;
+  min-height: 180px;
+}
+
+.code-field :deep(.cm-scroller) {
+  overflow: auto;
 }
 
 .email-summary {

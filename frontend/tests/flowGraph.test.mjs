@@ -80,6 +80,17 @@ test('new node IDs stay unique', () => {
   assert.equal(newNode(d, 'wait', { x: 0, y: 0 }).id, 'wait_2');
 });
 
+test('code nodes start runnable and show their first line of code', () => {
+  const d = sample();
+  const n = newNode(d, 'code', { x: 0, y: 0 });
+  assert.equal(n.id, 'code');
+  assert.equal(n.code, 'return input;\n');
+  assert.deepEqual(sourceHandles(n), [{ id: 'next', label: '' }]);
+  d.nodes.push({ ...n, code: '// Totals\n\nconst list = nodes.check.list;\nreturn list.length;' });
+  assert.equal(toFlow(d).nodes.find((x) => x.id === 'code').data.summary, 'const list = nodes.check.list;');
+  assert.match(renameNode(d, 'check', 'decide').nodes.find((x) => x.id === 'code').code, /nodes\.decide\.list/);
+});
+
 test('helpers read validation messages and compare without layout', () => {
   assert.deepEqual([...errorNodeIds(['node "send": tool is required', 'workflow needs one start'])], ['send']);
   const a = sample();

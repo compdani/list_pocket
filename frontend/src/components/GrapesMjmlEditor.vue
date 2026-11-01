@@ -6,6 +6,7 @@
       <v-card>
         <v-card-text class="pt-0">
           <media
+            v-if="isMediaVisible"
             is-modal
             type="pictures"
             @selected="onMediaSelect"
@@ -18,11 +19,12 @@
 </template>
 
 <script setup>
-import { ref, onBeforeUnmount, onMounted } from 'vue';
+import { defineAsyncComponent, ref, onBeforeUnmount, onMounted } from 'vue';
 import 'grapesjs/dist/css/grapes.min.css';
 import grapesJS from 'grapesjs';
 import grapesJSMJML from 'grapesjs-mjml';
-import Media from '../views/Media.vue';
+
+const Media = defineAsyncComponent(() => import('../views/Media.vue'));
 
 const BASIC_MJML_ROOT = '<mjml><mj-body><mj-section><mj-column><mj-text></mj-text></mj-column></mj-section></mj-body></mjml>';
 

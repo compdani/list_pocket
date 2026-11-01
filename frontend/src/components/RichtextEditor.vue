@@ -47,6 +47,7 @@
       <v-card>
         <v-card-text class="pt-0">
           <media
+            v-if="isMediaVisible"
             is-modal
             type="pictures"
             @selected="onMediaSelect"
@@ -59,6 +60,7 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from 'vue';
 import { html } from 'js-beautify';
 import { mapState } from 'vuex';
 
@@ -67,7 +69,8 @@ import 'tinymce/skins/ui/oxide/skin.css';
 
 import { colors, uris } from '../constants';
 import CodeEditor from './CodeEditor.vue';
-import Media from '../views/Media.vue';
+
+const Media = defineAsyncComponent(() => import('../views/Media.vue'));
 
 let tinyMceLoader;
 const GO_TEMPLATE_PATTERN = /\{\{[\s\S]*?\}\}/g;

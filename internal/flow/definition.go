@@ -57,12 +57,13 @@ const (
 	NodeSubworkflow = "subworkflow"
 	NodeNotify      = "notify"
 	NodeTransform   = "transform"
+	NodeCode        = "code"
 	NodeEnd         = "end"
 )
 
 var nodeTypes = map[string]bool{
 	NodeStart: true, NodeAgent: true, NodeTool: true, NodeBranch: true, NodeForEach: true, NodeLoop: true, NodeReview: true,
-	NodeWait: true, NodeSubworkflow: true, NodeNotify: true, NodeTransform: true, NodeEnd: true,
+	NodeWait: true, NodeSubworkflow: true, NodeNotify: true, NodeTransform: true, NodeCode: true, NodeEnd: true,
 }
 
 type Node struct {
@@ -103,6 +104,7 @@ type Node struct {
 
 	Message string `json:"message,omitempty"` // notify (templated)
 	Value   any    `json:"value,omitempty"`   // transform (templated)
+	Code    string `json:"code,omitempty"`    // code: JavaScript, whose return value is the output
 	Output  any    `json:"output,omitempty"`  // end (templated)
 
 	OnError string `json:"on_error,omitempty"` // fail (default) | continue

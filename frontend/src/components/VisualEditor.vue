@@ -12,6 +12,7 @@
       <v-card>
         <v-card-text class="pt-0">
           <media
+            v-if="isMediaVisible"
             is-modal
             type="pictures"
             @selected="onMediaSelect"
@@ -24,7 +25,9 @@
 </template>
 
 <script>
-import Media from '../views/Media.vue';
+import { defineAsyncComponent } from 'vue';
+
+const Media = defineAsyncComponent(() => import('../views/Media.vue'));
 
 export default {
   components: {

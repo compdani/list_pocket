@@ -241,6 +241,7 @@
       <v-card>
         <v-card-text class="pt-0">
           <media
+            v-if="isMediaVisible"
             is-modal
             type="pictures"
             @selected="onPictureSelected"
@@ -253,8 +254,10 @@
 </template>
 
 <script>
-import Media from '../views/Media.vue';
+import { defineAsyncComponent } from 'vue';
 import AppRightSidebar from './AppRightSidebar.vue';
+
+const Media = defineAsyncComponent(() => import('../views/Media.vue'));
 
 const STATUS_MAX_FILES = 12;
 const STATUS_MAX_BYTES = 6 * 1024 * 1024;

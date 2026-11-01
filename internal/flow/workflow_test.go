@@ -358,6 +358,8 @@ func TestValidation(t *testing.T) {
 	check(`{"name":"x1","trigger":{"type":"cron","spec":"bad"},"nodes":[]}`, "trigger.spec", "exactly one start")
 	check(`{"name":"loop","trigger":{"type":"manual"},"nodes":[
 		{"id":"start","type":"start","next":"a"},{"id":"a","type":"transform","next":"b"},{"id":"b","type":"transform","next":"a"}]}`, "cycle")
+	check(`{"name":"code","trigger":{"type":"manual"},"nodes":[
+		{"id":"start","type":"start","next":"a"},{"id":"a","type":"code","next":"b"},{"id":"b","type":"code","code":"return (;"}]}`, "node \"a\": code is required", "node \"b\": code:")
 	check(`{"name":"refs","trigger":{"type":"manual"},"nodes":[
 		{"id":"start","type":"start","next":"t"},
 		{"id":"t","type":"tool","tool":"nope.tool","next":"g","input":{"x":"{{ input.( }}"}},
@@ -596,6 +598,43 @@ func TestCrashedNodeIsRetriedAndFailuresReported(t *testing.T) {
 	}
 	if r.GetString("status") != flow.StatusFailed || !strings.Contains(r.GetString("error"), "node worse") {
 		t.Errorf("run = %s %q", r.GetString("status"), r.GetString("error"))
+	}
+}
+
+func TestCodeNode(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"coded","trigger":{"type":"manual"},"nodes":[
+		{"id":"start","type":"start","next":"sum"},
+		{"id":"sum","type":"code","code":"console.log('summing', {n: input.list.length});\nreturn {total: input.list.reduce((a, b) => a + b, 0), run: run.id, item: typeof item};","next":"each"},
+		{"id":"each","type":"foreach","items":"input.list","body":"double","next":"mutate"},
+		{"id":"double","type":"code","code":"input.list.push(99); return item * 2 + index;"},
+		{"id":"mutate","type":"code","code":"return async function () { return input.list.length; }();","next":"bad"},
+		{"id":"bad","type":"code","code":"throw new Error('boom');","on_error":"continue","next":"done"},
+		{"id":"done","type":"end","output":{"total":"{{ nodes.sum.total }}","each":"{{ nodes.each.results }}","len":"{{ nodes.mutate }}"}}]}`)
+
+	run, err := en.engine.StartRun(wf, map[string]any{"list": []any{1, 2, 3}}, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	en.drain()
+	r := en.run(t, run.Id)
+	if r.GetString("status") != flow.StatusSucceeded {
+		t.Fatalf("run = %s %q", r.GetString("status"), r.GetString("error"))
+	}
+	var out map[string]any
+	if err := r.UnmarshalJSONField("output", &out); err != nil {
+		t.Fatal(err)
+	}
+	// Each node changing its copy of the input must not reach the others.
+	if got, _ := json.Marshal(out); string(got) != `{"each":[2,5,8],"len":3,"total":6}` {
+		t.Errorf("output = %s", got)
+	}
+	n := en.nodes(t, run.Id)
+	if out := n["sum"].GetString("output"); !strings.Contains(out, run.Id) || !strings.Contains(out, `"item":"undefined"`) {
+		t.Errorf("sum output = %s", out)
+	}
+	if out := n["bad"].GetString("output"); !strings.Contains(out, "boom") {
+		t.Errorf("bad output = %s", out)
 	}
 }
 

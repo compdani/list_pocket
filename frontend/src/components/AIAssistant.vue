@@ -1,8 +1,7 @@
 <script setup>
-import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
+import { computed, defineAsyncComponent, getCurrentInstance, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import AppRightSidebar from './AppRightSidebar.vue';
-import Media from '../views/Media.vue';
 import { pb } from '../api';
 import { assistantContext } from '../assistant/context';
 import { assistantJSON, streamAssistant } from '../assistant/client';
@@ -16,6 +15,8 @@ import { shortStamp } from '../utils/crm.mjs';
 import ModelPicker from './agent/ModelPicker.vue';
 import ReviewModal from './agent/ReviewModal.vue';
 import { applyEditorPatch, revision } from '../assistant/patches.mjs';
+
+const Media = defineAsyncComponent(() => import('../views/Media.vue'));
 
 const route = useRoute();
 const { proxy } = getCurrentInstance();
@@ -420,7 +421,7 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
         </div>
       </form>
     </div>
-    <v-dialog v-model="mediaOpen" max-width="900"><v-card><v-card-text class="pt-0"><Media is-modal type="pictures" @selected="addPicture" @close="mediaOpen = false" /></v-card-text></v-card></v-dialog>
+    <v-dialog v-model="mediaOpen" max-width="900"><v-card><v-card-text class="pt-0"><Media v-if="mediaOpen" is-modal type="pictures" @selected="addPicture" @close="mediaOpen = false" /></v-card-text></v-card></v-dialog>
     <review-modal
       v-if="reviewing"
       :key="reviewing.id"

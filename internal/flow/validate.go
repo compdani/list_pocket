@@ -177,6 +177,12 @@ func Validate(d *Definition, cat Catalog) Validation {
 			checkTemplates("message", n.Message)
 		case NodeTransform:
 			checkTemplates("value", n.Value)
+		case NodeCode:
+			if strings.TrimSpace(n.Code) == "" {
+				errf("%s: code is required", label)
+			} else if _, err := compileCode(n.Code); err != nil {
+				errf("%s: code: %v", label, err)
+			}
 		case NodeEnd:
 			checkTemplates("output", n.Output)
 			if n.Next != "" {

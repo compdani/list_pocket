@@ -13,6 +13,7 @@ export const NODE_TYPES = {
   subworkflow: { label: 'Sub-workflow', icon: 'mdi-sitemap-outline', color: '#1b8a9a', hint: 'Run another workflow' },
   notify: { label: 'Notify', icon: 'mdi-bell-outline', color: '#6e7781', hint: 'Tell your team' },
   transform: { label: 'Transform', icon: 'mdi-code-json', color: '#6e7781', hint: 'Reshape data' },
+  code: { label: 'JavaScript', icon: 'mdi-language-javascript', color: '#6e7781', hint: 'Run your own code' },
   end: { label: 'End', icon: 'mdi-stop-circle-outline', color: '#cf4d45', hint: 'Set the output' },
 };
 
@@ -61,6 +62,11 @@ function targetOf(n, handle) {
   return m ? (n.cases?.[+m[1]]?.to || '') : '';
 }
 
+function firstCodeLine(code) {
+  const lines = String(code || '').split('\n').map((line) => line.trim());
+  return lines.find((line) => line && !line.startsWith('//')) || '';
+}
+
 export function nodeSummary(n, trigger) {
   switch (n.type) {
     case 'start': return triggerSummary(trigger);
@@ -77,6 +83,7 @@ export function nodeSummary(n, trigger) {
       return n.wait?.delay ? `for ${n.wait.delay}` : '';
     case 'subworkflow': return n.workflow || '';
     case 'notify': return truncate(n.message, 42);
+    case 'code': return truncate(firstCodeLine(n.code), 42);
     default: return '';
   }
 }
@@ -222,6 +229,7 @@ export function newNode(def, type, position, tool = '') {
   if (type === 'wait') n.wait = { delay: '1h' };
   if (type === 'notify') n.message = '';
   if (type === 'transform') n.value = {};
+  if (type === 'code') n.code = 'return input;\n';
   if (type === 'tool') { n.tool = tool; n.input = tool ? { contact: '{{ input.contact }}' } : {}; }
   return n;
 }

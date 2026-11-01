@@ -784,7 +784,7 @@
     >
       <v-card>
         <v-card-text>
-          <media is-modal type="legacy-attachment" @selected="onAttachSelect" />
+          <media v-if="isAttachModalOpen" is-modal type="legacy-attachment" @selected="onAttachSelect" />
         </v-card-text>
       </v-card>
     </v-dialog>
@@ -807,12 +807,12 @@
 <script>
 import dayjs from 'dayjs';
 import htmlToPlainText from 'textversionjs';
+import { defineAsyncComponent } from 'vue';
 import { mapState } from 'vuex';
 
 import CampaignPreview from '../components/CampaignPreview.vue';
 import CopyText from '../components/CopyText.vue';
 import Editor from '../components/Editor.vue';
-import Media from './Media.vue';
 import SchemaForm from '../pluginHost/SchemaForm.vue';
 import WhatsappCampaignStats from '../components/WhatsAppCampaignStats.vue';
 import WhatsappTemplatePicker from '../components/WhatsAppTemplatePicker.vue';
@@ -826,6 +826,8 @@ import {
   SMS_GROUP,
   templateTypeFor,
 } from '../utils/channels';
+
+const Media = defineAsyncComponent(() => import('./Media.vue'));
 
 export default {
   components: {

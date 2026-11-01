@@ -670,6 +670,12 @@ func (st *runState) execute(ctx context.Context, n *Node, nr *core.Record, idx i
 		out, err := Render(n.Value, env)
 		return out, stateOf(err), err
 
+	case NodeCode:
+		out, err := runCode(ctx, n.Code, env, func(line string) {
+			st.e.App.Logger().Info("workflow code", "run", st.run.Id, "node", n.ID, "message", line)
+		})
+		return out, stateOf(err), err
+
 	case NodeEnd:
 		if n.Output == nil {
 			return nil, pathDone, nil
