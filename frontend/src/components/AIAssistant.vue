@@ -260,7 +260,7 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
 </script>
 
 <template>
-  <AppRightSidebar v-model="assistantContext.open" :width="480" disable-route-watcher>
+  <AppRightSidebar v-model="assistantContext.open" :width="440" overlay disable-route-watcher>
     <template #header>
       <div class="ai-head">
         <span class="ai-mark"><v-icon icon="mdi-creation-outline" size="16" /></span>

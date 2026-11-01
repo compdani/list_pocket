@@ -6,7 +6,9 @@
     :width="currentWidth"
     :border="border"
     :color="color"
-    :temporary="isCompact && temporaryOnMobile"
+    :class="{ 'app-right-sidebar-drawer--overlay': isFloating }"
+    :temporary="overlay || (isCompact && temporaryOnMobile)"
+    :persistent="isFloating"
     :mobile="isCompact && temporaryOnMobile"
     :scrim="isCompact && temporaryOnMobile && scrimOnMobile"
     @update:model-value="onDrawerToggle"
@@ -90,6 +92,8 @@ defineOptions({
 
 const props = defineProps({
   disableRouteWatcher: { type: Boolean, default: false },
+  // Hovers over the page rather than taking space from it, and leaves the page usable.
+  overlay: { type: Boolean, default: false },
   modelValue: { type: Boolean, default: false },
   width: { type: [Number, String], default: 520 },
   location: { type: String, default: 'right' },
@@ -117,6 +121,7 @@ const resizeStartX = ref(0);
 const resizeStartWidth = ref(520);
 
 const isCompact = computed(() => layoutWidth.value <= props.mobileBreakpoint);
+const isFloating = computed(() => props.overlay && !isCompact.value);
 const canNarrow = computed(() => currentWidth.value > props.minWidth);
 const canWiden = computed(() => currentWidth.value < props.maxWidth);
 
@@ -219,6 +224,21 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Vuetify sets the height inline, measured from below the app bar. */
+.app-right-sidebar-drawer--overlay {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.22);
+  height: calc(100% - var(--v-layout-top, 64px) - 20px) !important;
+  margin: 10px 10px 10px 0;
+  overflow: hidden;
+}
+
+/* Vuetify only moves it by its width, which would leave the margin and shadow showing. */
+.app-right-sidebar-drawer--overlay:not(.v-navigation-drawer--active) {
+  transform: translateX(calc(100% + 60px)) !important;
+}
+
 .app-right-sidebar {
   min-height: 100%;
 }

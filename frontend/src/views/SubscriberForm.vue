@@ -4,25 +4,25 @@
       <header class="admin-dialog-head modal-card-head">
         <div class="dialog-meta-row">
           <p v-if="isEditing" class="entity-meta has-text-grey is-size-7">
-            {{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.id}`" /></span>
-            {{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" />
+            <span class="entity-meta-item">{{ $t('globals.fields.id') }}: <span data-cy="id"><copy-text :text="`${data.id}`" /></span></span>
+            <span class="entity-meta-item">{{ $t('globals.fields.uuid') }}: <copy-text :text="data.uuid" /></span>
           </p>
-          <span v-if="isEditing" class="status-pill" :class="data.status">
+          <span v-if="isEditing && !isPageMode" class="status-pill" :class="data.status">
             {{ $t(`subscribers.status.${data.status}`) }}
           </span>
         </div>
 
-        <h4 v-if="isEditing" class="dialog-title">
+        <h4 v-if="isEditing && !isPageMode" class="dialog-title">
           {{ data.name }}
         </h4>
-        <h4 v-else class="dialog-title">
+        <h4 v-else-if="!isEditing" class="dialog-title">
           {{ $t('subscribers.newSubscriber') }}
         </h4>
       </header>
 
       <section class="admin-dialog-body modal-card-body">
-        <v-row class="mb-1">
-          <v-col cols="12" md="4">
+        <div class="field-grid">
+          <div>
             <v-text-field
               ref="focus"
               v-model="form.email"
@@ -34,10 +34,11 @@
               type="email"
               variant="outlined"
               density="comfortable"
+              hide-details="auto"
             />
-          </v-col>
+          </div>
 
-          <v-col cols="12" md="4">
+          <div>
             <v-text-field
               v-model="form.phone"
               label="Phone"
@@ -47,6 +48,7 @@
               type="tel"
               variant="outlined"
               density="comfortable"
+              hide-details="auto"
             />
             <div v-if="isEditing && form.phone" class="phone-actions">
               <v-btn
@@ -61,9 +63,9 @@
                 {{ $t('subscribers.smsOptOut') }}
               </v-btn>
             </div>
-          </v-col>
+          </div>
 
-          <v-col cols="12" md="4">
+          <div>
             <v-select
               v-model="form.status"
               :items="statusOptions"
@@ -74,13 +76,14 @@
               required
               variant="outlined"
               density="comfortable"
+              hide-details="auto"
             />
             <p class="form-help">{{ $t('subscribers.blocklistedHelp') }}</p>
-          </v-col>
-        </v-row>
+          </div>
+        </div>
 
-        <v-row class="mb-2">
-          <v-col cols="12" md="6">
+        <div class="field-grid">
+          <div>
             <v-text-field
               v-model="form.firstName"
               label="First name"
@@ -90,9 +93,10 @@
               type="text"
               variant="outlined"
               density="comfortable"
+              hide-details="auto"
             />
-          </v-col>
-          <v-col cols="12" md="6">
+          </div>
+          <div>
             <v-text-field
               v-model="form.lastName"
               label="Last name"
@@ -102,9 +106,10 @@
               type="text"
               variant="outlined"
               density="comfortable"
+              hide-details="auto"
             />
-          </v-col>
-        </v-row>
+          </div>
+        </div>
 
         <v-tabs
           v-model="activeTab"
@@ -712,10 +717,39 @@ onMounted(() => {
   width: min(920px, calc(100vw - 32px));
 }
 
+/* On the contact page it sits inside a panel, so it needs no card of its own. */
 .admin-dialog-card.page-card {
+  background: none;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
   max-height: none;
+  overflow: visible;
   width: 100%;
+}
+
+.page-card .admin-dialog-head {
+  background: none;
+  border: 0;
+  padding: 0 0 10px;
+}
+
+.page-card .admin-dialog-body {
+  overflow: visible;
+  padding: 0;
+}
+
+.page-card .admin-dialog-foot {
+  background: none;
+  padding: 12px 0 0;
+}
+
+/* Fits as many columns as the card has room for, wherever the form is shown. */
+.field-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-bottom: 14px;
 }
 
 .admin-dialog-head {
@@ -732,7 +766,15 @@ onMounted(() => {
 }
 
 .entity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
   margin: 0;
+  min-width: 0;
+}
+
+.entity-meta-item {
+  overflow-wrap: anywhere;
 }
 
 .dialog-title {
@@ -759,14 +801,15 @@ onMounted(() => {
 
 .form-help {
   color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
-  font-size: 0.9rem;
-  margin-top: 4px;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  margin: 4px 0 0;
 }
 
 .phone-actions {
   display: flex;
   justify-content: flex-start;
-  margin-top: -6px;
+  margin-top: 2px;
 }
 
 .tab-panel {

@@ -27,64 +27,36 @@
       <div class="contact-layout">
         <aside class="contact-card" data-cy="contact-summary">
           <div class="contact-identity">
-            <contact-avatar :name="subscriber.name" :fallback="email" :size="64" />
-            <h1 class="text-h6 mt-2 mb-0">{{ subscriber.name || email || subscriber.phone }}</h1>
-            <p v-if="profile.company" class="text-body-2 text-medium-emphasis mb-1">{{ profile.company }}</p>
-            <div class="d-flex flex-wrap justify-center ga-1 mt-1">
-              <v-chip
-                v-for="place in contactBoards"
-                :key="place.board"
-                size="small"
-                label
-                :color="place.color"
-                :title="place.boardName"
-              >
-                {{ place.stageName }}
-              </v-chip>
-              <v-chip
-                v-if="subscriber.status && subscriber.status !== 'enabled'"
-                size="small"
-                label
-                color="error"
-                variant="tonal"
-              >
-                {{ subscriber.status }}
-              </v-chip>
+            <contact-avatar :name="subscriber.name" :fallback="email" :size="44" />
+            <div class="contact-identity-text">
+              <h1 class="text-subtitle-1 font-weight-medium mb-0">{{ subscriber.name || email || subscriber.phone }}</h1>
+              <p v-if="profile.company" class="text-body-2 text-medium-emphasis mb-0">{{ profile.company }}</p>
             </div>
           </div>
+          <div v-if="contactBoards.length || (subscriber.status && subscriber.status !== 'enabled')" class="d-flex flex-wrap ga-1 mt-2">
+            <v-chip
+              v-for="place in contactBoards"
+              :key="place.board"
+              size="small"
+              label
+              :color="place.color"
+              :title="place.boardName"
+            >
+              {{ place.stageName }}
+            </v-chip>
+            <v-chip
+              v-if="subscriber.status && subscriber.status !== 'enabled'"
+              size="small"
+              label
+              color="error"
+              variant="tonal"
+            >
+              {{ subscriber.status }}
+            </v-chip>
+          </div>
 
-          <div class="contact-quick">
+          <div v-if="canEnroll" class="contact-quick">
             <v-btn
-              v-if="canConverse"
-              size="small"
-              variant="tonal"
-              class="text-none"
-              prepend-icon="mdi-message-text-outline"
-              data-cy="contact-message"
-              @click="tab = 'conversation'"
-            >
-              {{ $t('crm.tab.conversation') }}
-            </v-btn>
-            <v-btn
-              size="small"
-              variant="tonal"
-              class="text-none"
-              prepend-icon="mdi-note-text-outline"
-              @click="tab = 'notes'"
-            >
-              {{ $t('crm.tab.notes') }}
-            </v-btn>
-            <v-btn
-              size="small"
-              variant="tonal"
-              class="text-none"
-              prepend-icon="mdi-clipboard-text-outline"
-              @click="tab = 'tasks'"
-            >
-              {{ $t('crm.tab.tasks') }}
-            </v-btn>
-            <v-btn
-              v-if="canEnroll"
               size="small"
               variant="tonal"
               class="text-none"
@@ -118,11 +90,11 @@
           <contact-boards
             v-if="subscriber.id && canSeeBoards"
             :subscriber-id="recordId"
-            class="mt-4"
+            class="mt-3"
             @updated="contactBoards = $event"
           />
 
-          <div v-if="listNames.length" class="mt-4">
+          <div v-if="listNames.length" class="mt-3">
             <div class="text-caption text-medium-emphasis mb-1">{{ $t('crm.lists') }}</div>
             <div class="d-flex flex-wrap ga-1">
               <v-chip v-for="name in listNames" :key="name" size="x-small" label variant="outlined">{{ name }}</v-chip>
@@ -281,13 +253,14 @@ export default {
 <style scoped>
 .contact-page {
   --contact-border: rgba(var(--v-border-color), var(--v-border-opacity));
+  container-type: inline-size;
 }
 
 .contact-layout {
   align-items: start;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 12px;
+  grid-template-columns: minmax(240px, 270px) minmax(0, 1fr);
 }
 
 .contact-card,
@@ -298,26 +271,31 @@ export default {
 }
 
 .contact-card {
-  padding: 20px 16px;
+  padding: 14px;
 }
 
 .contact-identity {
+  align-items: center;
+  display: flex;
+  gap: 10px;
   overflow-wrap: anywhere;
-  text-align: center;
+}
+
+.contact-identity-text {
+  min-width: 0;
 }
 
 .contact-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: center;
-  margin: 14px 0;
+  margin-top: 10px;
 }
 
 .contact-facts {
   border-top: 1px solid var(--contact-border);
-  margin: 0 0 14px;
-  padding-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 12px 0;
+  padding-top: 10px;
 }
 
 .contact-facts > div {
@@ -325,7 +303,7 @@ export default {
   display: flex;
   font-size: 14px;
   gap: 8px;
-  margin-bottom: 6px;
+  min-width: 0;
 }
 
 .contact-facts dd {
@@ -347,8 +325,13 @@ export default {
   min-width: 0;
 }
 
+.contact-main :deep(.v-tab) {
+  min-width: 0;
+  padding: 0 10px;
+}
+
 .contact-panel {
-  padding: 16px;
+  padding: 12px;
 }
 
 .contact-panel--thread {
@@ -367,7 +350,7 @@ export default {
   min-height: 240px;
 }
 
-@media (max-width: 960px) {
+@container (max-width: 680px) {
   .contact-layout {
     grid-template-columns: minmax(0, 1fr);
   }
