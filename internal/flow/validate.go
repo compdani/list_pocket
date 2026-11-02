@@ -183,6 +183,8 @@ func Validate(d *Definition, cat Catalog) Validation {
 			} else if _, err := compileCode(n.Code); err != nil {
 				errf("%s: code: %v", label, err)
 			}
+		case NodeSet:
+			validateVariables(n.Variables, label, errf)
 		case NodeEnd:
 			checkTemplates("output", n.Output)
 			if n.Next != "" {

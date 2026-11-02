@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  connect, disconnect, errorNodeIds, newNode, removeNode, renameNode, sameDefinition, sourceHandles, tidyLayout, toFlow, triggerSummary,
+  connect, disconnect, errorNodeIds, newNode, newVariable, removeNode, renameNode, retypeVariable, sameDefinition, sourceHandles, tidyLayout, toFlow, triggerSummary,
 } from '../src/utils/flowGraph.mjs';
 import { FLOW_TEMPLATES } from '../src/utils/flowTemplates.mjs';
 
@@ -89,6 +89,29 @@ test('code nodes start runnable and show their first line of code', () => {
   d.nodes.push({ ...n, code: '// Totals\n\nconst list = nodes.check.list;\nreturn list.length;' });
   assert.equal(toFlow(d).nodes.find((x) => x.id === 'code').data.summary, 'const list = nodes.check.list;');
   assert.match(renameNode(d, 'check', 'decide').nodes.find((x) => x.id === 'code').code, /nodes\.decide\.list/);
+});
+
+test('set nodes start with a free variable and list their names', () => {
+  const d = sample();
+  const n = newNode(d, 'set', { x: 0, y: 0 });
+  assert.equal(n.id, 'set');
+  assert.deepEqual(n.variables, [{ name: 'var_1', type: 'template', value: '' }]);
+  assert.equal(newVariable(n).name, 'var_2');
+  n.variables.push({ name: 'subject', type: 'string', value: '' });
+  d.nodes.push(n);
+  assert.equal(toFlow(d).nodes.find((x) => x.id === 'set').data.summary, 'var_1, subject');
+});
+
+test('changing a variable type keeps a value the new type can use', () => {
+  const retype = (value, type, extra = {}) => retypeVariable({ name: 'a', type: 'string', value, ...extra }, type);
+  assert.deepEqual(retype('hi', 'template'), { name: 'a', type: 'template', value: 'hi' });
+  assert.deepEqual(retype('hi', 'number'), { name: 'a', type: 'number', value: 0 });
+  assert.deepEqual(retype('{{ input.n }}', 'number'), { name: 'a', type: 'number', value: '{{ input.n }}' });
+  assert.deepEqual(retype(5, 'boolean'), { name: 'a', type: 'boolean', value: false });
+  assert.deepEqual(retype(false, 'string'), { name: 'a', type: 'string', value: 'false' });
+  assert.deepEqual(retype('', 'code'), { name: 'a', type: 'code', value: 'return input;\n' });
+  assert.deepEqual(retype('<b>', 'html'), { name: 'a', type: 'html', value: '<b>', editor: 'visual' });
+  assert.deepEqual(retype('<b>', 'template', { type: 'html', editor: 'code' }), { name: 'a', type: 'template', value: '<b>' });
 });
 
 test('helpers read validation messages and compare without layout', () => {

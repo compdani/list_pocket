@@ -73,6 +73,19 @@ test('nodes lists only steps that can have finished', () => {
   assert.ok(labels(['nodes'], 'lookup').includes('code'));
 });
 
+test('vars lists the variables set before a step, and its own', () => {
+  const def = sample();
+  def.nodes.find((n) => n.id === 'classify').next = 'names';
+  def.nodes.push({ id: 'names', type: 'set', variables: [{ name: 'subject', type: 'string' }, { name: 'total', type: 'number' }], next: 'check' });
+  def.nodes.push({ id: 'unset', type: 'set', variables: [{ name: 'never', type: 'string' }] });
+  const hints = (path, id) => codeHints(path, def, id, CATALOG);
+  assert.deepEqual(hints(['vars'], 'classify'), []);
+  assert.deepEqual(hints(['vars'], 'lookup').map((h) => h.label).sort(), ['subject', 'total']);
+  assert.equal(hints(['vars'], 'lookup').find((h) => h.label === 'total').detail, 'number');
+  assert.deepEqual(hints(['nodes', 'names'], 'lookup').map((h) => h.label), ['subject', 'total']);
+  assert.deepEqual(hints(['vars'], 'names').map((h) => h.label), ['subject', 'total']);
+});
+
 test('tool outputs come from the catalog', () => {
   assert.deepEqual(labels(['nodes', 'lookup'], 'search'), ['status', 'boards']);
   assert.deepEqual(labels(['nodes', 'search'], 'each'), ['total', 'results']);

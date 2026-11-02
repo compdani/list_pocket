@@ -279,6 +279,7 @@
       <code-field v-model="node.code" lang="javascript" :disabled="readonly" :completions="codeCompletions" data-cy="flow-code" />
       <p class="text-caption text-medium-emphasis">{{ $t('workflows.field.codeHelp') }}</p>
     </template>
+    <set-variables v-if="node.type === 'set'" :node="node" :readonly="readonly" :completions="codeCompletions" />
     <json-field v-if="node.type === 'end'" v-model="node.output" :label="$t('workflows.field.output')" :readonly="readonly" allow-text code class="mb-3" />
 
     <!-- errors -->
@@ -299,6 +300,7 @@ import {
 import CopyText from '../CopyText.vue';
 import CodeField from './CodeField.vue';
 import JsonField from './JsonField.vue';
+import SetVariables from './SetVariables.vue';
 import { nodeInfo } from '../../utils/flowGraph.mjs';
 import { codeHints } from '../../utils/codeHints.mjs';
 import { EMAIL_FORMATS, bodySummary, needsSendApproval } from '../../utils/emailCompose.mjs';
@@ -332,7 +334,7 @@ const field = computed(() => ({
 const info = computed(() => nodeInfo(props.node));
 const codeCompletions = (path) => codeHints(path, props.definition, props.node.id, props.catalog);
 const trigger = computed(() => props.definition.trigger);
-const canFail = computed(() => ['agent', 'tool', 'foreach', 'loop', 'subworkflow', 'transform', 'code', 'notify'].includes(props.node.type));
+const canFail = computed(() => ['agent', 'tool', 'foreach', 'loop', 'subworkflow', 'transform', 'code', 'set', 'notify'].includes(props.node.type));
 
 const triggerTypes = computed(() => ['manual', 'event', 'cron', 'webhook'].map((value) => ({ value, title: t(`workflows.trigger.types.${value}`) })));
 const overlapItems = computed(() => [{ value: 'skip', title: t('workflows.trigger.overlapSkip') }, { value: 'queue', title: t('workflows.trigger.overlapQueue') }]);

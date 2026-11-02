@@ -60,6 +60,7 @@ are bare expressions. Language: expr-lang (`==`, `!=`, `&&`, `||`, `not`,
 Undefined fields are `nil`.
 
 Environment: `input` (run input), `nodes.<id>` (a finished node's output),
+`vars.<name>` (a variable from a set node),
 `item` and `index` (inside a ForEach body), `loop.iteration` and `loop.last`
 (inside a Loop body and its `until`; see below), `now` (RFC 3339), and `run.id`.
 
@@ -79,13 +80,14 @@ Environment: `input` (run input), `nodes.<id>` (a finished node's output),
 | `notify` | `message`, `next` | `{message}` |
 | `transform` | `value` (template), `next` | the rendered value |
 | `code` | `code` (JavaScript), `next` | the value the code returns, as JSON |
+| `set` | `variables: [{name, type, value, editor?}]`, `next` | `{<name>: value}`; also readable as `vars.<name>` |
 | `end` | `output` (template) | sets the run output |
 
 Every node also accepts `name` (label), `on_error: "continue"` (failure
 becomes output `{error}` and the path continues), and `retries` (0–5).
 
 Code nodes: the `code` field is the body of a JavaScript function, so use
-`return`. `input`, `nodes`, `item`, `index`, `loop`, `now` and `run` are globals
+`return`. `input`, `nodes`, `vars`, `item`, `index`, `loop`, `now` and `run` are globals
 holding copies of the run data, for example
 `return nodes.search.results.filter((r) => r.score > input.min).length;`. `item`,
 `index` and `loop` are `undefined` outside a body. Code isn't a template, so `{{ }}`
@@ -94,6 +96,23 @@ run gets 10 seconds and at most 1 MB of output. `console.log` writes to the app 
 
 Anyone with `workflows:manage` can write code nodes. The 10-second limit is the only
 limit on memory, so code that allocates without stopping can use up the server's memory.
+
+Set nodes: `variables` run in order, so each can read the ones before it, and a later
+set node replaces an earlier variable of the same name. Read them as `vars.<name>` in
+templates, expressions and code. Inside a ForEach or Loop body, a variable lasts for that
+item or iteration only. Each variable has a `type`:
+
+| type | value | result |
+|---|---|---|
+| `string` | text | the text as written; `{{ }}` isn't expanded |
+| `number` | a number, or a `{{ expr }}` that gives one | a number; anything else fails the node |
+| `boolean` | `true`, `false`, or a `{{ expr }}` that gives one | a boolean; an empty value is `false` and anything else fails the node |
+| `template` | text with `{{ expr }}` | follows the template rules above |
+| `code` | a JavaScript function body, as in a code node | the value the code returns |
+| `html` | HTML with `{{ expr }}`; `editor` is `visual` or `code`, for the builder | text with interpolated values HTML-escaped, except the values of HTML variables |
+
+Use a `template` variable to insert markup that doesn't come from an HTML variable, and
+only when it can't contain untrusted data such as inbound messages.
 
 Agent nodes: the system prompt is a Go template over `{"input": …}` — use
 `{{ .input.market }}` (with a dot) there, not expr. Give agents only the tools

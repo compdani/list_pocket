@@ -360,6 +360,15 @@ func TestValidation(t *testing.T) {
 		{"id":"start","type":"start","next":"a"},{"id":"a","type":"transform","next":"b"},{"id":"b","type":"transform","next":"a"}]}`, "cycle")
 	check(`{"name":"code","trigger":{"type":"manual"},"nodes":[
 		{"id":"start","type":"start","next":"a"},{"id":"a","type":"code","next":"b"},{"id":"b","type":"code","code":"return (;"}]}`, "node \"a\": code is required", "node \"b\": code:")
+	check(`{"name":"sets","trigger":{"type":"manual"},"nodes":[
+		{"id":"start","type":"start","next":"a"},{"id":"a","type":"set","next":"b"},
+		{"id":"b","type":"set","variables":[
+			{"name":"1x","type":"string"},{"name":"t","type":"nope"},{"name":"dup","type":"string"},{"name":"dup","type":"string"},
+			{"name":"n","type":"number","value":"abc"},{"name":"f","type":"boolean","value":"maybe"},{"name":"s","type":"string","value":5},
+			{"name":"e","type":"template","value":"{{ input.( }}"},{"name":"h","type":"html","value":"{{ input.( }}"},
+			{"name":"c","type":"code"},{"name":"d","type":"code","value":"return (;"}]}]}`,
+		"node \"a\": set needs at least one variable", "variables[0]: name", "variable \"t\": type must be", "duplicate name", "\"abc\" isn't a number", "\"maybe\" isn't true or false",
+		"variable \"s\": value must be text", "variable \"e\":", "variable \"h\":", "variable \"c\": code is required", "variable \"d\": code:")
 	check(`{"name":"refs","trigger":{"type":"manual"},"nodes":[
 		{"id":"start","type":"start","next":"t"},
 		{"id":"t","type":"tool","tool":"nope.tool","next":"g","input":{"x":"{{ input.( }}"}},
@@ -635,6 +644,105 @@ func TestCodeNode(t *testing.T) {
 	}
 	if out := n["bad"].GetString("output"); !strings.Contains(out, "boom") {
 		t.Errorf("bad output = %s", out)
+	}
+}
+
+func TestSetNode(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"sets","trigger":{"type":"manual"},"nodes":[
+		{"id":"start","type":"start","next":"first"},
+		{"id":"first","type":"set","next":"each","variables":[
+			{"name":"literal","type":"string","value":"{{ input.name }}"},
+			{"name":"count","type":"number","value":3},
+			{"name":"parsed","type":"number","value":"{{ input.qty }}"},
+			{"name":"flag","type":"boolean","value":"{{ input.qty == '7' }}"},
+			{"name":"off","type":"boolean","value":false},
+			{"name":"list","type":"template","value":"{{ input.list }}"},
+			{"name":"hello","type":"template","value":"Hi {{ input.name }}, {{ vars.count }}"},
+			{"name":"total","type":"code","value":"return vars.count + input.list.length;"},
+			{"name":"header","type":"html","value":"<h1>{{ input.name }}</h1>"}]},
+		{"id":"each","type":"foreach","items":"input.list","body":"inner","next":"second"},
+		{"id":"inner","type":"set","variables":[{"name":"count","type":"template","value":"{{ item + vars.count }}"}],"next":"inner_read"},
+		{"id":"inner_read","type":"transform","value":"{{ vars.count }}"},
+		{"id":"second","type":"set","next":"bad","variables":[
+			{"name":"page","type":"html","editor":"visual","value":"{{ vars.header }}<p>{{ input.name }}</p>"},
+			{"name":"count","type":"number","value":"{{ vars.count + 1 }}"}]},
+		{"id":"bad","type":"set","on_error":"continue","next":"done","variables":[
+			{"name":"count","type":"number","value":"{{ input.name }}"}]},
+		{"id":"done","type":"end","output":{
+			"vars":"{{ vars }}","each":"{{ nodes.each.results }}","by_node":"{{ nodes.first.literal }}","bad":"{{ nodes.bad.error }}"}}]}`)
+
+	run, err := en.engine.StartRun(wf, map[string]any{"name": "<b>Al</b>", "qty": "7", "list": []any{1, 2}}, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	en.drain()
+	r := en.run(t, run.Id)
+	if r.GetString("status") != flow.StatusSucceeded {
+		t.Fatalf("run = %s %q", r.GetString("status"), r.GetString("error"))
+	}
+	var out map[string]any
+	if err := r.UnmarshalJSONField("output", &out); err != nil {
+		t.Fatal(err)
+	}
+	vars := out["vars"].(map[string]any)
+	want := map[string]any{
+		"literal": "{{ input.name }}",
+		// The body's count ends with its item, and the failed node sets nothing.
+		"count":  4.0,
+		"parsed": 7.0,
+		"flag":   true,
+		"off":    false,
+		"hello":  "Hi <b>Al</b>, 3",
+		"total":  5.0,
+		"header": "<h1>&lt;b&gt;Al&lt;/b&gt;</h1>",
+		"page":   "<h1>&lt;b&gt;Al&lt;/b&gt;</h1><p>&lt;b&gt;Al&lt;/b&gt;</p>",
+	}
+	for name, val := range want {
+		if vars[name] != val {
+			t.Errorf("vars.%s = %#v, want %#v", name, vars[name], val)
+		}
+	}
+	if got, _ := json.Marshal(vars["list"]); string(got) != `[1,2]` {
+		t.Errorf("vars.list = %s", got)
+	}
+	if got, _ := json.Marshal(out["each"]); string(got) != `[4,5]` {
+		t.Errorf("each = %s", got)
+	}
+	if out["by_node"] != "{{ input.name }}" {
+		t.Errorf("by_node = %v", out["by_node"])
+	}
+	if !strings.Contains(fmt.Sprint(out["bad"]), "isn't a number") {
+		t.Errorf("bad = %v", out["bad"])
+	}
+}
+
+func TestSetVariablesSurviveAResume(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"resumed","trigger":{"type":"manual"},"nodes":[
+		{"id":"start","type":"start","next":"a"},
+		{"id":"a","type":"set","next":"pause","variables":[{"name":"x","type":"number","value":1}]},
+		{"id":"pause","type":"wait","wait":{"delay":"1ms"},"next":"b"},
+		{"id":"b","type":"set","next":"done","variables":[{"name":"x","type":"number","value":"{{ vars.x + 1 }}"}]},
+		{"id":"done","type":"end","output":"{{ vars.x }}"}]}`)
+	run, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 50 && en.run(t, run.Id).GetString("status") != flow.StatusSucceeded; i++ {
+		time.Sleep(10 * time.Millisecond)
+		en.drain()
+	}
+	r := en.run(t, run.Id)
+	if r.GetString("status") != flow.StatusSucceeded {
+		t.Fatalf("run = %s %q", r.GetString("status"), r.GetString("error"))
+	}
+	var out any
+	if err := r.UnmarshalJSONField("output", &out); err != nil {
+		t.Fatal(err)
+	}
+	if out != 2.0 {
+		t.Errorf("output = %v", out)
 	}
 }
 

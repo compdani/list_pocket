@@ -409,6 +409,7 @@ type runState struct {
 	nrs    map[string]*core.Record // "<node>|<idx>"
 	main   map[string]any          // main-path node outputs
 	items  map[int]map[string]any  // per-item body outputs
+	vars   map[int]map[string]any  // set node variables by item; -1 is the main path
 	output any                     // set by a main-path end node
 }
 
@@ -419,7 +420,7 @@ func (e *Engine) loadState(run *core.Record, def *Definition) (*runState, error)
 	if err != nil {
 		return nil, err
 	}
-	st := &runState{e: e, run: run, def: def, nrs: map[string]*core.Record{}, main: map[string]any{}, items: map[int]map[string]any{}}
+	st := &runState{e: e, run: run, def: def, nrs: map[string]*core.Record{}, main: map[string]any{}, items: map[int]map[string]any{}, vars: map[int]map[string]any{}}
 	for _, r := range recs {
 		st.nrs[nrKey(r.GetString("node_id"), r.GetInt("item_index"))] = r
 	}
@@ -451,6 +452,23 @@ func (st *runState) setOutput(node string, idx int, out any) {
 	st.items[idx][node] = out
 }
 
+// setVars records a finished set node's variables. A walk replays finished nodes in order,
+// so a later set node still overrides an earlier one after a resume. A failure that
+// on_error let through has none of the names, so it sets nothing.
+func (st *runState) setVars(n *Node, idx int, out any) {
+	m, _ := out.(map[string]any)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.vars[idx] == nil {
+		st.vars[idx] = map[string]any{}
+	}
+	for _, v := range n.Variables {
+		if val, ok := m[v.Name]; ok {
+			st.vars[idx][v.Name] = val
+		}
+	}
+}
+
 // env is the expression environment for a node at item idx.
 func (st *runState) env(idx int, item any) map[string]any {
 	st.mu.Lock()
@@ -462,11 +480,19 @@ func (st *runState) env(idx int, item any) map[string]any {
 	for k, v := range st.items[idx] {
 		nodes[k] = v
 	}
+	vars := make(map[string]any, len(st.vars[-1]))
+	for k, v := range st.vars[-1] {
+		vars[k] = v
+	}
+	for k, v := range st.vars[idx] {
+		vars[k] = v
+	}
 	var input any
 	_ = st.run.UnmarshalJSONField("input", &input)
 	env := map[string]any{
 		"input": input,
 		"nodes": nodes,
+		"vars":  vars,
 		"run":   map[string]any{"id": st.run.Id, "source": st.run.GetString("source")},
 		"now":   time.Now().UTC().Format(time.RFC3339),
 	}
@@ -517,6 +543,9 @@ func (st *runState) walk(ctx context.Context, id string, idx int, item any) path
 			return pathResult{state: pathFailed, err: fmt.Errorf("node %s: %w", n.ID, err)}
 		}
 		st.setOutput(n.ID, idx, out)
+		if n.Type == NodeSet {
+			st.setVars(n, idx, out)
+		}
 		last = out
 		if n.Type == NodeEnd && idx < 0 {
 			st.output = out
@@ -675,6 +704,15 @@ func (st *runState) execute(ctx context.Context, n *Node, nr *core.Record, idx i
 			st.e.App.Logger().Info("workflow code", "run", st.run.Id, "node", n.ID, "message", line)
 		})
 		return out, stateOf(err), err
+
+	case NodeSet:
+		out, err := runSet(ctx, st.def, n, env, func(line string) {
+			st.e.App.Logger().Info("workflow code", "run", st.run.Id, "node", n.ID, "message", line)
+		})
+		if err != nil {
+			return nil, pathFailed, err
+		}
+		return out, pathDone, nil
 
 	case NodeEnd:
 		if n.Output == nil {

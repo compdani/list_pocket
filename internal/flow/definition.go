@@ -58,12 +58,13 @@ const (
 	NodeNotify      = "notify"
 	NodeTransform   = "transform"
 	NodeCode        = "code"
+	NodeSet         = "set"
 	NodeEnd         = "end"
 )
 
 var nodeTypes = map[string]bool{
 	NodeStart: true, NodeAgent: true, NodeTool: true, NodeBranch: true, NodeForEach: true, NodeLoop: true, NodeReview: true,
-	NodeWait: true, NodeSubworkflow: true, NodeNotify: true, NodeTransform: true, NodeCode: true, NodeEnd: true,
+	NodeWait: true, NodeSubworkflow: true, NodeNotify: true, NodeTransform: true, NodeCode: true, NodeSet: true, NodeEnd: true,
 }
 
 type Node struct {
@@ -107,6 +108,8 @@ type Node struct {
 	Code    string `json:"code,omitempty"`    // code: JavaScript, whose return value is the output
 	Output  any    `json:"output,omitempty"`  // end (templated)
 
+	Variables []Variable `json:"variables,omitempty"` // set: read later as vars.<name>
+
 	OnError string `json:"on_error,omitempty"` // fail (default) | continue
 	Retries int    `json:"retries,omitempty"`
 
@@ -122,6 +125,15 @@ type NodeUI struct {
 type Case struct {
 	If string `json:"if"`
 	To string `json:"to"` // node id; "" ends the path (or the ForEach item / Loop iteration)
+}
+
+// Variable is one value a set node names. See the Var constants for its types.
+type Variable struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Value any    `json:"value,omitempty"`
+	// Editor is how the builder edits an HTML variable: visual | code. The engine ignores it.
+	Editor string `json:"editor,omitempty"`
 }
 
 type AgentNode struct {

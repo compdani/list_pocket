@@ -14,6 +14,7 @@ export const NODE_TYPES = {
   notify: { label: 'Notify', icon: 'mdi-bell-outline', color: '#6e7781', hint: 'Tell your team' },
   transform: { label: 'Transform', icon: 'mdi-code-json', color: '#6e7781', hint: 'Reshape data' },
   code: { label: 'JavaScript', icon: 'mdi-language-javascript', color: '#6e7781', hint: 'Run your own code' },
+  set: { label: 'Set variables', icon: 'mdi-variable', color: '#6e7781', hint: 'Name values to use later' },
   end: { label: 'End', icon: 'mdi-stop-circle-outline', color: '#cf4d45', hint: 'Set the output' },
 };
 
@@ -84,6 +85,7 @@ export function nodeSummary(n, trigger) {
     case 'subworkflow': return n.workflow || '';
     case 'notify': return truncate(n.message, 42);
     case 'code': return truncate(firstCodeLine(n.code), 42);
+    case 'set': return truncate((n.variables || []).map((v) => v.name).join(', '), 42);
     default: return '';
   }
 }
@@ -230,8 +232,31 @@ export function newNode(def, type, position, tool = '') {
   if (type === 'notify') n.message = '';
   if (type === 'transform') n.value = {};
   if (type === 'code') n.code = 'return input;\n';
+  if (type === 'set') n.variables = [newVariable(n)];
   if (type === 'tool') { n.tool = tool; n.input = tool ? { contact: '{{ input.contact }}' } : {}; }
   return n;
+}
+
+export const VARIABLE_TYPES = ['string', 'number', 'boolean', 'template', 'code', 'html'];
+
+export function newVariable(n) {
+  const taken = new Set((n.variables || []).map((v) => v.name));
+  let i = 1;
+  while (taken.has(`var_${i}`)) i += 1;
+  return { name: `var_${i}`, type: 'template', value: '' };
+}
+
+// Changes a variable's type, keeping its value when the new type can use it. A number or
+// boolean can hold an expression, so those stay too.
+export function retypeVariable(v, type) {
+  const expression = typeof v.value === 'string' && v.value.includes('{{');
+  const next = { name: v.name, type };
+  if (type === 'number') next.value = typeof v.value === 'number' || expression ? v.value : 0;
+  else if (type === 'boolean') next.value = typeof v.value === 'boolean' || expression ? v.value : false;
+  else next.value = String(v.value ?? '');
+  if (type === 'code' && !next.value.trim()) next.value = 'return input;\n';
+  if (type === 'html') next.editor = v.editor || 'visual';
+  return next;
 }
 
 const ID_RE = /^[a-z][a-z0-9_]{0,40}$/;

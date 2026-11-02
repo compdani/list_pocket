@@ -30,6 +30,13 @@ function inputFields(def) {
 
 const list = () => hint('property', 'array', {}, hint('property'));
 
+// What each kind of variable holds. Template and code variables can hold anything.
+const VARIABLE_DETAILS = { string: 'string', number: 'number', boolean: 'boolean', html: 'HTML' };
+
+function variableHints(setNodes) {
+  return Object.fromEntries(setNodes.flatMap((n) => n.variables || []).map((v) => [v.name, hint('property', VARIABLE_DETAILS[v.type])]));
+}
+
 // Fields of each node's output, from the node types table in internal/flow/schema.md.
 function outputHint(n, def, catalog) {
   const output = (() => {
@@ -44,6 +51,7 @@ function outputHint(n, def, catalog) {
       case 'wait': return hint('property', undefined, names('property', ['waited', 'event', 'timed_out']));
       case 'notify': return hint('property', undefined, names('property', ['message']));
       case 'transform': return valueHint(n.value);
+      case 'set': return hint('property', undefined, variableHints([n]));
       case 'subworkflow': return hint('property', undefined, n.detach ? names('property', ['run_id']) : {});
       default: return hint('property', undefined, {});
     }
@@ -152,6 +160,8 @@ function rootHint(def, id, catalog) {
   const root = hint(undefined, undefined, {
     input: hint('variable', 'run input', inputFields(def)),
     nodes: hint('variable', 'finished steps', nodes),
+    // A step can also read the variables it sets itself, as long as they come first.
+    vars: hint('variable', 'set variables', variableHints([...steps, ...def.nodes.filter((n) => n.id === id)].filter((n) => n.type === 'set'))),
     now: hint('variable', 'RFC 3339 time'),
     run: hint('variable', 'this run', names('property', ['id', 'source'])),
     console: hint('variable', 'writes to the logs', names('function', ['log', 'info', 'warn', 'error', 'debug'])),
