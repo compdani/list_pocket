@@ -3,13 +3,13 @@
 | Method | Endpoint                                                                      | Description                    |
 |:-------|:------------------------------------------------------------------------------|:-------------------------------|
 | GET    | [/api/templates](#get-apitemplates)                                           | Retrieve all templates         |
-| GET    | [/api/templates/{id}](#get-apitemplates-id)                 | Retrieve a template            |
-| GET    | [/api/templates/{id}/preview](#get-apitemplates-id-preview) | Retrieve template HTML preview |
+| GET    | [/api/templates/{id}](#get-apitemplatesid)                  | Retrieve a template            |
+| GET    | [/api/templates/{id}/preview](#get-apitemplatesidpreview)   | Retrieve template HTML preview |
 | POST   | [/api/templates](#post-apitemplates)                                          | Create a template              |
 | POST   | /api/templates/preview                                                        | Render and preview a template  |
 | PUT    | [/api/templates/{id}](#put-apitemplatesid)                  | Update a template              |
-| PUT    | [/api/templates/{id}/default](#put-apitemplates-id-default) | Set default template           |
-| DELETE | [/api/templates/{id}](#delete-apitemplates-id)              | Delete a template              |
+| PUT    | [/api/templates/{id}/default](#put-apitemplatesiddefault)   | Set default template           |
+| DELETE | [/api/templates/{id}](#delete-apitemplatesid)               | Delete a template              |
 
 ______________________________________________________________________
 
