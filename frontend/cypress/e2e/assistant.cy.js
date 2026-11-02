@@ -48,4 +48,16 @@ describe('Context-aware assistant', () => {
     cy.contains('The editor changed').should('be.visible');
     cy.get('[data-cy=fixture-body]').should('contain.text', 'Shop today');
   });
+  it('keeps replies at full height when the chat outgrows the panel', () => {
+    const reply = Array.from({ length: 6 }, (_, i) => `Paragraph ${i + 1} of a reply long enough to wrap across the panel.`).join('\n\n');
+    const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Question ${i}` }, { role: 'assistant', content: reply, parts: [{ type: 'text', content: reply }] }]).flat();
+    cy.window().then(win => win.localStorage.setItem('listpocket_assistant_v1:fixture-owner', JSON.stringify({ active: 'long', threads: [{ id: 'long', title: 'Long chat', messages, tools: [], proposals: [], after: 0, turn: null }] })));
+    cy.reload();
+    cy.get('.assistant-message').should('have.length', 6).each($reply => {
+      expect($reply[0].clientHeight).to.eq($reply[0].scrollHeight);
+    });
+    cy.get('.assistant-scroll').then($scroll => {
+      expect($scroll[0].scrollHeight).to.be.greaterThan($scroll[0].clientHeight);
+    });
+  });
 });

@@ -385,7 +385,7 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
           <span /><span /><span />
         </div>
         <v-btn v-if="undo" size="small" variant="tonal" class="text-none mt-2 align-self-start" prepend-icon="mdi-undo" @click="undoEdit">Undo last edit</v-btn>
-        <v-alert v-if="error" type="error" variant="tonal" density="compact" class="ai-error mt-2 text-body-2" data-cy="assistant-error">{{ error }}</v-alert>
+        <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mt-2 text-body-2" data-cy="assistant-error">{{ error }}</v-alert>
         <div v-if="!running && (current?.turn || error)" class="d-flex ga-2">
           <v-btn v-if="current?.turn" size="small" variant="tonal" class="text-none" @click="listen(current)">Resume</v-btn>
           <v-btn v-if="error" size="small" variant="tonal" class="text-none" @click="send([...messages].reverse().find(m => m.role === 'user')?.content || '')">Retry</v-btn>
@@ -453,6 +453,8 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
 
 .assistant-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .assistant-scroll { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; padding: 16px; }
+/* Rows that clip overflow (replies, alerts) would otherwise shrink to nothing once the chat outgrows the panel. */
+.assistant-scroll > * { flex: none; }
 
 .ai-empty { align-items: center; display: flex; flex-direction: column; margin: auto 0; padding: 16px 4px; text-align: center; }
 .ai-empty-mark { align-items: center; background: rgba(var(--v-theme-primary), 0.12); border-radius: 14px; color: rgb(var(--v-theme-primary)); display: flex; height: 52px; justify-content: center; margin-bottom: 12px; width: 52px; }
@@ -477,9 +479,6 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
 .assistant-message :deep(pre) { background: rgba(var(--v-theme-on-surface), 0.05); border-radius: 8px; margin-bottom: 10px; overflow-x: auto; padding: 10px 12px; }
 .assistant-message :deep(pre code) { background: none; padding: 0; }
 .assistant-message :deep(blockquote) { border-left: 3px solid rgba(var(--v-border-color), 0.3); padding-left: 12px; }
-
-/* Vuetify's alert has a flex basis of 0 and hides overflow, so in this column it collapses. */
-.ai-error { flex: none; }
 
 .ai-tools { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 12px; }
 .ai-tools > summary { align-items: center; cursor: pointer; display: inline-flex; gap: 6px; list-style: none; }

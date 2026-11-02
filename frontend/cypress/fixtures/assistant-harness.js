@@ -30,4 +30,6 @@ if (new URLSearchParams(location.search).has('mock')) {
     return Response.json({});
   };
 }
-createApp({ render: () => h(VApp, {}, () => [h(VMain, {}, () => [h('div', { 'data-cy': 'fixture-body' }, snapshot.value.body), h('button', { onClick: () => router.push('/analytics') }, 'Navigate to analytics'), h('button', { onClick: window.assistantFixture.change }, 'Manual edit')]), h(AIAssistant)]) }).use(router).use(vuetify).mount('#app');
+const app = createApp({ render: () => h(VApp, {}, () => [h(VMain, {}, () => [h('div', { 'data-cy': 'fixture-body' }, snapshot.value.body), h('button', { onClick: () => router.push('/analytics') }, 'Navigate to analytics'), h('button', { onClick: window.assistantFixture.change }, 'Manual edit')]), h(AIAssistant)]) });
+app.config.globalProperties.$t = key => key;
+app.use(router).use(vuetify).mount('#app');
