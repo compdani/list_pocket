@@ -33,6 +33,8 @@ func (WebFetch) InputSchema() map[string]any {
 	}
 }
 
+func (WebFetch) OutputSchema() map[string]any { return SchemaFor[web.FetchResult]() }
+
 func (WebFetch) RequiresApproval() bool { return false }
 
 func (WebFetch) ReadOnly() bool { return true }

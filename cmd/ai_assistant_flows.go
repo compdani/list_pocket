@@ -222,7 +222,7 @@ func (a *App) assistantFlowTools() []assistantTool {
 		{name: "workflow_schema", description: "Read how workflows are written: node types, expressions and triggers. Read this before proposing a workflow.", perms: get, exec: func(*pbcore.RequestEvent, json.RawMessage) (any, string, error) {
 			return map[string]string{"schema": flow.SchemaDoc}, "", nil
 		}},
-		{name: "workflow_catalog", description: "Read every tool and event a workflow can use, with input schemas, and which tools are read-only or need approval.", handler: a.GetFlowCatalog, perms: get},
+		{name: "workflow_catalog", description: "Read every tool and event a workflow can use, with input and output schemas, and which tools are read-only or need approval.", handler: a.GetFlowCatalog, perms: get},
 		{name: "workflows", description: "Read workflows. Without id, a summary of each. With id (or name), its draft, validation and published version.", handler: a.GetFlows, perms: get},
 		{name: "workflow_runs", description: "Read recent runs. Query: workflow, status, limit. With id, one run's steps with their input, output, errors and agent activity.", handler: a.GetFlowRuns, perms: get},
 		{name: "workflow_approvals", description: "Read approvals waiting for a person. Query: status.", handler: a.GetFlowApprovals, perms: []string{permFlowsApprove, permFlowsGet, permFlowsManage}},

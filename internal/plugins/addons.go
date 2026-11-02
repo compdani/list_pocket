@@ -24,7 +24,9 @@ type ToolManifest struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema,omitempty"`
-	ReadOnly    bool           `json:"readOnly,omitempty"`
+	// OutputSchema is optional. It tells later workflow steps which fields they can read.
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	ReadOnly     bool           `json:"readOnly,omitempty"`
 	// RequiresApproval defaults to true unless the tool is read-only.
 	RequiresApproval *bool `json:"requiresApproval,omitempty"`
 }

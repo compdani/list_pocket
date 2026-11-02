@@ -208,6 +208,7 @@ plugin.tool('get_chat', (input, ctx) => {
 
 - **`description`:** required. Models read it to decide when to use the tool, so say what it does and when to use it.
 - **`inputSchema`:** input is checked against it before your handler runs.
+- **`outputSchema`:** optional. It says what the tool returns, so the workflow builder can suggest its fields in JavaScript steps and models know what to read. It isn't checked against what your handler returns.
 - **`readOnly`:** set this only if the tool changes and sends nothing.
 - **`requiresApproval`:** a person approves each call from a Tool node. It defaults to `true` unless the tool is read-only. Agents can't pause for approval, so an agent that calls a tool needing it gets an error back. Setting it to `false` on a tool with side effects lets workflows and agents act with no check, so only do that for low-risk actions.
 - **Results:** return any JSON value, up to 1 MiB. Later nodes read it as `nodes.<id>`, and models see it, so never return a secret.

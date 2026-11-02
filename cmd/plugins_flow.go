@@ -14,11 +14,12 @@ type pluginTool struct {
 	spec   plugins.ToolManifest
 }
 
-func (t pluginTool) Name() string                { return t.plugin.AddonName(t.spec.Name) }
-func (t pluginTool) Description() string         { return t.spec.Description }
-func (t pluginTool) InputSchema() map[string]any { return t.spec.InputSchema }
-func (t pluginTool) RequiresApproval() bool      { return t.spec.NeedsApproval() }
-func (t pluginTool) ReadOnly() bool              { return t.spec.ReadOnly }
+func (t pluginTool) Name() string                 { return t.plugin.AddonName(t.spec.Name) }
+func (t pluginTool) Description() string          { return t.spec.Description }
+func (t pluginTool) InputSchema() map[string]any  { return t.spec.InputSchema }
+func (t pluginTool) OutputSchema() map[string]any { return t.spec.OutputSchema }
+func (t pluginTool) RequiresApproval() bool       { return t.spec.NeedsApproval() }
+func (t pluginTool) ReadOnly() bool               { return t.spec.ReadOnly }
 func (t pluginTool) Invoke(ctx context.Context, call tools.Call) (any, error) {
 	return t.plugin.CallTool(ctx, t.spec.Name, call.Args, call.Config, call.RunID)
 }

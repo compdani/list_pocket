@@ -622,10 +622,14 @@ func (a *App) GetFlowCatalog(re *pbcore.RequestEvent) error {
 		if !ok {
 			continue
 		}
-		rows = append(rows, map[string]any{
+		row := map[string]any{
 			"name": name, "description": t.Description(), "input_schema": t.InputSchema(),
 			"read_only": tools.IsReadOnly(t), "requires_approval": t.RequiresApproval(),
-		})
+		}
+		if output := tools.OutputSchema(t); output != nil {
+			row["output_schema"] = output
+		}
+		rows = append(rows, row)
 	}
 	wfs, err := a.pb.FindRecordsByFilter("flows", "published_version > 0", "name", 0, 0)
 	if err != nil {

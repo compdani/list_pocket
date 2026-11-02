@@ -29,17 +29,19 @@ const (
 type flowTool struct {
 	name, description string
 	schema            map[string]any
+	output            map[string]any
 	readOnly          bool
 	approval          bool
 	humanWritten      func(args map[string]any) string
 	fn                func(ctx context.Context, args map[string]any) (any, error)
 }
 
-func (t flowTool) Name() string                { return t.name }
-func (t flowTool) Description() string         { return t.description }
-func (t flowTool) InputSchema() map[string]any { return t.schema }
-func (t flowTool) RequiresApproval() bool      { return t.approval }
-func (t flowTool) ReadOnly() bool              { return t.readOnly }
+func (t flowTool) Name() string                 { return t.name }
+func (t flowTool) Description() string          { return t.description }
+func (t flowTool) InputSchema() map[string]any  { return t.schema }
+func (t flowTool) OutputSchema() map[string]any { return t.output }
+func (t flowTool) RequiresApproval() bool       { return t.approval }
+func (t flowTool) ReadOnly() bool               { return t.readOnly }
 func (t flowTool) HumanWrittenField(args map[string]any) string {
 	if t.humanWritten == nil {
 		return ""
@@ -108,6 +110,23 @@ func contactSummary(sub models.Subscriber) map[string]any {
 		"id": sub.RecordID, "email": email, "name": sub.Name, "phone": sub.Phone,
 		"status": sub.Status, "attribs": sub.Attribs,
 	}
+}
+
+// contactLists says which lists a contact is on and their status on each, including lists
+// they've unsubscribed from. It's always a list, so code can read it without a check.
+func (a *App) contactLists(sub models.Subscriber) ([]map[string]any, error) {
+	lists, err := a.core.GetSubscriberLists(sub.ID, "", nil, nil, "", "")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]map[string]any, 0, len(lists))
+	for _, l := range lists {
+		out = append(out, map[string]any{
+			"id": l.RecordID, "name": l.Name, "type": l.Type,
+			"subscription_status": l.SubscriptionStatus, "subscription_sms_status": l.SubscriptionSmsStatus,
+		})
+	}
+	return out, nil
 }
 
 // emailSendRefusal says why a workflow may not email a contact. Someone who
@@ -339,7 +358,7 @@ func (a *App) flowTools() []tools.Tool {
 				}
 				return map[string]any{"total": total, "results": rows}, nil
 			}},
-		{name: "contacts.get", readOnly: true, description: "Read one contact with their boards, owner, company, open tasks and notes.",
+		{name: "contacts.get", readOnly: true, description: "Read one contact with their lists and subscription status on each, boards, owner, company, open tasks and notes.",
 			schema: toolSchema(map[string]any{"contact": contact}, "contact"),
 			fn: func(_ context.Context, args map[string]any) (any, error) {
 				sub, err := a.contactFromRef(argStr(args, "contact"))
@@ -362,8 +381,12 @@ func (a *App) flowTools() []tools.Tool {
 				if err != nil {
 					return nil, err
 				}
+				lists, err := a.contactLists(sub)
+				if err != nil {
+					return nil, err
+				}
 				out := contactSummary(sub)
-				out["boards"], out["owner"], out["company"] = boards, profile.OwnerName, profile.Company
+				out["lists"], out["boards"], out["owner"], out["company"] = lists, boards, profile.OwnerName, profile.Company
 				out["open_tasks"], out["notes"] = tasks, notes
 				return out, nil
 			}},
@@ -607,8 +630,10 @@ func (a *App) flowTools() []tools.Tool {
 			}, "url"),
 			fn: flowHTTPRequest},
 	}
+	outputs := flowToolOutputs()
 	result := make([]tools.Tool, 0, len(out)+2)
 	for _, t := range out {
+		t.output = outputs[t.name]
 		result = append(result, t)
 	}
 	fetcher := web.NewFetcher(nil)

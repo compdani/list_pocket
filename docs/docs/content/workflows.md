@@ -69,7 +69,7 @@ Environment: `input` (run input), `nodes.<id>` (a finished node's output),
 |---|---|---|
 | `start` | `next` — exactly one per workflow | the run input |
 | `agent` | `agent: {system_prompt, tools[], output_schema?, max_steps?, ai?}`, `input`, `next` | `{result: <submitted object>, _citations: [...]}` — read fields as `nodes.<id>.result.<field>` |
-| `tool` | `tool` (catalog name), `input`, `next` | the tool's return value |
+| `tool` | `tool` (catalog name), `input`, `next` | the tool's return value, described by its `output_schema` in the catalog when it has one |
 | `branch` | `cases: [{if, to}]`, `default` | `{_next, case}` |
 | `foreach` | `items` (expr → list), `body`, `concurrency` (default 4), `next` | `{count, failed, results: [last output per item]}` |
 | `loop` | `body`, `until` (expr), `max_iterations` (1–100, required), `next` | `{iterations, done, last, results: [last output per iteration]}` |

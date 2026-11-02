@@ -29,6 +29,20 @@ type ReadOnlyTool interface {
 	ReadOnly() bool
 }
 
+// OutputSchemaTool is implemented by tools that describe what they return, so later steps
+// know which fields they can read.
+type OutputSchemaTool interface {
+	OutputSchema() map[string]any
+}
+
+// OutputSchema returns what t says it returns, or nil if it doesn't say.
+func OutputSchema(t Tool) map[string]any {
+	if o, ok := t.(OutputSchemaTool); ok {
+		return o.OutputSchema()
+	}
+	return nil
+}
+
 // HumanWrittenTool is implemented by tools where, for some inputs, one field is
 // only safe to act on unchecked if a person wrote it, not a model or run data.
 type HumanWrittenTool interface {

@@ -274,14 +274,12 @@
     <template v-if="node.type === 'notify'">
       <v-textarea v-model="node.message" :label="$t('workflows.field.message')" :hint="$t('workflows.field.notifyHelp')" persistent-hint rows="3" auto-grow v-bind="field" />
     </template>
-    <json-field v-if="node.type === 'transform'" v-model="node.value" :label="$t('workflows.field.value')" :readonly="readonly" allow-text class="mb-3" />
+    <json-field v-if="node.type === 'transform'" v-model="node.value" :label="$t('workflows.field.value')" :readonly="readonly" allow-text code class="mb-3" />
     <template v-if="node.type === 'code'">
-      <div class="code-field" data-cy="flow-code">
-        <code-editor v-model="node.code" lang="javascript" :disabled="readonly" :autofocus="false" />
-      </div>
+      <code-field v-model="node.code" lang="javascript" :disabled="readonly" :completions="codeCompletions" data-cy="flow-code" />
       <p class="text-caption text-medium-emphasis">{{ $t('workflows.field.codeHelp') }}</p>
     </template>
-    <json-field v-if="node.type === 'end'" v-model="node.output" :label="$t('workflows.field.output')" :readonly="readonly" allow-text class="mb-3" />
+    <json-field v-if="node.type === 'end'" v-model="node.output" :label="$t('workflows.field.output')" :readonly="readonly" allow-text code class="mb-3" />
 
     <!-- errors -->
     <template v-if="canFail">
@@ -299,15 +297,16 @@ import {
   computed, defineAsyncComponent, getCurrentInstance, ref,
 } from 'vue';
 import CopyText from '../CopyText.vue';
+import CodeField from './CodeField.vue';
 import JsonField from './JsonField.vue';
 import { nodeInfo } from '../../utils/flowGraph.mjs';
+import { codeHints } from '../../utils/codeHints.mjs';
 import { EMAIL_FORMATS, bodySummary, needsSendApproval } from '../../utils/emailCompose.mjs';
 import { pluginRegistry } from '../../pluginHost';
 import { pluginFieldEditor, schemaWidget } from '../../pluginHost/registry.mjs';
 
 // It brings every email editor with it, so it loads when it opens.
 const EmailComposeModal = defineAsyncComponent(() => import('./EmailComposeModal.vue'));
-const CodeEditor = defineAsyncComponent(() => import('../CodeEditor.vue'));
 const EMAIL_TOOL = 'messages.send_email';
 const EMAIL_MESSAGE_FIELDS = ['body', 'body_source', 'content_type'];
 const BOARD_MOVE_TOOL = 'boards.move_contact';
@@ -331,6 +330,7 @@ const field = computed(() => ({
 }));
 
 const info = computed(() => nodeInfo(props.node));
+const codeCompletions = (path) => codeHints(path, props.definition, props.node.id, props.catalog);
 const trigger = computed(() => props.definition.trigger);
 const canFail = computed(() => ['agent', 'tool', 'foreach', 'loop', 'subworkflow', 'transform', 'code', 'notify'].includes(props.node.type));
 
@@ -485,23 +485,6 @@ function eventHint(name) {
   display: flex;
   gap: 8px;
   margin-bottom: 4px;
-}
-
-.code-field {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 4px;
-  font-size: 12px;
-  margin-bottom: 8px;
-  overflow: hidden;
-}
-
-.code-field :deep(.cm-editor) {
-  max-height: 420px;
-  min-height: 180px;
-}
-
-.code-field :deep(.cm-scroller) {
-  overflow: auto;
 }
 
 .email-summary {

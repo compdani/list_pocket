@@ -1,5 +1,11 @@
 <template>
+  <div v-if="code" class="json-field-code" role="group" :aria-label="label">
+    <div v-if="label" class="text-caption text-medium-emphasis mb-1">{{ label }}</div>
+    <code-field v-model="text" lang="json" :disabled="readonly" :error="Boolean(error)" @blur="commit" />
+    <div v-if="error || hint" :class="['text-caption', error ? 'text-error' : 'text-medium-emphasis']">{{ error || hint }}</div>
+  </div>
   <v-textarea
+    v-else
     v-model="text"
     :label="label"
     :hint="error || hint"
@@ -19,6 +25,7 @@
 
 <script setup>
 import { ref, watch } from 'vue';
+import CodeField from './CodeField.vue';
 
 const props = defineProps({
   modelValue: { type: null, default: undefined },
@@ -28,6 +35,8 @@ const props = defineProps({
   readonly: { type: Boolean, default: false },
   // Plain text is allowed as well as JSON, for values that are one template string.
   allowText: { type: Boolean, default: false },
+  // A code editor instead of a textarea, for values long enough to need one.
+  code: { type: Boolean, default: false },
 });
 const emit = defineEmits(['update:modelValue']);
 
@@ -76,6 +85,10 @@ function commit() {
 </script>
 
 <style scoped>
+.json-field-code {
+  --code-field-min-height: 96px;
+}
+
 .json-field :deep(textarea) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
