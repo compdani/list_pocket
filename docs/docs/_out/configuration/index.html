@@ -11,6 +11,7 @@
         <link rel="canonical" href="http://127.0.0.1:9000/docs/configuration/">
       
       
+      
         <link rel="prev" href="../installation/">
       
       
@@ -21,7 +22,7 @@
       
       
       <link rel="icon" href="../images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="zensical-0.0.74">
     
     
       
@@ -29,10 +30,15 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      <link rel="stylesheet" href="../assets/stylesheets/classic/main.94dd801d.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/classic/palette.813d4b3f.min.css">
       
       
 
@@ -46,14 +52,14 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback">
         <style>:root{--md-text-font:"Inter";--md-code-font:"Roboto Mono"}</style>
       
     
     
       <link rel="stylesheet" href="../static/style.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -64,6 +70,8 @@
   
     
     
+      
+    
     
     
     
@@ -72,14 +80,11 @@
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
-    <label class="md-overlay" for="__drawer"></label>
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
     <div data-md-component="skip">
-      
-        
-        <a href="#configuration" class="md-skip">
-          Skip to content
-        </a>
-      
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
     </div>
     <div data-md-component="announce">
       
@@ -92,14 +97,15 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="List Pocket / Documentation" class="md-header__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
+    <a href="./.." title="List Pocket &#x2f; Documentation" class="md-header__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
       
-  <img src="../images/favicon.png" alt="logo">
+  <img src="../images/favicon.png" alt="List Pocket / Documentation">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      <span class="md-visually-hidden">Navigation</span>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -119,7 +125,19 @@
     </div>
     
       
+        <form class="md-header__option" data-md-component="palette">
+  
     
+    
+    
+    <input class="md-option" data-md-color-media="none" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="red"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
     
     
     
@@ -128,42 +146,18 @@
         <label class="md-header__button md-icon" for="__search">
           
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+          <span class="md-visually-hidden">Search</span>
         </label>
-        <div class="md-search" data-md-component="search" role="dialog">
-  <label class="md-search__overlay" for="__search"></label>
-  <div class="md-search__inner" role="search">
-    <form class="md-search__form" name="search">
-      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
-      <label class="md-search__icon md-icon" for="__search">
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
-      </label>
-      <nav class="md-search__options" aria-label="Search">
-        
-        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
-          
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </nav>
-      
-    </form>
-    <div class="md-search__output">
-      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
-        <div class="md-search-result" data-md-component="search-result">
-          <div class="md-search-result__meta">
-            Initializing search
-          </div>
-          <ol class="md-search-result__list" role="presentation"></ol>
-        </div>
-      </div>
-    </div>
-  </div>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
 </div>
       
     
-    
+    <div class="md-header__source">
+      
+    </div>
   </nav>
   
 </header>
@@ -189,9 +183,9 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="List Pocket / Documentation" class="md-nav__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
+    <a href="./.." title="List Pocket &#x2f; Documentation" class="md-nav__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
       
-  <img src="../images/favicon.png" alt="logo">
+  <img src="../images/favicon.png" alt="List Pocket / Documentation">
 
     </a>
     List Pocket / Documentation
@@ -206,15 +200,14 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="./.." class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Introduction
-  
+  Introduction
 
     
   </span>
@@ -266,8 +259,7 @@
   <span class="md-ellipsis">
     
   
-    Getting Started
-  
+  Getting Started
 
     
   </span>
@@ -277,19 +269,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_2">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Getting Started
-  
+  Getting Started
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -302,8 +294,7 @@
   <span class="md-ellipsis">
     
   
-    Installation
-  
+  Installation
 
     
   </span>
@@ -314,10 +305,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
     
@@ -326,7 +317,9 @@
   
     <li class="md-nav__item md-nav__item--active">
       
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+        <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
       
       
         
@@ -339,8 +332,7 @@
   <span class="md-ellipsis">
     
   
-    Configuration
-  
+  Configuration
 
     
   </span>
@@ -350,15 +342,14 @@
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="./" class="md-nav__link md-nav__link--active">
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
     
   
-    Configuration
-  
+  Configuration
 
     
   </span>
@@ -369,7 +360,8 @@
       
         
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
   
   
   
@@ -378,16 +370,16 @@
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
-      Table of contents
+      On this page
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
   <a href="#toml-configuration-file" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         TOML Configuration file
-      
+      </span>
     </span>
   </a>
   
@@ -396,9 +388,9 @@
         <li class="md-nav__item">
   <a href="#environment-variables" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Environment variables
-      
+      </span>
     </span>
   </a>
   
@@ -407,9 +399,9 @@
         <li class="md-nav__item">
   <a href="#built-in-documentation-urls" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Built-in documentation URLs
-      
+      </span>
     </span>
   </a>
   
@@ -418,9 +410,9 @@
         <li class="md-nav__item">
   <a href="#customizing-system-templates" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Customizing system templates
-      
+      </span>
     </span>
   </a>
   
@@ -429,9 +421,9 @@
         <li class="md-nav__item">
   <a href="#http-routes" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         HTTP routes
-      
+      </span>
     </span>
   </a>
   
@@ -441,9 +433,9 @@
           <li class="md-nav__item">
   <a href="#private-admin-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Private admin endpoints.
-      
+      </span>
     </span>
   </a>
   
@@ -452,9 +444,9 @@
           <li class="md-nav__item">
   <a href="#public-endpoints-to-expose-to-the-internet" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Public endpoints to expose to the internet.
-      
+      </span>
     </span>
   </a>
   
@@ -468,9 +460,9 @@
         <li class="md-nav__item">
   <a href="#media-uploads" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Media uploads
-      
+      </span>
     </span>
   </a>
   
@@ -480,9 +472,9 @@
           <li class="md-nav__item">
   <a href="#using-filesystem" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Using filesystem
-      
+      </span>
     </span>
   </a>
   
@@ -491,9 +483,9 @@
           <li class="md-nav__item">
   <a href="#using-volumes" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Using volumes
-      
+      </span>
     </span>
   </a>
   
@@ -502,9 +494,9 @@
           <li class="md-nav__item">
   <a href="#using-bind-mounts" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Using bind mounts
-      
+      </span>
     </span>
   </a>
   
@@ -518,9 +510,9 @@
         <li class="md-nav__item">
   <a href="#logs" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Logs
-      
+      </span>
     </span>
   </a>
   
@@ -530,9 +522,9 @@
           <li class="md-nav__item">
   <a href="#docker" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Docker
-      
+      </span>
     </span>
   </a>
   
@@ -541,9 +533,9 @@
           <li class="md-nav__item">
   <a href="#binary" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Binary
-      
+      </span>
     </span>
   </a>
   
@@ -557,9 +549,9 @@
         <li class="md-nav__item">
   <a href="#time-zone" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Time zone
-      
+      </span>
     </span>
   </a>
   
@@ -568,9 +560,9 @@
         <li class="md-nav__item">
   <a href="#smtp" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         SMTP
-      
+      </span>
     </span>
   </a>
   
@@ -580,9 +572,9 @@
           <li class="md-nav__item">
   <a href="#retries" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Retries
-      
+      </span>
     </span>
   </a>
   
@@ -596,9 +588,9 @@
         <li class="md-nav__item">
   <a href="#smtp-ports" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         SMTP ports
-      
+      </span>
     </span>
   </a>
   
@@ -607,9 +599,9 @@
         <li class="md-nav__item">
   <a href="#performance" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Performance
-      
+      </span>
     </span>
   </a>
   
@@ -619,9 +611,9 @@
           <li class="md-nav__item">
   <a href="#batch-size" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Batch size
-      
+      </span>
     </span>
   </a>
   
@@ -639,10 +631,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -655,8 +647,7 @@
   <span class="md-ellipsis">
     
   
-    Upgrade
-  
+  Upgrade
 
     
   </span>
@@ -667,10 +658,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -684,6 +676,14 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
+        
       
         
       
@@ -728,8 +728,7 @@
   <span class="md-ellipsis">
     
   
-    Using List Pocket
-  
+  Using List Pocket
 
     
   </span>
@@ -739,19 +738,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Using List Pocket
-  
+  Using List Pocket
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -764,8 +763,7 @@
   <span class="md-ellipsis">
     
   
-    Concepts
-  
+  Concepts
 
     
   </span>
@@ -776,10 +774,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -792,8 +790,7 @@
   <span class="md-ellipsis">
     
   
-    Templating
-  
+  Templating
 
     
   </span>
@@ -804,10 +801,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -820,8 +817,7 @@
   <span class="md-ellipsis">
     
   
-    Querying and segmenting subscribers
-  
+  Querying and segmenting subscribers
 
     
   </span>
@@ -832,10 +828,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -848,8 +844,7 @@
   <span class="md-ellipsis">
     
   
-    Bounce processing
-  
+  Bounce processing
 
     
   </span>
@@ -860,10 +855,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -876,8 +871,7 @@
   <span class="md-ellipsis">
     
   
-    Messengers
-  
+  Messengers
 
     
   </span>
@@ -888,10 +882,118 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whatsapp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  WhatsApp
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  AI and the agent
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Plugins
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
   
   
   
@@ -904,8 +1006,7 @@
   <span class="md-ellipsis">
     
   
-    Archives
-  
+  Archives
 
     
   </span>
@@ -916,10 +1017,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -932,8 +1033,7 @@
   <span class="md-ellipsis">
     
   
-    Internationalization
-  
+  Internationalization
 
     
   </span>
@@ -944,10 +1044,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -960,8 +1060,7 @@
   <span class="md-ellipsis">
     
   
-    Integrating with external systems
-  
+  Integrating with external systems
 
     
   </span>
@@ -972,10 +1071,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -988,8 +1087,7 @@
   <span class="md-ellipsis">
     
   
-    User roles and permissions
-  
+  User roles and permissions
 
     
   </span>
@@ -1000,10 +1098,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1016,8 +1114,7 @@
   <span class="md-ellipsis">
     
   
-    OIDC SSO
-  
+  OIDC SSO
 
     
   </span>
@@ -1028,10 +1125,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1089,8 +1187,7 @@
   <span class="md-ellipsis">
     
   
-    API
-  
+  API
 
     
   </span>
@@ -1100,19 +1197,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    API
-  
+  API
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -1125,8 +1222,7 @@
   <span class="md-ellipsis">
     
   
-    Introduction
-  
+  Introduction
 
     
   </span>
@@ -1137,10 +1233,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1153,8 +1249,7 @@
   <span class="md-ellipsis">
     
   
-    SDKs and libs
-  
+  SDKs and libs
 
     
   </span>
@@ -1165,10 +1260,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1181,8 +1276,7 @@
   <span class="md-ellipsis">
     
   
-    Subscribers
-  
+  Subscribers
 
     
   </span>
@@ -1193,10 +1287,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1209,8 +1303,7 @@
   <span class="md-ellipsis">
     
   
-    Lists
-  
+  Lists
 
     
   </span>
@@ -1221,10 +1314,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1237,8 +1330,7 @@
   <span class="md-ellipsis">
     
   
-    Import
-  
+  Import
 
     
   </span>
@@ -1249,10 +1341,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1265,8 +1357,7 @@
   <span class="md-ellipsis">
     
   
-    Campaigns
-  
+  Campaigns
 
     
   </span>
@@ -1277,10 +1368,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1293,8 +1384,7 @@
   <span class="md-ellipsis">
     
   
-    Media
-  
+  Media
 
     
   </span>
@@ -1305,10 +1395,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1321,8 +1411,7 @@
   <span class="md-ellipsis">
     
   
-    Templates
-  
+  Templates
 
     
   </span>
@@ -1333,10 +1422,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1349,8 +1438,7 @@
   <span class="md-ellipsis">
     
   
-    Transactional
-  
+  Transactional
 
     
   </span>
@@ -1361,10 +1449,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1377,8 +1465,7 @@
   <span class="md-ellipsis">
     
   
-    Bounces
-  
+  Bounces
 
     
   </span>
@@ -1389,10 +1476,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1432,8 +1520,7 @@
   <span class="md-ellipsis">
     
   
-    Maintenance
-  
+  Maintenance
 
     
   </span>
@@ -1443,19 +1530,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Maintenance
-  
+  Maintenance
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -1468,8 +1555,7 @@
   <span class="md-ellipsis">
     
   
-    Performance
-  
+  Performance
 
     
   </span>
@@ -1480,10 +1566,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1525,8 +1612,7 @@
   <span class="md-ellipsis">
     
   
-    Contributions
-  
+  Contributions
 
     
   </span>
@@ -1536,19 +1622,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Contributions
-  
+  Contributions
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -1561,8 +1647,7 @@
   <span class="md-ellipsis">
     
   
-    Developer setup
-  
+  Developer setup
 
     
   </span>
@@ -1573,10 +1658,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1589,8 +1674,7 @@
   <span class="md-ellipsis">
     
   
-    Security reports
-  
+  Security reports
 
     
   </span>
@@ -1601,10 +1685,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1620,10 +1705,12 @@
               
               <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
+                  
                   <div class="md-sidebar__inner">
                     
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
   
   
   
@@ -1632,16 +1719,16 @@
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
-      Table of contents
+      On this page
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
   <a href="#toml-configuration-file" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         TOML Configuration file
-      
+      </span>
     </span>
   </a>
   
@@ -1650,9 +1737,9 @@
         <li class="md-nav__item">
   <a href="#environment-variables" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Environment variables
-      
+      </span>
     </span>
   </a>
   
@@ -1661,9 +1748,9 @@
         <li class="md-nav__item">
   <a href="#built-in-documentation-urls" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Built-in documentation URLs
-      
+      </span>
     </span>
   </a>
   
@@ -1672,9 +1759,9 @@
         <li class="md-nav__item">
   <a href="#customizing-system-templates" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Customizing system templates
-      
+      </span>
     </span>
   </a>
   
@@ -1683,9 +1770,9 @@
         <li class="md-nav__item">
   <a href="#http-routes" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         HTTP routes
-      
+      </span>
     </span>
   </a>
   
@@ -1695,9 +1782,9 @@
           <li class="md-nav__item">
   <a href="#private-admin-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Private admin endpoints.
-      
+      </span>
     </span>
   </a>
   
@@ -1706,9 +1793,9 @@
           <li class="md-nav__item">
   <a href="#public-endpoints-to-expose-to-the-internet" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Public endpoints to expose to the internet.
-      
+      </span>
     </span>
   </a>
   
@@ -1722,9 +1809,9 @@
         <li class="md-nav__item">
   <a href="#media-uploads" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Media uploads
-      
+      </span>
     </span>
   </a>
   
@@ -1734,9 +1821,9 @@
           <li class="md-nav__item">
   <a href="#using-filesystem" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Using filesystem
-      
+      </span>
     </span>
   </a>
   
@@ -1745,9 +1832,9 @@
           <li class="md-nav__item">
   <a href="#using-volumes" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Using volumes
-      
+      </span>
     </span>
   </a>
   
@@ -1756,9 +1843,9 @@
           <li class="md-nav__item">
   <a href="#using-bind-mounts" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Using bind mounts
-      
+      </span>
     </span>
   </a>
   
@@ -1772,9 +1859,9 @@
         <li class="md-nav__item">
   <a href="#logs" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Logs
-      
+      </span>
     </span>
   </a>
   
@@ -1784,9 +1871,9 @@
           <li class="md-nav__item">
   <a href="#docker" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Docker
-      
+      </span>
     </span>
   </a>
   
@@ -1795,9 +1882,9 @@
           <li class="md-nav__item">
   <a href="#binary" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Binary
-      
+      </span>
     </span>
   </a>
   
@@ -1811,9 +1898,9 @@
         <li class="md-nav__item">
   <a href="#time-zone" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Time zone
-      
+      </span>
     </span>
   </a>
   
@@ -1822,9 +1909,9 @@
         <li class="md-nav__item">
   <a href="#smtp" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         SMTP
-      
+      </span>
     </span>
   </a>
   
@@ -1834,9 +1921,9 @@
           <li class="md-nav__item">
   <a href="#retries" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Retries
-      
+      </span>
     </span>
   </a>
   
@@ -1850,9 +1937,9 @@
         <li class="md-nav__item">
   <a href="#smtp-ports" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         SMTP ports
-      
+      </span>
     </span>
   </a>
   
@@ -1861,9 +1948,9 @@
         <li class="md-nav__item">
   <a href="#performance" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Performance
-      
+      </span>
     </span>
   </a>
   
@@ -1873,9 +1960,9 @@
           <li class="md-nav__item">
   <a href="#batch-size" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Batch size
-      
+      </span>
     </span>
   </a>
   
@@ -1898,9 +1985,9 @@
             <div class="md-content" data-md-component="content">
               
               <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
                 
                   
-
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
@@ -1924,7 +2011,7 @@
 </tr>
 <tr>
 <td><code>LISTPOCKET_app__docs_dir</code></td>
-<td>"/var/listpocket/mkdocs-out"</td>
+<td>"/var/listpocket/docs"</td>
 </tr>
 <tr>
 <td><code>LISTPOCKET_app__swagger_dir</code></td>
@@ -1934,7 +2021,7 @@
 </table>
 <p>PocketBase’s own flags (for example data directory) are passed through the PocketBase CLI embedded in the binary; see <a href="https://pocketbase.io/docs/">PocketBase configuration</a>.</p>
 <h3 id="built-in-documentation-urls">Built-in documentation URLs<a class="headerlink" href="#built-in-documentation-urls" title="Permanent link">&para;</a></h3>
-<p>If <code>docs/docs/_out</code> (MkDocs <code>site_dir</code>) and <code>docs/swagger</code> exist relative to the process working directory—or you set <code>app.docs_dir</code> / <code>app.swagger_dir</code>—the HTTP server exposes:</p>
+<p>If <code>docs/docs/_out</code> (Zensical <code>site_dir</code>) and <code>docs/swagger</code> exist relative to the process working directory—or you set <code>app.docs_dir</code> / <code>app.swagger_dir</code>—the HTTP server exposes:</p>
 <table>
 <thead>
 <tr>
@@ -1945,7 +2032,7 @@
 <tbody>
 <tr>
 <td><code>/docs/</code></td>
-<td>MkDocs manual (static HTML)</td>
+<td>Documentation manual (static HTML)</td>
 </tr>
 <tr>
 <td><code>/openapi.yaml</code></td>
@@ -2001,17 +2088,37 @@
 <tr>
 <td><code>GET, POST</code></td>
 <td><code>/subscription/*</code></td>
-<td>HTML subscription pages</td>
+<td>HTML subscription pages (legacy UUID paths)</td>
+</tr>
+<tr>
+<td><code>GET, POST</code></td>
+<td><code>/s/*</code>, <code>/o/*</code></td>
+<td>Short subscription / opt-in URLs (record ids)</td>
 </tr>
 <tr>
 <td><code>GET,</code></td>
+<td><code>/l/*</code></td>
+<td>Tracked link redirection (record ids)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
 <td><code>/link/*</code></td>
-<td>Tracked link redirection</td>
+<td>Tracked link redirection (legacy UUID paths)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v/*</code></td>
+<td>Open tracking pixel (record ids)</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
 <td><code>/campaign/*</code></td>
-<td>Pixel tracking image</td>
+<td>Open tracking pixel (legacy UUID paths)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/m/*</code></td>
+<td>Hosted campaign message view (record ids)</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
@@ -2037,34 +2144,34 @@
 <p>And under <code>https://listpocket.mysite.com/admin/settings</code> you put <code>/listpocket/uploads</code> (paths depend on your deployment). </p>
 <h4 id="using-volumes">Using volumes<a class="headerlink" href="#using-volumes" title="Permanent link">&para;</a></h4>
 <p>Using <code>docker volumes</code>, you can specify the name of volume and destination for the files to be uploaded inside the container.</p>
-<div class="highlight"><pre><span></span><code>app:
-    volumes:
-      - type: volume
-        source: listpocket-uploads
-        target: /listpocket/uploads
+<div class="highlight"><pre><span></span><code><span class="nt">app</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">volume</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">listpocket-uploads</span>
+<span class="w">        </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/listpocket/uploads</span>
 
-volumes:
-  listpocket-uploads:
+<span class="nt">volumes</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">listpocket-uploads</span><span class="p">:</span>
 </code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>This volume is managed by <code>docker</code> itself, and you can find the host path with <code>docker volume inspect</code> on your stack’s volume name.</p>
 </div>
 <h4 id="using-bind-mounts">Using bind mounts<a class="headerlink" href="#using-bind-mounts" title="Permanent link">&para;</a></h4>
-<p><div class="highlight"><pre><span></span><code>  app:
-    volumes:
-      - ./path/on/your/host/:/path/inside/container
+<p><div class="highlight"><pre><span></span><code><span class="w">  </span><span class="nt">app</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./path/on/your/host/:/path/inside/container</span>
 </code></pre></div>
 Eg:
-<div class="highlight"><pre><span></span><code>  app:
-    volumes:
-      - ./data/uploads:/listpocket/uploads
+<div class="highlight"><pre><span></span><code><span class="w">  </span><span class="nt">app</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./data/uploads:/listpocket/uploads</span>
 </code></pre></div>
 The files will be available inside <code>/data/uploads</code> directory on the host machine.</p>
 <p>To use the default <code>uploads</code> folder:
-<div class="highlight"><pre><span></span><code>  app:
-    volumes:
-      - ./uploads:/listpocket/uploads
+<div class="highlight"><pre><span></span><code><span class="w">  </span><span class="nt">app</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./uploads:/listpocket/uploads</span>
 </code></pre></div></p>
 <h2 id="logs">Logs<a class="headerlink" href="#logs" title="Permanent link">&para;</a></h2>
 <h3 id="docker">Docker<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h3>
@@ -2105,6 +2212,8 @@ with any Timezone listed <a href="https://en.wikipedia.org/wiki/List_of_tz_datab
 
 
 
+
+
                 
               </article>
             </div>
@@ -2127,8 +2236,8 @@ with any Timezone listed <a href="https://en.wikipedia.org/wiki/List_of_tz_datab
   
   
     Made with
-    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
-      Material for MkDocs
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
     </a>
   
 </div>
@@ -2138,7 +2247,7 @@ with any Timezone listed <a href="https://en.wikipedia.org/wiki/List_of_tz_datab
 </footer>
       
     </div>
-    <div class="md-dialog" data-md-component="dialog">
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
@@ -2146,10 +2255,14 @@ with any Timezone listed <a href="https://en.wikipedia.org/wiki/List_of_tz_datab
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.indexes","navigation.sections","content.code.copy"],"redirect":null,"search":"../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.d31f0ffa.min.js"></script>
       
     
   </body>

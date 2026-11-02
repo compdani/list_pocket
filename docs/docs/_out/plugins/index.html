@@ -1,0 +1,2352 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="http://127.0.0.1:9000/docs/plugins/">
+      
+      
+      
+        <link rel="prev" href="../ai/">
+      
+      
+        <link rel="next" href="../archives/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../images/favicon.png">
+      <meta name="generator" content="zensical-0.0.74">
+    
+    
+      
+        <title>Plugins - List Pocket / Documentation</title>
+      
+    
+    
+      
+        
+      
+      <link rel="stylesheet" href="../assets/stylesheets/classic/main.94dd801d.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../assets/stylesheets/classic/palette.813d4b3f.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../static/style.css">
+    
+    <script>__md_scope=new URL("..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="red">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
+    <div data-md-component="skip">
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="./.." title="List Pocket &#x2f; Documentation" class="md-header__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
+      
+  <img src="../images/favicon.png" alt="List Pocket / Documentation">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      <span class="md-visually-hidden">Navigation</span>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            List Pocket / Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Plugins
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="none" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="red"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+          <span class="md-visually-hidden">Search</span>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
+</div>
+      
+    
+    <div class="md-header__source">
+      
+    </div>
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="./.." title="List Pocket &#x2f; Documentation" class="md-nav__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
+      
+  <img src="../images/favicon.png" alt="List Pocket / Documentation">
+
+    </a>
+    List Pocket / Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="./.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Introduction
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Getting Started
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Getting Started
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Installation
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Configuration
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../upgrade/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Upgrade
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Using List Pocket
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Using List Pocket
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Concepts
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../templating/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Templating
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../querying-and-segmentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Querying and segmenting subscribers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../bounces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Bounce processing
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../messengers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Messengers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../whatsapp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  WhatsApp
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  AI and the agent
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      
+        <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Plugins
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="././" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Plugins
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#add-on-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Add-on types
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-a-plugin-with-the-assistant" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Building a plugin with the assistant
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Installing
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-a-plugin-stops-the-app-from-starting" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        If a plugin stops the app from starting
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Package layout
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Manifest
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#server-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Server code
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Server code">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sending" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Sending
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Webhooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#host-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Host API
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-add-ons" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Workflow add-ons
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow add-ons">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Workflow tools
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Workflow events
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agent-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Agent presets
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#field-editors" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Field editors
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consent" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Consent
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#browser-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Browser code
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../archives/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Archives
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../i18n/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Internationalization
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../external-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Integrating with external systems
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../roles-and-permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  User roles and permissions
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../oidc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  OIDC SSO
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  API
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  API
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/apis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Introduction
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/sdks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  SDKs and libs
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/subscribers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Subscribers
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/lists/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Lists
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Import
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/campaigns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Campaigns
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/media/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Media
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/templates/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Templates
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/transactional/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Transactional
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../apis/bounces/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Bounces
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Maintenance
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Maintenance
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../maintenance/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Performance
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Contributions
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
+  
+  Contributions
+
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../developer-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Developer setup
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../security-reports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Security reports
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+            </ul>
+          </nav>
+        
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  
+                  <div class="md-sidebar__inner">
+                    
+
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      On this page
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#add-on-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Add-on types
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#building-a-plugin-with-the-assistant" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Building a plugin with the assistant
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installing" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Installing
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-a-plugin-stops-the-app-from-starting" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        If a plugin stops the app from starting
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#package-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Package layout
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#manifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Manifest
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#server-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Server code
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Server code">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sending" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Sending
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#webhooks" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Webhooks
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#host-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Host API
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#workflow-add-ons" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Workflow add-ons
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Workflow add-ons">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Workflow tools
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-events" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Workflow events
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#agent-presets" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Agent presets
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#field-editors" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Field editors
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consent" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Consent
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#browser-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Browser code
+      </span>
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
+                
+                  
+
+
+<h1 id="plugins">Plugins<a class="headerlink" href="#plugins" title="Permanent link">&para;</a></h1>
+<p>A plugin adds to a running List Pocket without a rebuild. It can:</p>
+<ul>
+<li>send new types of message, including new channels with their own addresses and consent</li>
+<li>receive webhooks at its own URLs</li>
+<li>add pages, settings tabs and other UI to the admin</li>
+<li>add tools, events, agent presets and field editors to workflows</li>
+</ul>
+<p>Only super admins can install plugins. <strong>A plugin runs with full access to the app and its data</strong>, so only install plugins you trust. Its browser code can act as any logged-in admin who loads it.</p>
+<p><code>examples/plugins/telegram</code> is a complete working plugin that uses all of this.</p>
+<h2 id="add-on-types">Add-on types<a class="headerlink" href="#add-on-types" title="Permanent link">&para;</a></h2>
+<p>A plugin declares what it adds in its manifest, and can add any mix of these. The Plugins page lists what each one adds.</p>
+<table>
+<thead>
+<tr>
+<th>Add-on</th>
+<th>Manifest key</th>
+<th>Code</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Channel</td>
+<td><code>channels</code></td>
+<td><code>plugin.channel</code></td>
+<td>A new way to send campaigns and messages</td>
+</tr>
+<tr>
+<td>Webhook</td>
+<td><code>webhooks</code></td>
+<td><code>plugin.webhook</code></td>
+<td>A public URL that receives requests</td>
+</tr>
+<tr>
+<td>Admin route</td>
+<td><code>adminRoutes</code></td>
+<td><code>plugin.adminRoute</code></td>
+<td>An API for the plugin's own UI</td>
+</tr>
+<tr>
+<td>Settings</td>
+<td><code>settings</code></td>
+<td>None</td>
+<td>A generated tab under <strong>Settings</strong></td>
+</tr>
+<tr>
+<td>Admin UI</td>
+<td><code>ui</code></td>
+<td><code>host.routes</code>, <code>host.nav</code>, <code>host.slots</code></td>
+<td>Pages, navigation and page sections</td>
+</tr>
+<tr>
+<td><a href="#workflow-tools">Workflow tool</a></td>
+<td><code>tools</code></td>
+<td><code>plugin.tool</code></td>
+<td>An action for Tool nodes and agents</td>
+</tr>
+<tr>
+<td><a href="#workflow-events">Workflow event</a></td>
+<td><code>events</code></td>
+<td><code>host.workflows.emit</code></td>
+<td>Something a workflow can start on or wait for</td>
+</tr>
+<tr>
+<td><a href="#agent-presets">Agent preset</a></td>
+<td><code>agentPresets</code></td>
+<td>None</td>
+<td>A ready-made agent for Agent nodes</td>
+</tr>
+<tr>
+<td><a href="#field-editors">Field editor</a></td>
+<td><code>fieldEditors</code></td>
+<td><code>host.fields.add</code></td>
+<td>A custom input for a tool's field</td>
+</tr>
+</tbody>
+</table>
+<p>Plugins add to workflows through tools rather than new node types. A tool already works with approvals, agents, retries and run history.</p>
+<h2 id="building-a-plugin-with-the-assistant">Building a plugin with the assistant<a class="headerlink" href="#building-a-plugin-with-the-assistant" title="Permanent link">&para;</a></h2>
+<p>Super admins can ask the AI assistant to write or change a plugin, from the assistant panel or the <strong>Agent</strong> page. <strong>Build with AI</strong> on the <strong>Plugins</strong> page opens it. Other roles don't have these tools.</p>
+<p>The assistant can read this guide and an installed plugin's source. It works in a draft, which it can write a few files at a time and change with targeted edits. A draft of an installed plugin starts as a copy of it. Drafts are saved on the server, so they outlast a conversation turn and a restart. They run nothing and aren't installed, so writing to one needs no approval. An untouched draft is removed after 30 days. Stored settings and secrets aren't available to the assistant.</p>
+<p>When the draft is finished, the assistant proposes it:</p>
+<ol>
+<li>Its manifest and script syntax are checked, and the assistant fixes any errors it gets back. None of the plugin's code runs at this point, so a plugin that passes may still fail to load.</li>
+<li>Open <strong>Review</strong> to read the code. You can edit it there. For a new version, you can also see what changed from the installed one.</li>
+<li><strong>Install</strong> adds it, disabled, and removes the draft. A new version of an installed plugin keeps its images and other files that aren't text.</li>
+<li>Enable it under <strong>Settings → Plugins</strong>. The app restarts, and any load error appears on that page. Ask the assistant to read it and fix the problem.</li>
+</ol>
+<p>Installing a new version of an enabled plugin needs no further approval to go live: it takes over at the next restart, even one you didn't start for this reason. Disable the plugin first if you aren't ready for that.</p>
+<p>Only plain text files can be written this way: <code>.js</code>, <code>.mjs</code>, <code>.json</code>, <code>.css</code>, <code>.md</code>, <code>.txt</code>, <code>.svg</code> and <code>.html</code>, up to 2 MiB of source in all. Upload a zip for anything else. A draft of a plugin that's already been replaced by an upload can't be proposed, because it would undo that upload. The assistant has to start it again.</p>
+<p>Inbound messages and other data can try to steer an AI model. Be wary of any plugin you didn't ask for, whatever it says it's for.</p>
+<h2 id="installing">Installing<a class="headerlink" href="#installing" title="Permanent link">&para;</a></h2>
+<p>Go to <strong>Settings → Plugins → Install plugin</strong> and upload a zip. A new plugin stays disabled until you enable it.</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Takes effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Install, change settings</td>
+<td>Straight away</td>
+</tr>
+<tr>
+<td>Enable, disable, upgrade, uninstall</td>
+<td>After an automatic restart, which waits for running campaigns</td>
+</tr>
+</tbody>
+</table>
+<p>A plugin can't be disabled while a running or scheduled campaign uses one of its channels.</p>
+<p>You can also copy a plugin to <code>&lt;pb_data&gt;/plugins/&lt;id&gt;/&lt;version&gt;/</code>. It's found at the next start and stays disabled until you enable it.</p>
+<h3 id="if-a-plugin-stops-the-app-from-starting">If a plugin stops the app from starting<a class="headerlink" href="#if-a-plugin-stops-the-app-from-starting" title="Permanent link">&para;</a></h3>
+<p>Set <code>LISTPOCKET_plugins__safe_mode=true</code> to start with no plugins loaded, then disable or uninstall the plugin. A plugin that only fails to load doesn't need this: it's marked as failed and the app carries on. If a campaign's channel is unavailable, the campaign pauses rather than being cancelled.</p>
+<p>To test the admin UI without any plugin's browser code, add <code>?plugins=off</code> to the URL.</p>
+<h2 id="package-layout">Package layout<a class="headerlink" href="#package-layout" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>plugin.json     the manifest
+server.js       server-side code
+ui/index.js     optional browser module; only ui/ is served publicly
+i18n/en.json    optional messages
+</code></pre></div>
+<h2 id="manifest">Manifest<a class="headerlink" href="#manifest" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"schemaVersion"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"telegram"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Telegram"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="s2">"1.0.0"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"server"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"entry"</span><span class="p">:</span><span class="w"> </span><span class="s2">"server.js"</span><span class="p">,</span><span class="w"> </span><span class="nt">"concurrency"</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="nt">"timeoutMs"</span><span class="p">:</span><span class="w"> </span><span class="mi">15000</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"ui"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"entry"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ui/index.js"</span><span class="p">,</span><span class="w"> </span><span class="nt">"css"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"ui/index.css"</span><span class="p">]</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nt">"channels"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span>
+<span class="w">    </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ch:telegram"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Telegram"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"icon"</span><span class="p">:</span><span class="w"> </span><span class="s2">"&lt;SVG path data&gt;"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"addressSource"</span><span class="p">:</span><span class="w"> </span><span class="s2">"channel"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"addressLabel"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Chat ID"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"contentTypes"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"plain"</span><span class="p">],</span>
+<span class="w">    </span><span class="nt">"campaignFields"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"disable_preview"</span><span class="p">,</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"boolean"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Hide link previews"</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">    </span><span class="nt">"rateLimit"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"maxPerSecond"</span><span class="p">:</span><span class="w"> </span><span class="mi">25</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}],</span>
+<span class="w">  </span><span class="nt">"webhooks"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"inbound"</span><span class="p">,</span><span class="w"> </span><span class="nt">"methods"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"POST"</span><span class="p">],</span><span class="w"> </span><span class="nt">"maxBodyBytes"</span><span class="p">:</span><span class="w"> </span><span class="mi">1048576</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">  </span><span class="nt">"adminRoutes"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"path"</span><span class="p">:</span><span class="w"> </span><span class="s2">"contacts"</span><span class="p">,</span><span class="w"> </span><span class="nt">"methods"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"GET"</span><span class="p">],</span><span class="w"> </span><span class="nt">"permission"</span><span class="p">:</span><span class="w"> </span><span class="s2">"plugin_telegram:manage"</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">  </span><span class="nt">"settings"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"key"</span><span class="p">:</span><span class="w"> </span><span class="s2">"bot_token"</span><span class="p">,</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"secret"</span><span class="p">,</span><span class="w"> </span><span class="nt">"label"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Bot token"</span><span class="p">,</span><span class="w"> </span><span class="nt">"required"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">  </span><span class="nt">"permissions"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"group"</span><span class="p">:</span><span class="w"> </span><span class="s2">"plugin_telegram"</span><span class="p">,</span><span class="w"> </span><span class="nt">"permissions"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"plugin_telegram:manage"</span><span class="p">]</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">  </span><span class="nt">"i18n"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"en"</span><span class="p">:</span><span class="w"> </span><span class="s2">"i18n/en.json"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<ul>
+<li><strong><code>id</code>:</strong> lowercase letters, numbers and underscores, starting with a letter. <code>whatsapp</code> is reserved for the built-in channel.</li>
+<li><strong>Channel IDs:</strong> <code>ch:&lt;plugin id&gt;</code> or <code>ch:&lt;plugin id&gt;_&lt;name&gt;</code>.</li>
+<li><strong><code>addressSource</code>:</strong> <code>channel</code> keeps addresses in their own table. <code>phone</code> uses the subscriber's phone number.</li>
+<li><strong><code>contentTypes</code>:</strong> only <code>plain</code> is supported.</li>
+<li><strong><code>campaignBody</code>:</strong> set to <code>none</code> to hide the campaign's content step, for channels that send something else, such as a provider-side template. A UI slot can set the channel's options on <code>campaign.channelFields</code>.</li>
+<li><strong><code>settings</code> and <code>campaignFields</code> types:</strong> <code>text</code>, <code>textarea</code>, <code>secret</code>, <code>select</code> (with <code>options</code>), <code>number</code> or <code>boolean</code>. Settings get a generated tab under <strong>Settings</strong>, so a plugin needs no UI code for configuration.</li>
+<li><strong>Permission groups:</strong> must be <code>plugin_&lt;id&gt;</code>. To label a group on the role form, add <code>globals.terms.plugin_&lt;id&gt;</code> to your messages.</li>
+</ul>
+<h2 id="server-code">Server code<a class="headerlink" href="#server-code" title="Permanent link">&para;</a></h2>
+<p><code>server.js</code> is a classic script, with no <code>import</code>. It runs on a small pool of JavaScript VMs that share nothing, so keep state in <code>host.kv</code>, not in globals. Host calls are synchronous and there's no <code>setTimeout</code>. A call that runs past <code>timeoutMs</code> is stopped.</p>
+<div class="highlight"><pre><span></span><code><span class="nx">plugin</span><span class="p">.</span><span class="nx">channel</span><span class="p">(</span><span class="s1">'ch:telegram'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">send</span><span class="p">(</span><span class="nx">msg</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// msg.to, msg.body, msg.subscriber, msg.campaign</span>
+<span class="w">    </span><span class="c1">// msg.fields: your campaignFields, or the data of a transactional message</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">providerMsgId</span><span class="o">:</span><span class="w"> </span><span class="s1">'123'</span><span class="p">,</span><span class="w"> </span><span class="nx">invalidAddresses</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">};</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">});</span>
+
+<span class="nx">plugin</span><span class="p">.</span><span class="nx">webhook</span><span class="p">(</span><span class="s1">'inbound'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">verify</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">verifyHmacSha256</span><span class="p">(</span><span class="nx">host</span><span class="p">.</span><span class="nx">settings</span><span class="p">.</span><span class="nx">get</span><span class="p">().</span><span class="nx">secret</span><span class="p">,</span><span class="w"> </span><span class="nx">req</span><span class="p">.</span><span class="nx">headers</span><span class="p">[</span><span class="s1">'x-signature'</span><span class="p">],</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">prefix</span><span class="o">:</span><span class="w"> </span><span class="s1">'sha256='</span><span class="w"> </span><span class="p">});</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nx">handle</span><span class="p">(</span><span class="nx">req</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">status</span><span class="o">:</span><span class="w"> </span><span class="mf">200</span><span class="p">,</span><span class="w"> </span><span class="nx">json</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">ok</span><span class="o">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">};</span><span class="w"> </span><span class="p">},</span>
+<span class="p">});</span>
+
+<span class="nx">plugin</span><span class="p">.</span><span class="nx">adminRoute</span><span class="p">(</span><span class="s1">'contacts'</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">req</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">({</span><span class="w"> </span><span class="nx">json</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">contacts</span><span class="o">:</span><span class="w"> </span><span class="p">[]</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}));</span>
+</code></pre></div>
+<h3 id="sending">Sending<a class="headerlink" href="#sending" title="Permanent link">&para;</a></h3>
+<p>Throw <code>host.errors.unsendable('reason')</code> if the recipient can never receive this, or return their addresses in <code>invalidAddresses</code>. Those addresses are retired and the recipient isn't retried. Any other error counts as a retryable send failure, and too many pause the campaign.</p>
+<h3 id="webhooks">Webhooks<a class="headerlink" href="#webhooks" title="Permanent link">&para;</a></h3>
+<p>Webhooks are public, at <code>/webhooks/plugins/&lt;id&gt;/&lt;path&gt;</code>. <code>verify</code> is required unless the manifest says <code>"verify": "none"</code>, and it must return exactly <code>true</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Response</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>404</td>
+<td>Unknown or disabled plugin, or unknown path</td>
+</tr>
+<tr>
+<td>405, 413</td>
+<td>Method not declared, or body over <code>maxBodyBytes</code></td>
+</tr>
+<tr>
+<td>401</td>
+<td><code>verify</code> didn't return <code>true</code></td>
+</tr>
+<tr>
+<td>503, 504</td>
+<td>All VMs busy, or the handler timed out</td>
+</tr>
+<tr>
+<td>500</td>
+<td>The handler threw. Details go to the log only</td>
+</tr>
+</tbody>
+</table>
+<p><code>req</code> has <code>method</code>, <code>path</code>, <code>query</code>, <code>headers</code> (lowercase), <code>body</code>, <code>bodyBase64</code>, <code>json()</code>, <code>verifyHmacSha256(secret, signature, { prefix, encoding })</code> and <code>once(key, ttlSeconds)</code>. A handler that returns nothing sends 200 <code>{"ok":true}</code>; otherwise return <code>{ status, headers, json }</code> or <code>{ status, headers, body }</code>.</p>
+<p>Always use <code>verifyHmacSha256</code> for body signatures. It checks the raw bytes in constant time, and a string in JavaScript can't round-trip them. Providers retry, so use <code>req.once</code> to handle each delivery once.</p>
+<h3 id="host-api">Host API<a class="headerlink" href="#host-api" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>host.settings.get()</code></td>
+<td>Stored settings, including secrets</td>
+</tr>
+<tr>
+<td><code>host.kv.get(key)</code>, <code>set(key, value, { ttlSeconds })</code>, <code>delete(key)</code></td>
+<td>Plugin storage</td>
+</tr>
+<tr>
+<td><code>host.fetch(url, { method, headers, body, timeoutMs })</code></td>
+<td>HTTP. Returns <code>status</code>, <code>ok</code>, <code>headers</code>, <code>body</code>, <code>bodyBase64</code>, <code>json()</code></td>
+</tr>
+<tr>
+<td><code>host.log.info(...)</code>, <code>warn</code>, <code>error</code></td>
+<td>Logging. Secret setting values are redacted</td>
+</tr>
+<tr>
+<td><code>host.crypto.hmacSha256Hex</code>, <code>sha256Hex</code>, <code>timingSafeEqual</code></td>
+<td>Crypto helpers</td>
+</tr>
+<tr>
+<td><code>host.contacts.findByAddress(channel, address)</code>, <code>get(id)</code></td>
+<td>Look up a contact, or <code>null</code></td>
+</tr>
+<tr>
+<td><code>host.contacts.upsertByAddress(channel, address, { name, lists, consent, source })</code></td>
+<td>Find or create a contact. <code>lists</code> takes list UUIDs, and <code>source</code> records where consent came from</td>
+</tr>
+<tr>
+<td><code>host.contacts.setConsent(id, listId, channel, status, { source })</code></td>
+<td><code>confirmed</code> or <code>unsubscribed</code></td>
+</tr>
+<tr>
+<td><code>host.contacts.importSMSConsent(channel, { dryRun, includeInherited })</code></td>
+<td>Grant consent from SMS consent. Returns <code>explicit</code>, <code>inherited</code> and <code>applied</code> counts. Existing consent rows are never overwritten</td>
+</tr>
+<tr>
+<td><code>host.events.record({ channel, direction, kind, status, providerMsgId, subscriberId, address, body, payload })</code></td>
+<td>Add to the subscriber's timeline. Returns <code>false</code> for a repeated <code>providerMsgId</code></td>
+</tr>
+<tr>
+<td><code>host.events.status(channel, providerMsgId, status, { permanent })</code></td>
+<td>Delivery update for a sent message. <code>permanent</code> also records a hard bounce and retires the address</td>
+</tr>
+<tr>
+<td><code>host.events.list({ subscriberId, channel, limit })</code></td>
+<td>A subscriber's latest events, newest first</td>
+</tr>
+<tr>
+<td><code>host.events.counts(campaignId)</code></td>
+<td>A campaign's sends by delivery status</td>
+</tr>
+<tr>
+<td><code>host.events.bounce({ channel, subscriberId, campaignId, type, meta })</code></td>
+<td>Record a bounce. Email bounce actions don't run for it</td>
+</tr>
+<tr>
+<td><code>host.events.optOut(channel, address)</code></td>
+<td>Withdraw consent on that channel, for everyone who owns the address</td>
+</tr>
+<tr>
+<td><code>host.messages.send({ channel, subscriberId, subject, body })</code></td>
+<td>Send one message, if the contact has consented</td>
+</tr>
+<tr>
+<td><code>host.workflows.emit(event, payload)</code></td>
+<td>Raise one of this plugin's <a href="#workflow-events">workflow events</a></td>
+</tr>
+</tbody>
+</table>
+<p>A plugin can only use its own channels.</p>
+<h2 id="workflow-add-ons">Workflow add-ons<a class="headerlink" href="#workflow-add-ons" title="Permanent link">&para;</a></h2>
+<p>Workflow add-ons are named <code>&lt;plugin id&gt;.&lt;name&gt;</code> everywhere they're used. Names use lowercase letters, numbers and underscores. If a workflow's plugin is disabled, publishing it fails validation and any run that reaches the missing tool or preset fails with an error saying so.</p>
+<h3 id="workflow-tools">Workflow tools<a class="headerlink" href="#workflow-tools" title="Permanent link">&para;</a></h3>
+<p>A tool appears in the builder's Tool node and in an Agent node's tool list. The assistant can also find it when it builds workflows.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">"tools"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"get_chat"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Look up a Telegram chat by ID."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"readOnly"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"inputSchema"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"object"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"properties"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"chat_id"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"string"</span><span class="p">,</span><span class="w"> </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Telegram chat ID"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">},</span>
+<span class="w">    </span><span class="nt">"required"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"chat_id"</span><span class="p">]</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}]</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="nx">plugin</span><span class="p">.</span><span class="nx">tool</span><span class="p">(</span><span class="s1">'get_chat'</span><span class="p">,</span><span class="w"> </span><span class="p">(</span><span class="nx">input</span><span class="p">,</span><span class="w"> </span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="c1">// ctx.config is this workflow's tool_config for the tool. ctx.runId is the workflow</span>
+<span class="w">  </span><span class="c1">// run's ID in a Tool node, or the agent run's ID when an agent calls it.</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">title</span><span class="o">:</span><span class="w"> </span><span class="s1">'General'</span><span class="w"> </span><span class="p">};</span>
+<span class="p">});</span>
+</code></pre></div>
+<ul>
+<li><strong><code>description</code>:</strong> required. Models read it to decide when to use the tool, so say what it does and when to use it.</li>
+<li><strong><code>inputSchema</code>:</strong> input is checked against it before your handler runs.</li>
+<li><strong><code>outputSchema</code>:</strong> optional. It says what the tool returns, so the workflow builder can suggest its fields in JavaScript steps and models know what to read. It isn't checked against what your handler returns.</li>
+<li><strong><code>readOnly</code>:</strong> set this only if the tool changes and sends nothing.</li>
+<li><strong><code>requiresApproval</code>:</strong> a person approves each call from a Tool node. It defaults to <code>true</code> unless the tool is read-only. Agents can't pause for approval, so an agent that calls a tool needing it gets an error back. Setting it to <code>false</code> on a tool with side effects lets workflows and agents act with no check, so only do that for low-risk actions.</li>
+<li><strong>Results:</strong> return any JSON value, up to 1 MiB. Later nodes read it as <code>nodes.&lt;id&gt;</code>, and models see it, so never return a secret.</li>
+<li><strong>Errors:</strong> throw to fail the call. Secret setting values are removed from the message. A model can read the error and try again.</li>
+</ul>
+<p>The name of the plugin and the tool can be 62 characters together. A tool can't replace one that already exists: it's skipped and the log says why.</p>
+<h3 id="workflow-events">Workflow events<a class="headerlink" href="#workflow-events" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nt">"events"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"message_received"</span><span class="p">,</span><span class="w"> </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Someone messaged the bot. event: {chat_id, text}"</span><span class="w"> </span><span class="p">}]</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="nx">host</span><span class="p">.</span><span class="nx">workflows</span><span class="p">.</span><span class="nx">emit</span><span class="p">(</span><span class="s1">'message_received'</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">chat_id</span><span class="o">:</span><span class="w"> </span><span class="s1">'42'</span><span class="p">,</span><span class="w"> </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="s1">'Hello'</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<p>Workflows can then start on <code>telegram.message_received</code> or wait for it, and read the payload as <code>event.*</code>. Say what the payload holds in the description, because that's what people and models see when they pick the event. Payloads can be up to 1 MiB.</p>
+<p>Only emit from a handler, not while the script loads. Emit once for each real event: webhook providers retry, so check <code>req.once</code> first. Anyone who can reach an unverified webhook can trigger what it emits, so verify the request before you emit.</p>
+<h3 id="agent-presets">Agent presets<a class="headerlink" href="#agent-presets" title="Permanent link">&para;</a></h3>
+<p>A preset is a ready-made agent. No code is needed.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">"agentPresets"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span>
+<span class="w">  </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"reply_drafter"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Drafts a short reply."</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"systemPrompt"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Draft a reply to: {{ .input.text }}"</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"tools"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"telegram.get_chat"</span><span class="p">],</span>
+<span class="w">  </span><span class="nt">"maxSteps"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"outputSchema"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"object"</span><span class="p">,</span><span class="w"> </span><span class="nt">"properties"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"reply"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"string"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}]</span>
+</code></pre></div>
+<p>Only <code>name</code> and <code>systemPrompt</code> are required. <code>ai</code> sets model options. Anything set on the Agent node overrides the preset, and the node's tools replace the preset's rather than adding to them. Workflows warn about tools with side effects in a preset the same way they do for the node's own tools.</p>
+<h3 id="field-editors">Field editors<a class="headerlink" href="#field-editors" title="Permanent link">&para;</a></h3>
+<p>A field editor replaces the plain input for one field of a tool in the builder.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">"fieldEditors"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"chat"</span><span class="p">,</span><span class="w"> </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Pick a chat."</span><span class="w"> </span><span class="p">}],</span>
+<span class="nt">"tools"</span><span class="p">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"get_chat"</span><span class="p">,</span><span class="w"> </span><span class="nt">"description"</span><span class="p">:</span><span class="w"> </span><span class="s2">"…"</span><span class="p">,</span><span class="w"> </span><span class="nt">"inputSchema"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"object"</span><span class="p">,</span><span class="w"> </span><span class="nt">"properties"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"chat_id"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"string"</span><span class="p">,</span><span class="w"> </span><span class="nt">"x-ui"</span><span class="p">:</span><span class="w"> </span><span class="s2">"telegram.chat"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}]</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">setup</span><span class="p">(</span><span class="nx">host</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">host</span><span class="p">.</span><span class="nx">fields</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">'chat'</span><span class="p">,</span><span class="w"> </span><span class="nx">defineComponent</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">props</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'modelValue'</span><span class="p">,</span><span class="w"> </span><span class="s1">'label'</span><span class="p">,</span><span class="w"> </span><span class="s1">'hint'</span><span class="p">,</span><span class="w"> </span><span class="s1">'readonly'</span><span class="p">,</span><span class="w"> </span><span class="s1">'schema'</span><span class="p">,</span><span class="w"> </span><span class="s1">'options'</span><span class="p">],</span>
+<span class="w">    </span><span class="nx">emits</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s1">'update:modelValue'</span><span class="p">],</span>
+<span class="w">    </span><span class="nx">setup</span><span class="p">(</span><span class="nx">props</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">emit</span><span class="w"> </span><span class="p">})</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* render an input */</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="p">}));</span>
+<span class="p">}</span>
+</code></pre></div>
+<p><code>x-ui</code> is an editor's name, or <code>{ "widget": "telegram.chat", ...options }</code> to pass <code>options</code> to it. An editor needs a <code>ui</code> entry, and it can be used by another plugin's tools. If it isn't running, the field gets a plain input, so the stored value must make sense on its own. People can also type <code>{{ }}</code> expressions into tool inputs, so an editor shouldn't reject them.</p>
+<h2 id="consent">Consent<a class="headerlink" href="#consent" title="Permanent link">&para;</a></h2>
+<p>Channel consent is separate from email and SMS. A contact gets a campaign on a plugin channel only if they have confirmed consent for one of its lists on that channel and an active address. With no consent row, nothing is sent. Opt-in campaigns aren't available on plugin channels.</p>
+<p>An opt-out is channel-wide and stays until new consent is given. A rejected address is different: it stops sends to that address but isn't an opt-out, and a message from that address clears it. Status updates can arrive in any order, including before the send is recorded, and never move backwards.</p>
+<p>A contact created by <code>upsertByAddress</code> has no email. They're stored with a placeholder under <code>no-email.invalid</code>, which is never shown or sent to and can't be claimed by anyone. Entering a real address on their subscriber page replaces it.</p>
+<h2 id="browser-code">Browser code<a class="headerlink" href="#browser-code" title="Permanent link">&para;</a></h2>
+<p><code>ui/index.js</code> is an ES module that exports a setup function. Imports of <code>vue</code>, <code>vuetify</code> and <code>vuetify/components</code> resolve to the host's copies, so keep them external if you use a bundler. Global Vuetify components such as <code>v-btn</code> are available through <code>resolveComponent</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">defineComponent</span><span class="p">,</span><span class="w"> </span><span class="nx">h</span><span class="p">,</span><span class="w"> </span><span class="nx">resolveComponent</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">'vue'</span><span class="p">;</span>
+
+<span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">setup</span><span class="p">(</span><span class="nx">host</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">Page</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">defineComponent</span><span class="p">({</span>
+<span class="w">    </span><span class="nx">setup</span><span class="o">:</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">h</span><span class="p">(</span><span class="nx">resolveComponent</span><span class="p">(</span><span class="s1">'v-alert'</span><span class="p">),</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">text</span><span class="o">:</span><span class="w"> </span><span class="nx">host</span><span class="p">.</span><span class="nx">t</span><span class="p">(</span><span class="s1">'telegram.note'</span><span class="p">)</span><span class="w"> </span><span class="p">}),</span>
+<span class="w">  </span><span class="p">});</span>
+
+<span class="w">  </span><span class="nx">host</span><span class="p">.</span><span class="nx">routes</span><span class="p">.</span><span class="nx">add</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s1">'contacts'</span><span class="p">,</span><span class="w"> </span><span class="nx">path</span><span class="o">:</span><span class="w"> </span><span class="s1">'contacts'</span><span class="p">,</span><span class="w"> </span><span class="nx">title</span><span class="o">:</span><span class="w"> </span><span class="s1">'telegram.contacts'</span><span class="p">,</span><span class="w"> </span><span class="nx">component</span><span class="o">:</span><span class="w"> </span><span class="nx">Page</span><span class="p">,</span><span class="w"> </span><span class="nx">permission</span><span class="o">:</span><span class="w"> </span><span class="s1">'plugin_telegram:manage'</span><span class="w"> </span><span class="p">});</span>
+<span class="w">  </span><span class="nx">host</span><span class="p">.</span><span class="nx">nav</span><span class="p">.</span><span class="nx">add</span><span class="p">({</span><span class="w"> </span><span class="nx">route</span><span class="o">:</span><span class="w"> </span><span class="s1">'contacts'</span><span class="p">,</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'Contacts'</span><span class="p">,</span><span class="w"> </span><span class="nx">icon</span><span class="o">:</span><span class="w"> </span><span class="s1">'&lt;SVG path data&gt;'</span><span class="p">,</span><span class="w"> </span><span class="nx">parent</span><span class="o">:</span><span class="w"> </span><span class="s1">'settings'</span><span class="w"> </span><span class="p">});</span>
+<span class="w">  </span><span class="nx">host</span><span class="p">.</span><span class="nx">settings</span><span class="p">.</span><span class="nx">addTab</span><span class="p">({</span><span class="w"> </span><span class="nx">key</span><span class="o">:</span><span class="w"> </span><span class="s1">'advanced'</span><span class="p">,</span><span class="w"> </span><span class="nx">label</span><span class="o">:</span><span class="w"> </span><span class="s1">'Advanced'</span><span class="p">,</span><span class="w"> </span><span class="nx">component</span><span class="o">:</span><span class="w"> </span><span class="nx">Page</span><span class="w"> </span><span class="p">});</span>
+<span class="w">  </span><span class="nx">host</span><span class="p">.</span><span class="nx">slots</span><span class="p">.</span><span class="nx">add</span><span class="p">(</span><span class="s1">'subscriber.form.after'</span><span class="p">,</span><span class="w"> </span><span class="nx">Page</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+<ul>
+<li><strong><code>host</code></strong> also has <code>fetch(path, options)</code> for your <code>adminRoutes</code>, <code>fields</code> for <a href="#field-editors">field editors</a>, <code>t</code>, <code>can</code>, <code>router</code> and <code>toast</code>.</li>
+<li><strong>Paths and names</strong> are namespaced: the route above is <code>/plugins/telegram/contacts</code>.</li>
+<li><strong>Icons:</strong> use SVG path data. Named <code>mdi-*</code> icons only work if the host already bundles them.</li>
+<li><strong>Slots:</strong> <code>campaign.form.after</code>, <code>template.form.after</code>, <code>subscriber.form.after</code>, <code>subscriber.activity.item</code>, <code>dashboard.widgets</code>.</li>
+<li><strong>Failures:</strong> a module that throws or takes over 5 seconds is reported on the Plugins page and skipped. A component that throws is replaced by an error notice.</li>
+<li><strong>Secrets:</strong> files in <code>ui/</code> are served without login, so never put secrets in them.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      CC BY-SA 4.0
+    </div>
+  
+  
+    Made with
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["navigation.indexes","navigation.sections","content.code.copy"],"redirect":null,"search":"../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d31f0ffa.min.js"></script>
+      
+    
+  </body>
+</html>

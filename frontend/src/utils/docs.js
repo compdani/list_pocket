@@ -1,5 +1,5 @@
 /**
- * Built-in MkDocs manual is served by the app at /docs/ (see cmd/doc_serve.go).
+ * Built-in documentation site is served by the app at /docs/ (see cmd/doc_serve.go).
  * Optional override: VITE_DOCS_BASE=/custom/path
  */
 const base = (import.meta.env.VITE_DOCS_BASE || '/docs').replace(/\/$/, '');

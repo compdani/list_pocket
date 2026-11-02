@@ -5,3 +5,5 @@ pb_data
 /listpocket
 /config.toml
 .DS_Store
+.venv
+docs/docs/.cache

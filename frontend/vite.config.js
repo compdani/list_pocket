@@ -81,7 +81,7 @@ export default defineConfig(({ _, mode }) => {
         '^/(admin\/custom\.(css|js))': {
           target: apiTarget,
         },
-        // Built-in MkDocs + OpenAPI (same origin as API in production)
+        // Built-in docs site + OpenAPI (same origin as API in production)
         '^/docs': {
           target: apiTarget,
         },

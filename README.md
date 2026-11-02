@@ -1,20 +1,51 @@
 # listpocket
 
-listpocket is a self-hosted newsletter and mailing list manager. It started as a fork of [listmonk](https://listmonk.app) but has diverged significantly in both architecture and scope.
+listpocket is a self-hosted newsletter, messaging, and contact platform. It started as a fork of [listmonk](https://listmonk.app) but has diverged in architecture and scope: campaigns and lists remain the core, with an inbox, CRM boards, workflows, an AI agent, WhatsApp, and a plugin host on top.
 
 Maintained by Danilo Urrutia.
 
 ## What It Is
 
-listpocket is intended for running and managing newsletters from your own infrastructure while keeping the application stack straightforward to develop and deploy.
+A single Go binary plus a Vue 3 admin UI. Persistence, auth, and file storage are [PocketBase](https://pocketbase.io) (SQLite under `pb_data/`). There is no external database server.
+
+The admin UI lives at `/admin/`. Public subscription, tracking, and archive URLs are served from the same process.
+
+## Capabilities
+
+**Audience**
+- Subscribers, lists, import, bounce processing, and public subscription forms
+- Contact pages with a unified activity timeline
+- Boards and tasks for pipeline work around those contacts
+
+**Messaging**
+- Email, SMS, and WhatsApp campaigns (Meta Cloud API or Whapi.Cloud)
+- Rich text, visual, HTML, and MJML editors, plus reusable templates
+- Media library (PocketBase files, used from the editors and the assistant)
+- Transactional messages, public archives, analytics, and open/click tracking
+- Inbox for inbound email and WhatsApp replies
+
+**Automation and AI**
+- Visual workflows: triggers, branches, loops, reviews, waits, tools, JavaScript code nodes, and set nodes for variables
+- Agent page and assistant side panel: read with your permissions, propose writes for you to review
+- Workflow AI steps using the same provider as Settings → AI (OpenAI-compatible API key, or ChatGPT plan sign-in)
+
+**Admin**
+- Users, roles, list-scoped permissions, 2FA, and optional OIDC
+- Super-admin plugins: new channels, webhooks, admin UI, and workflow tools without a rebuild
+- Light / dark / system theme
+
+User-facing documentation is the Zensical manual (build it, then open `/docs/`). The OpenAPI spec is at `/openapi.yaml` and Swagger UI at `/swagger/`.
 
 ## How It Differs from listmonk
 
-While listpocket draws inspiration from listmonk, it is **not a drop-in replacement** and has been substantially reworked:
+listpocket is **not a drop-in replacement**:
 
-- **Frontend rewrite.** The admin UI is a complete rewrite in Vue 3 using Vuetify 3. None of the original frontend code remains.
-- **PocketBase as the sole datastore.** Rather than supporting multiple SQL backends, listpocket uses [PocketBase](https://pocketbase.io) as its main and only database. This is a deliberate design choice — it simplifies deployment, embeds auth and storage, and removes the need for an external database server.
-- **Go backend, restructured.** The backend retains a Go foundation but has been adapted to integrate directly with PocketBase rather than the original listmonk data layer.
+- **Frontend rewrite.** Vue 3 and Vuetify 3. None of the original frontend remains.
+- **PocketBase only.** No PostgreSQL or other SQL backends. Auth, collections, realtime, and uploads go through PocketBase.
+- **Go backend, restructured.** HTTP is PocketBase `RequestEvent` handlers (`/mailapi/`), not the original listmonk Echo stack. Integer rowids still exist internally; API edges use PocketBase record IDs.
+- **Beyond newsletters.** Inbox, boards, tasks, workflows, the agent, WhatsApp, and plugins are not in upstream listmonk.
+
+Upstream listmonk guides that assume `LISTMONK_*` or a `[db]` block do not apply here. Environment variables are `LISTPOCKET_*`.
 
 ## Project Status & Contributions
 
@@ -29,25 +60,19 @@ If you need a managed, community-driven newsletter platform, [listmonk](https://
 
 ## Run in Development
 
-Before starting the app locally, make sure you have:
-
-- Go
-- Node.js and npm
-- A local `config.toml` copied from `config.toml.sample`
-
-Create your local config file:
+You need Go (see `go.mod`), Node.js and npm, and a local `config.toml`:
 
 ```bash
 cp config.toml.sample config.toml
 ```
 
-Start the backend from the repository root:
+Backend, from the repository root:
 
 ```bash
 go run ./cmd
 ```
 
-Start the frontend dev server in a second terminal:
+Frontend, in a second terminal:
 
 ```bash
 cd frontend
@@ -55,13 +80,17 @@ npm install
 npm run dev
 ```
 
-By default, the backend listens on `http://127.0.0.1:9000` and the frontend dev server runs on `http://127.0.0.1:8080`.
+By default the backend is `http://127.0.0.1:9000` and the Vite app is `http://127.0.0.1:8080` (it proxies `/api`, `/mailapi`, and related paths to the backend).
 
-With the repo layout unchanged, the server also exposes **`/openapi.yaml`** and **`/swagger/`** (from `docs/swagger/`), and after `mkdocs build` in `docs/docs`, the manual at **`/docs/`**.
+Optional:
+
+- `LISTPOCKET_AI_API_KEY`, `LISTPOCKET_AI_BASE_URL`, and `LISTPOCKET_AI_MODEL` for the assistant, Agent page, and workflow AI steps
+- `zensical build` in `docs/docs` so `/docs/` is available while the backend is running
+- `go run ./cmd migrate up` to apply migrations without serving (they also run on startup)
 
 ## Build
 
-Build the frontend assets first, then compile the backend binary:
+Frontend first, then the binary:
 
 ```bash
 cd frontend
@@ -72,13 +101,23 @@ cd ..
 go build -o listpocket ./cmd
 ```
 
-This produces the frontend bundle in `frontend/dist` and the backend binary at `./listpocket`.
+That writes `frontend/dist` and `./listpocket`. The binary embeds templates, i18n, permissions, and the sample config. Serve the admin UI from `frontend/dist` on disk. Run with `config.toml` and optional `LISTPOCKET_*` variables (`LISTPOCKET_app__address` maps to `app.address`).
+
+Docker (multi-stage: frontend, Zensical, Go):
+
+```bash
+docker build -t listpocket .
+docker run --rm -p 9000:9000 -v listpocket-data:/app/pb_data listpocket
+```
+
+The image listens on `0.0.0.0:9000` and stores PocketBase data in `/app/pb_data`.
 
 ## Tech Stack
 
-- **Backend:** Go
-- **Frontend:** Vue 3 + Vuetify 3
-- **Database / Auth / Storage:** PocketBase
+- **Backend:** Go, embedded PocketBase
+- **Frontend:** Vue 3, Vuetify 3, Vite
+- **Database / auth / files:** PocketBase (SQLite)
+- **Editors and canvas:** TinyMCE, GrapesJS (MJML), Vue Flow (workflows)
 
 ## License
 
@@ -87,5 +126,5 @@ listpocket is free and open source software licensed under **AGPLv3**.
 ## Credits
 
 - [listmonk](https://listmonk.app) — original foundation and architectural inspiration.
-- [Vuetify](https://vuetifyjs.com) — UI framework powering the rewritten admin frontend.
-- [PocketBase](https://pocketbase.io) — embedded backend providing the database, auth, and storage layer.
+- [Vuetify](https://vuetifyjs.com) — UI framework for the admin frontend.
+- [PocketBase](https://pocketbase.io) — embedded database, auth, and storage.

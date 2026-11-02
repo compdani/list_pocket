@@ -87,5 +87,5 @@ When the app is running, the OpenAPI spec is served at **`/openapi.yaml`** and i
 
 The same files live in the repository under [`docs/swagger/`](https://github.com/compdani/list_pocket/tree/master/docs/swagger); you can also import `collections.yaml` into external tooling.
 
-The MkDocs manual is served at **`/docs/`** after you run `mkdocs build` in `docs/docs` (or set `app.docs_dir` to your `site_dir` output).
+The documentation manual is served at **`/docs/`** after you run `zensical build` in `docs/docs` (or set `app.docs_dir` to your `site_dir` output).
 

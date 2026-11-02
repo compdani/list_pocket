@@ -16,7 +16,7 @@ WORKDIR /src/docs/docs
 COPY docs/docs/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY docs/docs/ ./
-RUN mkdocs build
+RUN zensical build
 
 
 FROM golang:1.27-alpine AS go-builder

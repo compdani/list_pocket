@@ -12,7 +12,7 @@ import (
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
-// registerDocsRoutes serves the MkDocs build at /docs/, the OpenAPI file at /openapi.yaml,
+// registerDocsRoutes serves the Zensical build at /docs/, the OpenAPI file at /openapi.yaml,
 // and Swagger UI at /swagger/ when the configured or default paths exist on disk.
 func registerDocsRoutes(se *pbcore.ServeEvent, ko *config.Conf) {
 	swaggerDir := resolveSwaggerDir(ko)
@@ -45,7 +45,7 @@ func registerDocsRoutes(se *pbcore.ServeEvent, ko *config.Conf) {
 		lo.Printf("app.docs_dir %q not found or not a directory; skipping /docs", docsDir)
 		return
 	}
-	lo.Printf("documentation site at /docs/ (MkDocs output: %s)", docsDir)
+	lo.Printf("documentation site at /docs/ (Zensical output: %s)", docsDir)
 
 	// Single catch-all: Go's ServeMux rejects registering both /docs/ and /docs/{path...}
 	// because they match the same requests. Handle /docs → /docs/ redirect here too.

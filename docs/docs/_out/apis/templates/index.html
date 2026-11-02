@@ -11,6 +11,7 @@
         <link rel="canonical" href="http://127.0.0.1:9000/docs/apis/templates/">
       
       
+      
         <link rel="prev" href="../media/">
       
       
@@ -21,7 +22,7 @@
       
       
       <link rel="icon" href="../../images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="zensical-0.0.74">
     
     
       
@@ -29,10 +30,15 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      <link rel="stylesheet" href="../../assets/stylesheets/classic/main.94dd801d.min.css">
+      
+        
+          
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/classic/palette.813d4b3f.min.css">
       
       
 
@@ -46,14 +52,14 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,500,500i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback">
         <style>:root{--md-text-font:"Inter";--md-code-font:"Roboto Mono"}</style>
       
     
     
       <link rel="stylesheet" href="../../static/style.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_scope.pathname.endsWith("/")||(__md_scope=new URL(__md_scope.pathname+"/",location)),__md_hash=e=>[...e].reduce(((e,t)=>(e<<5)-e+t.charCodeAt(0)),0),__md_get=(e,t=localStorage,_=__md_scope)=>JSON.parse(t.getItem(_.pathname+"."+e)),__md_set=(e,t,_=localStorage,a=__md_scope)=>{try{_.setItem(a.pathname+"."+e,JSON.stringify(t))}catch(e){}},document.documentElement.setAttribute("data-platform",navigator.platform)</script>
     
       
 
@@ -64,6 +70,8 @@
   
     
     
+      
+    
     
     
     
@@ -72,14 +80,11 @@
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
     <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
-    <label class="md-overlay" for="__drawer"></label>
+    <label class="md-overlay" for="__drawer" aria-hidden="true"></label>
     <div data-md-component="skip">
-      
-        
-        <a href="#api-templates" class="md-skip">
-          Skip to content
-        </a>
-      
+      <a href="#__skip" class="md-skip">
+        Skip to content
+      </a>
     </div>
     <div data-md-component="announce">
       
@@ -92,14 +97,15 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="List Pocket / Documentation" class="md-header__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
+    <a href="../.." title="List Pocket &#x2f; Documentation" class="md-header__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
       
-  <img src="../../images/favicon.png" alt="logo">
+  <img src="../../images/favicon.png" alt="List Pocket / Documentation">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      <span class="md-visually-hidden">Navigation</span>
     </label>
     <div class="md-header__title" data-md-component="header-title">
       <div class="md-header__ellipsis">
@@ -119,7 +125,19 @@
     </div>
     
       
+        <form class="md-header__option" data-md-component="palette">
+  
     
+    
+    
+    <input class="md-option" data-md-color-media="none" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="red"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
     
     
     
@@ -128,42 +146,18 @@
         <label class="md-header__button md-icon" for="__search">
           
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+          <span class="md-visually-hidden">Search</span>
         </label>
-        <div class="md-search" data-md-component="search" role="dialog">
-  <label class="md-search__overlay" for="__search"></label>
-  <div class="md-search__inner" role="search">
-    <form class="md-search__form" name="search">
-      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
-      <label class="md-search__icon md-icon" for="__search">
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
-      </label>
-      <nav class="md-search__options" aria-label="Search">
-        
-        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
-          
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </button>
-      </nav>
-      
-    </form>
-    <div class="md-search__output">
-      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
-        <div class="md-search-result" data-md-component="search-result">
-          <div class="md-search-result__meta">
-            Initializing search
-          </div>
-          <ol class="md-search-result__list" role="presentation"></ol>
-        </div>
-      </div>
-    </div>
-  </div>
+        <div class="md-search" data-md-component="search" role="dialog" aria-label="Search">
+  <button type="button" class="md-search__button">
+    Search
+  </button>
 </div>
       
     
-    
+    <div class="md-header__source">
+      
+    </div>
   </nav>
   
 </header>
@@ -189,9 +183,9 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="List Pocket / Documentation" class="md-nav__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
+    <a href="../.." title="List Pocket &#x2f; Documentation" class="md-nav__button md-logo" aria-label="List Pocket / Documentation" data-md-component="logo">
       
-  <img src="../../images/favicon.png" alt="logo">
+  <img src="../../images/favicon.png" alt="List Pocket / Documentation">
 
     </a>
     List Pocket / Documentation
@@ -213,8 +207,7 @@
   <span class="md-ellipsis">
     
   
-    Introduction
-  
+  Introduction
 
     
   </span>
@@ -264,8 +257,7 @@
   <span class="md-ellipsis">
     
   
-    Getting Started
-  
+  Getting Started
 
     
   </span>
@@ -275,19 +267,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_2">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_2">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Getting Started
-  
+  Getting Started
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -300,8 +292,7 @@
   <span class="md-ellipsis">
     
   
-    Installation
-  
+  Installation
 
     
   </span>
@@ -312,10 +303,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -328,8 +319,7 @@
   <span class="md-ellipsis">
     
   
-    Configuration
-  
+  Configuration
 
     
   </span>
@@ -340,10 +330,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -356,8 +346,7 @@
   <span class="md-ellipsis">
     
   
-    Upgrade
-  
+  Upgrade
 
     
   </span>
@@ -368,10 +357,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -385,6 +375,14 @@
   
     
     
+      
+        
+      
+        
+      
+        
+      
+        
       
         
       
@@ -429,8 +427,7 @@
   <span class="md-ellipsis">
     
   
-    Using List Pocket
-  
+  Using List Pocket
 
     
   </span>
@@ -440,19 +437,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_3">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Using List Pocket
-  
+  Using List Pocket
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -465,8 +462,7 @@
   <span class="md-ellipsis">
     
   
-    Concepts
-  
+  Concepts
 
     
   </span>
@@ -477,10 +473,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -493,8 +489,7 @@
   <span class="md-ellipsis">
     
   
-    Templating
-  
+  Templating
 
     
   </span>
@@ -505,10 +500,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -521,8 +516,7 @@
   <span class="md-ellipsis">
     
   
-    Querying and segmenting subscribers
-  
+  Querying and segmenting subscribers
 
     
   </span>
@@ -533,10 +527,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -549,8 +543,7 @@
   <span class="md-ellipsis">
     
   
-    Bounce processing
-  
+  Bounce processing
 
     
   </span>
@@ -561,10 +554,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -577,8 +570,7 @@
   <span class="md-ellipsis">
     
   
-    Messengers
-  
+  Messengers
 
     
   </span>
@@ -589,10 +581,118 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../whatsapp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  WhatsApp
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Workflows
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  AI and the agent
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../plugins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+  Plugins
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+                
+              
+                
+                  
   
   
   
@@ -605,8 +705,7 @@
   <span class="md-ellipsis">
     
   
-    Archives
-  
+  Archives
 
     
   </span>
@@ -617,10 +716,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -633,8 +732,7 @@
   <span class="md-ellipsis">
     
   
-    Internationalization
-  
+  Internationalization
 
     
   </span>
@@ -645,10 +743,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -661,8 +759,7 @@
   <span class="md-ellipsis">
     
   
-    Integrating with external systems
-  
+  Integrating with external systems
 
     
   </span>
@@ -673,10 +770,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -689,8 +786,7 @@
   <span class="md-ellipsis">
     
   
-    User roles and permissions
-  
+  User roles and permissions
 
     
   </span>
@@ -701,10 +797,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -717,8 +813,7 @@
   <span class="md-ellipsis">
     
   
-    OIDC SSO
-  
+  OIDC SSO
 
     
   </span>
@@ -729,10 +824,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -792,8 +888,7 @@
   <span class="md-ellipsis">
     
   
-    API
-  
+  API
 
     
   </span>
@@ -803,19 +898,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_4">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+            <label class="md-nav__title" for="__nav_4">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    API
-  
+  API
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -828,8 +923,7 @@
   <span class="md-ellipsis">
     
   
-    Introduction
-  
+  Introduction
 
     
   </span>
@@ -840,10 +934,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -856,8 +950,7 @@
   <span class="md-ellipsis">
     
   
-    SDKs and libs
-  
+  SDKs and libs
 
     
   </span>
@@ -868,10 +961,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -884,8 +977,7 @@
   <span class="md-ellipsis">
     
   
-    Subscribers
-  
+  Subscribers
 
     
   </span>
@@ -896,10 +988,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -912,8 +1004,7 @@
   <span class="md-ellipsis">
     
   
-    Lists
-  
+  Lists
 
     
   </span>
@@ -924,10 +1015,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -940,8 +1031,7 @@
   <span class="md-ellipsis">
     
   
-    Import
-  
+  Import
 
     
   </span>
@@ -952,10 +1042,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -968,8 +1058,7 @@
   <span class="md-ellipsis">
     
   
-    Campaigns
-  
+  Campaigns
 
     
   </span>
@@ -980,10 +1069,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -996,8 +1085,7 @@
   <span class="md-ellipsis">
     
   
-    Media
-  
+  Media
 
     
   </span>
@@ -1008,10 +1096,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
     
@@ -1020,7 +1108,9 @@
   
     <li class="md-nav__item md-nav__item--active">
       
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+        <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
       
       
         
@@ -1033,8 +1123,7 @@
   <span class="md-ellipsis">
     
   
-    Templates
-  
+  Templates
 
     
   </span>
@@ -1044,15 +1133,14 @@
           <span class="md-nav__icon md-icon"></span>
         </label>
       
-      <a href="./" class="md-nav__link md-nav__link--active">
+      <a href="././" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
     
   
-    Templates
-  
+  Templates
 
     
   </span>
@@ -1063,7 +1151,8 @@
       
         
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
   
   
   
@@ -1072,28 +1161,28 @@
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
-      Table of contents
+      On this page
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
   <a href="#get-apitemplates" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         GET /api/templates
-      
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GET /api/templates">
+    <nav class="md-nav" aria-label="GET &#x2f;api&#x2f;templates">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#example-request" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1102,9 +1191,9 @@
           <li class="md-nav__item">
   <a href="#example-response" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1116,23 +1205,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#get-apitemplatestemplate_id" class="md-nav__link">
+  <a href="#get-apitemplatesid" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        GET /api/templates/{template_id}
-      
+      <span class="md-typeset">
+        GET /api/templates/{id}
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GET /api/templates/{template_id}">
+    <nav class="md-nav" aria-label="GET &#x2f;api&#x2f;templates&#x2f;{id}">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1141,9 +1230,9 @@
           <li class="md-nav__item">
   <a href="#example-request_1" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1152,9 +1241,9 @@
           <li class="md-nav__item">
   <a href="#example-response_1" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1166,23 +1255,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#get-apitemplatestemplate_idpreview" class="md-nav__link">
+  <a href="#get-apitemplatesidpreview" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        GET /api/templates/{template_id}/preview
-      
+      <span class="md-typeset">
+        GET /api/templates/{id}/preview
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GET /api/templates/{template_id}/preview">
+    <nav class="md-nav" aria-label="GET &#x2f;api&#x2f;templates&#x2f;{id}&#x2f;preview">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_1" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1191,9 +1280,9 @@
           <li class="md-nav__item">
   <a href="#example-request_2" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1202,9 +1291,9 @@
           <li class="md-nav__item">
   <a href="#example-response_2" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1218,21 +1307,21 @@
         <li class="md-nav__item">
   <a href="#post-apitemplates" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         POST /api/templates
-      
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="POST /api/templates">
+    <nav class="md-nav" aria-label="POST &#x2f;api&#x2f;templates">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_2" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1241,9 +1330,9 @@
           <li class="md-nav__item">
   <a href="#example-request_3" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1252,9 +1341,9 @@
           <li class="md-nav__item">
   <a href="#example-response_3" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1266,34 +1355,34 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#put-apitemplatestemplate_id" class="md-nav__link">
+  <a href="#put-apitemplatesid" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        PUT /api/templates/{template_id}
-      
+      <span class="md-typeset">
+        PUT /api/templates/{id}
+      </span>
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#put-apitemplatestemplate_iddefault" class="md-nav__link">
+  <a href="#put-apitemplatesiddefault" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        PUT /api/templates/{template_id}/default
-      
+      <span class="md-typeset">
+        PUT /api/templates/{id}/default
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="PUT /api/templates/{template_id}/default">
+    <nav class="md-nav" aria-label="PUT &#x2f;api&#x2f;templates&#x2f;{id}&#x2f;default">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_3" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1302,9 +1391,9 @@
           <li class="md-nav__item">
   <a href="#example-request_4" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1313,9 +1402,9 @@
           <li class="md-nav__item">
   <a href="#example-response_4" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1327,23 +1416,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#delete-apitemplatestemplate_id" class="md-nav__link">
+  <a href="#delete-apitemplatesid" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        DELETE /api/templates/{template_id}
-      
+      <span class="md-typeset">
+        DELETE /api/templates/{id}
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="DELETE /api/templates/{template_id}">
+    <nav class="md-nav" aria-label="DELETE &#x2f;api&#x2f;templates&#x2f;{id}">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_4" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1352,9 +1441,9 @@
           <li class="md-nav__item">
   <a href="#example-request_5" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1363,9 +1452,9 @@
           <li class="md-nav__item">
   <a href="#example-response_5" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1383,10 +1472,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1399,8 +1488,7 @@
   <span class="md-ellipsis">
     
   
-    Transactional
-  
+  Transactional
 
     
   </span>
@@ -1411,10 +1499,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1427,8 +1515,7 @@
   <span class="md-ellipsis">
     
   
-    Bounces
-  
+  Bounces
 
     
   </span>
@@ -1439,10 +1526,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1482,8 +1570,7 @@
   <span class="md-ellipsis">
     
   
-    Maintenance
-  
+  Maintenance
 
     
   </span>
@@ -1493,19 +1580,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_5">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Maintenance
-  
+  Maintenance
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -1518,8 +1605,7 @@
   <span class="md-ellipsis">
     
   
-    Performance
-  
+  Performance
 
     
   </span>
@@ -1530,10 +1616,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1575,8 +1662,7 @@
   <span class="md-ellipsis">
     
   
-    Contributions
-  
+  Contributions
 
     
   </span>
@@ -1586,19 +1672,19 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
-            <span class="md-nav__icon md-icon"></span>
-            
+        
+          <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+            <label class="md-nav__title" for="__nav_6">
+              <span class="md-nav__icon md-icon"></span>
+              
   
-    Contributions
-  
+  Contributions
 
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
+            </label>
+            <ul class="md-nav__list" data-md-scrollfix>
               
                 
+                  
   
   
   
@@ -1611,8 +1697,7 @@
   <span class="md-ellipsis">
     
   
-    Developer setup
-  
+  Developer setup
 
     
   </span>
@@ -1623,10 +1708,10 @@
     </li>
   
 
-              
-            
+                
               
                 
+                  
   
   
   
@@ -1639,8 +1724,7 @@
   <span class="md-ellipsis">
     
   
-    Security reports
-  
+  Security reports
 
     
   </span>
@@ -1651,10 +1735,11 @@
     </li>
   
 
+                
               
-            
-          </ul>
-        </nav>
+            </ul>
+          </nav>
+        
       
     </li>
   
@@ -1670,10 +1755,12 @@
               
               <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
+                  
                   <div class="md-sidebar__inner">
                     
 
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+
+<nav class="md-nav md-nav--secondary" aria-label="On this page">
   
   
   
@@ -1682,28 +1769,28 @@
   
     <label class="md-nav__title" for="__toc">
       <span class="md-nav__icon md-icon"></span>
-      Table of contents
+      On this page
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
   <a href="#get-apitemplates" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         GET /api/templates
-      
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GET /api/templates">
+    <nav class="md-nav" aria-label="GET &#x2f;api&#x2f;templates">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#example-request" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1712,9 +1799,9 @@
           <li class="md-nav__item">
   <a href="#example-response" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1726,23 +1813,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#get-apitemplatestemplate_id" class="md-nav__link">
+  <a href="#get-apitemplatesid" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        GET /api/templates/{template_id}
-      
+      <span class="md-typeset">
+        GET /api/templates/{id}
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GET /api/templates/{template_id}">
+    <nav class="md-nav" aria-label="GET &#x2f;api&#x2f;templates&#x2f;{id}">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1751,9 +1838,9 @@
           <li class="md-nav__item">
   <a href="#example-request_1" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1762,9 +1849,9 @@
           <li class="md-nav__item">
   <a href="#example-response_1" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1776,23 +1863,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#get-apitemplatestemplate_idpreview" class="md-nav__link">
+  <a href="#get-apitemplatesidpreview" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        GET /api/templates/{template_id}/preview
-      
+      <span class="md-typeset">
+        GET /api/templates/{id}/preview
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="GET /api/templates/{template_id}/preview">
+    <nav class="md-nav" aria-label="GET &#x2f;api&#x2f;templates&#x2f;{id}&#x2f;preview">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_1" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1801,9 +1888,9 @@
           <li class="md-nav__item">
   <a href="#example-request_2" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1812,9 +1899,9 @@
           <li class="md-nav__item">
   <a href="#example-response_2" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1828,21 +1915,21 @@
         <li class="md-nav__item">
   <a href="#post-apitemplates" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         POST /api/templates
-      
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="POST /api/templates">
+    <nav class="md-nav" aria-label="POST &#x2f;api&#x2f;templates">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_2" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1851,9 +1938,9 @@
           <li class="md-nav__item">
   <a href="#example-request_3" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1862,9 +1949,9 @@
           <li class="md-nav__item">
   <a href="#example-response_3" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1876,34 +1963,34 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#put-apitemplatestemplate_id" class="md-nav__link">
+  <a href="#put-apitemplatesid" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        PUT /api/templates/{template_id}
-      
+      <span class="md-typeset">
+        PUT /api/templates/{id}
+      </span>
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#put-apitemplatestemplate_iddefault" class="md-nav__link">
+  <a href="#put-apitemplatesiddefault" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        PUT /api/templates/{template_id}/default
-      
+      <span class="md-typeset">
+        PUT /api/templates/{id}/default
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="PUT /api/templates/{template_id}/default">
+    <nav class="md-nav" aria-label="PUT &#x2f;api&#x2f;templates&#x2f;{id}&#x2f;default">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_3" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1912,9 +1999,9 @@
           <li class="md-nav__item">
   <a href="#example-request_4" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1923,9 +2010,9 @@
           <li class="md-nav__item">
   <a href="#example-response_4" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1937,23 +2024,23 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#delete-apitemplatestemplate_id" class="md-nav__link">
+  <a href="#delete-apitemplatesid" class="md-nav__link">
     <span class="md-ellipsis">
-      
-        DELETE /api/templates/{template_id}
-      
+      <span class="md-typeset">
+        DELETE /api/templates/{id}
+      </span>
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="DELETE /api/templates/{template_id}">
+    <nav class="md-nav" aria-label="DELETE &#x2f;api&#x2f;templates&#x2f;{id}">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
   <a href="#parameters_4" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Parameters
-      
+      </span>
     </span>
   </a>
   
@@ -1962,9 +2049,9 @@
           <li class="md-nav__item">
   <a href="#example-request_5" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Request
-      
+      </span>
     </span>
   </a>
   
@@ -1973,9 +2060,9 @@
           <li class="md-nav__item">
   <a href="#example-response_5" class="md-nav__link">
     <span class="md-ellipsis">
-      
+      <span class="md-typeset">
         Example Response
-      
+      </span>
     </span>
   </a>
   
@@ -1998,9 +2085,9 @@
             <div class="md-content" data-md-component="content">
               
               <article class="md-content__inner md-typeset">
+                <a id="__skip" tabindex="-1"></a>
                 
                   
-
 
 
 <h1 id="api-templates">API / Templates<a class="headerlink" href="#api-templates" title="Permanent link">&para;</a></h1>
@@ -2020,12 +2107,12 @@
 </tr>
 <tr>
 <td style="text-align: left;">GET</td>
-<td style="text-align: left;"><a href="#get-apitemplates-template_id">/api/templates/{template_id}</a></td>
+<td style="text-align: left;"><a href="#get-apitemplates-id">/api/templates/{id}</a></td>
 <td style="text-align: left;">Retrieve a template</td>
 </tr>
 <tr>
 <td style="text-align: left;">GET</td>
-<td style="text-align: left;"><a href="#get-apitemplates-template_id-preview">/api/templates/{template_id}/preview</a></td>
+<td style="text-align: left;"><a href="#get-apitemplates-id-preview">/api/templates/{id}/preview</a></td>
 <td style="text-align: left;">Retrieve template HTML preview</td>
 </tr>
 <tr>
@@ -2040,17 +2127,17 @@
 </tr>
 <tr>
 <td style="text-align: left;">PUT</td>
-<td style="text-align: left;"><a href="#put-apitemplatestemplate_id">/api/templates/{template_id}</a></td>
+<td style="text-align: left;"><a href="#put-apitemplatesid">/api/templates/{id}</a></td>
 <td style="text-align: left;">Update a template</td>
 </tr>
 <tr>
 <td style="text-align: left;">PUT</td>
-<td style="text-align: left;"><a href="#put-apitemplates-template_id-default">/api/templates/{template_id}/default</a></td>
+<td style="text-align: left;"><a href="#put-apitemplates-id-default">/api/templates/{id}/default</a></td>
 <td style="text-align: left;">Set default template</td>
 </tr>
 <tr>
 <td style="text-align: left;">DELETE</td>
-<td style="text-align: left;"><a href="#delete-apitemplates-template_id">/api/templates/{template_id}</a></td>
+<td style="text-align: left;"><a href="#delete-apitemplates-id">/api/templates/{id}</a></td>
 <td style="text-align: left;">Delete a template</td>
 </tr>
 </tbody>
@@ -2059,26 +2146,26 @@
 <h4 id="get-apitemplates">GET /api/templates<a class="headerlink" href="#get-apitemplates" title="Permanent link">&para;</a></h4>
 <p>Retrieve all templates.</p>
 <h5 id="example-request">Example Request<a class="headerlink" href="#example-request" title="Permanent link">&para;</a></h5>
-<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;api_user:token&quot;</span><span class="w"> </span>-X<span class="w"> </span>GET<span class="w"> </span><span class="s1">&#39;http://localhost:9000/api/templates&#39;</span>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">"api_user:token"</span><span class="w"> </span>-X<span class="w"> </span>GET<span class="w"> </span><span class="s1">'http://localhost:9000/api/templates'</span>
 </code></pre></div>
 <h5 id="example-response">Example Response<a class="headerlink" href="#example-response" title="Permanent link">&para;</a></h5>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">        </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;updated_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Default template&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{ template \&quot;content\&quot; . }}&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;body_source&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;campaign&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;is_default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">            </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"updated_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Default template"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"body"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ template \"content\" . }}"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"body_source"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"campaign"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"is_default"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="p">}</span>
 </code></pre></div>
 <hr />
-<h4 id="get-apitemplatestemplate_id">GET /api/templates/{template_id}<a class="headerlink" href="#get-apitemplatestemplate_id" title="Permanent link">&para;</a></h4>
+<h4 id="get-apitemplatesid">GET /api/templates/{id}<a class="headerlink" href="#get-apitemplatesid" title="Permanent link">&para;</a></h4>
 <p>Retrieve a specific template.</p>
 <h5 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h5>
 <table>
@@ -2092,7 +2179,7 @@
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">template_id</td>
+<td style="text-align: left;">id</td>
 <td style="text-align: left;">number</td>
 <td style="text-align: left;">Yes</td>
 <td style="text-align: left;">ID of the template to retrieve</td>
@@ -2100,24 +2187,24 @@
 </tbody>
 </table>
 <h5 id="example-request_1">Example Request<a class="headerlink" href="#example-request_1" title="Permanent link">&para;</a></h5>
-<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;api_user:token&quot;</span><span class="w"> </span>-X<span class="w"> </span>GET<span class="w"> </span><span class="s1">&#39;http://localhost:9000/api/templates/1&#39;</span>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">"api_user:token"</span><span class="w"> </span>-X<span class="w"> </span>GET<span class="w"> </span><span class="s1">'http://localhost:9000/api/templates/1'</span>
 </code></pre></div>
 <h5 id="example-response_1">Example Response<a class="headerlink" href="#example-response_1" title="Permanent link">&para;</a></h5>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;updated_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Default template&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{ template \&quot;content\&quot; . }}&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;body_source&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;campaign&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;is_default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"updated_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Default template"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"body"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ template \"content\" . }}"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"body_source"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"campaign"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"is_default"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 <hr />
-<h4 id="get-apitemplatestemplate_idpreview">GET /api/templates/{template_id}/preview<a class="headerlink" href="#get-apitemplatestemplate_idpreview" title="Permanent link">&para;</a></h4>
+<h4 id="get-apitemplatesidpreview">GET /api/templates/{id}/preview<a class="headerlink" href="#get-apitemplatesidpreview" title="Permanent link">&para;</a></h4>
 <p>Retrieve the HTML preview of a template.</p>
 <h5 id="parameters_1">Parameters<a class="headerlink" href="#parameters_1" title="Permanent link">&para;</a></h5>
 <table>
@@ -2131,7 +2218,7 @@
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">template_id</td>
+<td style="text-align: left;">id</td>
 <td style="text-align: left;">number</td>
 <td style="text-align: left;">Yes</td>
 <td style="text-align: left;">ID of the template to preview</td>
@@ -2139,7 +2226,7 @@
 </tbody>
 </table>
 <h5 id="example-request_2">Example Request<a class="headerlink" href="#example-request_2" title="Permanent link">&para;</a></h5>
-<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;api_user:token&quot;</span><span class="w"> </span>-X<span class="w"> </span>GET<span class="w"> </span><span class="s1">&#39;http://localhost:9000/api/templates/1/preview&#39;</span>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">"api_user:token"</span><span class="w"> </span>-X<span class="w"> </span>GET<span class="w"> </span><span class="s1">'http://localhost:9000/api/templates/1/preview'</span>
 </code></pre></div>
 <h5 id="example-response_2">Example Response<a class="headerlink" href="#example-response_2" title="Permanent link">&para;</a></h5>
 <div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Hi there<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
@@ -2153,7 +2240,7 @@
 <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Nam luctus dui non placerat mattis. Morbi non accumsan orci, vel interdum urna. Duis faucibus id nunc ut euismod.
     Curabitur et eros id erat feugiat fringilla in eget neque. Aliquam accumsan cursus eros sed faucibus.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
 
-<span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Here is a link to <span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">&quot;https://github.com/compdani/list_pocket&quot;</span> <span class="na">target</span><span class="o">=</span><span class="s">&quot;_blank&quot;</span><span class="p">&gt;</span>List Pocket<span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Here is a link to <span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">"https://github.com/compdani/list_pocket"</span> <span class="na">target</span><span class="o">=</span><span class="s">"_blank"</span><span class="p">&gt;</span>List Pocket<span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
 </code></pre></div>
 <hr />
 <h4 id="post-apitemplates">POST /api/templates<a class="headerlink" href="#post-apitemplates" title="Permanent link">&para;</a></h4>
@@ -2202,39 +2289,39 @@
 </tbody>
 </table>
 <h5 id="example-request_3">Example Request<a class="headerlink" href="#example-request_3" title="Permanent link">&para;</a></h5>
-<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;api_user:token&quot;</span><span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s1">&#39;http://localhost:9000/api/templates&#39;</span><span class="w"> </span><span class="se">\</span>
--H<span class="w"> </span><span class="s1">&#39;Content-Type: application/json&#39;</span><span class="w"> </span><span class="se">\</span>
--d<span class="w"> </span><span class="s1">&#39;{</span>
-<span class="s1">    &quot;name&quot;: &quot;New template&quot;,</span>
-<span class="s1">    &quot;type&quot;: &quot;campaign&quot;,</span>
-<span class="s1">    &quot;subject&quot;: &quot;Your Weekly Newsletter&quot;,</span>
-<span class="s1">    &quot;body&quot;: &quot;&lt;h1&gt;Header&lt;/h1&gt;&lt;p&gt;Content goes here&lt;/p&gt;&quot;</span>
-<span class="s1">}&#39;</span>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">"api_user:token"</span><span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s1">'http://localhost:9000/api/templates'</span><span class="w"> </span><span class="se">\</span>
+-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+-d<span class="w"> </span><span class="s1">'{</span>
+<span class="s1">    "name": "New template",</span>
+<span class="s1">    "type": "campaign",</span>
+<span class="s1">    "subject": "Your Weekly Newsletter",</span>
+<span class="s1">    "body": "&lt;h1&gt;Header&lt;/h1&gt;&lt;p&gt;Content goes here&lt;/p&gt;"</span>
+<span class="s1">}'</span>
 </code></pre></div>
 <h5 id="example-response_3">Example Response<a class="headerlink" href="#example-response_3" title="Permanent link">&para;</a></h5>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">        </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;updated_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Default template&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{ template \&quot;content\&quot; . }}&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;body_source&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;campaign&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;is_default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">            </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"updated_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Default template"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"body"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ template \"content\" . }}"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"body_source"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"campaign"</span><span class="p">,</span>
+<span class="w">            </span><span class="nt">"is_default"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">        </span><span class="p">}</span>
 <span class="w">    </span><span class="p">]</span>
 <span class="p">}</span>
 </code></pre></div>
 <hr />
-<h4 id="put-apitemplatestemplate_id">PUT /api/templates/{template_id}<a class="headerlink" href="#put-apitemplatestemplate_id" title="Permanent link">&para;</a></h4>
+<h4 id="put-apitemplatesid">PUT /api/templates/{id}<a class="headerlink" href="#put-apitemplatesid" title="Permanent link">&para;</a></h4>
 <p>Update a template.</p>
 <blockquote>
 <p>Refer to parameters from <a href="#post-apitemplates">POST /api/templates</a></p>
 </blockquote>
 <hr />
-<h4 id="put-apitemplatestemplate_iddefault">PUT /api/templates/{template_id}/default<a class="headerlink" href="#put-apitemplatestemplate_iddefault" title="Permanent link">&para;</a></h4>
+<h4 id="put-apitemplatesiddefault">PUT /api/templates/{id}/default<a class="headerlink" href="#put-apitemplatesiddefault" title="Permanent link">&para;</a></h4>
 <p>Set a template as the default.</p>
 <h5 id="parameters_3">Parameters<a class="headerlink" href="#parameters_3" title="Permanent link">&para;</a></h5>
 <table>
@@ -2248,7 +2335,7 @@
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">template_id</td>
+<td style="text-align: left;">id</td>
 <td style="text-align: left;">number</td>
 <td style="text-align: left;">Yes</td>
 <td style="text-align: left;">ID of the template to set as default</td>
@@ -2256,24 +2343,24 @@
 </tbody>
 </table>
 <h5 id="example-request_4">Example Request<a class="headerlink" href="#example-request_4" title="Permanent link">&para;</a></h5>
-<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;api_user:token&quot;</span><span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s1">&#39;http://localhost:9000/api/templates/1/default&#39;</span>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">"api_user:token"</span><span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s1">'http://localhost:9000/api/templates/1/default'</span>
 </code></pre></div>
 <h5 id="example-response_4">Example Response<a class="headerlink" href="#example-response_4" title="Permanent link">&para;</a></h5>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;updated_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2020-03-14T17:36:41.288578+01:00&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Default template&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;{{ template \&quot;content\&quot; . }}&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;body_source&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;campaign&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;is_default&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"created_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"updated_at"</span><span class="p">:</span><span class="w"> </span><span class="s2">"2020-03-14T17:36:41.288578+01:00"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Default template"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"body"</span><span class="p">:</span><span class="w"> </span><span class="s2">"{{ template \"content\" . }}"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"body_source"</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"type"</span><span class="p">:</span><span class="w"> </span><span class="s2">"campaign"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"is_default"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="p">}</span>
 </code></pre></div>
 <hr />
-<h4 id="delete-apitemplatestemplate_id">DELETE /api/templates/{template_id}<a class="headerlink" href="#delete-apitemplatestemplate_id" title="Permanent link">&para;</a></h4>
+<h4 id="delete-apitemplatesid">DELETE /api/templates/{id}<a class="headerlink" href="#delete-apitemplatesid" title="Permanent link">&para;</a></h4>
 <p>Delete a template.</p>
 <h5 id="parameters_4">Parameters<a class="headerlink" href="#parameters_4" title="Permanent link">&para;</a></h5>
 <table>
@@ -2287,7 +2374,7 @@
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;">template_id</td>
+<td style="text-align: left;">id</td>
 <td style="text-align: left;">number</td>
 <td style="text-align: left;">Yes</td>
 <td style="text-align: left;">ID of the template to delete</td>
@@ -2295,13 +2382,15 @@
 </tbody>
 </table>
 <h5 id="example-request_5">Example Request<a class="headerlink" href="#example-request_5" title="Permanent link">&para;</a></h5>
-<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">&quot;api_user:token&quot;</span><span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s1">&#39;http://localhost:9000/api/templates/35&#39;</span>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">"api_user:token"</span><span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span><span class="s1">'http://localhost:9000/api/templates/35'</span>
 </code></pre></div>
 <h5 id="example-response_5">Example Response<a class="headerlink" href="#example-response_5" title="Permanent link">&para;</a></h5>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="nt">"data"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="p">}</span>
 </code></pre></div>
+
+
 
 
 
@@ -2336,8 +2425,8 @@
   
   
     Made with
-    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
-      Material for MkDocs
+    <a href="https://zensical.org/" target="_blank" rel="noopener">
+      Zensical
     </a>
   
 </div>
@@ -2347,7 +2436,7 @@
 </footer>
       
     </div>
-    <div class="md-dialog" data-md-component="dialog">
+    <div class="md-dialog" data-md-component="dialog" role="status" aria-atomic="true">
       <div class="md-dialog__inner md-typeset"></div>
     </div>
     
@@ -2355,10 +2444,14 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.indexes", "navigation.sections", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      
+      
+        
+        
+      <script id="__config" type="application/json">{"annotate":null,"base":"../..","features":["navigation.indexes","navigation.sections","content.code.copy"],"redirect":null,"search":"../../assets/javascripts/workers/search.719e0d91.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","clipboard.error":"Could not copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d31f0ffa.min.js"></script>
       
     
   </body>

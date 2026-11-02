@@ -2,9 +2,10 @@ site_name: List Pocket / Documentation
 # Set this to your public URL including /docs/ when serving via the app (e.g. http://127.0.0.1:9000/docs/).
 site_url: http://127.0.0.1:9000/docs/
 
+# Zensical reads this file. classic keeps the Material for MkDocs appearance.
 theme:
   name: material
-  # custom_dir: "mkdocs-material/material"
+  variant: classic
   logo: "images/favicon.png"
   favicon: "images/favicon.png"
   language: "en"

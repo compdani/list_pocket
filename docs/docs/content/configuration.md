@@ -13,18 +13,18 @@ Example:
 | **Environment variable**       | Example value  |
 | ------------------------------ | -------------- |
 | `LISTPOCKET_app__address`      | "0.0.0.0:9000" |
-| `LISTPOCKET_app__docs_dir`    | "/var/listpocket/mkdocs-out" |
+| `LISTPOCKET_app__docs_dir`    | "/var/listpocket/docs" |
 | `LISTPOCKET_app__swagger_dir` | "/var/listpocket/swagger" |
 
 PocketBase’s own flags (for example data directory) are passed through the PocketBase CLI embedded in the binary; see [PocketBase configuration](https://pocketbase.io/docs/).
 
 ### Built-in documentation URLs
 
-If `docs/docs/_out` (MkDocs `site_dir`) and `docs/swagger` exist relative to the process working directory—or you set `app.docs_dir` / `app.swagger_dir`—the HTTP server exposes:
+If `docs/docs/_out` (Zensical `site_dir`) and `docs/swagger` exist relative to the process working directory—or you set `app.docs_dir` / `app.swagger_dir`—the HTTP server exposes:
 
 | Path | Content |
 | ---- | ------- |
-| `/docs/` | MkDocs manual (static HTML) |
+| `/docs/` | Documentation manual (static HTML) |
 | `/openapi.yaml` | OpenAPI 3 spec (`collections.yaml`) |
 | `/swagger/` | Swagger UI for the spec |
 
