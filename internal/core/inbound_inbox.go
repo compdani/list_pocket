@@ -11,6 +11,7 @@ import (
 	"github.com/compdani/list_pocket/internal/apperr"
 
 	"github.com/compdani/list_pocket/models"
+	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type InboxQueryParams struct {
@@ -207,8 +208,10 @@ func (c *Core) GetInboundEmailByID(ctx context.Context, id string) (*models.Inbo
 	return &e, nil
 }
 
-// UpdateInboundEmailSpamStatus updates the spam_status on an inbound email reply and triggers
-// spam learning (upserts sender/domain/keyword rules) so future emails are auto-classified.
+// UpdateInboundEmailSpamStatus updates spam feedback on an inbound email and the
+// rules that should follow it. Spam and confirmed_spam learn an exact sender
+// and keywords. Clearing the status also clears the score and records exact-sender
+// clean feedback. The message write and the rule write commit together.
 func (c *Core) UpdateInboundEmailSpamStatus(ctx context.Context, id string, spamStatus string) error {
 	_ = ctx
 	id = strings.TrimSpace(id)
@@ -217,31 +220,49 @@ func (c *Core) UpdateInboundEmailSpamStatus(ctx context.Context, id string, spam
 		return apperr.BadRequest("invalid spam_status value")
 	}
 
-	pb := c.db.PocketBase()
-	if pb == nil {
-		return fmt.Errorf("pocketbase is not initialized")
-	}
-	rec, err := pb.FindRecordById("inbound_email_replies", id)
+	pb, err := c.pocketBaseApp()
 	if err != nil {
-		return apperr.NotFound("inbound email not found")
+		return err
 	}
 
-	rec.Set("spam_status", spamStatus)
-	if err := pb.Save(rec); err != nil {
-		return apperr.Internal("failed to update spam status")
-	}
-
-	// Trigger learning when explicitly marking as spam level.
-	if spamStatus == "spam" || spamStatus == "confirmed_spam" {
-		fromAddress := strings.ToLower(strings.TrimSpace(toString(rec.Get("from_address"))))
-		subject := strings.TrimSpace(toString(rec.Get("subject")))
-		bodyText := strings.TrimSpace(toString(rec.Get("body_text")))
-		if learnErr := c.LearnSpamFromEmail(ctx, fromAddress, subject, bodyText, spamStatus); learnErr != nil {
-			c.log.Printf("spam learning warning id=%q: %v", id, learnErr)
+	err = pb.RunInTransaction(func(tx pbcore.App) error {
+		rec, findErr := tx.FindRecordById("inbound_email_replies", id)
+		if findErr != nil {
+			return apperr.NotFound("inbound email not found")
 		}
+		rec.Set("spam_status", spamStatus)
+		if spamStatus == "" {
+			rec.Set("spam_score", 0)
+		} else if spamStatus == "spam" || spamStatus == "confirmed_spam" {
+			rec.Set("spam_score", senderSpamScore)
+		}
+		if saveErr := tx.Save(rec); saveErr != nil {
+			return apperr.Internal("failed to update spam status")
+		}
+
+		fromAddress := strings.ToLower(strings.TrimSpace(toString(rec.Get("from_address"))))
+		switch spamStatus {
+		case "spam", "confirmed_spam":
+			subject := strings.TrimSpace(toString(rec.Get("subject")))
+			bodyText := strings.TrimSpace(toString(rec.Get("body_text")))
+			if learnErr := c.learnSpamFromEmail(tx, fromAddress, subject, bodyText, spamStatus); learnErr != nil {
+				c.log.Printf("spam learning warning id=%q: %v", id, learnErr)
+				return learnErr
+			}
+		case "":
+			if learnErr := c.recordSenderClean(tx, fromAddress); learnErr != nil {
+				c.log.Printf("spam learning warning id=%q: %v", id, learnErr)
+				return learnErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		var appErr *apperr.Error
+		if errors.As(err, &appErr) {
+			return err
+		}
+		return apperr.Internal("failed to update spam status")
 	}
 	return nil
 }
-
-// LearnSpamFromEmail upserts sender, domain, and keyword spam rules based on
-// an explicitly user-marked spam email.

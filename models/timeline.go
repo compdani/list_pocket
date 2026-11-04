@@ -258,15 +258,16 @@ type InboundEmailSummary struct {
 
 // InboundSpamRule represents a learned spam rule used for auto-detection on incoming emails.
 type InboundSpamRule struct {
-	RecordID  string    `db:"record_id" json:"id"`
-	Type      string    `db:"type" json:"type"`           // "sender", "domain", "keyword"
-	Value     string    `db:"value" json:"value"`         // email, domain string, or keyword
-	Weight    float64   `db:"weight" json:"weight"`       // scoring weight (default 1.0)
-	HitCount  int       `db:"hit_count" json:"hit_count"` // user-reinforcement count
-	SpamLevel string    `db:"spam_level" json:"spam_level"` // max implied spam level
-	IsActive  bool      `db:"is_active" json:"is_active"`
-	CreatedAt time.Time `db:"created_at" json:"created_at"`
-	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+	CleanOverride bool      `db:"clean_override" json:"clean_override"`
+	RecordID      string    `db:"record_id" json:"id"`
+	Type          string    `db:"type" json:"type"`             // "sender", "domain", "keyword"
+	Value         string    `db:"value" json:"value"`           // email, domain string, or keyword
+	Weight        float64   `db:"weight" json:"weight"`         // scoring weight (default 1.0)
+	HitCount      int       `db:"hit_count" json:"hit_count"`   // user-reinforcement count
+	SpamLevel     string    `db:"spam_level" json:"spam_level"` // max implied spam level
+	IsActive      bool      `db:"is_active" json:"is_active"`
+	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
 }
 
 // UnifiedContactTimeline represents the response payload from the timeline API endpoint

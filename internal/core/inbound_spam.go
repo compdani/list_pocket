@@ -5,15 +5,41 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/compdani/list_pocket/internal/apperr"
 
 	"github.com/compdani/list_pocket/models"
 	"github.com/pocketbase/dbx"
 	pbcore "github.com/pocketbase/pocketbase/core"
+)
+
+// Spam evidence is fixed and local to the message. It does not depend on how
+// many unrelated rules exist.
+//
+// Exact sender rules classify at their own level. A suspected sender scores
+// senderSuspectedScore; spam and confirmed_spam score 1. Domain rules are
+// capped at suspected (domainSuspectedScore) because their provenance is
+// unknown and shared domains would otherwise block unrelated senders.
+// Keyword-only evidence never rises above suspected. It requires at least
+// keywordMinDistinct distinct matching tokens whose positive, finite weights
+// sum to at least keywordEvidenceUnit. The keyword score is
+// min(1, sum/keywordEvidenceUnit). Sub-threshold keyword evidence scores 0.
+const (
+	senderSuspectedScore = 0.5
+	senderSpamScore      = 1.0
+	domainSuspectedScore = 0.5
+
+	keywordMinDistinct  = 3
+	keywordEvidenceUnit = 3.0
+
+	// maxSpamRuleValueLen bounds values before they are passed as PocketBase
+	// filter parameters or stored. It is below the text field default of 5000.
+	maxSpamRuleValueLen = 1000
 )
 
 func spamLevelOrder(level string) int {
@@ -46,23 +72,40 @@ var spamStopWords = map[string]struct{}{
 	"https": {}, "email": {}, "message": {}, "reply": {},
 }
 
-// extractSpamKeywords extracts up to maxN significant words from text (subject + body).
-func extractSpamKeywords(subject, bodyText string, maxN int) []string {
+// eligibleSpamToken reports whether w is a whole token worth matching.
+// w must already be lowercased and stripped to ASCII letters and digits.
+func eligibleSpamToken(w string) bool {
+	if len(w) < 4 {
+		return false
+	}
+	_, stop := spamStopWords[w]
+	return !stop
+}
+
+// spamWordCounts counts eligible whole tokens in subject and body.
+func spamWordCounts(subject, bodyText string) map[string]int {
 	text := strings.ToLower(subject + " " + bodyText)
 	words := strings.FieldsFunc(text, func(r rune) bool {
 		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
 	})
 	seen := map[string]int{}
 	for _, w := range words {
-		if len(w) < 4 {
-			continue
-		}
-		if _, stop := spamStopWords[w]; stop {
+		if !eligibleSpamToken(w) {
 			continue
 		}
 		seen[w]++
 	}
-	// Sort by frequency descending.
+	return seen
+}
+
+// extractSpamKeywords extracts up to maxN significant words from text (subject + body).
+// Equal frequencies break toward ascending lexical order so the result is stable.
+// A nonpositive maxN extracts nothing.
+func extractSpamKeywords(subject, bodyText string, maxN int) []string {
+	if maxN <= 0 {
+		return nil
+	}
+	seen := spamWordCounts(subject, bodyText)
 	type wf struct {
 		word  string
 		count int
@@ -71,14 +114,17 @@ func extractSpamKeywords(subject, bodyText string, maxN int) []string {
 	for w, c := range seen {
 		ranked = append(ranked, wf{w, c})
 	}
-	sort.SliceStable(ranked, func(i, j int) bool {
-		return ranked[i].count > ranked[j].count
-	})
-	out := make([]string, 0, maxN)
-	for i, w := range ranked {
-		if i >= maxN {
-			break
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].count != ranked[j].count {
+			return ranked[i].count > ranked[j].count
 		}
+		return ranked[i].word < ranked[j].word
+	})
+	if maxN > len(ranked) {
+		maxN = len(ranked)
+	}
+	out := make([]string, 0, maxN)
+	for _, w := range ranked[:maxN] {
 		out = append(out, w.word)
 	}
 	return out
@@ -93,150 +139,344 @@ func extractDomain(email string) string {
 	return strings.ToLower(strings.TrimSpace(email[at+1:]))
 }
 
+type spamRuleMatch struct {
+	Type          string
+	Value         string
+	Weight        float64
+	SpamLevel     string
+	CleanOverride bool
+}
+
+// positiveSpamWeight reports w when it can contribute evidence.
+// Nonpositive and nonfinite weights are ignored.
+func positiveSpamWeight(w float64) (float64, bool) {
+	if math.IsNaN(w) || math.IsInf(w, 0) || w <= 0 {
+		return 0, false
+	}
+	return w, true
+}
+
+func clampSpamScore(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+		return 0
+	}
+	if v >= 1 {
+		return 1
+	}
+	return v
+}
+
+func senderEvidenceScore(level string) float64 {
+	switch level {
+	case "spam", "confirmed_spam":
+		return senderSpamScore
+	case "suspected":
+		return senderSuspectedScore
+	default:
+		return 0
+	}
+}
+
+// keywordSpamEvidence scores whole-token keyword matches.
+// Repeated occurrences of one token count once. Unrelated rules are not part
+// of the denominator. The level is suspected, or empty when the fixed bar
+// (keywordMinDistinct distinct tokens and weight sum >= keywordEvidenceUnit)
+// is not met.
+func keywordSpamEvidence(tokens map[string]struct{}, rules []spamRuleMatch) (string, float64) {
+	if len(tokens) == 0 || len(rules) == 0 {
+		return "", 0
+	}
+	matched := make(map[string]float64, keywordMinDistinct)
+	for _, rule := range rules {
+		if rule.Type != "" && rule.Type != "keyword" {
+			continue
+		}
+		weight, ok := positiveSpamWeight(rule.Weight)
+		if !ok {
+			continue
+		}
+		token := strings.ToLower(strings.TrimSpace(rule.Value))
+		if _, eligible := tokens[token]; !eligible {
+			continue
+		}
+		if prev, exists := matched[token]; !exists || weight > prev {
+			matched[token] = weight
+		}
+	}
+	if len(matched) < keywordMinDistinct {
+		return "", 0
+	}
+	var sum float64
+	for _, weight := range matched {
+		sum += weight
+	}
+	if math.IsNaN(sum) || math.IsInf(sum, 0) || sum < keywordEvidenceUnit {
+		return "", 0
+	}
+	return "suspected", clampSpamScore(sum / keywordEvidenceUnit)
+}
+
+// classifySpam applies the conservative evidence policy to an already loaded
+// rule set. An exact-sender clean override returns ("", 0) and wins over
+// domain, keyword, and older sender matches.
+func classifySpam(fromAddress, subject, bodyText string, rules []spamRuleMatch) (string, float64) {
+	fromAddress = strings.ToLower(strings.TrimSpace(fromAddress))
+	if fromAddress == "" {
+		return "", 0
+	}
+	domain := extractDomain(fromAddress)
+
+	senderClean := false
+	senderLevel := ""
+	domainLevel := ""
+	keywordRules := make([]spamRuleMatch, 0)
+	for _, rule := range rules {
+		switch rule.Type {
+		case "sender":
+			if !strings.EqualFold(rule.Value, fromAddress) {
+				continue
+			}
+			if rule.CleanOverride {
+				senderClean = true
+				continue
+			}
+			if rule.SpamLevel != "" {
+				senderLevel = maxSpamLevel(senderLevel, rule.SpamLevel)
+			}
+		case "domain":
+			if domain != "" && rule.SpamLevel != "" && strings.EqualFold(rule.Value, domain) {
+				domainLevel = maxSpamLevel(domainLevel, rule.SpamLevel)
+			}
+		case "keyword":
+			keywordRules = append(keywordRules, rule)
+		}
+	}
+
+	// Clean feedback is the newest explicit decision for this address.
+	if senderClean {
+		return "", 0
+	}
+	// Exact sender evidence stands on its own, including suspected.
+	if senderLevel != "" {
+		return senderLevel, senderEvidenceScore(senderLevel)
+	}
+
+	level := ""
+	score := 0.0
+	if domainLevel != "" {
+		// Cap domain-only matches. The stored level may say spam or
+		// confirmed_spam, but that provenance is not an exact-sender decision.
+		level = "suspected"
+		score = domainSuspectedScore
+	}
+
+	tokens := map[string]struct{}{}
+	if len(keywordRules) > 0 {
+		for token := range spamWordCounts(subject, bodyText) {
+			tokens[token] = struct{}{}
+		}
+	}
+	keywordLevel, keywordScore := keywordSpamEvidence(tokens, keywordRules)
+	if keywordLevel != "" {
+		level = maxSpamLevel(level, keywordLevel)
+		if keywordScore > score {
+			score = keywordScore
+		}
+	}
+	return level, score
+}
+
 // CheckInboundSpamRules evaluates active spam rules against the incoming email fields.
-// It checks sender address, sender domain, then keyword scoring.
-// Returns the highest implied spam level and composite score, or ("", 0, nil) if no match.
+// See the evidence constants for the level and score policy.
+// Returns ("", 0, nil) when the message should stay clean.
 func (c *Core) CheckInboundSpamRules(ctx context.Context, fromAddress, subject, bodyText string) (string, float64, error) {
 	_ = ctx
 	fromAddress = strings.ToLower(strings.TrimSpace(fromAddress))
 	if fromAddress == "" {
 		return "", 0, nil
 	}
-	domain := extractDomain(fromAddress)
 
 	type ruleRow struct {
-		Type      string  `db:"type"`
-		Value     string  `db:"value"`
-		Weight    float64 `db:"weight"`
-		SpamLevel string  `db:"spam_level"`
+		Type          string  `db:"type"`
+		Value         string  `db:"value"`
+		Weight        float64 `db:"weight"`
+		SpamLevel     string  `db:"spam_level"`
+		CleanOverride bool    `db:"clean_override"`
 	}
-	rules := []ruleRow{}
-	if err := c.db.Select(&rules, `
-		SELECT type, value, COALESCE(weight, 1.0) AS weight, COALESCE(spam_level, 'suspected') AS spam_level
+	rows := []ruleRow{}
+	if err := c.db.Select(&rows, `
+		SELECT
+			type,
+			value,
+			COALESCE(weight, 1.0) AS weight,
+			COALESCE(spam_level, '') AS spam_level,
+			COALESCE(clean_override, 0) AS clean_override
 		FROM inbound_spam_rules
 		WHERE is_active = 1
-		  AND spam_level != ''
+		  AND (
+		    COALESCE(spam_level, '') != ''
+		    OR COALESCE(clean_override, 0) = 1
+		  )
 		ORDER BY rowid ASC
 	`); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", 0, err
 	}
 
-	bestLevel := ""
-	var keywordRules []ruleRow
-	for _, r := range rules {
-		switch r.Type {
-		case "sender":
-			if strings.EqualFold(r.Value, fromAddress) {
-				bestLevel = maxSpamLevel(bestLevel, r.SpamLevel)
-			}
-		case "domain":
-			if domain != "" && strings.EqualFold(r.Value, domain) {
-				bestLevel = maxSpamLevel(bestLevel, r.SpamLevel)
-			}
-		case "keyword":
-			keywordRules = append(keywordRules, r)
-		}
+	rules := make([]spamRuleMatch, 0, len(rows))
+	for _, row := range rows {
+		rules = append(rules, spamRuleMatch{
+			Type:          row.Type,
+			Value:         row.Value,
+			Weight:        row.Weight,
+			SpamLevel:     row.SpamLevel,
+			CleanOverride: row.CleanOverride,
+		})
 	}
-
-	// If sender/domain rule already determined spam or confirmed_spam, return early.
-	if spamLevelOrder(bestLevel) >= spamLevelOrder("spam") {
-		return bestLevel, 1.0, nil
-	}
-
-	// Keyword scoring.
-	var keywordScore float64
-	if len(keywordRules) > 0 {
-		keywords := extractSpamKeywords(subject, bodyText, 20)
-		kwSet := make(map[string]struct{}, len(keywords))
-		for _, kw := range keywords {
-			kwSet[kw] = struct{}{}
-		}
-		var totalWeight, matchWeight float64
-		for _, kr := range keywordRules {
-			totalWeight += kr.Weight
-			if _, ok := kwSet[strings.ToLower(kr.Value)]; ok {
-				matchWeight += kr.Weight
-			}
-		}
-		if totalWeight > 0 {
-			keywordScore = matchWeight / totalWeight
-		}
-		// Mark as suspected if keyword score exceeds threshold.
-		if keywordScore >= 0.3 {
-			bestLevel = maxSpamLevel(bestLevel, "suspected")
-		}
-	}
-
-	return bestLevel, keywordScore, nil
+	level, score := classifySpam(fromAddress, subject, bodyText, rules)
+	return level, score, nil
 }
 
-// InboxQueryParams contains filter options for the unified inbox listing.
+// LearnSpamFromEmail upserts an exact-sender rule and keyword rules for an
+// explicitly marked spam email. It does not create a domain rule. Errors are
+// returned to the caller. A clean override on the same sender is cleared so
+// the new spam feedback wins.
 func (c *Core) LearnSpamFromEmail(ctx context.Context, fromAddress, subject, bodyText, spamStatus string) error {
 	_ = ctx
+	pb, err := c.pocketBaseApp()
+	if err != nil {
+		return err
+	}
+	return pb.RunInTransaction(func(tx pbcore.App) error {
+		return c.learnSpamFromEmail(tx, fromAddress, subject, bodyText, spamStatus)
+	})
+}
+
+func (c *Core) learnSpamFromEmail(app pbcore.App, fromAddress, subject, bodyText, spamStatus string) error {
 	fromAddress = strings.ToLower(strings.TrimSpace(fromAddress))
 	if fromAddress == "" {
 		return nil
 	}
-	domain := extractDomain(fromAddress)
-
-	upsertRule := func(ruleType, value string) error {
-		if value == "" {
-			return nil
-		}
-		value = strings.ToLower(strings.TrimSpace(value))
-		if err := c.upsertSpamRule(ruleType, value, 1.0, spamStatus); err != nil {
-			c.log.Printf("upsert spam rule type=%q value=%q: %v", ruleType, value, err)
-		}
-		return nil
+	if err := c.upsertSpamRule(app, "sender", fromAddress, 1, spamStatus, false); err != nil {
+		return err
 	}
-
-	_ = upsertRule("sender", fromAddress)
-	if domain != "" {
-		_ = upsertRule("domain", domain)
-	}
-
-	keywords := extractSpamKeywords(subject, bodyText, 10)
-	for _, kw := range keywords {
-		_ = upsertRule("keyword", kw)
+	for _, kw := range extractSpamKeywords(subject, bodyText, 10) {
+		if err := c.upsertSpamRule(app, "keyword", kw, 1, spamStatus, false); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// upsertSpamRule creates or updates a spam rule, incrementing hit_count and applying the
-// max spam level observed.
-func (c *Core) upsertSpamRule(ruleType, value string, weight float64, spamLevel string) error {
-	pb := c.db.PocketBase()
-	if pb == nil {
+// recordSenderClean stores durable exact-sender clean feedback. The sender's
+// historical spam level is left in place and ignored while the override is set.
+func (c *Core) recordSenderClean(app pbcore.App, fromAddress string) error {
+	fromAddress = strings.ToLower(strings.TrimSpace(fromAddress))
+	if fromAddress == "" {
+		return nil
+	}
+	return c.upsertSpamRule(app, "sender", fromAddress, 1, "", true)
+}
+
+func (c *Core) pocketBaseApp() (pbcore.App, error) {
+	if c == nil || c.db == nil || c.db.PocketBase() == nil {
+		return nil, fmt.Errorf("pocketbase is not initialized")
+	}
+	return c.db.PocketBase(), nil
+}
+
+// decideSpamRuleWrite reports whether a rule lookup miss should insert.
+// Only sql.ErrNoRows creates a row. Any other lookup error is returned so a
+// transient failure cannot insert a duplicate.
+func decideSpamRuleWrite(err error) (create bool, writeErr error) {
+	if err == nil {
+		return false, nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return true, nil
+	}
+	return false, err
+}
+
+func normalizeSpamRuleType(ruleType string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(ruleType)) {
+	case "sender", "domain", "keyword":
+		return strings.ToLower(strings.TrimSpace(ruleType)), nil
+	default:
+		return "", fmt.Errorf("invalid spam rule type %q", ruleType)
+	}
+}
+
+// normalizeSpamRuleValue bounds a rule value before it is used as a PocketBase
+// filter parameter. Empty input is not an error; the caller skips the write.
+func normalizeSpamRuleValue(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "", nil
+	}
+	if utf8.RuneCountInString(value) > maxSpamRuleValueLen {
+		return "", fmt.Errorf("spam rule value exceeds %d characters", maxSpamRuleValueLen)
+	}
+	return value, nil
+}
+
+// upsertSpamRule creates or updates one spam rule using bound filter parameters.
+// cleanOverride sets exact-sender clean feedback without raising hit_count or
+// the stored spam level. A spam write clears that override.
+func (c *Core) upsertSpamRule(app pbcore.App, ruleType, value string, weight float64, spamLevel string, cleanOverride bool) error {
+	if app == nil {
 		return fmt.Errorf("pocketbase is not initialized")
 	}
-	collection, err := pb.FindCollectionByNameOrId("inbound_spam_rules")
+	var err error
+	ruleType, err = normalizeSpamRuleType(ruleType)
 	if err != nil {
 		return err
 	}
+	value, err = normalizeSpamRuleValue(value)
+	if err != nil || value == "" {
+		return err
+	}
 
-	// Try to find existing rule.
-	existing, err := pb.FindFirstRecordByFilter("inbound_spam_rules",
-		fmt.Sprintf(`type = "%s" && value = "%s"`,
-			strings.ReplaceAll(ruleType, `"`, ``),
-			strings.ReplaceAll(value, `"`, ``)))
-	if err == nil && existing != nil {
-		// Update existing: increment hit_count, apply max spam_level.
+	existing, findErr := app.FindFirstRecordByFilter("inbound_spam_rules",
+		"type = {:type} && value = {:value}",
+		dbx.Params{"type": ruleType, "value": value})
+	create, err := decideSpamRuleWrite(findErr)
+	if err != nil {
+		return err
+	}
+	if !create {
+		if existing == nil {
+			return fmt.Errorf("spam rule lookup returned no record")
+		}
+		if cleanOverride {
+			existing.Set("clean_override", true)
+			existing.Set("is_active", true)
+			return app.Save(existing)
+		}
 		hitCount := int(toFloat(existing.Get("hit_count"))) + 1
 		existing.Set("hit_count", hitCount)
 		existing.Set("spam_level", maxSpamLevel(toString(existing.Get("spam_level")), spamLevel))
+		existing.Set("clean_override", false)
 		existing.Set("is_active", true)
-		return pb.Save(existing)
+		return app.Save(existing)
 	}
 
-	// Create new rule.
+	collection, err := app.FindCollectionByNameOrId("inbound_spam_rules")
+	if err != nil {
+		return err
+	}
 	rec := pbcore.NewRecord(collection)
 	rec.Set("type", ruleType)
 	rec.Set("value", value)
 	rec.Set("weight", weight)
-	rec.Set("hit_count", 1)
-	rec.Set("spam_level", spamLevel)
 	rec.Set("is_active", true)
-	return pb.Save(rec)
+	rec.Set("clean_override", cleanOverride)
+	if cleanOverride {
+		rec.Set("hit_count", 0)
+	} else {
+		rec.Set("hit_count", 1)
+		rec.Set("spam_level", spamLevel)
+	}
+	return app.Save(rec)
 }
 
 // GetInboundSpamRules returns paginated spam rules.
@@ -266,15 +506,16 @@ func (c *Core) GetInboundSpamRules(ctx context.Context, limit, offset int, ruleT
 	}
 
 	type ruleRow struct {
-		RecordID  string         `db:"record_id"`
-		Type      string         `db:"type"`
-		Value     string         `db:"value"`
-		Weight    float64        `db:"weight"`
-		HitCount  int            `db:"hit_count"`
-		SpamLevel string         `db:"spam_level"`
-		IsActive  bool           `db:"is_active"`
-		CreatedAt sql.NullString `db:"created_at"`
-		UpdatedAt sql.NullString `db:"updated_at"`
+		RecordID      string         `db:"record_id"`
+		Type          string         `db:"type"`
+		Value         string         `db:"value"`
+		Weight        float64        `db:"weight"`
+		HitCount      int            `db:"hit_count"`
+		SpamLevel     string         `db:"spam_level"`
+		IsActive      bool           `db:"is_active"`
+		CleanOverride bool           `db:"clean_override"`
+		CreatedAt     sql.NullString `db:"created_at"`
+		UpdatedAt     sql.NullString `db:"updated_at"`
 	}
 	rows := []ruleRow{}
 	listArgs := append(args, limit, offset)
@@ -287,6 +528,7 @@ func (c *Core) GetInboundSpamRules(ctx context.Context, limit, offset int, ruleT
 			COALESCE(hit_count, 0) AS hit_count,
 			COALESCE(spam_level, '') AS spam_level,
 			COALESCE(is_active, 0) AS is_active,
+			COALESCE(clean_override, 0) AS clean_override,
 			created AS created_at,
 			updated AS updated_at
 		FROM inbound_spam_rules
@@ -302,15 +544,16 @@ func (c *Core) GetInboundSpamRules(ctx context.Context, limit, offset int, ruleT
 		created, _ := parseSQLiteDateTime(r.CreatedAt.String)
 		updated, _ := parseSQLiteDateTime(r.UpdatedAt.String)
 		out = append(out, models.InboundSpamRule{
-			RecordID:  r.RecordID,
-			Type:      r.Type,
-			Value:     r.Value,
-			Weight:    r.Weight,
-			HitCount:  r.HitCount,
-			SpamLevel: r.SpamLevel,
-			IsActive:  r.IsActive,
-			CreatedAt: created,
-			UpdatedAt: updated,
+			RecordID:      r.RecordID,
+			Type:          r.Type,
+			Value:         r.Value,
+			Weight:        r.Weight,
+			HitCount:      r.HitCount,
+			SpamLevel:     r.SpamLevel,
+			IsActive:      r.IsActive,
+			CleanOverride: r.CleanOverride,
+			CreatedAt:     created,
+			UpdatedAt:     updated,
 		})
 	}
 	return out, total, nil

@@ -17,6 +17,7 @@
         width="264"
         color="surface"
         border="end"
+        id="app-navigation"
         class="app-drawer"
       >
         <div class="app-drawer-brand">
@@ -35,17 +36,18 @@
         />
 
         <template v-if="!isMobile" #append>
-          <div class="app-drawer-foot">
-            <v-btn
-              :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
-              variant="text"
-              size="small"
-              :aria-label="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
-              :title="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
-              data-cy="nav-collapse"
-              @click="toggleRail"
-            />
-          </div>
+          <v-btn
+            :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+            class="app-drawer-toggle"
+            variant="flat"
+            size="40"
+            :aria-expanded="!rail"
+            aria-controls="app-navigation"
+            :aria-label="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
+            :title="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
+            data-cy="nav-collapse"
+            @click="toggleRail"
+          />
         </template>
       </v-navigation-drawer>
 
@@ -492,6 +494,8 @@ export default {
 }
 
 .app-drawer .v-navigation-drawer__content {
+  min-height: 0;
+  overflow: hidden;
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
@@ -506,15 +510,20 @@ export default {
   padding: 8px 8px 16px;
 }
 
-.app-drawer-foot {
-  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  display: flex;
-  justify-content: flex-end;
-  padding: 4px 8px;
+.app-drawer-toggle {
+  position: absolute;
+  inset-inline-end: -20px;
+  top: 76px;
+  z-index: 1;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: rgb(var(--v-theme-surface));
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.14);
 }
 
-.app-drawer.v-navigation-drawer--rail .app-drawer-foot {
-  justify-content: center;
+.app-drawer-toggle:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 3px;
 }
 
 .app-brand-link {

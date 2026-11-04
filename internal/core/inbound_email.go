@@ -233,8 +233,12 @@ func (c *Core) CreateInboundEmailReplyEvent(ctx context.Context, event *models.I
 	}
 
 	// Check spam rules to auto-classify the incoming email.
+	// Classification failure stays fail-open: the message is still ingested.
 	if event.SpamStatus == "" {
-		if spamStatus, spamScore, checkErr := c.CheckInboundSpamRules(ctx, event.FromAddress, event.Subject, event.BodyText); checkErr == nil && spamStatus != "" {
+		spamStatus, spamScore, checkErr := c.CheckInboundSpamRules(ctx, event.FromAddress, event.Subject, event.BodyText)
+		if checkErr != nil {
+			c.log.Printf("inbound spam classification failed from=%q: %v", event.FromAddress, checkErr)
+		} else if spamStatus != "" {
 			event.SpamStatus = spamStatus
 			event.SpamScore = spamScore
 		}

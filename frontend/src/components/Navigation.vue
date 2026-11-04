@@ -375,15 +375,17 @@ function onItemClick() {
 </script>
 
 <style scoped>
-.side-nav { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.side-nav { display: flex; flex: 1 1 0; flex-direction: column; min-height: 0; }
 
 .side-nav-search {
   flex-shrink: 0;
   padding: 0 4px 10px;
 }
 
-.side-nav-list {
+.side-nav > .v-list.side-nav-list {
+  flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
   background: transparent;
   padding: 0;
@@ -451,7 +453,9 @@ function onItemClick() {
 }
 
 .side-nav--rail .side-nav-rail-item {
-  justify-content: center;
+  grid-template-areas: "prepend";
+  grid-template-columns: 1fr;
+  justify-items: center;
   padding-inline: 0 !important;
 }
 
@@ -459,7 +463,9 @@ function onItemClick() {
   margin-inline-end: 0;
 }
 
-.side-nav--rail :deep(.v-list-item__spacer) {
+.side-nav--rail :deep(.v-list-item__spacer),
+.side-nav--rail :deep(.v-list-item__content),
+.side-nav--rail :deep(.v-list-item__append) {
   display: none;
 }
 
