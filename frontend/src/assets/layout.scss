@@ -159,3 +159,50 @@
     }
   }
 }
+
+/* Shared management surfaces; never target message HTML or editor canvases. */
+.app-shell {
+  .v-card--variant-outlined {
+    border-color: rgba(var(--v-border-color), var(--v-border-opacity));
+    background: rgb(var(--v-theme-surface));
+  }
+  :is(.admin-data-table, .inbox-table, .page-header, .query-card) a:not(.v-btn) {
+    color: rgb(var(--v-theme-primary));
+    text-underline-offset: 3px;
+  }
+  :is(.query-form, .media-search-row) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+  :is(.query-form, .media-search-row) > .v-input { flex: 1 1 0; min-width: 0; }
+  .query-card { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+  :is(.admin-data-table, .inbox-table) .v-data-table-footer { border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+  :is(.admin-data-table, .inbox-table) td { font-variant-numeric: tabular-nums; }
+}
+@media (max-width: 600px) {
+  .app-shell :is(.admin-data-table, .inbox-table) table { min-width: 720px; }
+  .app-shell :is(.query-form, .media-search-row) { flex-direction: row; }
+  .app-shell :is(.query-form, .media-search-row) > .query-submit { width: 44px; flex: 0 0 44px; }
+}
+
+.app-shell .contact-page a:not(.v-btn) { color: rgb(var(--v-theme-primary)); }
+.app-shell :is(.tasks-empty, .approvals-empty) {
+  background: rgb(var(--v-theme-surface));
+  border: 1px dashed rgba(var(--v-border-color), 0.24);
+  border-radius: 16px;
+  padding: 40px 24px;
+}
+.app-shell .user-profile .profile-form {
+  padding: 24px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 16px;
+  background: rgb(var(--v-theme-surface));
+}
+.app-shell .logs-shell .lines { padding: 16px; }
+
+.app-shell .admin-data-table .v-btn--icon { width: 36px; height: 36px; }
+@media (max-width: 600px) {
+  .app-shell .admin-data-table .v-btn--icon { width: 44px; height: 44px; }
+}

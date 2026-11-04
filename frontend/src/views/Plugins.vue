@@ -48,7 +48,7 @@
 
     <v-progress-linear v-if="isLoading" indeterminate color="primary" class="mb-4" />
 
-    <empty-placeholder v-if="!isLoading && plugins.length === 0" />
+    <empty-placeholder v-if="!isLoading && plugins.length === 0" icon="mdi-puzzle-outline" :label="$t('ui.pluginsEmpty')" :hint="$t('ui.pluginsEmptyHelp')" />
 
     <v-card v-for="item in plugins" :key="item.manifest.id" class="mb-4" :data-cy="`plugin-${item.manifest.id}`">
       <v-card-title class="d-flex align-center flex-wrap ga-2">

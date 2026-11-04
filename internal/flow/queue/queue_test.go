@@ -59,3 +59,29 @@ func TestQueueRetryDeadAndDedupe(t *testing.T) {
 		t.Errorf("only the future job should remain, have %d", n)
 	}
 }
+
+func TestDeadFinalizationFailureRetainsJob(t *testing.T) {
+	app, err := tests.NewTestAppWithConfig(core.BaseAppConfig{DataDir: t.TempDir(), EncryptionEnv: "pb_test_env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Cleanup()
+	if err := app.RunAllMigrations(); err != nil {
+		t.Fatal(err)
+	}
+	q := queue.New(app)
+	q.MaxAttempts = 1
+	q.Handle("fail", func(context.Context, queue.Job) error { return errors.New("failed") })
+	q.FinalizeDead = func(queue.Job, error) error { return errors.New("database unavailable") }
+	if err := q.Enqueue("fail", "run", nil, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	q.RunOnce(context.Background())
+	count, err := app.CountRecords("flow_jobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatal("job discarded before finalization")
+	}
+}

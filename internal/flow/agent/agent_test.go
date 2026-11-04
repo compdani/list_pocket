@@ -336,3 +336,66 @@ func TestAgentCannotFillHumanWrittenField(t *testing.T) {
 		t.Fatalf("the model should be told why: %s", raw)
 	}
 }
+
+type markerTool struct {
+	app   core.App
+	t     *testing.T
+	calls int
+}
+
+func (*markerTool) Name() string                { return "test.marker" }
+func (*markerTool) Description() string         { return "Test persisted side effect intent" }
+func (*markerTool) InputSchema() map[string]any { return map[string]any{"type": "object"} }
+func (*markerTool) RequiresApproval() bool      { return false }
+func (m *markerTool) Invoke(_ context.Context, call tools.Call) (any, error) {
+	m.calls++
+	rec, err := m.app.FindRecordById("flow_agent_runs", call.RunID)
+	if err != nil || !rec.GetBool("side_effect_started") {
+		m.t.Errorf("tool invoked before durable intent: %v", err)
+	}
+	return map[string]any{"ok": true}, nil
+}
+func TestAgentPersistsIntentBeforeSideEffectInvoke(t *testing.T) {
+	mock := &mockLLM{replies: []string{`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"write1","type":"function","function":{"name":"test__marker","arguments":"{}"}}]}}]}`}}
+	server := httptest.NewServer(mock)
+	defer server.Close()
+	app := newApp(t, server.URL)
+	runner := newRunner(app)
+	tool := &markerTool{app: app, t: t}
+	runner.Tools.Register(tool)
+	if _, err := runner.Run(context.Background(), agent.Spec{Name: "marker", SystemPrompt: "Use tool", Tools: []string{"test.marker"}}, agent.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if tool.calls != 1 {
+		t.Fatalf("tool calls=%d", tool.calls)
+	}
+}
+
+func TestSearchSubrequestDoesNotMarkSideEffectIntent(t *testing.T) {
+	mock := &mockLLM{replies: []string{
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"search1","type":"function","function":{"name":"web__search","arguments":"{\"query\":\"example\"}"}}]}}]}`,
+		`{"choices":[{"delta":{"content":"Search answer"}}]}`,
+		`{"choices":[{"delta":{"content":"Done"}}]}`,
+	}}
+	server := httptest.NewServer(mock)
+	defer server.Close()
+	app := newApp(t, server.URL)
+	runner := newRunner(app)
+	result, err := runner.Run(context.Background(), agent.Spec{Name: "search", SystemPrompt: "Search", Tools: []string{tools.WebSearch}, AI: map[string]any{"search": map[string]any{"strategy": "subrequest"}}}, agent.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record, err := app.FindRecordById("flow_agent_runs", result.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.GetBool("side_effect_started") {
+		t.Fatal("search-only agent marked as a write")
+	}
+	mock.mu.Lock()
+	hits := mock.hitCount
+	mock.mu.Unlock()
+	if hits != 3 {
+		t.Fatalf("fallback search was not executed: %d requests", hits)
+	}
+}

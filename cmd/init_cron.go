@@ -13,9 +13,9 @@ import (
 	"github.com/pocketbase/pocketbase"
 )
 
-func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manager.Manager) {
+func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manager.Manager, jobs *backgroundCallbacks) {
 	if pb != nil && mgr != nil && !ko.Bool("passive") {
-		if err := pb.Cron().Add("campaign-scheduler", "* * * * *", func() {
+		if err := jobs.Add(pb, "campaign-scheduler", "* * * * *", func() {
 			mgr.ScanCampaignsOnce()
 		}); err != nil {
 			lo.Printf("error initializing campaign scheduler cron: %v", err)
@@ -30,7 +30,7 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 		if intval == "" {
 			lo.Println("error: invalid cron interval string for slow query cache")
 		} else {
-			err := pb.Cron().Add("slow-query-cache-refresh", intval, func() {
+			err := jobs.Add(pb, "slow-query-cache-refresh", intval, func() {
 				lo.Println("refreshing slow query cache")
 				if err := co.RefreshMatViews(true); err != nil {
 					lo.Printf("error refreshing slow query cache: %v", err)
@@ -52,7 +52,7 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 		if intval == "" {
 			lo.Println("error: invalid cron interval string for database vacuum")
 		} else {
-			err := pb.Cron().Add("database-vacuum", intval, func() {
+			err := jobs.Add(pb, "database-vacuum", intval, func() {
 				RunDBVacuum(db, lo)
 			})
 			if err != nil {
@@ -69,7 +69,7 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 			ledgerCleanupCron = "15 3 * * *"
 			ledgerRetention   = 14
 		)
-		err := pb.Cron().Add("campaign-ledger-cleanup", ledgerCleanupCron, func() {
+		err := jobs.Add(pb, "campaign-ledger-cleanup", ledgerCleanupCron, func() {
 			cutoff := time.Now().UTC().AddDate(0, 0, -ledgerRetention)
 			deleted, reconciled, err := campaignledger.CleanupSentOlderThan(db, cutoff)
 			if err != nil {
@@ -90,7 +90,7 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 	}
 
 	// Weekly spam inbox cleanup cron job — deletes spam/confirmed_spam emails older than 7 days.
-	if err := pb.Cron().Add("spam-inbox-cleanup", "0 2 * * 0", func() {
+	if err := jobs.Add(pb, "spam-inbox-cleanup", "0 2 * * 0", func() {
 		ctx := context.Background()
 		deleted, err := co.DeleteSpamInboundEmails(ctx)
 		if err != nil {
@@ -109,35 +109,26 @@ func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manage
 // startSIGHUPReload watches for SIGHUP and respawns the process after cleanup.
 // Settings changes and /mailapi/admin/reload send on the same channel.
 func startSIGHUPReload(sigChan chan os.Signal, closer func()) {
-	closerWait := make(chan bool, 1)
-
-	respawn := func() {
-		if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
-			lo.Fatalf("error spawning process: %v", err)
-		}
-		os.Exit(0)
-	}
-
 	go func() {
-		for range sigChan {
-			lo.Println("reloading on signal ...")
-
-			go func() {
-				closer()
-				select {
-				case closerWait <- true:
-				default:
-				}
-			}()
-
-			select {
-			case <-closerWait:
-				respawn()
-			case <-time.After(time.Second * 3):
-				respawn()
-			}
+		// Only one reload can run. Never replace the process while cleanup is
+		// still using its resources, even when draining takes longer than usual.
+		if _, ok := <-sigChan; !ok {
+			return
 		}
+		lo.Println("reloading on signal ...")
+		reloadAfterCleanup(closer, func() {
+			if err := syscall.Exec(os.Args[0], os.Args, os.Environ()); err != nil {
+				lo.Fatalf("error spawning process: %v", err)
+			}
+		})
 	}()
+}
+
+// reloadAfterCleanup preserves the resource ownership boundary: replacement
+// must wait until all cleanup has completed.
+func reloadAfterCleanup(closer, replace func()) {
+	closer()
+	replace()
 }
 
 // initTplFuncs returns a generic template func map with custom template

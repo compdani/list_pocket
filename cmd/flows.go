@@ -14,6 +14,7 @@ import (
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/core"
+	"github.com/compdani/list_pocket/internal/delivery"
 	"github.com/compdani/list_pocket/internal/flow"
 	"github.com/compdani/list_pocket/internal/flow/agent"
 	"github.com/compdani/list_pocket/internal/flow/llm"
@@ -41,10 +42,11 @@ const (
 
 // flowEngine runs workflows. It's a separate struct so the App keeps one field for it.
 type flowEngine struct {
-	engine *flow.Engine
-	queue  *queue.Queue
-	tools  *tools.Registry
-	cancel context.CancelFunc
+	delivery *delivery.Outbox
+	engine   *flow.Engine
+	queue    *queue.Queue
+	tools    *tools.Registry
+	cancel   context.CancelFunc
 }
 
 // campaignStatusChanged lets the send pipeline, which is built before the app, report
@@ -71,7 +73,32 @@ func (a *App) initFlows(passive bool) {
 	runner := &agent.Runner{App: a.pb, LLM: llm.NewClient(), Tools: registry, Resolver: resolver}
 	engine := flow.NewEngine(a.pb, runner, presets, q)
 	engine.Notify = a.flowNotify
-	a.flows = &flowEngine{engine: engine, queue: q, tools: registry}
+	outbox := &delivery.Outbox{App: a.pb, Queue: q, Send: func(msg models.Message) error {
+		err := a.manager.DeliverMessage(msg)
+
+		if err == nil && msg.TxMessage == nil {
+			body := msg.Body
+			if len(msg.AltBody) > 0 {
+				body = msg.AltBody
+			}
+			if logErr := a.core.RecordConversationReply(models.ChannelEmail, msg.Subscriber.RecordID, strings.ToLower(msg.Subscriber.Email), msg.Subject, string(body), flowMessageID()); logErr != nil {
+				a.log.Printf("workflow conversation receipt: %v", logErr)
+			}
+		}
+		return err
+	}}
+	outbox.Register()
+	finalizeWorkflow := q.FinalizeDead
+	q.FinalizeDead = func(job queue.Job, err error) error {
+		if job.Kind == delivery.JobKind {
+			return outbox.FinalizeDead(job, err)
+		}
+		if finalizeWorkflow != nil {
+			return finalizeWorkflow(job, err)
+		}
+		return nil
+	}
+	a.flows = &flowEngine{engine: engine, queue: q, tools: registry, delivery: outbox}
 
 	if err := engine.RefreshTriggers(); err != nil {
 		a.log.Printf("error loading workflow triggers: %v", err)
@@ -82,11 +109,17 @@ func (a *App) initFlows(passive bool) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a.flows.cancel = cancel
+	if err := outbox.Recover(); err != nil {
+		a.log.Printf("workflow delivery recovery: %v", err)
+	}
 	q.Start(ctx)
 	if err := engine.Recover(); err != nil {
 		a.log.Printf("error recovering workflow runs: %v", err)
 	}
-	if err := a.pb.Cron().Add("flow-triggers", "* * * * *", func() { engine.Tick(time.Now()) }); err != nil {
+	if a.cronJobs == nil {
+		a.cronJobs = &backgroundCallbacks{}
+	}
+	if err := a.cronJobs.Add(a.pb, "flow-triggers", "* * * * *", func() { engine.Tick(time.Now()) }); err != nil {
 		a.log.Printf("error scheduling workflow triggers: %v", err)
 	}
 }

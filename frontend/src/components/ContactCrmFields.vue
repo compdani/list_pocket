@@ -1,5 +1,6 @@
 <template>
   <div class="crm-fields" data-cy="contact-crm-fields">
+    <p class="text-caption text-medium-emphasis mb-0">{{ $t('crm.tab.details') }}</p>
     <v-select
       :model-value="profile.owner"
       :items="ownerItems"
@@ -87,6 +88,6 @@ onMounted(load);
 .crm-fields {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 </style>

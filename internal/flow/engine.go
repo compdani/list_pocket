@@ -2,6 +2,7 @@ package flow
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,13 +76,23 @@ func NewEngine(app core.App, runner *agent.Runner, presets PresetSource, q *queu
 	q.Handle(JobAdvance, func(ctx context.Context, job queue.Job) error {
 		return e.Advance(ctx, job.Target)
 	})
-	q.OnDead = func(job queue.Job, err error) {
-		if job.Kind == JobAdvance {
-			if run, ferr := app.FindRecordById("flow_runs", job.Target); ferr == nil && !final(run.GetString("status")) {
-				e.finishRun(run, StatusFailed, nil, "engine error: "+err.Error())
-			}
+	q.FinalizeDead = func(job queue.Job, cause error) error {
+		if job.Kind != JobAdvance {
+			return nil
 		}
+		run, err := app.FindRecordById("flow_runs", job.Target)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if final(run.GetString("status")) {
+			return nil
+		}
+		return e.finishRun(run, StatusFailed, nil, "engine error: "+cause.Error())
 	}
+
 	return e
 }
 
@@ -99,10 +110,11 @@ func (e *Engine) runLock(id string) *sync.Mutex {
 // --- starting runs ---
 
 type StartOptions struct {
-	Source       string // manual_ui | cron | event | webhook | subworkflow | test
-	StartedBy    string // users id
-	ScheduledFor time.Time
-	ParentRun    string
+	Source        string // manual_ui | cron | event | webhook | subworkflow | test
+	StartedBy     string // users id
+	ScheduledFor  time.Time
+	ParentRun     string
+	ParentNodeRun string // establish child linkage in the start transaction
 }
 
 var ErrNotPublished = errors.New("workflow has no published version")
@@ -212,10 +224,29 @@ func (e *Engine) startRun(wf *core.Record, def *Definition, version int, input m
 	if !opts.ScheduledFor.IsZero() {
 		run.Set("scheduled_for", opts.ScheduledFor.UTC())
 	}
-	if err := e.App.Save(run); err != nil {
+	if err := e.App.RunInTransaction(func(tx core.App) error {
+		if err := tx.Save(run); err != nil {
+			return err
+		}
+		if opts.ParentNodeRun != "" {
+			parentNode, err := tx.FindRecordById("flow_node_runs", opts.ParentNodeRun)
+			if err != nil {
+				return err
+			}
+			if parentNode.GetString("workflow_run") != opts.ParentRun {
+				return errors.New("parent node does not belong to parent run")
+			}
+			parentNode.Set("child_run", run.Id)
+			if err := tx.Save(parentNode); err != nil {
+				return err
+			}
+		}
+		return e.Queue.EnqueueWithApp(tx, JobAdvance, run.Id, nil, time.Time{})
+	}); err != nil {
 		return nil, err
 	}
-	return run, e.Queue.Enqueue(JobAdvance, run.Id, nil, time.Time{})
+	e.Queue.Notify()
+	return run, nil
 }
 
 func (e *Engine) depth(runID string) int {
@@ -242,16 +273,18 @@ func (e *Engine) Advance(ctx context.Context, runID string) error {
 	defer l.Unlock()
 
 	run, err := e.App.FindRecordById("flow_runs", runID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
-		return nil // deleted
+		return err
 	}
 	if final(run.GetString("status")) {
 		return nil
 	}
 	def, err := e.runDefinition(run)
 	if err != nil {
-		e.finishRun(run, StatusFailed, nil, err.Error())
-		return nil
+		return e.finishRun(run, StatusFailed, nil, err.Error())
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -269,8 +302,16 @@ func (e *Engine) Advance(ctx context.Context, runID string) error {
 	if run.GetDateTime("started").IsZero() {
 		run.Set("started", types.NowDateTime())
 	}
-	if err := e.App.Save(run); err != nil {
+	advanced := false
+	if err := e.App.RunInTransaction(func(tx core.App) error {
+		var err error
+		advanced, err = persistRunTransition(tx, run)
 		return err
+	}); err != nil {
+		return err
+	}
+	if !advanced {
+		return nil
 	}
 
 	st, err := e.loadState(run, def)
@@ -289,38 +330,59 @@ func (e *Engine) Advance(ctx context.Context, runID string) error {
 		if out == nil {
 			out = res.out
 		}
-		e.finishRun(run, StatusSucceeded, out, "")
+		return e.finishRun(run, StatusSucceeded, out, "")
 	case pathWaiting:
 		e.updateTotals(run)
 		run.Set("status", StatusWaiting)
-		if err := e.App.Save(run); err != nil {
+		if err := e.App.RunInTransaction(func(tx core.App) error {
+			saved, err := persistRunTransition(tx, run)
+			if err != nil || !saved {
+				return err
+			}
+			if wake := st.earliestWake(); !wake.IsZero() {
+				return e.Queue.EnqueueWithApp(tx, JobAdvance, runID, map[string]any{"wake": true}, wake)
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
-		if wake := st.earliestWake(); !wake.IsZero() {
-			return e.Queue.Enqueue(JobAdvance, runID, map[string]any{"wake": true}, wake)
-		}
+		e.Queue.Notify()
 	case pathFailed:
 		if ctx.Err() != nil && res.err != nil && errors.Is(res.err, context.Canceled) {
 			return nil
 		}
-		e.finishRun(run, StatusFailed, nil, res.err.Error())
+		return e.finishRun(run, StatusFailed, nil, res.err.Error())
 	}
 	return nil
 }
 
-func (e *Engine) finishRun(run *core.Record, status string, output any, errMsg string) {
+func (e *Engine) finishRun(run *core.Record, status string, output any, errMsg string) error {
 	e.updateTotals(run)
 	run.Set("status", status)
 	run.Set("output", output)
 	run.Set("error", errMsg)
 	run.Set("finished", types.NowDateTime())
-	if err := e.App.Save(run); err != nil {
-		e.App.Logger().Error("saving workflow run failed", "run", run.Id, "error", err)
-		return
+	if err := e.App.RunInTransaction(func(tx core.App) error {
+		saved, err := persistRunTransition(tx, run)
+		if err != nil || !saved {
+			return err
+		}
+		if parent := run.GetString("parent_run"); parent != "" {
+			_, err := tx.FindFirstRecordByFilter("flow_node_runs", "workflow_run = {:p} && child_run = {:c}", dbx.Params{"p": parent, "c": run.Id})
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return e.Queue.EnqueueWithApp(tx, JobAdvance, parent, nil, time.Time{})
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	if parent := run.GetString("parent_run"); parent != "" {
-		e.resolveSubworkflow(parent, run)
-	}
+	e.Queue.Notify()
+	return nil
 }
 
 func (e *Engine) updateTotals(run *core.Record) {
@@ -350,9 +412,7 @@ func (e *Engine) Cancel(runID string) error {
 	}
 	e.mu.Unlock()
 
-	run.Set("status", StatusCancelled)
-	run.Set("finished", types.NowDateTime())
-	if err := e.App.Save(run); err != nil {
+	if err := e.finishRun(run, StatusCancelled, nil, ""); err != nil {
 		return err
 	}
 	nodeRuns, _ := e.App.FindRecordsByFilter("flow_node_runs", "workflow_run = {:r} && (status = 'waiting' || status = 'running')", "", 0, 0, dbx.Params{"r": runID})
@@ -787,7 +847,7 @@ func (st *runState) execTool(ctx context.Context, n *Node, nr *core.Record, env 
 		}
 		return nil, pathWaiting, nil
 	}
-	return st.invokeTool(ctx, t, n, input)
+	return st.invokeTool(ctx, t, n, nr.Id, input)
 }
 
 // filledAtRuntime reports whether a field that needs a person's writing comes from
@@ -801,10 +861,10 @@ func filledAtRuntime(t tools.Tool, raw, rendered map[string]any) bool {
 	return !ok || strings.Contains(text, "{{")
 }
 
-func (st *runState) invokeTool(ctx context.Context, t tools.Tool, n *Node, input map[string]any) (any, pathState, error) {
+func (st *runState) invokeTool(ctx context.Context, t tools.Tool, n *Node, executionID string, input map[string]any) (any, pathState, error) {
 	tctx, cancel := context.WithTimeout(ctx, toolNodeTimeout)
 	defer cancel()
-	out, err := tools.Invoke(tctx, t, tools.Call{Args: input, Config: st.def.ToolConfig[n.Tool], RunID: st.run.Id})
+	out, err := tools.Invoke(tctx, t, tools.Call{ExecutionID: executionID, Args: input, Config: st.def.ToolConfig[n.Tool], RunID: st.run.Id})
 	return out, stateOf(err), err
 }
 
@@ -819,6 +879,13 @@ func (st *runState) execAgent(ctx context.Context, n *Node, nr *core.Record, env
 	}
 	nr.Set("input", input)
 	if err := st.checkDailyBudget(); err != nil {
+		return nil, pathFailed, err
+	}
+	// Re-prompting a partially executed agent can choose fresh provider call IDs
+	// for an action already accepted. Without a resumable journal, fail closed.
+	if _, err := st.e.App.FindFirstRecordByFilter("flow_agent_runs", "node_run = {:node} && side_effect_started = true", dbx.Params{"node": nr.Id}); err == nil {
+		return nil, pathFailed, errors.New("agent execution already started; reconcile its deliveries before starting a new run")
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, pathFailed, err
 	}
 	res, err := st.e.Runner.Run(ctx, spec, agent.Options{
@@ -1076,6 +1143,25 @@ func (st *runState) execWait(n *Node, nr *core.Record, env map[string]any) (any,
 }
 
 func (st *runState) execSubworkflow(n *Node, nr *core.Record, env map[string]any) (any, pathState, error) {
+	if childID := nr.GetString("child_run"); childID != "" {
+		if n.Detach {
+			return map[string]any{"run_id": childID}, pathDone, nil
+		}
+		child, err := st.e.App.FindRecordById("flow_runs", childID)
+		if err != nil {
+			return nil, pathFailed, err
+		}
+		switch child.GetString("status") {
+		case StatusSucceeded:
+			var out any
+			_ = child.UnmarshalJSONField("output", &out)
+			return out, pathDone, nil
+		case StatusFailed, StatusCancelled:
+			return nil, pathFailed, fmt.Errorf("subworkflow %s: %s", child.GetString("status"), child.GetString("error"))
+		}
+		return nil, pathWaiting, nil
+	}
+
 	wf, err := st.e.App.FindFirstRecordByData("flows", "name", n.Workflow)
 	if err != nil {
 		return nil, pathFailed, fmt.Errorf("workflow %q not found", n.Workflow)
@@ -1090,11 +1176,14 @@ func (st *runState) execSubworkflow(n *Node, nr *core.Record, env map[string]any
 			delete(input, k)
 		}
 	}
-	child, err := st.e.StartRun(wf, input, StartOptions{Source: "subworkflow", ParentRun: st.run.Id})
+	opts := StartOptions{Source: "subworkflow", ParentRun: st.run.Id}
+	opts.ParentNodeRun = nr.Id
+	child, err := st.e.StartRun(wf, input, opts)
 	if err != nil {
 		return nil, pathFailed, err
 	}
 	nr.Set("input", input)
+	nr.Set("child_run", child.Id)
 	if n.Detach {
 		return map[string]any{"run_id": child.Id}, pathDone, nil
 	}
@@ -1151,7 +1240,7 @@ func (st *runState) resume(ctx context.Context, n *Node, nr *core.Record, idx in
 		if !ok {
 			return st.settle(n, nr, nil, pathFailed, fmt.Errorf("tool %q is not available", n.Tool))
 		}
-		out, state, err := st.invokeTool(ctx, t, n, input)
+		out, state, err := st.invokeTool(ctx, t, n, nr.Id, input)
 		return st.settle(n, nr, out, state, err)
 
 	case NodeWait:
@@ -1197,12 +1286,18 @@ func (st *runState) createApproval(nr *core.Record, kind, title, instructions st
 	return st.e.App.Save(a)
 }
 
-// resolveSubworkflow wakes the parent run when a child finishes.
-func (e *Engine) resolveSubworkflow(parentID string, child *core.Record) {
-	if _, err := e.App.FindFirstRecordByFilter("flow_node_runs", "workflow_run = {:p} && child_run = {:c}", dbx.Params{"p": parentID, "c": child.Id}); err != nil {
-		return
+// persistRunTransition must run inside the writer transaction so a concurrent
+// cancellation cannot commit between the terminal check and the state write.
+func persistRunTransition(tx core.App, run *core.Record) (bool, error) {
+	fresh, err := tx.FindRecordById("flow_runs", run.Id)
+	if err != nil {
+		return false, err
 	}
-	if err := e.Queue.Enqueue(JobAdvance, parentID, nil, time.Time{}); err != nil {
-		e.App.Logger().Error("waking parent run failed", "parent", parentID, "error", err)
+	if final(fresh.GetString("status")) {
+		return false, nil
 	}
+	if err := tx.Save(run); err != nil {
+		return false, err
+	}
+	return true, nil
 }

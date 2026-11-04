@@ -66,6 +66,8 @@
       <template v-if="!emails.length" #loading>
         <v-skeleton-loader type="table-row@8" />
       </template>
+      <template #item.fromAddress="{ item }"><span class="email-address" :title="item.fromAddress">{{ item.fromAddress }}</span></template>
+      <template #item.subject="{ item }">{{ decodeEmailSubject(item.subject) }}</template>
       <template #item.spamStatus="{ item }">
         <v-chip
           v-if="item.spamStatus"
@@ -148,7 +150,7 @@
     <v-dialog v-model="detailDialog" max-width="900" scrollable>
       <v-card v-if="selectedEmail">
         <v-card-title class="d-flex align-center justify-space-between">
-          <span class="text-truncate mr-2">{{ selectedEmail.subject || '(no subject)' }}</span>
+          <span class="text-truncate mr-2">{{ decodeEmailSubject(selectedEmail.subject) || '(no subject)' }}</span>
           <v-btn :aria-label="$t('globals.buttons.close')" icon="mdi-close" variant="text" @click="detailDialog = false" />
         </v-card-title>
         <v-card-subtitle>
@@ -209,11 +211,14 @@
         <v-card-text>
           <v-data-table
             :headers="spamRuleHeaders"
+            class="spam-rules-table"
             :items="spamRules"
+            :items-per-page="-1"
             :loading="loadingRules"
             density="compact"
             hide-default-footer
           >
+            <template #item.spamLevel="{ item }">{{ String(item.spamLevel || '').replace(/_/g, ' ') }}</template>
             <template #item.isActive="{ item }">
               <v-icon :color="item.isActive ? 'success' : 'error'" size="small">
                 {{ item.isActive ? 'mdi-check-circle' : 'mdi-close-circle' }}
@@ -240,6 +245,7 @@
 </template>
 
 <script setup>
+import { decodeEmailSubject } from '../utils/emailSubject.mjs';
 import { ref, reactive, onMounted, watch } from 'vue';
 import {
   getInboundEmailInbox,
@@ -276,8 +282,8 @@ const spamStatusOptions = [
 ];
 
 const tableHeaders = [
-  { title: 'From', key: 'fromAddress', sortable: false },
-  { title: 'Subject', key: 'subject', sortable: false },
+  { title: 'From', key: 'fromAddress', sortable: false, width: '220px' },
+  { title: 'Subject', key: 'subject', sortable: false, width: '300px' },
   { title: 'Subscriber', key: 'subscriberName', sortable: false },
   { title: 'Received', key: 'receivedAt', sortable: false },
   { title: 'Status', key: 'spamStatus', sortable: false },
@@ -286,11 +292,11 @@ const tableHeaders = [
 ];
 
 const spamRuleHeaders = [
-  { title: 'Type', key: 'type' },
+  { title: 'Type', key: 'type', width: '96px' },
   { title: 'Value', key: 'value' },
-  { title: 'Level', key: 'spamLevel' },
-  { title: 'Hits', key: 'hitCount' },
-  { title: 'Active', key: 'isActive' },
+  { title: 'Level', key: 'spamLevel', width: '115px' },
+  { title: 'Hits', key: 'hitCount', width: '48px' },
+  { title: 'Active', key: 'isActive', width: '64px' },
   { title: '', key: 'actions', sortable: false, width: '48px' },
 ];
 
@@ -373,4 +379,10 @@ onMounted(fetchEmails);
 .inbox-table {
   cursor: pointer;
 }
+
+:deep(.inbox-table table) { table-layout: fixed; min-width: 900px; }
+:deep(.inbox-table td) { overflow-wrap: anywhere; }
+.email-address { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:deep(.spam-rules-table table) { width: 100%; table-layout: fixed; }
+:deep(.spam-rules-table td) { overflow-wrap: anywhere; }
 </style>

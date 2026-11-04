@@ -11,6 +11,7 @@
         <v-btn
           v-if="$can('roles:manage')"
           color="primary"
+          variant="flat"
           prepend-icon="mdi-plus"
           data-cy="btn-new"
           @click="showNewForm"

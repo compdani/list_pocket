@@ -958,3 +958,265 @@ func TestRegisterEvent(t *testing.T) {
 		t.Fatalf("started %d runs", started)
 	}
 }
+
+func TestStartRunRollsBackWhenEnqueueFails(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"atomic_start","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"end"},{"id":"end","type":"end"}]}`)
+	en.app.OnRecordCreate("flow_jobs").BindFunc(func(e *core.RecordEvent) error { return fmt.Errorf("injected enqueue failure") })
+	if _, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"}); err == nil {
+		t.Fatal("expected enqueue failure")
+	}
+	count, err := en.app.CountRecords("flow_runs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("orphaned runs: %d", count)
+	}
+}
+
+func TestTerminalSaveFailureRetainsJobForRetry(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"terminal_retry","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"end"},{"id":"end","type":"end"}]}`)
+	run, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	en.app.OnRecordUpdate("flow_runs").BindFunc(func(e *core.RecordEvent) error {
+		if e.Record.GetString("status") == flow.StatusSucceeded {
+			return fmt.Errorf("injected terminal save failure")
+		}
+		return e.Next()
+	})
+	en.queue.RunOnce(context.Background())
+	if en.run(t, run.Id).GetString("status") == flow.StatusSucceeded {
+		t.Fatal("terminal write unexpectedly succeeded")
+	}
+	jobs, err := en.app.FindAllRecords("flow_jobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 || jobs[0].GetInt("attempts") != 1 {
+		t.Fatalf("failed job was not retained for retry: %v", jobs)
+	}
+}
+
+func TestChildCompletionRollsBackWhenParentWakeFails(t *testing.T) {
+	en := setup(t)
+	en.publish(t, `{"name":"atomic_child","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"end"},{"id":"end","type":"end"}]}`)
+	wf := en.publish(t, `{"name":"atomic_parent","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"sub"},{"id":"sub","type":"subworkflow","workflow":"atomic_child","next":"end"},{"id":"end","type":"end"}]}`)
+	parent, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Acknowledge the parent's first advance, leaving its child queued.
+	en.queue.RunOnce(context.Background())
+	node := en.nodes(t, parent.Id)["sub"]
+	if node == nil || node.GetString("child_run") == "" {
+		t.Fatal("child not created")
+	}
+	childID := node.GetString("child_run")
+	binding := en.app.OnRecordCreate("flow_jobs").BindFunc(func(e *core.RecordEvent) error {
+		if e.Record.GetString("target_id") == parent.Id {
+			return fmt.Errorf("injected parent wake failure")
+		}
+		return e.Next()
+	})
+	if err := en.engine.Advance(context.Background(), childID); err == nil {
+		t.Fatal("expected parent wake failure")
+	}
+	if en.run(t, childID).GetString("status") == flow.StatusSucceeded {
+		t.Fatal("child committed without parent wake")
+	}
+	en.app.OnRecordCreate("flow_jobs").Unbind(binding)
+	en.drain()
+	if en.run(t, parent.Id).GetString("status") != flow.StatusSucceeded {
+		t.Fatal("parent did not resume after retry")
+	}
+}
+
+func TestChildIsLinkedBeforeDispatchAndCancellationWakesParent(t *testing.T) {
+	en := setup(t)
+	en.publish(t, `{"name":"cancel_child","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"pause"},{"id":"pause","type":"wait","wait":{"delay":"1h"}}]}`)
+	wf := en.publish(t, `{"name":"cancel_parent","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"sub"},{"id":"sub","type":"subworkflow","workflow":"cancel_child","next":"end"},{"id":"end","type":"end"}]}`)
+	en.app.OnRecordCreate("flow_jobs").BindFunc(func(e *core.RecordEvent) error {
+		child, err := e.App.FindRecordById("flow_runs", e.Record.GetString("target_id"))
+		if err == nil && child.GetString("parent_run") != "" {
+			if _, err := e.App.FindFirstRecordByData("flow_node_runs", "child_run", child.Id); err != nil {
+				return fmt.Errorf("child job visible without parent linkage: %w", err)
+			}
+		}
+		return e.Next()
+	})
+	parent, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	en.drain()
+	child := en.nodes(t, parent.Id)["sub"].GetString("child_run")
+	if child == "" {
+		t.Fatal("missing child")
+	}
+	if err := en.engine.Cancel(child); err != nil {
+		t.Fatal(err)
+	}
+	en.drain()
+	if en.run(t, parent.Id).GetString("status") == flow.StatusWaiting {
+		t.Fatal("cancelled child did not wake parent")
+	}
+}
+
+func TestInterruptedAgentDoesNotReprompt(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"interrupted_agent","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"agent"},{"id":"agent","type":"agent","agent":{"system_prompt":"Help"},"next":"end"},{"id":"end","type":"end"}]}`)
+	run, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	col, _ := en.app.FindCachedCollectionByNameOrId("flow_node_runs")
+	nr := core.NewRecord(col)
+	nr.Set("workflow_run", run.Id)
+	nr.Set("node_id", "agent")
+	nr.Set("node_type", "agent")
+	nr.Set("item_index", -1)
+	nr.Set("status", "running")
+	if err := en.app.Save(nr); err != nil {
+		t.Fatal(err)
+	}
+	col, _ = en.app.FindCachedCollectionByNameOrId("flow_agent_runs")
+	ar := core.NewRecord(col)
+	ar.Set("node_run", nr.Id)
+	ar.Set("side_effect_started", true)
+	ar.Set("status", "running")
+	if err := en.app.Save(ar); err != nil {
+		t.Fatal(err)
+	}
+	en.drain()
+	fresh := en.run(t, run.Id)
+	if fresh.GetString("status") != flow.StatusFailed || !strings.Contains(fresh.GetString("error"), "reconcile") {
+		t.Fatalf("status=%s error=%s", fresh.GetString("status"), fresh.GetString("error"))
+	}
+	if count, _ := en.app.CountRecords("flow_agent_runs"); count != 1 {
+		t.Fatalf("restarted agent: %d", count)
+	}
+}
+
+type transitionGate struct {
+	core.App
+	before func()
+}
+
+func (g *transitionGate) RunInTransaction(fn func(core.App) error) error {
+	if g.before != nil {
+		f := g.before
+		g.before = nil
+		f()
+	}
+	return g.App.RunInTransaction(fn)
+}
+
+func TestCancellationBetweenAdvanceCheckAndPersistenceWins(t *testing.T) {
+	for _, waiting := range []bool{false, true} {
+		t.Run(fmt.Sprint(waiting), func(t *testing.T) {
+			en := setup(t)
+			node := `{"id":"last","type":"end"}`
+			if waiting {
+				node = `{"id":"last","type":"wait","wait":{"delay":"1h"}}`
+			}
+			wf := en.publish(t, `{"name":"cancel_race","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"last"},`+node+`]}`)
+			run, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			gate := &transitionGate{App: en.app}
+			en.engine.App = gate
+			en.app.OnRecordAfterUpdateSuccess("flow_node_runs").BindFunc(func(e *core.RecordEvent) error {
+				if e.Record.GetString("node_id") == "last" {
+					gate.before = func() {
+						if err := en.engine.Cancel(run.Id); err != nil {
+							t.Error(err)
+						}
+					}
+				}
+				return e.Next()
+			})
+			if err := en.engine.Advance(context.Background(), run.Id); err != nil {
+				t.Fatal(err)
+			}
+			if got := en.run(t, run.Id).GetString("status"); got != flow.StatusCancelled {
+				t.Fatalf("cancellation overwritten: %s", got)
+			}
+		})
+	}
+}
+
+func TestLinkedRunningSubworkflowReusesChildOnReplay(t *testing.T) {
+	for _, detached := range []bool{false, true} {
+		t.Run(fmt.Sprint(detached), func(t *testing.T) {
+			en := setup(t)
+			childWF := en.publish(t, `{"name":"replay_child","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"pause"},{"id":"pause","type":"wait","wait":{"delay":"1h"}}]}`)
+			parentWF := en.publish(t, `{"name":"replay_parent","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"sub"},{"id":"sub","type":"subworkflow","workflow":"replay_child","detach":`+fmt.Sprint(detached)+`}]}`)
+			parent, err := en.engine.StartRun(parentWF, nil, flow.StartOptions{Source: "manual_ui"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			col, _ := en.app.FindCachedCollectionByNameOrId("flow_node_runs")
+			nr := core.NewRecord(col)
+			nr.Set("workflow_run", parent.Id)
+			nr.Set("node_id", "sub")
+			nr.Set("node_type", "subworkflow")
+			nr.Set("item_index", -1)
+			nr.Set("status", "running")
+			if err := en.app.Save(nr); err != nil {
+				t.Fatal(err)
+			}
+			child, err := en.engine.StartRun(childWF, nil, flow.StartOptions{Source: "subworkflow", ParentRun: parent.Id, ParentNodeRun: nr.Id})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// This is the persisted crash boundary: linked child, parent node still running.
+			en.newEngine()
+			if err := en.engine.Advance(context.Background(), parent.Id); err != nil {
+				t.Fatal(err)
+			}
+			children, err := en.app.FindRecordsByFilter("flow_runs", "parent_run = {:p}", "", 0, 0, dbx.Params{"p": parent.Id})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(children) != 1 || children[0].Id != child.Id {
+				t.Fatalf("created duplicate children: %v", children)
+			}
+		})
+	}
+}
+
+func TestInterruptedReadOnlyAgentCanRetry(t *testing.T) {
+	en := setup(t)
+	wf := en.publish(t, `{"name":"interrupted_agent","trigger":{"type":"manual"},"nodes":[{"id":"start","type":"start","next":"agent"},{"id":"agent","type":"agent","agent":{"system_prompt":"Help"},"next":"end"},{"id":"end","type":"end"}]}`)
+	run, err := en.engine.StartRun(wf, nil, flow.StartOptions{Source: "manual_ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	col, _ := en.app.FindCachedCollectionByNameOrId("flow_node_runs")
+	nr := core.NewRecord(col)
+	nr.Set("workflow_run", run.Id)
+	nr.Set("node_id", "agent")
+	nr.Set("node_type", "agent")
+	nr.Set("item_index", -1)
+	nr.Set("status", "running")
+	if err := en.app.Save(nr); err != nil {
+		t.Fatal(err)
+	}
+	col, _ = en.app.FindCachedCollectionByNameOrId("flow_agent_runs")
+	ar := core.NewRecord(col)
+	ar.Set("node_run", nr.Id)
+	ar.Set("side_effect_started", false)
+	ar.Set("status", "running")
+	if err := en.app.Save(ar); err != nil {
+		t.Fatal(err)
+	}
+	en.drain()
+	if count, _ := en.app.CountRecords("flow_agent_runs"); count != 2 {
+		t.Fatalf("read-only retry did not start: %d", count)
+	}
+}

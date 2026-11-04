@@ -2,11 +2,11 @@
   <section class="flows-page" data-cy="flows-page">
     <header class="page-header">
       <div class="header-content">
-        <h1 class="text-h5">{{ $t('menu.workflows') }}</h1>
+        <h1 class="text-h5">{{ $t('workflows.yourWorkflows') }}</h1>
         <p class="text-body-2 text-medium-emphasis mb-0">{{ $t('workflows.intro') }}</p>
       </div>
       <div class="header-actions">
-        <v-btn variant="text" class="text-none" prepend-icon="mdi-creation-outline" data-cy="flows-ask-ai" @click="askAssistant">{{ $t('workflows.askAI') }}</v-btn>
+        <v-btn variant="outlined" class="text-none" prepend-icon="mdi-creation-outline" data-cy="flows-ask-ai" @click="askAssistant">{{ $t('workflows.askAI') }}</v-btn>
         <v-btn v-if="canManage" color="primary" variant="flat" class="text-none" prepend-icon="mdi-plus" data-cy="flows-new" @click="createOpen = true">{{ $t('workflows.new') }}</v-btn>
       </div>
     </header>
@@ -27,13 +27,15 @@
 
     <div v-else class="flows-list">
       <router-link v-for="item in flows" :key="item.id" :to="{ name: 'workflowBuilder', params: { id: item.id } }" class="flow-row" data-cy="flow-row">
+        <v-icon icon="mdi-source-branch" color="primary" size="24" />
         <div class="flow-row-main">
-          <div class="font-weight-medium text-truncate">{{ item.name }}</div>
-          <div class="text-caption text-medium-emphasis text-truncate">{{ item.description || triggerLabel(item) }}</div>
+          <div class="font-weight-semibold text-truncate">{{ item.name }}</div>
+          <div class="text-caption text-medium-emphasis text-truncate">{{ triggerLabel(item) }}<template v-if="item.description"> · {{ item.description }}</template></div>
         </div>
         <v-chip v-if="item.pending_approvals > 0" size="small" label color="warning" variant="tonal">{{ $t('workflows.pendingCount', { n: item.pending_approvals }) }}</v-chip>
         <v-chip v-if="item.last_run" size="small" label variant="tonal" :color="runColors[item.last_run.status]">{{ item.last_run.status }} · {{ shortStamp(item.last_run.created) }}</v-chip>
         <v-chip size="small" label :color="statusColor(item)" data-cy="flow-row-status">{{ statusLabel(item) }}</v-chip>
+        <v-icon icon="mdi-chevron-right" size="20" color="secondary" />
       </router-link>
     </div>
 
@@ -41,14 +43,19 @@
       <h2 class="text-subtitle-1 mt-6 mb-2">{{ $t('workflows.templates') }}</h2>
       <div class="flow-templates">
         <button v-for="tpl in templates" :key="tpl.key" type="button" class="flow-template" :data-cy="`flow-template-${tpl.key}`" @click="useTemplate(tpl)">
+          <v-icon icon="mdi-source-branch" size="22" color="primary" class="mb-2" />
           <strong>{{ tpl.title }}</strong>
           <span class="text-caption text-medium-emphasis">{{ tpl.description }}</span>
+          <span class="template-action">{{ $t('workflows.useTemplate') }} <v-icon icon="mdi-chevron-right" size="16" /></span>
         </button>
       </div>
     </template>
 
     <h2 class="text-subtitle-1 mt-6 mb-2">{{ $t('workflows.recentRuns') }}</h2>
-    <p v-if="!runs.length" class="text-body-2 text-medium-emphasis">{{ $t('workflows.noRuns') }}</p>
+    <div v-if="!runs.length" class="runs-empty">
+      <v-icon icon="mdi-clock-start" size="24" color="secondary" />
+      <div><strong>{{ $t('workflows.noRuns') }}</strong><p class="text-body-2 text-medium-emphasis mb-0">{{ $t('workflows.noRunsHelp') }}</p></div>
+    </div>
     <div v-else class="flows-list">
       <router-link v-for="run in runs" :key="run.id" :to="{ name: 'workflowRun', params: { id: run.id } }" class="flow-row">
         <v-chip size="small" label :color="runColors[run.status]">{{ run.status }}</v-chip>
@@ -173,6 +180,25 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.template-action {
+  color: rgb(var(--v-theme-primary));
+  display: flex;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 16px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.runs-empty {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  border: 1px dashed rgba(var(--v-border-color), 0.24);
+  border-radius: 12px;
+}
+.runs-empty strong { font-size: 0.875rem; }
+
 .flows-list {
   background: rgb(var(--v-theme-surface));
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
@@ -190,6 +216,9 @@ onBeforeUnmount(() => {
   padding: 12px 16px;
   text-decoration: none;
 }
+
+[data-cy="flow-row"] { flex-wrap: nowrap; }
+[data-cy="flow-row"] .flow-row-main { flex-basis: 0; }
 
 .flow-row:last-child {
   border-bottom: 0;
@@ -215,7 +244,7 @@ onBeforeUnmount(() => {
 .flow-templates {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
 }
 
 .flow-template {
@@ -228,15 +257,24 @@ onBeforeUnmount(() => {
   flex-direction: column;
   font: inherit;
   gap: 4px;
-  padding: 14px;
+  padding: 20px;
   text-align: left;
 }
 
 .flow-template:hover {
   background: rgb(var(--v-theme-surface-light));
+  border-color: rgb(var(--v-theme-primary));
 }
 
 .flow-template:focus-visible {
   outline: 2px solid rgb(var(--v-theme-primary));
+}
+@media (max-width: 600px) {
+  .header-actions { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .header-actions > .v-btn { width: 100%; }
+  [data-cy="flow-row"] { display: grid; grid-template-columns: 24px minmax(0, 1fr) 20px; gap: 8px 12px; }
+  [data-cy="flow-row"] .text-truncate { white-space: normal !important; overflow-wrap: anywhere; }
+  [data-cy="flow-row-status"] { grid-column: 2; justify-self: start; }
+  [data-cy="flow-row"] > .v-icon:last-child { grid-column: 3; grid-row: 1; }
 }
 </style>

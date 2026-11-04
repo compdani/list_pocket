@@ -156,7 +156,8 @@
 import {
   computed, getCurrentInstance, markRaw, onBeforeUnmount, onMounted, reactive, ref, watch,
 } from 'vue';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { createDraftSaver, createDraftFlusher } from '../utils/draftSaver.mjs';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
 import '@vue-flow/controls/dist/style.css';
@@ -204,6 +205,11 @@ const testing = ref(false);
 const testInput = ref({});
 const enrollOpen = ref(false);
 let saveTimer = null;
+let editRevision = 0;
+const persistDraft = createDraftSaver(saveFlowDraft);
+const flushDraft = createDraftFlusher(persistDraft, () => ({
+  id: workflow.value.id, revision: editRevision, draft: definition.value,
+}));
 let applying = false;
 
 const canManage = computed(() => proxy.$can('workflows:manage'));
@@ -283,24 +289,29 @@ async function loadRuns() {
 async function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
-  if (!canManage.value || !definition.value) return;
+  if (!canManage.value || !definition.value) return true;
   saveState.value = 'saving';
   try {
-    const out = await saveFlowDraft(workflow.value.id, definition.value);
-    validation.value = out.validation;
-    saveState.value = saveTimer ? 'unsaved' : 'saved';
+    const { id, revision, out } = await flushDraft();
+    if (id === workflow.value.id && revision === editRevision) {
+      validation.value = out.validation;
+      saveState.value = 'saved';
+    }
+    return true;
   } catch (err) {
     saveState.value = 'failed';
     proxy.$utils.toast(errorText(err), 'error');
+    return false;
   }
 }
 
 watch(definition, () => {
   if (applying || !definition.value || !canManage.value) return;
+  editRevision += 1;
   saveState.value = 'unsaved';
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveNow, SAVE_DELAY_MS);
-}, { deep: true });
+}, { deep: true, flush: 'sync' });
 
 function addNode(type, tool = '') {
   const def = definition.value;
@@ -356,10 +367,12 @@ function tidy() {
 async function publish() {
   publishing.value = true;
   try {
-    await saveNow();
+    if (!await saveNow()) return;
+    const revision = editRevision;
     const out = await publishFlow(workflow.value.id);
     proxy.$utils.toast(proxy.$t('workflows.published', { n: out.version }));
-    adopt(await getFlow(workflow.value.id));
+    const fresh = await getFlow(workflow.value.id);
+    if (revision === editRevision) adopt(fresh);
   } catch (err) {
     proxy.$utils.toast(errorText(err), 'error');
   } finally {
@@ -379,7 +392,7 @@ async function setEnabled(enabled) {
 async function runTest() {
   testing.value = true;
   try {
-    await saveNow();
+    if (!await saveNow()) return;
     const out = await testFlow(workflow.value.id, testInput.value || {});
     testOpen.value = false;
     router.push({ name: 'workflowRun', params: { id: out.run_id } });
@@ -405,6 +418,7 @@ function removeWorkflow() {
       clearTimeout(saveTimer);
       saveTimer = null;
       await deleteFlow(workflow.value.id);
+      saveState.value = 'saved';
       router.push({ name: 'workflows' });
     } catch (err) {
       proxy.$utils.toast(errorText(err), 'error');
@@ -418,7 +432,7 @@ function askAssistant() {
 
 // The assistant changes drafts on the server, so pick its changes up when one's applied.
 async function onAssistantApplied() {
-  if (saveTimer) await saveNow();
+  if (saveState.value !== 'saved' && !await saveNow()) return;
   try {
     adopt(await getFlow(workflow.value.id));
     await loadRuns();
@@ -428,9 +442,8 @@ async function onAssistantApplied() {
   }
 }
 
-onBeforeRouteLeave(async () => {
-  if (saveTimer) await saveNow();
-});
+onBeforeRouteLeave(async () => saveState.value === 'saved' || saveNow());
+onBeforeRouteUpdate(async () => saveState.value === 'saved' || saveNow());
 
 watch(() => route.params.id, (id, old) => {
   if (id && id !== old) {

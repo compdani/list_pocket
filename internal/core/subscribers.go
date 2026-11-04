@@ -10,6 +10,7 @@ import (
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
+	"github.com/pocketbase/dbx"
 	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
@@ -232,36 +233,48 @@ func (c *Core) ResolveSubscriberRecordIDs(subIDs []int) ([]string, error) {
 }
 
 func (c *Core) sqliteSyncSubscriberLists(subscriberPBID string, listPBIDs []string, status string, deleteLists bool) error {
-	if deleteLists {
-		if len(listPBIDs) == 0 {
-			if _, err := c.db.Exec(`DELETE FROM subscriber_lists WHERE subscriber_id = ?`, subscriberPBID); err != nil {
-				return err
-			}
-		} else {
-			args := []any{subscriberPBID}
-			for _, id := range listPBIDs {
-				args = append(args, id)
-			}
-			q := `DELETE FROM subscriber_lists WHERE subscriber_id = ? AND list_id NOT IN (` + sqlitePlaceholders(len(listPBIDs)) + `)`
-			if _, err := c.db.Exec(q, args...); err != nil {
+	return c.db.PocketBase().RunInTransaction(func(tx pbcore.App) error {
+		return syncSubscriberLists(tx, subscriberPBID, listPBIDs, status, deleteLists)
+	})
+}
+
+// syncSubscriberLists uses the same transaction as its owning contact mutation.
+func syncSubscriberLists(app pbcore.App, subscriberID string, listIDs []string, status string, remove bool) error {
+	existing, err := app.FindRecordsByFilter("subscriber_lists", "subscriber_id = {:id}", "", 0, 0, dbx.Params{"id": subscriberID})
+	if err != nil {
+		return err
+	}
+	wanted := make(map[string]bool, len(listIDs))
+	for _, id := range listIDs {
+		wanted[id] = true
+	}
+	records := make(map[string]*pbcore.Record, len(existing))
+	for _, rec := range existing {
+		id := rec.GetString("list_id")
+		records[id] = rec
+		if remove && !wanted[id] {
+			if err := app.Delete(rec); err != nil {
 				return err
 			}
 		}
 	}
-
-	for _, listPBID := range listPBIDs {
-		if _, err := c.db.Exec(`
-			INSERT INTO subscriber_lists (subscriber_id, list_id, status, sms_status)
-			VALUES (?, ?, ?, ?)
-			ON CONFLICT (subscriber_id, list_id) DO UPDATE SET
-				updated=strftime('%Y-%m-%d %H:%M:%fZ', 'now'),
-				status=excluded.status,
-				sms_status=excluded.sms_status`,
-			subscriberPBID, listPBID, status, status); err != nil {
+	col, err := app.FindCachedCollectionByNameOrId("subscriber_lists")
+	if err != nil {
+		return err
+	}
+	for _, id := range listIDs {
+		rec := records[id]
+		if rec == nil {
+			rec = pbcore.NewRecord(col)
+			rec.Set("subscriber_id", subscriberID)
+			rec.Set("list_id", id)
+		}
+		rec.Set("status", status)
+		rec.Set("sms_status", status)
+		if err := app.Save(rec); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -363,27 +376,24 @@ func (c *Core) InsertSubscriber(sub models.Subscriber, listIDs []int, listUUIDs 
 	record.Set("status", sub.Status)
 	record.Set("attribs", sub.Attribs)
 
-	if err := pb.Save(record); err != nil {
+	listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
+	if err != nil {
+		return models.Subscriber{}, false, err
+	}
+	status := subStatus
+	if sub.Status == models.SubscriberStatusBlockListed {
+		status = models.SubscriptionStatusUnsubscribed
+	}
+	if err := pb.RunInTransaction(func(tx pbcore.App) error {
+		if err := tx.Save(record); err != nil {
+			return err
+		}
+		return syncSubscriberLists(tx, record.Id, listPBIDs, status, false)
+	}); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") && strings.Contains(strings.ToLower(err.Error()), "email") {
 			return models.Subscriber{}, false, apperr.Conflict(c.i18n.T("subscribers.emailExists"))
 		}
-		c.log.Printf("error inserting subscriber: %v", err)
 		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", dbErr(err)))
-	}
-	subscriberPBID := record.Id
-
-	if len(listIDs) > 0 || len(listUUIDs) > 0 {
-		listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
-		if err != nil {
-			return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", dbErr(err)))
-		}
-		status := subStatus
-		if sub.Status == models.SubscriberStatusBlockListed {
-			status = models.SubscriptionStatusUnsubscribed
-		}
-		if err := c.sqliteSyncSubscriberLists(subscriberPBID, listPBIDs, status, false); err != nil {
-			return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{globals.terms.subscriber}", "error", dbErr(err)))
-		}
 	}
 
 	out, err := c.GetSubscriber(0, sub.UUID, sub.Email)
@@ -443,22 +453,20 @@ func (c *Core) UpdateSubscriberWithLists(recordID string, sub models.Subscriber,
 	rec.Set("name", strings.TrimSpace(sub.Name))
 	rec.Set("status", sub.Status)
 	rec.Set("attribs", sub.Attribs)
-	if err := pb.Save(rec); err != nil {
-		c.log.Printf("error updating subscriber: %v", err)
-		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", dbErr(err)))
-	}
-
 	listPBIDs, err := c.sqliteListRecordIDs(listIDs, listUUIDs)
 	if err != nil {
-		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", dbErr(err)))
+		return models.Subscriber{}, false, err
 	}
-
 	status := subStatus
 	if sub.Status == models.SubscriberStatusBlockListed {
 		status = models.SubscriptionStatusUnsubscribed
 	}
-	if err := c.sqliteSyncSubscriberLists(recordID, listPBIDs, status, deleteLists); err != nil {
-		c.log.Printf("error updating subscriber: %v", err)
+	if err := pb.RunInTransaction(func(tx pbcore.App) error {
+		if err := tx.Save(rec); err != nil {
+			return err
+		}
+		return syncSubscriberLists(tx, recordID, listPBIDs, status, deleteLists)
+	}); err != nil {
 		return models.Subscriber{}, false, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscriber}", "error", dbErr(err)))
 	}
 

@@ -493,6 +493,8 @@ export default {
 
 .app-drawer .v-navigation-drawer__content {
   padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-drawer.v-navigation-drawer--rail .v-navigation-drawer__content {
@@ -500,6 +502,7 @@ export default {
 }
 
 .app-drawer-brand {
+  flex-shrink: 0;
   padding: 8px 8px 16px;
 }
 
@@ -581,6 +584,7 @@ export default {
 }
 
 .app-shell {
+  --v-medium-emphasis-opacity: 0.74;
   padding: 24px;
   width: 100%;
 }
@@ -609,6 +613,12 @@ export default {
     padding: 16px 12px 24px;
   }
 
+  .app-user-menu { margin-inline-end: 8px; }
+  .app-bar .v-toolbar-title { margin-inline: 8px; font-size: 1rem; }
+  .app-bar .v-toolbar__content > .v-btn { width: 36px; height: 40px; }
+  .app-user-trigger { min-width: 44px !important; padding-inline: 6px !important; }
+  .app-user-trigger .v-avatar { margin-right: 0 !important; }
+  .app-user-trigger .v-icon { display: none; }
   .app-user-name {
     display: none;
   }

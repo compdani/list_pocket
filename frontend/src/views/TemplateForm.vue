@@ -131,7 +131,7 @@
               ref="visualEditor"
               name="body"
               :source="form.bodySource"
-              height="62vh"
+              height="100%"
               @change="onChangeVisualEditor"
             />
 
@@ -140,7 +140,7 @@
               ref="grapesEditor"
               :source="form.bodySource"
               :data="form.body"
-              height="62vh"
+              height="100%"
               @change="onChangeVisualEditor"
             />
 
@@ -613,7 +613,7 @@ export default {
   background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   display: block;
-  padding: 18px 20px;
+  padding: 12px 20px;
   width: 100%;
 }
 
@@ -635,7 +635,7 @@ export default {
   flex-direction: column;
   min-height: 0;
   overflow: auto;
-  padding: 24px 20px;
+  padding: 16px 20px;
 }
 
 .editor-shell {
@@ -697,16 +697,18 @@ export default {
   background: rgb(var(--v-theme-surface));
   border-color: rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
-  height: 62vh;
-  min-height: 420px;
+  height: max(280px, calc(100dvh - 350px));
+  min-height: 280px;
 }
+
+:deep(#visual-editor) { min-height: 0; height: 100%; }
 
 :deep(.visual-editor-wrapper) {
   background: rgb(var(--v-theme-surface));
   border-color: rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 10px;
-  height: min(62vh, calc(100vh - 360px));
-  min-height: 420px;
+  height: max(280px, calc(100dvh - 350px));
+  min-height: 280px;
   overflow: hidden;
 }
 
@@ -720,7 +722,7 @@ export default {
   }
 
   .editor-shell {
-    min-height: 360px;
+    min-height: 280px;
     padding: 12px;
   }
 

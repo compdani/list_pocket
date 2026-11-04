@@ -6,6 +6,7 @@
           v-if="$can('campaigns:manage')"
           :to="{ name: 'campaign', params: { id: 'new' } }"
           color="primary"
+          variant="flat"
           prepend-icon="mdi-plus"
           data-cy="btn-new"
         >
@@ -115,7 +116,7 @@
               />
             </router-link>
           </div>
-          <div v-if="isSheduled(item)" class="text-caption text-medium-emphasis mt-2">
+          <div v-if="isSheduled(item) && !isDone(item) && item.status !== 'draft'" class="text-caption text-medium-emphasis mt-2">
             <v-icon size="small">mdi-alarm</v-icon>
             <span v-if="!isDone(item) && !isRunning(item)">
               {{ $utils.duration(new Date(), item.sendAt, true) }}
@@ -164,6 +165,8 @@
       </template>
 
       <template #[`item.created_at`]="{ item }">
+        <details class="campaign-time-details">
+          <summary class="text-caption">{{ $utils.niceDate(item.createdAt) }}</summary>
         <div class="fields timestamps">
           <div>
             <div class="text-caption font-weight-bold">{{ $t('globals.fields.createdAt') }}</div>
@@ -182,10 +185,17 @@
             <span class="text-caption">{{ $utils.duration(getCampaignStats(item).startedAt, getCampaignStats(item).updatedAt) }}</span>
           </div>
         </div>
+        </details>
       </template>
 
       <template #[`item.stats`]="{ item }">
-        <div class="fields stats campaign-stats">
+        <details class="campaign-metric-details">
+          <summary class="campaign-metric-summary">
+            <span>{{ $t('campaigns.sent') }} <strong>{{ $utils.formatNumber(getCampaignStats(item).sent) }}</strong></span>
+            <span>{{ $t('campaigns.clicks') }} <strong>{{ $utils.formatNumber(item.clicks) }}</strong></span>
+            <span>{{ $t('analytics.uniqueConfirmedViews') }} <strong>{{ $utils.formatNumber(item.views) }}</strong> · {{ formatConfirmedRate(item.views, getCampaignStats(item).sent || 0) }}%</span>
+          </summary>
+        <div class="fields stats campaign-stats mt-3">
           <div>
             <div class="text-caption font-weight-bold">{{ $t('analytics.uniqueConfirmedViews') }}</div>
             <div class="text-caption">
@@ -244,19 +254,23 @@
             />
           </div>
         </div>
+        </details>
       </template>
 
       <template #[`item.actions`]="{ item }">
+        <v-menu location="bottom end">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" :aria-label="$t('globals.buttons.more')" />
+          </template>
+          <v-card class="campaign-action-menu pa-1" min-width="220">
         <div class="actions">
           <template v-if="$can('campaigns:manage')">
             <v-tooltip v-if="canStart(item)" :text="$t('campaigns.start')" location="top">
               <template #activator="{ props }">
-                <v-btn
-                  :aria-label="$t('campaigns.start')"
+                <v-list-item
+                  :aria-label="$t('campaigns.start')" :title="$t('campaigns.start')"
                   v-bind="props"
-                  icon="mdi-rocket-launch-outline"
-                  size="x-small"
-                  variant="text"
+                  prepend-icon="mdi-rocket-launch-outline"
                   @click="$utils.confirm(null, () => changeCampaignStatus(item, 'running'))"
                   data-cy="btn-start"
                 />
@@ -265,12 +279,10 @@
 
             <v-tooltip v-if="canPause(item)" :text="$t('campaigns.pause')" location="top">
               <template #activator="{ props }">
-                <v-btn
-                  :aria-label="$t('campaigns.pause')"
+                <v-list-item
+                  :aria-label="$t('campaigns.pause')" :title="$t('campaigns.pause')"
                   v-bind="props"
-                  icon="mdi-pause-circle-outline"
-                  size="x-small"
-                  variant="text"
+                  prepend-icon="mdi-pause-circle-outline"
                   @click="$utils.confirm(null, () => changeCampaignStatus(item, 'paused'))"
                   data-cy="btn-pause"
                 />
@@ -279,12 +291,10 @@
 
             <v-tooltip v-if="canResume(item)" :text="$t('campaigns.send')" location="top">
               <template #activator="{ props }">
-                <v-btn
-                  :aria-label="$t('campaigns.send')"
+                <v-list-item
+                  :aria-label="$t('campaigns.send')" :title="$t('campaigns.send')"
                   v-bind="props"
-                  icon="mdi-rocket-launch-outline"
-                  size="x-small"
-                  variant="text"
+                  prepend-icon="mdi-rocket-launch-outline"
                   @click="$utils.confirm(null, () => changeCampaignStatus(item, 'running'))"
                   data-cy="btn-resume"
                 />
@@ -293,51 +303,43 @@
 
             <v-tooltip v-if="canSchedule(item)" :text="$t('campaigns.schedule')" location="top">
               <template #activator="{ props }">
-                <v-btn
-                  :aria-label="$t('campaigns.schedule')"
+                <v-list-item
+                  :aria-label="$t('campaigns.schedule')" :title="$t('campaigns.schedule')"
                   v-bind="props"
-                  icon="mdi-clock-start"
-                  size="x-small"
-                  variant="text"
+                  prepend-icon="mdi-clock-start"
                   @click="$utils.confirm($t('campaigns.confirmSchedule'), () => changeCampaignStatus(item, 'scheduled'))"
                   data-cy="btn-schedule"
                 />
               </template>
             </v-tooltip>
 
-            <v-btn
-              :aria-label="$t('campaigns.start')"
+            <v-list-item
+              :aria-label="$t('campaigns.start')" :title="$t('campaigns.start')"
               v-if="!canCancel(item) && !canSchedule(item) && !canStart(item)"
-              icon="mdi-rocket-launch-outline"
-              size="x-small"
-              variant="text"
+              prepend-icon="mdi-rocket-launch-outline"
               disabled
             />
 
             <v-tooltip v-if="canCancel(item)" :text="$t('globals.buttons.cancel')" location="top">
               <template #activator="{ props }">
-                <v-btn
-                  :aria-label="$t('globals.buttons.cancel')"
+                <v-list-item
+                  :aria-label="$t('globals.buttons.cancel')" :title="$t('globals.buttons.cancel')"
                   v-bind="props"
-                  icon="mdi-cancel"
-                  size="x-small"
-                  variant="text"
+                  prepend-icon="mdi-cancel"
                   @click="$utils.confirm(null, () => changeCampaignStatus(item, 'cancelled'))"
                   data-cy="btn-cancel"
                 />
               </template>
             </v-tooltip>
-            <v-btn :aria-label="$t('globals.buttons.cancel')" v-else icon="mdi-cancel" size="x-small" variant="text" disabled />
+            <v-list-item :aria-label="$t('globals.buttons.cancel')" :title="$t('globals.buttons.cancel')" v-else prepend-icon="mdi-cancel" disabled />
           </template>
 
           <v-tooltip :text="$t('campaigns.preview')" location="top">
             <template #activator="{ props }">
-              <v-btn
-                :aria-label="$t('campaigns.preview')"
+              <v-list-item
+                :aria-label="$t('campaigns.preview')" :title="$t('campaigns.preview')"
                 v-bind="props"
-                icon="mdi-file-find-outline"
-                size="x-small"
-                variant="text"
+                prepend-icon="mdi-file-find-outline"
                 @click="previewCampaign(item)"
                 data-cy="btn-preview"
               />
@@ -346,12 +348,10 @@
 
           <v-tooltip v-if="$can('campaigns:manage')" :text="$t('globals.buttons.clone')" location="top">
             <template #activator="{ props }">
-              <v-btn
-                :aria-label="$t('globals.buttons.clone')"
+              <v-list-item
+                :aria-label="$t('globals.buttons.clone')" :title="$t('globals.buttons.clone')"
                 v-bind="props"
-                icon="mdi-file-multiple-outline"
-                size="x-small"
-                variant="text"
+                prepend-icon="mdi-file-multiple-outline"
                 @click="$utils.prompt($t('globals.buttons.clone'), { placeholder: $t('globals.fields.name'), value: $t('campaigns.copyOf', { name: item.name }) }, (name) => cloneCampaign(name, item))"
                 data-cy="btn-clone"
               />
@@ -361,25 +361,25 @@
           <router-link v-if="$can('campaigns:get_analytics')" :to="{ name: 'campaignAnalytics', query: { id: item.id } }">
             <v-tooltip :text="$t('globals.terms.analytics')" location="top">
               <template #activator="{ props }">
-                <v-btn :aria-label="$t('globals.terms.analytics')" v-bind="props" icon="mdi-chart-bar" size="x-small" variant="text" />
+                <v-list-item :aria-label="$t('globals.terms.analytics')" :title="$t('globals.terms.analytics')" v-bind="props" prepend-icon="mdi-chart-bar" />
               </template>
             </v-tooltip>
           </router-link>
 
           <v-tooltip v-if="$can('campaigns:manage')" :text="$t('globals.buttons.delete')" location="top">
             <template #activator="{ props }">
-              <v-btn
-                :aria-label="$t('globals.buttons.delete')"
+              <v-list-item
+                :aria-label="$t('globals.buttons.delete')" :title="$t('globals.buttons.delete')"
                 v-bind="props"
-                icon="mdi-trash-can-outline"
-                size="x-small"
-                variant="text"
+                prepend-icon="mdi-trash-can-outline"
                 @click="$utils.confirm($t('campaigns.confirmDelete', { name: item.name }), () => deleteCampaign(item))"
                 data-cy="btn-delete"
               />
             </template>
           </v-tooltip>
         </div>
+          </v-card>
+        </v-menu>
       </template>
 
       <template #no-data>
@@ -796,14 +796,15 @@ export default {
 
     tableHeaders() {
       return [
-        { title: this.$t('globals.fields.status'), key: 'status', sortable: true },
+        { title: this.$t('globals.fields.status'), key: 'status', sortable: true, width: '108px' },
         { title: this.$t('globals.fields.name'), key: 'name', sortable: true },
-        { title: this.$t('globals.terms.lists'), key: 'lists', sortable: false },
-        { title: this.$t('campaigns.timestamps'), key: 'created_at', sortable: true },
-        { title: this.$t('campaigns.stats'), key: 'stats', sortable: false },
+        { title: this.$t('globals.terms.lists'), key: 'lists', sortable: false, width: '95px' },
+        { title: this.$t('campaigns.timestamps'), key: 'created_at', sortable: true, width: '110px' },
+        { title: this.$t('campaigns.stats'), key: 'stats', sortable: false, width: '185px' },
         {
           title: '',
           key: 'actions',
+          width: '52px',
           sortable: false,
           align: 'end',
         },
@@ -854,25 +855,32 @@ export default {
   --campaigns-surface-soft: rgb(var(--v-theme-surface-light));
 }
 
+.campaign-metric-summary::after { content: '⌄'; position: absolute; inset-inline-end: 0; top: 0; }
+.campaign-metric-summary { position: relative; padding-inline-end: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 0.8125rem; cursor: pointer; }
+.campaign-metric-summary span:last-child { grid-column: 1 / -1; }
+.campaign-time-details summary { cursor: pointer; }
+
 .campaign-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 16px;
-  min-width: 220px;
+  min-width: 0;
 }
 
 .timestamps {
   display: grid;
   gap: 8px;
-  min-width: 125px;
+  min-width: 0;
 }
 
 .actions {
-  display: grid;
-  grid-template-columns: repeat(3, 28px);
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   justify-content: end;
 }
+
+.actions a { color: inherit; text-decoration: none; }
 
 .actions :deep(.v-btn) {
   color: rgb(var(--v-theme-primary));
@@ -915,7 +923,7 @@ export default {
 
 .query-tags {
   max-width: 320px;
-  min-width: 220px;
+  min-width: 0;
 }
 
 .query-input :deep(.v-field) {
@@ -961,8 +969,10 @@ export default {
   vertical-align: top;
 }
 
+:deep(.campaigns-table table) { min-width: 900px; table-layout: fixed; }
+
 :deep(.campaigns-table td:nth-child(3)) {
-  min-width: 240px;
+  min-width: 0;
 }
 
 :deep(.campaigns-table tbody tr:hover) {

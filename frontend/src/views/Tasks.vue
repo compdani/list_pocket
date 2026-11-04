@@ -22,6 +22,8 @@
     <div v-else-if="tasks.length === 0" class="tasks-empty text-medium-emphasis">
       <v-icon icon="mdi-check-circle-outline" size="40" class="mb-2" />
       <p class="mb-0">{{ $t(status === 'done' ? 'crm.tasks.noneDone' : 'crm.tasks.noneOpen') }}</p>
+      <p class="text-body-2 mt-2">{{ $t('crm.tasks.hint') }}</p>
+      <v-btn :to="{ name: 'subscribers' }" variant="outlined" color="primary" class="mt-4">{{ $t('globals.terms.subscribers') }}</v-btn>
     </div>
 
     <template v-else-if="status === 'open'">

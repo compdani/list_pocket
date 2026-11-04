@@ -8,6 +8,7 @@
     <v-form ref="formRef" @submit.prevent="submit">
       <v-text-field
         v-model="username"
+        name="username"
         :label="$t('users.username')"
         autocomplete="username"
         variant="outlined"
@@ -19,12 +20,13 @@
       />
       <password-field
         v-model="password"
+        name="password"
         :label="$t('users.password')"
         autocomplete="current-password"
         field-class="mb-2"
         :rules="requiredRule"
       />
-      <v-btn block color="primary" size="large" type="submit" :loading="loading">
+      <v-btn block color="primary" variant="flat" size="large" type="submit" :loading="loading">
         {{ $t('users.login') }}
       </v-btn>
     </v-form>

@@ -1121,6 +1121,10 @@ export default {
   overflow: hidden;
 }
 
+:deep(.subscribers-table table) {
+  min-width: 960px;
+}
+
 :deep(.subscribers-table thead th) {
   background: var(--subscribers-surface-soft);
   border-bottom: 1px solid var(--subscribers-border-strong) !important;
@@ -1227,6 +1231,7 @@ export default {
 
 .entity-line > .link-button {
   min-width: 0;
+  white-space: nowrap;
 }
 
 .entity-line > .copy-text {

@@ -29,7 +29,7 @@
           <div class="contact-identity">
             <contact-avatar :name="subscriber.name" :fallback="email" :size="44" />
             <div class="contact-identity-text">
-              <h1 class="text-subtitle-1 font-weight-medium mb-0">{{ subscriber.name || email || subscriber.phone }}</h1>
+              <h1 class="text-subtitle-1 font-weight-semibold mb-0">{{ subscriber.name || email || subscriber.phone }}</h1>
               <p v-if="profile.company" class="text-body-2 text-medium-emphasis mb-0">{{ profile.company }}</p>
             </div>
           </div>
@@ -355,4 +355,7 @@ export default {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.contact-facts a { text-decoration: none; }
+.contact-facts a:hover { text-decoration: underline; }
 </style>

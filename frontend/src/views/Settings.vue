@@ -20,11 +20,12 @@
         </div>
 
         <v-btn
-          v-if="$can('settings:manage')"
+          v-if="$can('settings:manage') && !['ai', 'whatsapp', 'textMessaging'].includes(tab)"
           type="submit"
           color="primary"
           prepend-icon="mdi-content-save-outline"
           :disabled="!hasFormChanged"
+          variant="flat"
           class="isSaveEnabled"
           data-cy="btn-save"
         >
@@ -32,8 +33,11 @@
         </v-btn>
       </div>
 
-      <v-card v-if="form" variant="outlined" class="settings-shell">
+      <v-card v-if="form" variant="outlined" :class="['settings-shell', { 'settings-shell--mobile': mobileSettings }]">
+        <v-select v-if="mobileSettings" v-model="tab" :items="settingsTabs" item-title="label" item-value="key" :label="$t('settings.title')" hide-details class="settings-picker" />
         <v-tabs
+          v-else
+          direction="vertical"
           v-model="tab"
           color="primary"
           density="comfortable"
@@ -49,8 +53,6 @@
             {{ item.label }}
           </v-tab>
         </v-tabs>
-
-        <v-divider />
 
         <v-card-text class="settings-body">
           <v-window v-model="tab" :touch="false">
@@ -99,6 +101,7 @@
 
 <script>
 import { mapState } from 'vuex';
+import { useDisplay } from 'vuetify';
 import AppearanceSettings from './settings/appearance.vue';
 import BounceSettings from './settings/bounces.vue';
 import GeneralSettings from './settings/general.vue';
@@ -128,6 +131,7 @@ const SETTINGS_TAB_KEYS = [
 ];
 
 export default {
+  setup() { const { smAndDown } = useDisplay(); return { mobileSettings: smAndDown }; },
   components: {
     GeneralSettings,
     PerformanceSettings,
@@ -448,6 +452,11 @@ export default {
 }
 
 .settings-header {
+  position: sticky;
+  top: 64px;
+  z-index: 2;
+  background: rgb(var(--v-theme-surface-light));
+  padding-block: 12px;
   align-items: flex-start;
   display: flex;
   gap: 16px;
@@ -456,12 +465,19 @@ export default {
 }
 
 .settings-shell {
-  overflow: visible;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .settings-tabs {
-  padding: 0 12px;
+  padding: 12px;
+  border-inline-end: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
+
+.settings-tabs :deep(.v-tab) { justify-content: flex-start; border-radius: 8px; font-size: 0.8125rem; }
+.settings-shell--mobile { grid-template-columns: minmax(0, 1fr); }
+.settings-picker { margin: 16px 16px 0; }
 
 .settings-body {
   padding: 24px;

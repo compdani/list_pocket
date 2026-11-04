@@ -37,6 +37,8 @@ type Queue struct {
 	Poll        time.Duration
 	// OnDead is called when a job exhausts its attempts.
 	OnDead func(job Job, err error)
+	// FinalizeDead must persist terminal state before acknowledgement.
+	FinalizeDead func(job Job, err error) error
 
 	id       string
 	handlers map[string]Handler
@@ -72,18 +74,28 @@ func dbTime(t time.Time) string {
 // job (same kind and target, not yet claimed, due no later) makes this a
 // no-op, so repeated "advance this run" requests collapse into one.
 func (q *Queue) Enqueue(kind, target string, payload map[string]any, at time.Time) error {
+	if err := q.EnqueueWithApp(q.App, kind, target, payload, at); err != nil {
+		return err
+	}
+	q.Notify()
+	return nil
+}
+
+// EnqueueWithApp participates in the caller's transaction. Notify workers only
+// after that transaction commits; polling also discovers committed jobs.
+func (q *Queue) EnqueueWithApp(app core.App, kind, target string, payload map[string]any, at time.Time) error {
 	if at.IsZero() {
 		at = time.Now()
 	}
 	var existing int
-	_ = q.App.DB().NewQuery(`SELECT COUNT(*) FROM flow_jobs WHERE kind = {:kind} AND target_id = {:target}
+	_ = app.DB().NewQuery(`SELECT COUNT(*) FROM flow_jobs WHERE kind = {:kind} AND target_id = {:target}
 		AND (locked_until = '' OR locked_until IS NULL) AND available_at <= {:at}`).
 		Bind(dbx.Params{"kind": kind, "target": target, "at": dbTime(at)}).Row(&existing)
 	if existing > 0 && payload == nil {
 		return nil
 	}
 
-	col, err := q.App.FindCachedCollectionByNameOrId(collection)
+	col, err := app.FindCachedCollectionByNameOrId(collection)
 	if err != nil {
 		return err
 	}
@@ -93,10 +105,9 @@ func (q *Queue) Enqueue(kind, target string, payload map[string]any, at time.Tim
 	rec.Set("payload", payload)
 	rec.Set("available_at", at.UTC())
 	rec.Set("max_attempts", q.MaxAttempts)
-	if err := q.App.Save(rec); err != nil {
+	if err := app.Save(rec); err != nil {
 		return err
 	}
-	q.Notify()
 	return nil
 }
 
@@ -195,13 +206,27 @@ func (q *Queue) run(ctx context.Context, job Job) {
 		err = safeCall(ctx, h, job)
 	}
 	if err == nil {
-		_, _ = q.App.DB().Delete(collection, dbx.HashExp{"id": job.ID}).Execute()
+		if _, ackErr := q.App.DB().Delete(collection, dbx.HashExp{"id": job.ID}).Execute(); ackErr != nil {
+			// Leave the lease intact for recovery; never report an unpersisted ack.
+			q.App.Logger().Error("job acknowledgement failed; lease retained", "job", job.ID, "error", ackErr)
+			return
+		}
 		return
 	}
 
 	attempts := job.Attempts + 1
 	if attempts >= q.MaxAttempts || !ok {
-		_, _ = q.App.DB().Delete(collection, dbx.HashExp{"id": job.ID}).Execute()
+		if q.FinalizeDead != nil {
+			if finalizeErr := q.FinalizeDead(job, err); finalizeErr != nil {
+				q.App.Logger().Error("dead job finalization failed; lease retained", "job", job.ID, "error", finalizeErr)
+				return
+			}
+		}
+		if _, ackErr := q.App.DB().Delete(collection, dbx.HashExp{"id": job.ID}).Execute(); ackErr != nil {
+			// Leave the lease intact for recovery; never report an unpersisted ack.
+			q.App.Logger().Error("job acknowledgement failed; lease retained", "job", job.ID, "error", ackErr)
+			return
+		}
 		q.App.Logger().Error("job failed permanently", "kind", job.Kind, "target", job.Target, "error", err)
 		if q.OnDead != nil {
 			q.OnDead(job, err)
@@ -209,13 +234,17 @@ func (q *Queue) run(ctx context.Context, job Job) {
 		return
 	}
 	backoff := time.Duration(1<<attempts) * time.Second
-	_, _ = q.App.DB().Update(collection, dbx.Params{
+	_, retryErr := q.App.DB().Update(collection, dbx.Params{
 		"attempts":     attempts,
 		"available_at": dbTime(time.Now().Add(backoff)),
 		"locked_by":    "",
 		"locked_until": "",
 		"last_error":   err.Error(),
 	}, dbx.HashExp{"id": job.ID}).Execute()
+	if retryErr != nil {
+		q.App.Logger().Error("job retry persistence failed; lease retained", "job", job.ID, "error", retryErr)
+		return
+	}
 	q.App.Logger().Warn("job failed; will retry", "kind", job.Kind, "target", job.Target, "attempt", attempts, "error", err)
 }
 

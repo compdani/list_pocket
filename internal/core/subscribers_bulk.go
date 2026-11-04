@@ -1,11 +1,13 @@
 package core
 
 import (
-	"encoding/json"
+	"fmt"
 	"github.com/compdani/list_pocket/internal/apperr"
 
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
+	"github.com/pocketbase/dbx"
+	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const bulkContactBatchSize = 5000
@@ -53,20 +55,26 @@ func (c *Core) BulkUpdateSubscribersByEmail(emails, tagsAdd, tagsRemove, listRem
 		emailsFound = append(emailsFound, sub.Email)
 	}
 
-	if len(tagsAdd) > 0 || len(tagsRemove) > 0 {
-		n, err := c.bulkUpdateSubscriberTags(emailsFound, tagsAdd, tagsRemove)
-		if err != nil {
-			return result, err
-		}
-		result.TagsUpdated = n
-	}
-
+	// Validate all list references before any mutation or workflow event.
 	listRemoveIDs, err := c.ResolveListIDs(nil, listRemoveRecordIDs)
 	if err != nil {
 		return result, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
 	}
+	listUpdateIDs, err := c.ResolveListIDs(nil, listUpdateRecordIDs)
+	if err != nil {
+		return result, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
+	}
+	if len(tagsAdd) > 0 || len(tagsRemove) > 0 {
+		n, err := c.bulkUpdateSubscriberTags(emailsFound, tagsAdd, tagsRemove)
+		result.TagsUpdated = n
+		if err != nil {
+			return result, err
+		}
+	}
+
 	if len(listRemoveIDs) > 0 {
 		n, err := c.deleteSubscriptionsSQLite(subIDs, listRemoveIDs)
+		result.ListsRemoved = n
 		if err != nil {
 			c.log.Printf("error removing bulk subscriptions: %v", err)
 			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
@@ -74,12 +82,9 @@ func (c *Core) BulkUpdateSubscribersByEmail(emails, tagsAdd, tagsRemove, listRem
 		result.ListsRemoved = n
 	}
 
-	listUpdateIDs, err := c.ResolveListIDs(nil, listUpdateRecordIDs)
-	if err != nil {
-		return result, apperr.BadRequest(c.i18n.Ts("globals.messages.errorInvalidIDs", "error", err.Error()))
-	}
 	if len(listUpdateIDs) > 0 {
 		n, err := c.upsertSubscriptionsSQLite(subIDs, listUpdateIDs, subStatus)
+		result.ListsUpdated = n
 		if err != nil {
 			c.log.Printf("error upserting bulk subscriptions: %v", err)
 			return result, apperr.Internal(c.i18n.Ts("globals.messages.errorUpdating", "name", "{globals.terms.subscribers}", "error", dbErr(err)))
@@ -147,42 +152,32 @@ func (c *Core) bulkUpdateSubscriberTags(emails, tagsAdd, tagsRemove []string) (i
 	}
 
 	updated := 0
-	for i := 0; i < len(emails); i += 300 {
-		end := i + 300
-		if end > len(emails) {
-			end = len(emails)
-		}
-		chunk := emails[i:end]
-
-		args := make([]any, 0, len(chunk))
-		for _, email := range chunk {
-			args = append(args, email)
-		}
-
-		var rows []struct {
-			Email   string `db:"email"`
-			Attribs []byte `db:"attribs"`
-		}
-		q := `SELECT email, attribs FROM subscribers WHERE email IN (` + sqlitePlaceholders(len(chunk)) + `)`
-		if err := c.db.Select(&rows, q, args...); err != nil {
-			return updated, err
-		}
-
-		for _, row := range rows {
-			attribs := models.JSON{}
-			if len(row.Attribs) > 0 && string(row.Attribs) != "null" {
-				_ = json.Unmarshal(row.Attribs, &attribs)
+	pb := c.db.PocketBase()
+	if pb == nil {
+		return 0, fmt.Errorf("pocketbase is not initialized")
+	}
+	err := pb.RunInTransaction(func(tx pbcore.App) error {
+		for _, email := range emails {
+			rec, err := tx.FindFirstRecordByFilter("subscribers", "email = {:email}", dbx.Params{"email": email})
+			if err != nil {
+				return err
 			}
-			merged := subimporter.ApplyImportTagChanges(attribs, tagsAdd, tagsRemove)
-			if _, err := c.db.Exec(`
-UPDATE subscribers
-SET attribs = ?, updated = (strftime('%Y-%m-%d %H:%M:%fZ'))
-WHERE email = ?;
-`, merged, row.Email); err != nil {
-				return updated, err
+			attribs := models.JSON{}
+			if err := rec.UnmarshalJSONField("attribs", &attribs); err != nil {
+				return err
+			}
+			rec.Set("attribs", subimporter.ApplyImportTagChanges(attribs, tagsAdd, tagsRemove))
+			// Use Record Save so individual and bulk tag edits share workflow hooks.
+			if err := tx.Save(rec); err != nil {
+				return err
 			}
 			updated++
 		}
+
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 
 	return updated, nil

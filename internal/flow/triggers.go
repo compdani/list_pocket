@@ -185,10 +185,16 @@ func (e *Engine) resolveWaits(name string, payload any) int {
 		nr.Set("output", map[string]any{"event": payload})
 		nr.Set("waiting_for", "")
 		nr.Set("finished", types.NowDateTime())
-		if err := e.App.Save(nr); err != nil {
+		if err := e.App.RunInTransaction(func(tx core.App) error {
+			if err := tx.Save(nr); err != nil {
+				return err
+			}
+			return e.Queue.EnqueueWithApp(tx, JobAdvance, run.Id, nil, time.Time{})
+		}); err != nil {
+			e.App.Logger().Error("resuming workflow wait failed", "run", run.Id, "error", err)
 			continue
 		}
-		_ = e.Queue.Enqueue(JobAdvance, run.Id, nil, time.Time{})
+		e.Queue.Notify()
 		n++
 	}
 	return n

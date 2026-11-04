@@ -74,7 +74,7 @@
         </div>
         <div class="summary-item">
           <div class="summary-label">User</div>
-          <div class="summary-value summary-truncate">{{ item.username || 'Not set' }}</div>
+          <div class="summary-value summary-truncate">{{ item.username ? '••••••••' : 'Not set' }}</div>
         </div>
         <div class="summary-item">
           <div class="summary-label">Default From</div>

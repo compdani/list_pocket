@@ -66,9 +66,10 @@ func IsReadOnly(t Tool) bool {
 
 // Call is one invocation.
 type Call struct {
-	Args   map[string]any
-	Config map[string]any // per-workflow tool config (Phase 2+)
-	RunID  string         // flow_agent_runs id
+	ExecutionID string // stable node execution or agent tool call identity
+	Args        map[string]any
+	Config      map[string]any // per-workflow tool config (Phase 2+)
+	RunID       string         // flow_agent_runs id
 }
 
 // ProviderSide marks catalog names that are fulfilled by the model provider

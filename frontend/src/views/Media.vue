@@ -44,7 +44,7 @@
             @click="onToggleForm"
             prepend-icon="mdi-file-upload-outline"
             color="primary"
-            variant="tonal"
+            variant="flat"
             class="media-upload-toggle"
             data-cy="btn-toggle-upload"
           >

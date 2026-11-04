@@ -1,15 +1,20 @@
 <template>
   <section class="dashboard content">
     <header class="dashboard-header">
-      <h1 class="text-h5 font-weight-semibold dashboard-date">
-        {{ $utils.niceDate(new Date()) }}
-      </h1>
+      <div>
+        <h1 class="text-h5 font-weight-semibold">{{ $t('dashboard.workspaceOverview') }}</h1>
+        <p class="text-body-2 text-medium-emphasis mb-0">{{ $utils.niceDate(new Date()) }}</p>
+      </div>
+      <div class="dashboard-actions">
+        <v-btn :to="{ name: 'inbox' }" variant="text" prepend-icon="mdi-inbox-outline">{{ $t('menu.inbox') }}</v-btn>
+        <v-btn :to="{ name: 'campaigns' }" color="primary" variant="flat" prepend-icon="mdi-rocket-launch-outline">{{ $t('globals.terms.campaigns') }}</v-btn>
+      </div>
     </header>
 
     <section class="counts wrap">
       <div class="overview-grid relative">
         <template v-if="isCountsLoading">
-          <div v-for="n in 3" :key="n" class="overview-card" aria-hidden="true">
+          <div v-for="n in 4" :key="n" class="overview-card" aria-hidden="true">
             <v-skeleton-loader type="heading, list-item@3" color="transparent" />
           </div>
         </template>
@@ -90,16 +95,19 @@
               </li>
             </ul>
 
-            <div class="metric-divider" />
+          </router-link>
+
+          <router-link :to="{ name: 'campaigns' }" class="overview-card">
 
             <div class="messages-block" data-cy="messages">
-              <p class="metric-value compact">
+              <p class="metric-value">
                 <span class="metric-icon"><v-icon icon="mdi-email-outline" size="20" /></span>
                 {{ $utils.niceNumber(counts.messages) }}
               </p>
               <p class="metric-label">
                 {{ $t('dashboard.messagesSent') }}
               </p>
+              <p class="text-body-2 text-medium-emphasis mt-4">{{ $t('dashboard.messagesHelp') }}</p>
             </div>
           </router-link>
         </template>
@@ -134,16 +142,22 @@
               </div>
               <chart type="line" v-if="openTrackingBreakdown" :data="openTrackingBreakdown" />
               <p v-else-if="!isChartsLoading" class="chart-empty text-medium-emphasis">
-                {{ $t('globals.messages.emptyState') }}
+                <v-icon icon="mdi-email-open-outline" size="28" class="mb-3" />
+                <strong>{{ $t('dashboard.noOpensYet') }}</strong>
+                <span>{{ $t('dashboard.opensHelp') }}</span>
+                <router-link :to="{ name: 'campaigns' }">{{ $t('globals.terms.campaigns') }} →</router-link>
               </p>
             </div>
             <div class="chart-block">
-              <h3 class="text-subtitle-1 font-weight-medium chart-title align-right">
+              <h3 class="text-subtitle-1 font-weight-medium chart-title">
                 {{ $t('dashboard.linkClicks') }}
               </h3>
               <chart type="line" v-if="campaignClicks" :data="campaignClicks" />
               <p v-else-if="!isChartsLoading" class="chart-empty text-medium-emphasis">
-                {{ $t('globals.messages.emptyState') }}
+                <v-icon icon="mdi-cursor-default-click-outline" size="28" class="mb-3" />
+                <strong>{{ $t('dashboard.noClicksYet') }}</strong>
+                <span>{{ $t('dashboard.clicksHelp') }}</span>
+                <router-link :to="{ name: 'campaigns' }">{{ $t('globals.terms.campaigns') }} →</router-link>
               </p>
             </div>
           </div>
@@ -357,13 +371,16 @@ export default {
 }
 
 .dashboard-header {
-  margin-bottom: 14px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
-.dashboard-date {
-  line-height: 1.25;
-  margin: 0;
-}
+.dashboard-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 
 .relative {
   position: relative;
@@ -383,17 +400,17 @@ export default {
 .overview-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
   margin-bottom: 16px;
 }
 
 .overview-card {
-  background: linear-gradient(180deg, rgb(var(--v-theme-surface)) 0%, rgb(var(--v-theme-surface-light)) 100%);
+  background: rgb(var(--v-theme-surface));
   border: 1px solid var(--dashboard-border);
   border-radius: 16px;
   color: inherit;
   display: block;
-  min-height: 220px;
+  min-height: 208px;
   padding: 16px;
   text-decoration: none;
 }
@@ -444,14 +461,15 @@ export default {
   display: flex;
   font-size: 0.95rem;
   gap: 8px;
-  justify-content: space-between;
   padding: 4px 0;
 }
 
 .metric-breakdown .metric-count {
   color: rgba(var(--v-theme-on-surface), var(--v-high-emphasis-opacity));
   font-weight: 700;
-  margin-right: auto;
+  order: 2;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .running-indicator {
@@ -476,20 +494,13 @@ export default {
   }
 }
 
-.metric-divider {
-  border-top: 1px solid var(--dashboard-border-strong);
-  margin: 14px 0;
-}
 
 .charts-card {
   margin-bottom: 16px;
 }
 
 .charts-panel {
-  background: rgb(var(--v-theme-surface));
-  border: 1px solid var(--dashboard-border);
-  border-radius: 16px;
-  padding: 16px;
+  padding: 0;
 }
 
 .charts-grid {
@@ -499,15 +510,21 @@ export default {
 }
 
 .chart-block {
+  background: rgb(var(--v-theme-surface));
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   border-radius: 12px;
   padding: 14px;
   min-width: 0;
 }
 
+.chart-empty a { color: rgb(var(--v-theme-primary)); text-underline-offset: 3px; }
+
 .chart-empty {
   display: grid;
-  min-height: 200px;
+  min-height: 144px;
+  gap: 6px;
+  justify-items: center;
+  font-size: 0.875rem;
   place-content: center;
   text-align: center;
 }
@@ -558,17 +575,11 @@ export default {
   color: rgb(var(--v-theme-warning));
 }
 
-.align-right {
-  text-align: right;
-}
 
 @media (max-width: 960px) {
   .charts-grid {
     grid-template-columns: 1fr;
   }
 
-  .align-right {
-    text-align: left;
-  }
 }
 </style>

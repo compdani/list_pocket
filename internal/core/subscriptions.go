@@ -255,7 +255,7 @@ func (c *Core) deleteSubscriptionsSQLite(subIDs, listIDs []int) (int, error) {
 
 		res, err := c.db.Exec(q, args...)
 		if err != nil {
-			return 0, err
+			return affected, err
 		}
 
 		n, _ := res.RowsAffected()

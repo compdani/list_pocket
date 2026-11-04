@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/compdani/list_pocket/internal/flow/web"
 	"github.com/compdani/list_pocket/internal/txemail"
 	"github.com/compdani/list_pocket/models"
+	"github.com/pocketbase/dbx"
 	"gopkg.in/volatiletech/null.v6"
 )
 
@@ -34,6 +36,7 @@ type flowTool struct {
 	approval          bool
 	humanWritten      func(args map[string]any) string
 	fn                func(ctx context.Context, args map[string]any) (any, error)
+	callFn            func(context.Context, tools.Call) (any, error)
 }
 
 func (t flowTool) Name() string                 { return t.name }
@@ -49,6 +52,9 @@ func (t flowTool) HumanWrittenField(args map[string]any) string {
 	return t.humanWritten(args)
 }
 func (t flowTool) Invoke(ctx context.Context, call tools.Call) (any, error) {
+	if t.callFn != nil {
+		return t.callFn(ctx, call)
+	}
 	return t.fn(ctx, call.Args)
 }
 
@@ -201,7 +207,28 @@ func tagsFromAttribs(attribs map[string]any) []string {
 	return out
 }
 
-func (a *App) sendFlowEmail(args map[string]any) (any, error) {
+func (a *App) sendFlowEmail(args map[string]any, executionID string) (any, error) {
+	if a.flows == nil || a.flows.delivery == nil {
+		return nil, errors.New("workflow delivery is unavailable")
+	}
+	if executionID == "" {
+		return nil, errors.New("stable delivery execution identity is required")
+	}
+	key := "email:" + executionID
+	if existing, err := a.pb.FindFirstRecordByFilter("flow_deliveries", "execution_key = {:key}", dbx.Params{"key": key}); err == nil {
+		return deliveryReceipt(existing), nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	var receipt map[string]any
+	submit := func(msg models.Message) error {
+		rec, err := a.flows.delivery.Enqueue(key, msg)
+		if err != nil {
+			return err
+		}
+		receipt = deliveryReceipt(rec)
+		return nil
+	}
 	sub, err := a.contactFromRef(argStr(args, "contact"))
 	if err != nil {
 		return nil, err
@@ -217,7 +244,9 @@ func (a *App) sendFlowEmail(args map[string]any) (any, error) {
 	subject := argStr(args, "subject")
 	if templateID := argStr(args, "template_id"); templateID != "" {
 		data, _ := args["data"].(map[string]any)
-		record, err := a.newTransactionalSender().Send(txemail.Request{
+		sender := a.newTransactionalSender()
+		sender.Enqueue = submit
+		_, err := sender.Send(txemail.Request{
 			TemplateID: templateID, SubscriberID: sub.RecordID, SubscriberEmail: sub.Email, SubscriberName: sub.Name,
 			FirstName: sub.FirstName, LastName: sub.LastName, Phone: sub.Phone, Attribs: sub.Attribs,
 			Data: data, Subject: subject,
@@ -225,7 +254,7 @@ func (a *App) sendFlowEmail(args map[string]any) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"sent": true, "id": record.RecordID, "to": sub.Email}, nil
+		return receipt, nil
 	}
 	body := argStr(args, "body")
 	if subject == "" || body == "" {
@@ -245,13 +274,10 @@ func (a *App) sendFlowEmail(args map[string]any) (any, error) {
 		msg.ContentType, msg.Body, msg.AltBody = models.CampaignContentTypeHTML, htmlBody, []byte(text)
 		body = text
 	}
-	if err := a.manager.PushMessage(msg); err != nil {
+	if err := submit(msg); err != nil {
 		return nil, err
 	}
-	if err := a.core.RecordConversationReply(models.ChannelEmail, sub.RecordID, strings.ToLower(sub.Email), subject, body, flowMessageID()); err != nil {
-		a.log.Printf("error recording workflow email: %v", err)
-	}
-	return map[string]any{"sent": true, "to": sub.Email}, nil
+	return receipt, nil
 }
 
 func (a *App) createFlowCampaignDraft(args map[string]any) (any, error) {
@@ -571,7 +597,7 @@ func (a *App) flowTools() []tools.Tool {
 			fn: func(_ context.Context, args map[string]any) (any, error) {
 				return map[string]any{"closed": true}, a.core.SetConversationClosed(argStr(args, "conversation"), true)
 			}},
-		{name: "messages.send_email", description: "Email a contact from a saved template (template_id, with optional data) or from subject and body. The body is plain text unless content_type says otherwise; other formats are sanitized, and a person approves each send if the body is filled in at run time. An agent can only send plain text this way. Blocklisted and unsubscribed contacts are skipped with sent=false; set transactional only for messages they asked for, such as a receipt.",
+		{name: "messages.send_email", description: "Queue a durable email delivery intent for a contact from a saved template (template_id, with optional data) or from subject and body. The body is plain text unless content_type says otherwise; other formats are sanitized, and a person approves each send if the body is filled in at run time. An agent can only send plain text this way. Returns delivery_id and status; queued is not delivery confirmation. Ambiguous outcomes require manual reconciliation. Blocklisted and unsubscribed contacts are skipped with sent=false; set transactional only for messages they asked for, such as a receipt.",
 			humanWritten: flowEmailHumanWritten,
 			schema: toolSchema(map[string]any{
 				"contact": contact, "template_id": strProp("Template record ID"), "data": map[string]any{"type": "object", "description": "Template variables"},
@@ -580,8 +606,8 @@ func (a *App) flowTools() []tools.Tool {
 				"body_source":   strProp("Editor document for the visual formats. It is kept for editing and never sent"),
 				"transactional": map[string]any{"type": "boolean", "description": "Send even if unsubscribed from marketing"},
 			}, "contact"),
-			fn: func(_ context.Context, args map[string]any) (any, error) {
-				return a.sendFlowEmail(args)
+			callFn: func(_ context.Context, call tools.Call) (any, error) {
+				return a.sendFlowEmail(call.Args, call.ExecutionID)
 			}},
 		{name: "lists.list", readOnly: true, description: "List mailing lists with their record IDs and subscriber counts.",
 			schema: toolSchema(map[string]any{}),

@@ -66,7 +66,7 @@ func flowToolOutputs() map[string]map[string]any {
 		"conversations.thread":      tools.SchemaFor[core.ConversationThread](),
 		"conversations.reply":       outObject(map[string]any{"sent": outBool, "reason": outString}),
 		"conversations.close":       outObject(map[string]any{"closed": outBool}),
-		"messages.send_email":       outObject(map[string]any{"sent": outBool, "reason": outString, "id": outString, "to": outString}),
+		"messages.send_email":       outObject(map[string]any{"sent": outBool, "queued": outBool, "delivery_id": outString, "status": outString, "reason": outString}),
 		"lists.list":                tools.SchemaFor[[]models.List](),
 		"templates.list":            tools.SchemaFor[[]models.Template](),
 		"campaigns.list":            outObject(map[string]any{"total": outInt, "results": tools.SchemaFor[[]models.Campaign]()}),

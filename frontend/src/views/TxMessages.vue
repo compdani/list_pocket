@@ -43,6 +43,9 @@
         <template v-if="!(txMessages.results || []).length" #loading>
           <v-skeleton-loader type="table-row@8" />
         </template>
+        <template #no-data>
+          <empty-placeholder icon="mdi-email-outline" :label="$t('ui.txEmpty')" :hint="$t('ui.txEmptyHelp')" />
+        </template>
         <template #[`item.subject`]="{ item }">
           <button type="button" class="link-button" @click="openMessage(item)">
             {{ item.subject }}
@@ -92,7 +95,7 @@
         </template>
       </v-data-table>
 
-      <empty-placeholder v-if="!loading.txMessages && (txMessages.results || []).length === 0" />
+
     </div>
 
     <div v-if="pageCount > 1" class="table-pagination">

@@ -18,6 +18,9 @@ import (
 // the subscriber out of rotation rather than retry.
 var ErrUnsendableDestination = errors.New("destination not sendable")
 
+// ErrNotAttempted proves that no provider call began, so retry is safe.
+var ErrNotAttempted = errors.New("delivery not attempted")
+
 // Message is the message pushed to a Messenger.
 type Message struct {
 	From        string

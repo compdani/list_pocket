@@ -375,27 +375,32 @@ function onItemClick() {
 </script>
 
 <style scoped>
+.side-nav { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+
 .side-nav-search {
+  flex-shrink: 0;
   padding: 0 4px 10px;
 }
 
 .side-nav-list {
+  overflow-y: auto;
+  min-height: 0;
   background: transparent;
   padding: 0;
 }
 
 .side-nav-heading {
-  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  color: rgba(var(--v-theme-on-surface), 0.74);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  margin: 14px 0 4px;
+  margin: 10px 0 4px;
   padding: 0 12px;
   text-transform: uppercase;
 }
 
 .side-nav-list :deep(.v-list-item--active) {
-  background: rgba(var(--v-theme-primary), 0.14);
+  background: rgba(var(--v-theme-primary), 0.06);
   color: rgb(var(--v-theme-primary));
 }
 
@@ -405,6 +410,14 @@ function onItemClick() {
 
 .side-nav-list :deep(.v-list-item__prepend > .v-icon) {
   margin-inline-end: 12px;
+}
+
+.side-nav-list :deep(.v-list-item__spacer) {
+  width: 0;
+}
+
+.side-nav-list :deep(.v-list-item) {
+  min-height: 36px;
 }
 
 .side-nav-list :deep(.v-list-item-title) {

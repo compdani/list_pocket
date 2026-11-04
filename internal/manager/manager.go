@@ -93,9 +93,12 @@ type Manager struct {
 	links    map[string]string
 	linksMut sync.RWMutex
 
-	nextPipes chan *pipe
-	campMsgQ  chan CampaignMessage
-	msgQ      chan models.Message
+	nextPipes      chan *pipe
+	campMsgQ       chan CampaignMessage
+	msgQ           chan models.Message
+	deliveryQ      chan deliveryRequest
+	deliveryRateMu sync.Mutex
+	deliveryStates map[string]*deliveryRateState
 
 	// Sliding window keeps track of the total number of messages sent in a period
 	// and on reaching the specified limit, waits until the window is over before
@@ -108,6 +111,17 @@ type Manager struct {
 	smsLimitsMu     sync.RWMutex
 	smsSlidingCount int
 	smsSlidingStart time.Time
+
+	lifecycle sync.RWMutex
+	closed    bool
+	started   bool
+	stop      chan struct{}
+	closeOnce sync.Once
+	stopOnce  sync.Once
+	runWG     sync.WaitGroup
+	workerWG  sync.WaitGroup
+	pipeWG    sync.WaitGroup
+	scanMu    sync.Mutex
 
 	tplFuncs template.FuncMap
 }
@@ -192,9 +206,11 @@ func New(cfg Config, store Store, i *i18n.I18n, l *log.Logger) *Manager {
 		pipes:           make(map[int]*pipe),
 		tpls:            make(map[int]*models.Template),
 		links:           make(map[string]string),
+		stop:            make(chan struct{}),
 		nextPipes:       make(chan *pipe, 1000),
 		campMsgQ:        make(chan CampaignMessage, cfg.Concurrency*cfg.MessageRate*2),
 		msgQ:            make(chan models.Message, cfg.Concurrency*cfg.MessageRate*2),
+		deliveryQ:       make(chan deliveryRequest, cfg.Concurrency),
 		slidingStart:    time.Now(),
 		smsSlidingStart: time.Now(),
 	}
@@ -234,10 +250,17 @@ func (m *Manager) AddMessenger(msg Messenger) error {
 // PushMessage pushes an arbitrary non-campaign Message to be sent out by the workers.
 // It times out if the queue is busy.
 func (m *Manager) PushMessage(msg models.Message) error {
+	m.lifecycle.RLock()
+	defer m.lifecycle.RUnlock()
+	if m.closed {
+		return errors.New("manager is closed")
+	}
 	t := time.NewTicker(pushTimeout)
 	defer t.Stop()
 
 	select {
+	case <-m.stop:
+		return fmt.Errorf("%w: manager stopping", models.ErrNotAttempted)
 	case m.msgQ <- msg:
 	case <-t.C:
 		m.log.Printf("message push timed out: '%s'", msg.Subject)
@@ -250,6 +273,11 @@ func (m *Manager) PushMessage(msg models.Message) error {
 // PushCampaignMessage pushes a campaign messages into a queue to be sent out by the workers.
 // It times out if the queue is busy.
 func (m *Manager) PushCampaignMessage(msg CampaignMessage) error {
+	m.lifecycle.RLock()
+	defer m.lifecycle.RUnlock()
+	if m.closed {
+		return errors.New("manager is closed")
+	}
 	t := time.NewTicker(pushTimeout)
 	defer t.Stop()
 
@@ -259,6 +287,8 @@ func (m *Manager) PushCampaignMessage(msg CampaignMessage) error {
 	}
 
 	select {
+	case <-m.stop:
+		return fmt.Errorf("%w: manager stopping", models.ErrNotAttempted)
 	case m.campMsgQ <- msg:
 	case <-t.C:
 		m.log.Printf("message push timed out: '%s'", msg.Subject())
@@ -303,20 +333,42 @@ func (m *Manager) GetCampaignStats(id int) CampStats {
 // until all subscribers are exhausted, at which point, a campaign is marked
 // as "finished".
 func (m *Manager) Run() {
+	m.lifecycle.Lock()
+	if m.closed || m.started {
+		m.lifecycle.Unlock()
+		return
+	}
+	m.started = true
+	m.runWG.Add(1)
+	m.lifecycle.Unlock()
+	defer m.runWG.Done()
 	if m.cfg.ScanCampaigns {
 		// Periodically scan campaigns and push running campaigns to nextPipes
 		// to fetch subscribers from the campaign.
-		go m.scanCampaigns(m.cfg.ScanInterval)
+		m.runWG.Add(1)
+		go func() { defer m.runWG.Done(); m.scanCampaigns(m.cfg.ScanInterval) }()
 	}
 
 	// Spawn N message workers.
 	for i := 0; i < m.cfg.Concurrency; i++ {
-		go m.worker()
+		m.workerWG.Add(1)
+		go func() { defer m.workerWG.Done(); m.worker() }()
 	}
 
 	// Indefinitely wait on the pipe queue to fetch the next set of subscribers
 	// for any active campaigns.
-	for p := range m.nextPipes {
+	for {
+		var p *pipe
+		select {
+		case <-m.stop:
+			return
+		case p = <-m.nextPipes:
+		}
+		select {
+		case <-m.stop:
+			return
+		default:
+		}
 		has, err := p.NextSubscribers()
 		if err != nil {
 			m.log.Printf("error processing campaign batch (%s): %v", p.camp.Name, err)
@@ -339,13 +391,25 @@ func (m *Manager) Run() {
 			// This marks down the original non-message +1, causing the waitgroup
 			// to be released and the pipe to end, triggering the pg.Wait()
 			// in newPipe() that calls pipe.cleanup().
-			p.wg.Done()
+			p.finishProducing()
 		}
 	}
 }
 
 // ScanCampaignsOnce scans the store for campaigns ready to run and queues them.
 func (m *Manager) ScanCampaignsOnce() {
+	select {
+	case <-m.stop:
+		return
+	default:
+	}
+	m.lifecycle.RLock()
+	defer m.lifecycle.RUnlock()
+	if m.closed {
+		return
+	}
+	m.scanMu.Lock()
+	defer m.scanMu.Unlock()
 	ids, counts := m.getCurrentCampaigns()
 	if m.cfg.LogVerbose {
 		m.log.Printf("campaign scheduler: scan current_ids=%v sent_counts=%v", ids, counts)
@@ -505,9 +569,34 @@ func (m *Manager) StopCampaign(id int) {
 }
 
 // Close closes and exits the campaign manager.
+// BeginShutdown independently signals blocked admission and rate waits. It
+// never waits for the lifecycle lock held by a saturated queue submitter.
+func (m *Manager) BeginShutdown() { m.stopOnce.Do(func() { close(m.stop) }) }
+
 func (m *Manager) Close() {
-	close(m.nextPipes)
-	close(m.msgQ)
+	m.BeginShutdown()
+	m.closeOnce.Do(func() {
+		m.lifecycle.Lock()
+		m.closed = true
+		m.lifecycle.Unlock()
+		m.pipesMut.RLock()
+		for _, p := range m.pipes {
+			p.Stop(false)
+		}
+		m.pipesMut.RUnlock()
+		m.runWG.Wait()
+		m.pipesMut.RLock()
+		for _, p := range m.pipes {
+			p.Stop(false)
+			p.finishProducing()
+		}
+		m.pipesMut.RUnlock()
+		close(m.campMsgQ)
+		close(m.msgQ)
+		close(m.deliveryQ)
+		m.workerWG.Wait()
+		m.pipeWG.Wait()
+	})
 }
 
 // scanCampaigns is a blocking function that periodically scans the data source
@@ -518,8 +607,13 @@ func (m *Manager) scanCampaigns(tick time.Duration) {
 	defer t.Stop()
 
 	// Periodically scan the data source for campaigns to process.
-	for range t.C {
-		m.ScanCampaignsOnce()
+	for {
+		select {
+		case <-m.stop:
+			return
+		case <-t.C:
+			m.ScanCampaignsOnce()
+		}
 	}
 }
 
@@ -527,13 +621,25 @@ func (m *Manager) scanCampaigns(tick time.Duration) {
 // queues and processes them.
 func (m *Manager) worker() {
 	// Counter to keep track of the message / sec rate limit.
-	numMsg := 0
-	for {
+	campQ, msgQ := m.campMsgQ, m.msgQ
+	deliveryQ := m.deliveryQ
+	for campQ != nil || msgQ != nil || deliveryQ != nil {
 		select {
-		// Campaign message.
-		case msg, ok := <-m.campMsgQ:
+		case request, ok := <-deliveryQ:
 			if !ok {
-				return
+				deliveryQ = nil
+				continue
+			}
+			if !m.deliverySlot(request.msg) {
+				request.done <- fmt.Errorf("%w: manager stopping", models.ErrNotAttempted)
+				continue
+			}
+			request.done <- m.messengers[request.msg.Messenger].Push(request.msg)
+		// Campaign message.
+		case msg, ok := <-campQ:
+			if !ok {
+				campQ = nil
+				continue
 			}
 
 			// If the campaign has ended or stopped, ignore the message.
@@ -549,26 +655,16 @@ func (m *Manager) worker() {
 				continue
 			}
 
-			// Pause on hitting the message rate (SMS uses typed send_limits).
 			spec := models.ChannelFor(msg.Campaign.Messenger)
-			rateCap := m.cfg.MessageRate
-			if spec.SMSLimits {
-				lim := m.smsSendLimits()
-				if lim.MaxMessagesPerSecond > 0 {
-					rateCap = lim.MaxMessagesPerSecond
+			if !m.deliverySlot(models.Message{Messenger: msg.Campaign.Messenger}) {
+				if msg.pipe != nil {
+					if err := m.store.RollbackCampaignLedgerInflight(msg.Campaign.ID, msg.Subscriber.RecordID); err != nil {
+						m.log.Printf("rollback interrupted campaign delivery: %v", err)
+					}
+					msg.pipe.wg.Done()
 				}
+				continue
 			}
-			if spec.MaxPerSecond > 0 {
-				rateCap = spec.MaxPerSecond
-			}
-			if rateCap < 1 {
-				rateCap = 1
-			}
-			if numMsg >= rateCap {
-				time.Sleep(time.Second)
-				numMsg = 0
-			}
-			numMsg++
 
 			// Outgoing message.
 			to := []string{msg.to}
@@ -676,9 +772,10 @@ func (m *Manager) worker() {
 			}
 
 		// Arbitrary message.
-		case msg, ok := <-m.msgQ:
+		case msg, ok := <-msgQ:
 			if !ok {
-				return
+				msgQ = nil
+				continue
 			}
 
 			// Push the message to the messenger. It may be unknown here: a workflow
@@ -891,4 +988,125 @@ func MakeAttachmentHeader(filename, encoding, contentType string) textproto.MIME
 	h.Set("Content-Type", fmt.Sprintf("%s; name=\""+filename+"\"", contentType))
 	h.Set("Content-Transfer-Encoding", encoding)
 	return h
+}
+
+// waitOrStop interrupts rate-limit delays when shutting down producers.
+func (m *Manager) waitOrStop(delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-m.stop:
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// DeliverMessage performs a durable outbox's provider attempt synchronously.
+// The caller owns persistence and ambiguity handling; close waits for the call.
+type deliveryRequest struct {
+	msg  models.Message
+	done chan error
+}
+
+// DeliverMessage uses the manager's worker pool and rate admission. The short
+// admission lock protects channel ownership; it is never held over provider I/O.
+func (m *Manager) DeliverMessage(msg models.Message) error {
+	m.lifecycle.RLock()
+	if m.closed || !m.started {
+		m.lifecycle.RUnlock()
+		return fmt.Errorf("%w: manager unavailable", models.ErrNotAttempted)
+	}
+	if _, ok := m.messengers[msg.Messenger]; !ok {
+		m.lifecycle.RUnlock()
+		return fmt.Errorf("%w: unknown messenger %q", models.ErrNotAttempted, msg.Messenger)
+	}
+	request := deliveryRequest{msg: msg, done: make(chan error, 1)}
+	select {
+	case m.deliveryQ <- request:
+		m.lifecycle.RUnlock()
+	case <-m.stop:
+		m.lifecycle.RUnlock()
+		return fmt.Errorf("%w: manager stopping", models.ErrNotAttempted)
+	}
+	return <-request.done
+}
+
+type deliveryRateState struct {
+	last, windowStart time.Time
+	windowCount       int
+}
+
+// deliveryLimits preserves message_rate per worker; channel and SMS overrides
+// are channel-global. Sliding limits permit bursts until the window fills.
+func (m *Manager) deliveryLimits(messenger string) (int, time.Duration, int) {
+	rate := m.cfg.MessageRate * m.cfg.Concurrency
+	sliding, duration, count := m.cfg.SlidingWindow, m.cfg.SlidingWindowDuration, m.cfg.SlidingWindowRate
+	spec := models.ChannelFor(messenger)
+	if spec.SMSLimits {
+		limits := m.smsSendLimits()
+		if limits.MaxMessagesPerSecond > 0 {
+			rate = limits.MaxMessagesPerSecond
+		}
+		sliding = limits.SlidingEnabled
+		duration = time.Duration(limits.SlidingWindowSeconds) * time.Second
+		count = limits.SlidingMaxMessages
+	}
+	if spec.MaxPerSecond > 0 {
+		rate = spec.MaxPerSecond
+	}
+	if rate < 1 {
+		rate = 1
+	}
+	if !sliding || duration <= 0 || count <= 0 {
+		duration = 0
+		count = 0
+	}
+	return rate, duration, count
+}
+
+// reserveDeliverySlot reserves a channel-local timestamp under the short mutex.
+// Sleeping outside the lock keeps slow-channel windows from blocking email.
+func (m *Manager) reserveDeliverySlot(messenger string, now time.Time) time.Duration {
+	m.deliveryRateMu.Lock()
+	defer m.deliveryRateMu.Unlock()
+	if m.deliveryStates == nil {
+		m.deliveryStates = map[string]*deliveryRateState{}
+	}
+	state := m.deliveryStates[messenger]
+	if state == nil {
+		state = &deliveryRateState{}
+		m.deliveryStates[messenger] = state
+	}
+	rate, duration, count := m.deliveryLimits(messenger)
+	slot := now
+	if next := state.last.Add(time.Second / time.Duration(rate)); next.After(slot) {
+		slot = next
+	}
+	if count > 0 {
+		end := state.windowStart.Add(duration)
+		if state.windowStart.IsZero() || !slot.Before(end) {
+			state.windowStart = slot
+			state.windowCount = 0
+		} else if state.windowCount >= count {
+			slot = end
+			state.windowStart = slot
+			state.windowCount = 0
+		}
+		state.windowCount++
+	}
+	state.last = slot
+	return slot.Sub(now)
+}
+func (m *Manager) deliverySlot(msg models.Message) bool {
+	wait := m.reserveDeliverySlot(msg.Messenger, time.Now())
+	if wait > 0 && !m.waitOrStop(wait) {
+		return false
+	}
+	select {
+	case <-m.stop:
+		return false
+	default:
+		return true
+	}
 }

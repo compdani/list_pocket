@@ -17,6 +17,8 @@ type searchSubrequest struct {
 	st *run
 }
 
+func (*searchSubrequest) ReadOnly() bool { return true }
+
 func (*searchSubrequest) Name() string { return tools.WebSearch }
 
 func (*searchSubrequest) Description() string {

@@ -83,6 +83,10 @@
         </v-card-text>
       </v-card>
 
+      <v-alert v-if="!form.campaigns.length" type="info" variant="tonal" class="mb-6">
+        {{ $t('ui.analyticsSelectHelp') }}
+      </v-alert>
+      <template v-else>
       <!-- Open tracking breakdown panel -->
       <v-row v-if="openTrackingVisible" class="mb-6">
         <v-col cols="12">
@@ -137,10 +141,7 @@
                     class="mx-auto d-block mb-4"
                   />
                   <div v-else-if="openTrackingCombinedData">
-                    <h3 class="text-h6 mb-3">
-                      {{ $t('analytics.openTracking') }}
-                    </h3>
-                    <div class="d-flex align-center flex-wrap ga-2 mb-3">
+                    <div class="analytics-legend d-flex align-center flex-wrap ga-2 mb-3">
                       <v-chip size="small" variant="tonal" color="success">
                         {{ openTrackingLineNames.confirmed }}
                       </v-chip>
@@ -204,6 +205,7 @@
           </div>
         </v-col>
       </v-row>
+      </template>
     </v-container>
   </section>
 </template>
@@ -451,7 +453,7 @@ export default {
     formatCampaignOption(campaign) {
       return {
         ...campaign,
-        name: `#${campaign.id}: ${campaign.name}`,
+        name: campaign.name,
       };
     },
 
@@ -890,4 +892,10 @@ export default {
     min-height: 230px;
   }
 }
+
+.analytics-legend :deep(.v-chip) { color: rgba(var(--v-theme-on-surface), 0.9) !important; font-weight: 600; font-size: 0.8125rem; }
+.analytics-legend :deep(.v-chip:nth-child(1)) { border-inline-start: 3px solid rgb(var(--v-theme-success)); }
+.analytics-legend :deep(.v-chip:nth-child(2)) { border-inline-start: 3px solid rgb(var(--v-theme-info)); }
+.analytics-legend :deep(.v-chip:nth-child(3)) { border-inline-start: 3px solid rgb(var(--v-theme-secondary)); }
+.analytics-legend :deep(.v-chip:last-child) { border-inline-start: 3px solid rgb(var(--v-theme-warning)); }
 </style>

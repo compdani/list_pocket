@@ -29,7 +29,7 @@
         </v-col>
         <v-col cols="12" md="3" offset-md="4">
           <v-btn
-            color="primary"
+            color="error"
             variant="flat"
             block
             :loading="loading.maintenance"
@@ -70,7 +70,7 @@
         </v-col>
         <v-col cols="12" md="3" offset-md="1">
           <v-btn
-            color="primary"
+            color="error"
             variant="flat"
             block
             :loading="loading.maintenance"
@@ -111,7 +111,7 @@
         </v-col>
         <v-col cols="12" md="3" offset-md="1">
           <v-btn
-            color="primary"
+            color="error"
             variant="flat"
             block
             :loading="loading.maintenance"

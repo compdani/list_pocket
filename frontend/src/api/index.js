@@ -806,37 +806,17 @@ export const deleteMedia = (id) => http.delete(
   { loading: models.media },
 );
 
-export const listPictures = async ({ page = 1, perPage = 20, query = '' } = {}) => {
-  const options = {
-    sort: '-created',
-  };
+export const listPictures = (params = {}) => http.get('/api/pictures', { params, camelCase: false });
 
-  if (query && query.trim()) {
-    options.filter = pb.filter('original_name ~ {:query} || file ~ {:query}', {
-      query: query.trim(),
-    });
-  }
-
-  return pb.collection('pictures').getList(page, perPage, options);
-};
-
-export const uploadPicture = async (file) => {
+export const uploadPicture = (file) => {
   const data = new FormData();
   data.set('file', file);
-  data.set('original_name', file.name);
-  data.set('content_type', file.type || '');
-  return pb.collection('pictures').create(data);
+  return http.post('/api/pictures', data, { camelCase: false });
 };
 
-export const deletePicture = async (id) => pb.collection('pictures').delete(id);
+export const deletePicture = (id) => http.delete(`/api/pictures/${id}`);
 
-// Subscriber tag catalog (PocketBase collection).
-export const getSubscriberTagsCatalog = async () => {
-  const records = await pb.collection('subscriber_tags').getFullList({
-    sort: 'tag',
-  });
-  return records.map((record) => String(record.tag || '').trim()).filter(Boolean);
-};
+export const getSubscriberTagsCatalog = () => http.get('/api/subscriber-tags');
 
 function isUniqueConstraintError(err) {
   const chunks = [err && err.message ? String(err.message) : ''];
@@ -880,7 +860,7 @@ export const ensureSubscriberTags = async (tags = [], alreadyHave = []) => {
   for (const tag of normalized) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      await pb.collection('subscriber_tags').create({ tag });
+      await http.post('/api/subscriber-tags', { tag });
     } catch (err) {
       if (!isUniqueConstraintError(err)) {
         throw err;
@@ -890,12 +870,7 @@ export const ensureSubscriberTags = async (tags = [], alreadyHave = []) => {
 };
 
 // Campaign tag catalog (PocketBase collection) — labels for campaigns, not subscriber audience tags.
-export const getCampaignTagsCatalog = async () => {
-  const records = await pb.collection('campaign_tags').getFullList({
-    sort: 'tag',
-  });
-  return records.map((record) => String(record.tag || '').trim()).filter(Boolean);
-};
+export const getCampaignTagsCatalog = () => http.get('/api/campaign-tags');
 
 export const ensureCampaignTags = async (tags = [], alreadyHave = []) => {
   const normalized = tagsMissingFromCatalog(tags, alreadyHave);
@@ -906,7 +881,7 @@ export const ensureCampaignTags = async (tags = [], alreadyHave = []) => {
   for (const tag of normalized) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      await pb.collection('campaign_tags').create({ tag });
+      await http.post('/api/campaign-tags', { tag });
     } catch (err) {
       if (!isUniqueConstraintError(err)) {
         throw err;

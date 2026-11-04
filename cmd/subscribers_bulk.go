@@ -85,6 +85,11 @@ func (a *App) BulkUpdateSubscribers(re *pbcore.RequestEvent) error {
 		req.SubscriptionStatus,
 	)
 	if err != nil {
+		if result.TagsUpdated > 0 || result.ListsRemoved > 0 || result.ListsUpdated > 0 {
+			// The validated batch has explicit phases. Report committed work rather
+			// than implying that a retry starts from an unchanged audience.
+			return re.JSON(500, map[string]any{"message": err.Error(), "partial": true, "data": result})
+		}
 		return err
 	}
 

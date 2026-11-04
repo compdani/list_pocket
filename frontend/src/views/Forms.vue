@@ -43,15 +43,10 @@
           <template v-if="publicSubscriptionVisible">
             <v-divider class="my-4" />
             <h3 class="text-subtitle-2 font-weight-bold mb-2">{{ $t('forms.publicSubPage') }}</h3>
-            <a
-              :href="publicSubscriptionURL"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-cy="url"
-              class="form-link"
-            >
-              {{ publicSubscriptionURL }}
-            </a>
+            <div class="form-url-row">
+              <a :href="publicSubscriptionURL" target="_blank" rel="noopener noreferrer" data-cy="url" class="form-link" :title="publicSubscriptionURL">{{ publicSubscriptionURL }}</a>
+              <copy-text :text="publicSubscriptionURL" hide-text />
+            </div>
           </template>
         </v-card>
       </v-col>
@@ -72,6 +67,7 @@
 </template>
 
 <script setup>
+import CopyText from '../components/CopyText.vue';
 import {
   computed,
   getCurrentInstance,
@@ -237,4 +233,7 @@ const formHTML = computed(() => {
   color: rgb(var(--v-theme-primary));
   text-decoration: underline;
 }
+
+.form-url-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.form-url-row .form-link { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 </style>

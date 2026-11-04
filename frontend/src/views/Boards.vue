@@ -22,7 +22,8 @@
         class="board-tile"
         :data-cy="`board-${board.key}`"
       >
-        <div class="text-subtitle-1 font-weight-medium">{{ board.name }}</div>
+        <v-icon icon="mdi-view-column-outline" color="primary" size="24" class="mb-3" />
+        <div class="text-subtitle-1 font-weight-semibold">{{ board.name }}</div>
         <div class="text-caption text-medium-emphasis mb-2">
           {{ $t('boards.stageCount', { n: board.stages.length }) }} · {{ $t('boards.contactCount', { n: contactCount(board) }) }}
         </div>
@@ -120,7 +121,7 @@ onMounted(load);
 .boards-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
 }
 
 .board-tile {
@@ -129,7 +130,7 @@ onMounted(load);
   border-radius: 12px;
   color: inherit;
   display: block;
-  padding: 14px 16px;
+  padding: 20px;
   text-decoration: none;
 }
 

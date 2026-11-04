@@ -363,8 +363,16 @@ func (st *run) handleCall(ctx context.Context, call llm.ToolCall, byWire map[str
 	}
 	var result any
 	if err == nil {
+		if !tools.IsReadOnly(t) {
+			// Persist intent BEFORE calling a side-effecting tool. A post-call journal
+			// alone cannot prove that an interrupted execution did not act.
+			st.rec.Set("side_effect_started", true)
+			if saveErr := st.r.App.Save(st.rec); saveErr != nil {
+				return "error: could not persist tool intent: " + saveErr.Error(), nil
+			}
+		}
 		tctx, cancel := context.WithTimeout(ctx, toolTimeout)
-		result, err = tools.Invoke(tctx, t, tools.Call{Args: args, Config: st.opts.ToolConfig[t.Name()], RunID: st.rec.Id})
+		result, err = tools.Invoke(tctx, t, tools.Call{ExecutionID: st.rec.Id + ":" + call.ID, Args: args, Config: st.opts.ToolConfig[t.Name()], RunID: st.rec.Id})
 		cancel()
 	}
 	var content string

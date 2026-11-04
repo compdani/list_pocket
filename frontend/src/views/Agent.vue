@@ -18,8 +18,22 @@
       </div>
     </aside>
 
+    <v-dialog v-model="historyOpen" max-width="440">
+      <v-card>
+        <v-card-title>{{ $t('agent.conversations') }}</v-card-title>
+        <v-card-text>
+          <v-btn color="primary" variant="flat" prepend-icon="mdi-plus" block @click="newChat(); historyOpen = false">{{ $t('agent.newChat') }}</v-btn>
+          <p v-if="!conversations.length" class="text-body-2 text-medium-emphasis mt-4">{{ $t('agent.noConversations') }}</p>
+          <v-list v-else>
+            <v-list-item v-for="c in conversations" :key="c.id" :title="c.title" :to="{ name: 'agent', params: { id: c.id } }" @click="historyOpen = false" />
+          </v-list>
+        </v-card-text>
+        <v-card-actions><v-spacer /><v-btn @click="historyOpen = false">{{ $t('globals.buttons.close') }}</v-btn></v-card-actions>
+      </v-card>
+    </v-dialog>
     <div class="agent-chat">
       <header class="agent-head">
+        <v-btn class="agent-mobile-history" variant="text" icon="mdi-clock-start" size="small" :aria-label="$t('agent.conversations')" @click="historyOpen = true" />
         <v-text-field
           v-if="renaming"
           v-model="title"
@@ -120,7 +134,7 @@
               @input="onInput"
               @keydown="onKeydown"
             />
-            <div class="d-flex align-center flex-wrap ga-1">
+            <div class="agent-compose-actions d-flex align-center flex-wrap ga-1">
               <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-at" data-cy="agent-context" @click="togglePicker">{{ $t('agent.context') }}</v-btn>
               <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-paperclip" :loading="uploading" data-cy="agent-attach" @click="fileInput.click()">{{ $t('agent.attachFile') }}</v-btn>
               <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-content-paste" data-cy="agent-paste" @click="pasting = { name: '', content: '' }">{{ $t('agent.pasteData') }}</v-btn>
@@ -193,6 +207,7 @@ const statusColors = {
   pending: 'warning', applying: 'info', applied: 'success', failed: 'error', rejected: 'default',
 };
 
+const historyOpen = ref(false);
 const conversations = ref([]);
 const convId = ref(String(route.params.id || ''));
 const title = ref('');
@@ -554,6 +569,8 @@ onBeforeUnmount(() => controller?.abort());
 </script>
 
 <style scoped>
+.agent-mobile-history { display: none; }
+
 .agent-page {
   --agent-border: rgba(var(--v-border-color), var(--v-border-opacity));
   background: rgb(var(--v-theme-surface));
@@ -870,6 +887,12 @@ onBeforeUnmount(() => controller?.abort());
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .agent-head { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 8px; }
+  .agent-head > .v-spacer { display: none; }
+  .agent-title { max-width: 100%; }
+  .agent-head :deep(.model-trigger) { grid-column: 1 / -1; justify-self: stretch; max-width: 100%; }
+  .agent-mobile-history { display: inline-grid; }
+  .agent-compose-actions [data-cy="agent-send"] { margin-left: auto; }
   .agent-convs {
     display: none;
   }

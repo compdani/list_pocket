@@ -76,10 +76,10 @@
           data-cy="whatsapp-post-send-at"
         />
         <div class="d-flex flex-wrap ga-2">
-          <v-btn color="primary" :loading="saving" data-cy="whatsapp-post-schedule" @click="save(true)">
+          <v-btn color="primary" variant="flat" :disabled="!form.channel_id || Boolean(channelsError)" :loading="saving" data-cy="whatsapp-post-schedule" @click="save(true)">
             {{ form.send_at ? $t('whatsapp.posts.schedule') : $t('whatsapp.posts.postNow') }}
           </v-btn>
-          <v-btn variant="tonal" :loading="saving" data-cy="whatsapp-post-draft" @click="save(false)">
+          <v-btn variant="tonal" :disabled="!form.channel_id || Boolean(channelsError)" :loading="saving" data-cy="whatsapp-post-draft" @click="save(false)">
             {{ $t('whatsapp.posts.saveDraft') }}
           </v-btn>
           <v-btn v-if="editingId" variant="text" @click="resetForm">{{ $t('globals.buttons.cancel') }}</v-btn>
@@ -87,7 +87,7 @@
       </v-card-text>
     </v-card>
 
-    <empty-placeholder v-if="!loading && posts.length === 0" />
+    <empty-placeholder v-if="!loading && posts.length === 0" icon="mdi-message-text-outline" :label="$t('whatsapp.posts.empty')" :hint="$t('whatsapp.posts.emptyHelp')" />
 
     <v-card v-for="post in posts" :key="post.id" variant="outlined" class="mb-3" :data-cy="`whatsapp-post-${post.id}`">
       <v-card-text>

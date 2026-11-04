@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"errors"
 	"io"
 	"log"
 	"strings"
@@ -323,5 +324,217 @@ func TestNewPipePausesCampaignOnMissingPluginChannel(t *testing.T) {
 	}
 	if store.status != models.CampaignStatusCancelled {
 		t.Fatalf("status = %q, want the existing cancel behaviour", store.status)
+	}
+}
+
+func TestCloseJoinsRunAndRejectsProducers(t *testing.T) {
+	m := New(Config{ScanCampaigns: true, ScanInterval: time.Millisecond}, testStore{}, nil, log.New(io.Discard, "", 0))
+	done := make(chan struct{})
+	go func() { m.Run(); close(done) }()
+	time.Sleep(5 * time.Millisecond)
+	m.Close()
+	m.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not stop")
+	}
+	if err := m.PushMessage(models.Message{}); err == nil {
+		t.Fatal("accepted message after close")
+	}
+	if err := m.PushCampaignMessage(CampaignMessage{}); err == nil {
+		t.Fatal("accepted campaign after close")
+	}
+	m.ScanCampaignsOnce()
+}
+
+func TestCloseBeforeRun(t *testing.T) {
+	m := New(Config{}, testStore{}, nil, log.New(io.Discard, "", 0))
+	m.Close()
+	m.Run()
+}
+
+func TestShutdownInterruptsLongRateLimitWait(t *testing.T) {
+	m := New(Config{}, testStore{}, nil, log.New(io.Discard, "", 0))
+	waiting := make(chan bool, 1)
+	go func() { waiting <- m.waitOrStop(time.Hour) }()
+	m.Close()
+	select {
+	case elapsed := <-waiting:
+		if elapsed {
+			t.Fatal("wait elapsed instead of observing shutdown")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("shutdown did not interrupt wait")
+	}
+}
+
+type blockingDeliveryMessenger struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (*blockingDeliveryMessenger) Name() string { return "email" }
+func (m *blockingDeliveryMessenger) Push(models.Message) error {
+	close(m.entered)
+	<-m.release
+	return nil
+}
+func (*blockingDeliveryMessenger) Flush() error { return nil }
+func (*blockingDeliveryMessenger) Close() error { return nil }
+
+func TestCloseJoinsDeliveryWithoutHoldingAdmissionLock(t *testing.T) {
+	m := New(Config{}, testStore{}, nil, log.New(io.Discard, "", 0))
+	messenger := &blockingDeliveryMessenger{entered: make(chan struct{}), release: make(chan struct{})}
+	if err := m.AddMessenger(messenger); err != nil {
+		t.Fatal(err)
+	}
+	go m.Run()
+	for {
+		m.lifecycle.RLock()
+		started := m.started
+		m.lifecycle.RUnlock()
+		if started {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	sent := make(chan error, 1)
+	go func() { sent <- m.DeliverMessage(models.Message{Messenger: "email"}) }()
+	<-messenger.entered
+	closed := make(chan struct{})
+	go func() { m.Close(); close(closed) }()
+	select {
+	case <-m.stop:
+	case <-time.After(time.Second):
+		t.Fatal("provider call held admission lock")
+	}
+	select {
+	case <-closed:
+		t.Fatal("closed before delivery completed")
+	default:
+	}
+	close(messenger.release)
+	if err := <-sent; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("close failed to join delivery")
+	}
+}
+
+func TestSaturatedAdmissionCannotBlockStopSignal(t *testing.T) {
+	m := New(Config{Concurrency: 1}, testStore{}, nil, log.New(io.Discard, "", 0))
+	provider := &blockingDeliveryMessenger{entered: make(chan struct{}), release: make(chan struct{})}
+	if err := m.AddMessenger(provider); err != nil {
+		t.Fatal(err)
+	}
+	go m.Run()
+	for {
+		m.lifecycle.RLock()
+		started := m.started
+		m.lifecycle.RUnlock()
+		if started {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	first := make(chan error, 1)
+	second := make(chan error, 1)
+	third := make(chan error, 1)
+	go func() { first <- m.DeliverMessage(models.Message{Messenger: "email"}) }()
+	<-provider.entered
+	go func() { second <- m.DeliverMessage(models.Message{Messenger: "email"}) }()
+	deadline := time.Now().Add(time.Second)
+	for len(m.deliveryQ) != 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("second delivery not queued")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	go func() { third <- m.DeliverMessage(models.Message{Messenger: "email"}) }()
+	// The only admission reader left is the submitter blocked on the full queue.
+	for m.lifecycle.TryLock() {
+		m.lifecycle.Unlock()
+		if time.Now().After(deadline) {
+			t.Fatal("third delivery not waiting in admission")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	closed := make(chan struct{})
+	go func() { m.Close(); close(closed) }()
+	select {
+	case <-m.stop:
+	case <-time.After(time.Second):
+		t.Fatal("saturated admission blocked stop")
+	}
+	select {
+	case err := <-third:
+		if !errors.Is(err, models.ErrNotAttempted) {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("submitter did not unblock")
+	}
+	close(provider.release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-second; !errors.Is(err, models.ErrNotAttempted) {
+		t.Fatalf("queued delivery attempted: %v", err)
+	}
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		t.Fatal("shutdown did not finish")
+	}
+}
+
+func TestDeliveryCadencePreservesConcurrencyBudget(t *testing.T) {
+	m := New(Config{Concurrency: 10, MessageRate: 10, SlidingWindow: true, SlidingWindowDuration: time.Minute, SlidingWindowRate: 1000}, testStore{}, nil, log.New(io.Discard, "", 0))
+	rate, window, count := m.deliveryLimits("email")
+	if rate != 100 || time.Second/time.Duration(rate) != 10*time.Millisecond {
+		t.Fatalf("expected100/s, got%d", rate)
+	}
+	if window != time.Minute || count != 1000 {
+		t.Fatalf("sliding window lost: %s/%d", window, count)
+	}
+	// A channel's explicit cap overrides the generic per-worker budget globally.
+	models.RegisterChannel(models.ChannelSpec{ID: "ch:cadence", Label: "Cadence", MaxPerSecond: 7})
+	rate, _, _ = m.deliveryLimits("ch:cadence")
+	if rate != 7 {
+		t.Fatalf("channel cap multiplied by concurrency: %d", rate)
+	}
+}
+
+func TestRateReservationsPreserveThroughputAndChannelIndependence(t *testing.T) {
+	m := New(Config{Concurrency: 10, MessageRate: 10}, testStore{}, nil, log.New(io.Discard, "", 0))
+	now := time.Now()
+	for i := 0; i < 100; i++ {
+		if wait := m.reserveDeliverySlot("email", now); wait != time.Duration(i)*10*time.Millisecond {
+			t.Fatalf("slot%d=%s", i, wait)
+		}
+	}
+	models.RegisterChannel(models.ChannelSpec{ID: "ch:slow", Label: "Slow", MaxPerSecond: 1})
+	if wait := m.reserveDeliverySlot("ch:slow", now); wait != 0 {
+		t.Fatal(wait)
+	}
+	if wait := m.reserveDeliverySlot("ch:slow", now); wait != time.Second {
+		t.Fatal(wait)
+	}
+	// The slow channel's future reservation does not shift email's own timeline.
+	if wait := m.reserveDeliverySlot("email", now); wait != time.Second {
+		t.Fatalf("email blocked by slow channel: %s", wait)
+	}
+}
+func TestSlidingReservationsAllowBurstBeforeWindowHold(t *testing.T) {
+	m := New(Config{Concurrency: 1, MessageRate: 100, SlidingWindow: true, SlidingWindowDuration: time.Minute, SlidingWindowRate: 2}, testStore{}, nil, log.New(io.Discard, "", 0))
+	now := time.Now()
+	for i, want := range []time.Duration{0, 10 * time.Millisecond, time.Minute, time.Minute + 10*time.Millisecond, 2 * time.Minute} {
+		if got := m.reserveDeliverySlot("email", now); got != want {
+			t.Fatalf("slot%d=%s want%s", i, got, want)
+		}
 	}
 }

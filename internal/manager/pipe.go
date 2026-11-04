@@ -15,6 +15,7 @@ type pipe struct {
 	camp         *models.Campaign
 	rate         *ratecounter.RateCounter
 	wg           *sync.WaitGroup
+	producerDone sync.Once
 	sent         atomic.Int64
 	lastID       atomic.Uint64
 	errors       atomic.Uint64
@@ -73,7 +74,9 @@ func (m *Manager) newPipe(c *models.Campaign) (*pipe, error) {
 	// count is used to determine the exhaustion/completion of all messages.
 	p.wg.Add(1)
 
+	m.pipeWG.Add(1)
 	go func() {
+		defer m.pipeWG.Done()
 		// Wait for all the messages in the campaign to be processed
 		// (successfully or skipped after errors or cancellation).
 		p.wg.Wait()
@@ -113,10 +116,10 @@ func (p *pipe) NextSubscribers() (bool, error) {
 
 	// Sliding window: email uses app settings; SMS (Quo) uses typed send_limits.
 	var (
-		hasSliding       bool
-		slidingDur       time.Duration
-		slidingMax       int
-		useSMSWindow     = models.ChannelFor(p.camp.Messenger).SMSLimits
+		hasSliding   bool
+		slidingDur   time.Duration
+		slidingMax   int
+		useSMSWindow = models.ChannelFor(p.camp.Messenger).SMSLimits
 	)
 	if useSMSWindow {
 		lim := p.m.smsSendLimits()
@@ -137,6 +140,12 @@ func (p *pipe) NextSubscribers() (bool, error) {
 
 	// Push messages.
 	for _, s := range subs {
+		select {
+		case <-p.m.stop:
+			p.Stop(false)
+			return false, nil
+		default:
+		}
 		msg, err := p.newMessage(s)
 		if err != nil {
 			p.m.log.Printf("error rendering message (%s) (%s): %v", p.camp.Name, s.Email, err)
@@ -152,7 +161,15 @@ func (p *pipe) NextSubscribers() (bool, error) {
 
 		// Push the message to the queue while blocking and waiting until
 		// the queue is drained.
-		p.m.campMsgQ <- msg
+		select {
+		case p.m.campMsgQ <- msg:
+		case <-p.m.stop:
+			p.Stop(false)
+			// newMessage owns a counter before it reaches a worker. Cleanup resets
+			// all claimed but undispatched ledger rows after this producer exits.
+			p.wg.Done()
+			return false, nil
+		}
 
 		// Check if the sliding window is active.
 		if hasSliding {
@@ -171,7 +188,10 @@ func (p *pipe) NextSubscribers() (bool, error) {
 						p.m.smsSlidingStart.Format(time.RFC822Z),
 						wait.Round(time.Second)*1)
 					p.m.smsSlidingCount = 0
-					time.Sleep(wait)
+					if !p.m.waitOrStop(wait) {
+						p.Stop(false)
+						return false, nil
+					}
 				}
 			} else {
 				diff := time.Since(p.m.slidingStart)
@@ -188,7 +208,10 @@ func (p *pipe) NextSubscribers() (bool, error) {
 						p.m.slidingStart.Format(time.RFC822Z),
 						wait.Round(time.Second)*1)
 					p.m.slidingCount = 0
-					time.Sleep(wait)
+					if !p.m.waitOrStop(wait) {
+						p.Stop(false)
+						return false, nil
+					}
 				}
 			}
 		}
@@ -448,3 +471,6 @@ func parseClock(value string) (int, int, bool) {
 	}
 	return parsed.Hour(), parsed.Minute(), true
 }
+
+// finishProducing releases the pipe sentinel exactly once, including shutdown.
+func (p *pipe) finishProducing() { p.producerDone.Do(func() { p.wg.Done() }) }

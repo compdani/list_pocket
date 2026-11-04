@@ -253,6 +253,7 @@ export default {
         },
 
         license_key: 'gpl',
+        promotion: false,
         browser_spellcheck: true,
         min_height: this.fill ? 300 : 500,
         ...(this.fill ? { height: '100%' } : {}),

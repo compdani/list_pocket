@@ -37,6 +37,7 @@ type Request struct {
 }
 
 type Sender struct {
+	Enqueue          func(models.Message) error // optional durable transport submission
 	Core             *core.Core
 	Manager          *manager.Manager
 	DefaultFromEmail string
@@ -206,7 +207,11 @@ func (s *Sender) Send(req Request) (models.TransactionalMessage, error) {
 		}
 	}
 
-	if err := s.Manager.PushMessage(msg); err != nil {
+	enqueue := s.Enqueue
+	if enqueue == nil {
+		enqueue = s.Manager.PushMessage
+	}
+	if err := enqueue(msg); err != nil {
 		if s.Log != nil {
 			s.Log.Printf("error queueing transactional message %s: %v", record.RecordID, err)
 		}

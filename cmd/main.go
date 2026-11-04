@@ -87,6 +87,8 @@ type App struct {
 	// Global state that stores data on an available remote update.
 	update *AppUpdate
 	sync.Mutex
+	shutdownOnce sync.Once
+	cronJobs     *backgroundCallbacks
 }
 
 var (
@@ -111,12 +113,9 @@ var (
 	frontendDir string = "frontend/dist"
 )
 
-func init() {
-	// Skip application bootstrapping during `go test` for the cmd package.
-	// The test binary name ends with ".test".
-	if strings.HasSuffix(os.Args[0], ".test") {
-		return
-	}
+// bootstrapRuntime performs process startup explicitly, so importing the package
+// in tests never reads configuration, parses flags, or opens runtime resources.
+func bootstrapRuntime() {
 
 	// In local/dev mode, load environment variables from .env.
 	tempIsProd := os.Getenv("is_prod")
@@ -179,6 +178,7 @@ func init() {
 }
 
 func main() {
+	bootstrapRuntime()
 	var (
 		app   *App
 		appMu sync.Mutex
@@ -311,10 +311,11 @@ func wireApp(chReload chan os.Signal) *App {
 		go bounceMgr.Run()
 	}
 
-	initCron(pb, coreSvc, db, mgr)
+	cronJobs := &backgroundCallbacks{}
+	initCron(pb, coreSvc, db, mgr, cronJobs)
 
 	if !ko.Bool("passive") {
-		if err := pb.Cron().Add("whatsapp-channel-posts", "* * * * *", whatsappMsgr.PublishDuePosts); err != nil {
+		if err := cronJobs.Add(pb, "whatsapp-channel-posts", "* * * * *", whatsappMsgr.PublishDuePosts); err != nil {
 			lo.Printf("error initializing WhatsApp channel posts cron: %v", err)
 		}
 	}
@@ -338,6 +339,7 @@ func wireApp(chReload chan os.Signal) *App {
 	renderer := newTplRenderer(tpl, cfg, urlCfg, i18n)
 
 	app := &App{
+		cronJobs:   cronJobs,
 		cfg:        cfg,
 		urlCfg:     urlCfg,
 		fs:         fs,
@@ -391,15 +393,27 @@ func shutdownApp(app *App) {
 	if app == nil {
 		return
 	}
-	if app.flows != nil && app.flows.cancel != nil {
-		app.flows.cancel()
-	}
-	if app.manager != nil {
-		app.manager.Close()
-	}
-	for _, m := range app.messengers {
-		m.Close()
-	}
+	app.shutdownOnce.Do(func() {
+		if app.manager != nil {
+			app.manager.BeginShutdown()
+		}
+		if app.pb != nil {
+			app.pb.Cron().Stop()
+		}
+		app.cronJobs.StopAndWait()
+		if app.flows != nil && app.flows.cancel != nil {
+			app.flows.cancel()
+			if app.flows.queue != nil {
+				app.flows.queue.Wait()
+			}
+		}
+		if app.manager != nil {
+			app.manager.Close()
+		}
+		for _, m := range app.messengers {
+			m.Close()
+		}
+	})
 }
 
 func ensureSuperAdminRolePermissions(core *core.Core, cfg *Config) error {

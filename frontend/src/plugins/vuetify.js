@@ -98,22 +98,27 @@ export default createVuetify({
       style: 'text-transform: none; letter-spacing: normal;',
     },
     VTextField: {
+      color: 'primary',
       variant: 'outlined',
       density: 'comfortable',
     },
     VTextarea: {
+      color: 'primary',
       variant: 'outlined',
       density: 'comfortable',
     },
     VSelect: {
+      color: 'primary',
       variant: 'outlined',
       density: 'comfortable',
     },
     VCombobox: {
+      color: 'primary',
       variant: 'outlined',
       density: 'comfortable',
     },
     VAutocomplete: {
+      color: 'primary',
       variant: 'outlined',
       density: 'comfortable',
     },

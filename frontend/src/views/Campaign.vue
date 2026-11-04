@@ -25,6 +25,9 @@
         </v-col>
 
         <v-col cols="12" md="6">
+          <div v-if="canManage && isNew" class="campaign-actions d-flex justify-md-end">
+            <v-btn color="primary" variant="flat" :loading="loading.campaigns" @click="onSubmit('create')">{{ $t('globals.buttons.continue') }}</v-btn>
+          </div>
           <div
             v-if="canManage && isEditing && (canEdit || canRecover)"
             class="campaign-actions d-flex flex-wrap justify-md-end ga-2"
@@ -32,6 +35,7 @@
             <v-btn
               v-if="canEdit"
               type="button"
+              variant="flat"
               color="primary"
               class="action-btn"
               :disabled="loading.campaigns"
@@ -58,6 +62,7 @@
             </v-btn>
             <v-btn
               v-if="canStart"
+              variant="tonal"
               type="button"
               color="primary"
               class="action-btn"
@@ -71,6 +76,7 @@
             </v-btn>
             <v-btn
               v-if="canSchedule"
+              variant="tonal"
               type="button"
               color="primary"
               class="action-btn"
@@ -132,7 +138,8 @@
     <section v-show="activeTab === 'campaign'">
       <v-row>
         <v-col cols="12" lg="8">
-          <v-form @submit.prevent="() => onSubmit(isNew ? 'create' : 'update')">
+          <v-form class="campaign-form-panel" @submit.prevent="() => onSubmit(isNew ? 'create' : 'update')">
+            <h2 class="text-subtitle-1 font-weight-semibold mb-4">{{ $t('globals.terms.campaign') }}</h2>
             <v-text-field hide-details="auto"
               ref="focus"
               v-model="form.name"
@@ -264,6 +271,8 @@
               class="mb-4"
             />
 
+            <v-divider class="my-6" />
+            <h2 class="text-subtitle-1 font-weight-semibold mb-4">{{ $t('globals.terms.subscribers') }}</h2>
             <v-select hide-details="auto"
               :model-value="selectedListIds"
               :items="availableLists"
@@ -287,7 +296,9 @@
               <v-col cols="12" md="6">
                 <v-select hide-details="auto"
                   v-model="form.messenger"
-                  :items="displayedMessengers"
+                  :items="displayedMessengers.map(value => ({ value, title: value === 'email' ? $t('campaigns.channelEmail') : value === 'sms' ? $t('campaigns.channelSms') : value }))"
+                  item-title="title"
+                  item-value="value"
                   :label="$tc('globals.terms.messenger')"
                   name="messenger"
                   :disabled="!canEdit || isMessengerFieldLocked"
@@ -1150,6 +1161,9 @@ export default {
     },
 
     isUnsaved() {
+      if (this.isNew) {
+        return Boolean(this.form.name?.trim() || this.form.subject?.trim() || this.form.content.body?.trim());
+      }
       return this.data.body !== this.form.content.body
         || this.data.contentType !== this.form.content.contentType;
     },
@@ -1938,12 +1952,20 @@ export default {
   },
 
   beforeUnmount() {
+    window.onbeforeunload = null;
     this.$events.$off('campaign.update');
   },
 };
 </script>
 
 <style scoped>
+
+.campaign-form-panel {
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 16px;
+  padding: 24px;
+}
 
 .campaign-header {
   border-bottom: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
@@ -1959,9 +1981,10 @@ export default {
 }
 
 .inline-meta {
-  color: rgba(var(--v-theme-on-surface), 0.62);
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
   font-size: 0.8rem;
-  overflow-wrap: anywhere;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .send-at-field {
