@@ -40,7 +40,7 @@
             :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
             class="app-drawer-toggle"
             variant="flat"
-            size="40"
+            size="24"
             :aria-expanded="!rail"
             aria-controls="app-navigation"
             :aria-label="rail ? $t('globals.buttons.expandNav') : $t('globals.buttons.collapseNav')"
@@ -512,8 +512,9 @@ export default {
 
 .app-drawer-toggle {
   position: absolute;
-  inset-inline-end: -20px;
-  top: 76px;
+  inset-inline-end: -12px;
+  top: 80px;
+  font-size: 14px;
   z-index: 1;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
   background: rgb(var(--v-theme-surface));
