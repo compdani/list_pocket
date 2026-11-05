@@ -9,7 +9,7 @@ import (
 
 	"github.com/compdani/list_pocket/internal/flow/schema"
 
-	"github.com/pocketbase/pocketbase/tools/cron"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/cron"
 )
 
 // Catalog is what validation checks references against.

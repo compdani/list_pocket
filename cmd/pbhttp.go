@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"strings"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/models"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const appContextKey = "app"
@@ -143,7 +143,7 @@ func hydrateAuthUser(re *pbcore.RequestEvent) error {
 	}
 
 	user, err := app.core.GetUser(re.Auth.Id, "", "")
-	if err != nil {
+	if err != nil || user.Status != auth.UserStatusEnabled {
 		return writeAppError(re, apperr.Forbidden("invalid auth user"))
 	}
 

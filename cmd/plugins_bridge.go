@@ -7,15 +7,15 @@ import (
 	"path/filepath"
 	"slices"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/config"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/internal/plugins"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const pluginSettingsPrefix = "plugin:"

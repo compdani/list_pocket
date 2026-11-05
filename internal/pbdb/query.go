@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/dbx"
 )
 
 var (

@@ -12,13 +12,13 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/flow/llm"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/dbx"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const (

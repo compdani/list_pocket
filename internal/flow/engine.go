@@ -15,9 +15,9 @@ import (
 	"github.com/compdani/list_pocket/internal/flow/schema"
 	"github.com/compdani/list_pocket/internal/flow/tools"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/types"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/types"
 )
 
 const (

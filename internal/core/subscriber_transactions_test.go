@@ -2,8 +2,8 @@ package core
 
 import (
 	"fmt"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/models"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"strings"
 	"testing"
 )

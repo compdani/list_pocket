@@ -22,9 +22,9 @@ import (
 	"github.com/compdani/list_pocket/internal/flow/chatgpt"
 	"github.com/compdani/list_pocket/internal/flow/llm"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tests"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tests"
 )
 
 // mockAuth is a stand-in ChatGPT authorization server.

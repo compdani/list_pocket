@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"github.com/compdani/list_pocket/internal/apperr"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/dbx"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const bulkContactBatchSize = 5000

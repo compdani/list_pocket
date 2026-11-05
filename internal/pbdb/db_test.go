@@ -3,7 +3,7 @@ package pbdb
 import (
 	"testing"
 
-	"github.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase"
 )
 
 func TestIsReadOnlySQL(t *testing.T) {

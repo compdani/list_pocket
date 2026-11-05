@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/dop251/goja"
-	"github.com/pocketbase/pocketbase/core"
 )
 
 const maxResponseBytes = 1 << 20

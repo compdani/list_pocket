@@ -1,8 +1,8 @@
 package migrations
 
 import (
-	"github.com/pocketbase/pocketbase/core"
-	m "github.com/pocketbase/pocketbase/migrations"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 )
 
 func init() {
@@ -20,15 +20,15 @@ func init() {
 		ledger := core.NewBaseCollection("campaign_send_ledger")
 		ledger.Fields.Add(
 			&core.RelationField{
-				Name:         "campaign_id",
-				Required:     true,
-				CollectionId: campaigns.Id,
+				Name:          "campaign_id",
+				Required:      true,
+				CollectionId:  campaigns.Id,
 				CascadeDelete: true,
 			},
 			&core.RelationField{
-				Name:         "subscriber_id",
-				Required:     true,
-				CollectionId: subscribers.Id,
+				Name:          "subscriber_id",
+				Required:      true,
+				CollectionId:  subscribers.Id,
 				CascadeDelete: true,
 			},
 			&core.SelectField{

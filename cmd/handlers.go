@@ -6,11 +6,11 @@ import (
 	"path"
 	"regexp"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/apis"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/router"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
-	"github.com/pocketbase/pocketbase/apis"
-	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/router"
 )
 
 const (
@@ -56,7 +56,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 	authAPI.POST("/reset", asHandler(a.AuthResetPassword))
 
 	pmRE := a.auth.PermRE
-	api := se.Group("/mailapi").Bind(apis.RequireAuth()).BindFunc(hydrateAuthUser)
+	api := se.Group("/mailapi").Bind(apis.RequireAuth("users")).BindFunc(hydrateAuthUser)
 
 	api.POST("/ai/assistant/turns", asHandler(a.StartAssistantTurn))
 	api.GET("/ai/assistant/turns/{id}/stream", asHandler(a.StreamAssistantTurn))

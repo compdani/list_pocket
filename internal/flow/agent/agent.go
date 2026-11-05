@@ -17,8 +17,8 @@ import (
 	"github.com/compdani/list_pocket/internal/flow/tools"
 	"github.com/compdani/list_pocket/internal/flow/web"
 
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/types"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/types"
 )
 
 const (

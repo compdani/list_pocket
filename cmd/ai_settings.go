@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/flow/chatgpt"
 	"github.com/compdani/list_pocket/internal/flow/llm"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const (

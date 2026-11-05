@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"strings"
 
 	"github.com/compdani/list_pocket/internal/auth"

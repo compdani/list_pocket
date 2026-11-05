@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"strings"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/flow"
 	"github.com/compdani/list_pocket/models"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 const (

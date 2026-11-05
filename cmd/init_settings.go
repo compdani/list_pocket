@@ -6,11 +6,11 @@ import (
 	"errors"
 	"strings"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/config"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 func initSettings(ko *config.Conf) {

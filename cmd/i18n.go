@@ -7,10 +7,10 @@ import (
 	"regexp"
 	"sort"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/assets"
 	"github.com/compdani/list_pocket/internal/i18n"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type i18nLang struct {

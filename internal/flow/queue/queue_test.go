@@ -10,8 +10,8 @@ import (
 
 	"github.com/compdani/list_pocket/internal/flow/queue"
 
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tests"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tests"
 )
 
 func TestQueueRetryDeadAndDedupe(t *testing.T) {

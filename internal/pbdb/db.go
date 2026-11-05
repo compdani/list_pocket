@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase"
 	"github.com/jmoiron/sqlx"
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
 )
 
 // DB wraps a sqlx connection that is sourced from a PocketBase app DB handle.

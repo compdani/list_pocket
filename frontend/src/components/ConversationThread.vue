@@ -48,9 +48,8 @@
                     <a
                       v-for="file in emails[message.id].attachments"
                       :key="file.id"
-                      :href="attachmentUrl(file)"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="#"
+                      @click.prevent="downloadInboundEmailAttachment(file)"
                       class="msg-attachment"
                     >
                       <v-icon icon="mdi-paperclip" size="14" />
@@ -201,7 +200,7 @@ import {
 } from 'vue';
 import {
   getConversationThread,
-  getInboundEmailAttachmentDownloadUrl,
+  downloadInboundEmailAttachment,
   getInboundEmailByID,
   getInboundEmailReplyAttachments,
   markConversationRead,
@@ -330,10 +329,6 @@ function timeOf(message) {
 // Only stored inbound emails have a full body to show.
 function canExpand(message) {
   return message.channel === 'email' && message.direction === 'inbound';
-}
-
-function attachmentUrl(file) {
-  return file.downloadUrl || getInboundEmailAttachmentDownloadUrl(file.id);
 }
 
 async function toggleEmail(message) {

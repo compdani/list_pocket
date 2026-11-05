@@ -5,9 +5,9 @@ import (
 	"errors"
 	"strings"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/pocketbase/core"
-	m "github.com/pocketbase/pocketbase/migrations"
 )
 
 func init() {

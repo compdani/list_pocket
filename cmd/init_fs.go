@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/apis"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/Masterminds/sprig/v3"
 	listpocket "github.com/compdani/list_pocket"
 	"github.com/compdani/list_pocket/internal/assets"
 	"github.com/compdani/list_pocket/internal/i18n"
-	"github.com/pocketbase/pocketbase/apis"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 // initFS loads embedded static assets and optional on-disk overlays.

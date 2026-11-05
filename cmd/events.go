@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	pbcore "github.com/pocketbase/pocketbase/core"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"log"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/subscriptions"
 	"github.com/compdani/list_pocket/internal/events"
-	"github.com/pocketbase/pocketbase/tools/subscriptions"
 )
 
 // EventStream serves an endpoint that never closes and pushes a

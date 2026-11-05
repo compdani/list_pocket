@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tests"
 	"github.com/compdani/list_pocket/internal/flow/queue"
 	_ "github.com/compdani/list_pocket/internal/migrations"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tests"
 )
 
 func setup(t *testing.T) *Outbox {

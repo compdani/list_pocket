@@ -121,7 +121,7 @@ def convert_file(path: Path) -> bool:
     )
 
     if "pbcore " not in src and "*pbcore.RequestEvent" in src:
-        src = ensure_import(src, 'pbcore "github.com/pocketbase/pocketbase/core"')
+        src = ensure_import(src, 'pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"')
 
     # Remove unused echo import only if echo. is gone — leave for NewHTTPError
     if src != orig:

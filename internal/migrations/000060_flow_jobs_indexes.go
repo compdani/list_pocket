@@ -1,8 +1,8 @@
 package migrations
 
 import (
-	"github.com/pocketbase/pocketbase/core"
-	m "github.com/pocketbase/pocketbase/migrations"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	m "ganigeorgiev.com/pocketbase/pocketbase/migrations"
 )
 
 // The queue claim query filters on target_id and locked_until; without these

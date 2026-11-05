@@ -13,9 +13,9 @@ import (
 
 	"github.com/compdani/list_pocket/internal/apperr"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/dbx"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 // Spam evidence is fixed and local to the message. It does not depend on how

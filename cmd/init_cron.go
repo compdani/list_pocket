@@ -6,11 +6,11 @@ import (
 	"syscall"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
 	"github.com/compdani/list_pocket/internal/campaignledger"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/manager"
 	"github.com/compdani/list_pocket/internal/pbdb"
-	"github.com/pocketbase/pocketbase"
 )
 
 func initCron(pb *pocketbase.PocketBase, co *core.Core, db *pbdb.DB, mgr *manager.Manager, jobs *backgroundCallbacks) {

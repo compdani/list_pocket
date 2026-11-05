@@ -519,7 +519,29 @@ export const getInboundEmailReplyAttachments = async (replyId) => http.get(
   { loading: models.subscribers },
 );
 
-export const getInboundEmailAttachmentDownloadUrl = (attachmentId) => (`/api/inbound-email-attachments/${attachmentId}/download`);
+export const getInboundEmailAttachmentDownloadUrl = (attachmentId) => (`/mailapi/inbound-email-attachments/${encodeURIComponent(attachmentId)}/download`);
+
+export async function downloadInboundEmailAttachment(attachment) {
+  const id = attachment.id || attachment.attachmentRecordId || attachment.attachment_record_id;
+  if (!id) return;
+  try {
+    const response = await fetch(`${pbBaseURL}${getInboundEmailAttachmentDownloadUrl(id)}`, {
+      headers: { Authorization: pb.authStore.token },
+      credentials: 'omit',
+    });
+    if (!response.ok) throw new Error(`Download failed (${response.status})`);
+    const objectURL = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = objectURL;
+    link.download = attachment.filename || attachment.originalName || attachment.original_name || 'attachment';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectURL), 1000);
+  } catch (err) {
+    utils.toast(getErrorMessage(err), 'is-danger', 3000, false);
+  }
+}
 
 export const getSubscriberBounces = async (idOrRecordId) => http.get(
   `/api/subscribers/${idOrRecordId}/bounces`,

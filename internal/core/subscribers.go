@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"strings"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	"github.com/pocketbase/dbx"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type sqliteSubscriberRow struct {

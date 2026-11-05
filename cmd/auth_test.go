@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/i18n"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 // newSetupTestApp returns an App awaiting first-time setup that renders the real

@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	_ "github.com/compdani/list_pocket/internal/migrations"
 	"github.com/compdani/list_pocket/models"
 	"github.com/dop251/goja"
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 )
 
 type fakeHost struct {

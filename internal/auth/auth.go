@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 type BasicAuthConfig struct {
@@ -78,6 +78,7 @@ func New(cfg Config, db *sql.DB, pb *pocketbase.PocketBase, cb *Callbacks, lo *l
 		return nil, err
 	}
 
+	a.registerAuthPolicy()
 	return a, nil
 }
 
@@ -152,7 +153,12 @@ func (o *Auth) ensureAuthCollection() error {
 	}
 
 	if col.Fields.GetByName("twofa_key") == nil {
-		col.Fields.Add(&pbcore.TextField{Name: "twofa_key"})
+		col.Fields.Add(&pbcore.TextField{Name: "twofa_key", Hidden: true})
+		changed = true
+	}
+
+	if field := col.Fields.GetByName("twofa_key"); !field.GetHidden() {
+		field.SetHidden(true)
 		changed = true
 	}
 
@@ -567,6 +573,9 @@ func ExtractRoleIDFromRecord(rec *pbcore.Record) int {
 // IssueClientAuth syncs a user into PocketBase auth, creates an auth token,
 // and returns the payload expected by the JS SDK authStore.
 func (o *Auth) IssueClientAuth(u User) (ClientAuth, error) {
+	if u.Status != UserStatusEnabled {
+		return ClientAuth{}, ErrPermDenied
+	}
 	if err := o.SyncUser(u); err != nil {
 		o.log.Printf("error syncing auth user: %v", err)
 		return ClientAuth{}, apperr.Internal("error creating auth token")

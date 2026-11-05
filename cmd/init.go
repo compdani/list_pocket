@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
 	"github.com/compdani/list_pocket/internal/assets"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/captcha"
@@ -25,7 +26,6 @@ import (
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/pocketbase/pocketbase"
 )
 
 const (

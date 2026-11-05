@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"io"
+	"mime"
 	"net/http"
 	stdmail "net/mail"
 	"os"
@@ -14,13 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/filesystem"
 	"github.com/compdani/list_pocket/models"
 	"github.com/emersion/go-message"
 	_ "github.com/emersion/go-message/charset"
 	gomail "github.com/emersion/go-message/mail"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
 
 const inboundEmailReplyWebhookSecretEnv = "LISTPOCKET_INBOUND_EMAIL_WEBHOOK_SECRET"
@@ -765,7 +766,18 @@ func (a *App) DownloadInboundEmailAttachment(re *pbcore.RequestEvent) error {
 		return apperr.NotFound("attachment file missing")
 	}
 
-	return re.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("/api/files/%s/%s/%s?download=1", collection.Id, record.Id, fileName))
+	fsys, err := pb.NewFilesystem()
+	if err != nil {
+		return apperr.Internal("attachment storage unavailable")
+	}
+	defer fsys.Close()
+	name := strings.TrimSpace(record.GetString("original_name"))
+	if name == "" {
+		name = fileName
+	}
+	re.Response.Header().Set("Cache-Control", "private, no-store")
+	re.Response.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	return fsys.Serve(re.Response, re.Request, record.BaseFilesPath()+"/"+fileName, fileName)
 }
 
 func firstFileName(v any) string {

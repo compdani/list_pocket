@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,14 +16,14 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/cron"
 	"github.com/compdani/list_pocket/internal/messenger/email"
 	"github.com/compdani/list_pocket/internal/notifs"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
 	"github.com/jmoiron/sqlx/types"
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/cron"
 )
 
 const pwdMask = "•"

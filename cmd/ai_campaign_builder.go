@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"io"
 	"net/http"
 	"os"
@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/dbx"
 	"github.com/gofrs/uuid/v5"
-	"github.com/pocketbase/dbx"
 )
 
 const (

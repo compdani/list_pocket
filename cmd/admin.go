@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"slices"
 	"strings"
 	"syscall"

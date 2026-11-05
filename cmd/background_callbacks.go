@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase"
 	"sync"
 )
 

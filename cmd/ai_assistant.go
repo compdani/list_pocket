@@ -20,12 +20,12 @@ import (
 	"sync"
 	"time"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/flow"
 	"github.com/compdani/list_pocket/internal/flow/llm"
 	"github.com/gofrs/uuid/v5"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type assistantMessage struct {

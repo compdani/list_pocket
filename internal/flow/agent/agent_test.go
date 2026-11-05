@@ -18,8 +18,8 @@ import (
 	"github.com/compdani/list_pocket/internal/flow/tools"
 	"github.com/compdani/list_pocket/internal/flow/web"
 
-	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tests"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tests"
 )
 
 // mockLLM replays scripted streaming responses and records request bodies.

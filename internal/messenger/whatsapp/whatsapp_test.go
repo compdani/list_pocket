@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/i18n"
 	_ "github.com/compdani/list_pocket/internal/migrations"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 func sign(secret string, body []byte) string {

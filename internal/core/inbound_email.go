@@ -12,8 +12,8 @@ import (
 
 	"github.com/compdani/list_pocket/internal/apperr"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/models"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 func (c *Core) GetInboundEmailRepliesBySubscriber(ctx context.Context, subscriberID int, limit int, offset int) ([]models.InboundEmailReplyEvent, int, error) {

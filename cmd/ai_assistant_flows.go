@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/flow"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 // assistantFlowArgs is the union of what the workflow proposal tools take.

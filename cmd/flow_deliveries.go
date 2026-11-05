@@ -1,8 +1,8 @@
 package main
 
 import (
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 func deliveryReceipt(rec *pbcore.Record) map[string]any {

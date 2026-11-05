@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/config"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 // registerDocsRoutes serves the Zensical build at /docs/, the OpenAPI file at /openapi.yaml,

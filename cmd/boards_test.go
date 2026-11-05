@@ -6,6 +6,7 @@ import (
 	"log"
 	"testing"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/internal/flow"
 	"github.com/compdani/list_pocket/internal/flow/agent"
@@ -15,7 +16,6 @@ import (
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/pbdb"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/pocketbase"
 )
 
 // boardsTestApp is an app whose moves start the workflow watching for them. Its engine

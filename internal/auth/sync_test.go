@@ -5,8 +5,8 @@ import (
 	"log"
 	"testing"
 
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	null "gopkg.in/volatiletech/null.v6"
 )
 

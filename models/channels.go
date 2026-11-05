@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pocketbase/pocketbase/tools/security"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/security"
 )
 
 // ChannelMessengerPrefix is reserved for messengers registered by plugins.

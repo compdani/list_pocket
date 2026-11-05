@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	pbcore "github.com/pocketbase/pocketbase/core"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 var reAPIEmailInvalid = regexp.MustCompile(`[^a-z0-9_\-]+`)

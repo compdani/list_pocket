@@ -1,10 +1,10 @@
 package campaignledger
 
 import (
+	"ganigeorgiev.com/pocketbase/dbx"
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/jmoiron/sqlx"
-	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 )
 
 // RegisterHooks adds PocketBase hooks that keep campaign_send_ledger in sync when

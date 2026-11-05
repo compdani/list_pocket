@@ -8,6 +8,10 @@ Maintained by Danilo Urrutia.
 
 A single Go binary plus a Vue 3 admin UI. Persistence, auth, and file storage are [PocketBase](https://pocketbase.io) (SQLite under `pb_data/`). There is no external database server.
 
+The Go server uses PocketBase v0.41.1 from `ganigeorgiev.com/pocketbase/pocketbase`.
+Its companion `dbx` and validation modules also use the new host. The Docker image
+builds this application from source; it does not download a prebuilt PocketBase executable.
+
 The admin UI lives at `/admin/`. Public subscription, tracking, and archive URLs are served from the same process.
 
 ## Capabilities

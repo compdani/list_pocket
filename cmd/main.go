@@ -15,6 +15,9 @@ import (
 
 	_ "github.com/compdani/list_pocket/internal/migrations"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/plugins/migratecmd"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/bounce"
 	"github.com/compdani/list_pocket/internal/buflog"
@@ -35,9 +38,6 @@ import (
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
 	"github.com/joho/godotenv"
-	"github.com/pocketbase/pocketbase"
-	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 )
 
 // App contains the "global" shared components, controllers and fields.

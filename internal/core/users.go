@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/utils"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"gopkg.in/volatiletech/null.v6"
 )
 
@@ -377,9 +377,6 @@ func userFromAuthRecord(rec *pbcore.Record) auth.User {
 	if out.Status == "" {
 		out.Status = auth.UserStatusEnabled
 	}
-	if !out.PasswordLogin && out.Type == auth.UserTypeUser && strings.TrimSpace(rec.GetString("password:hash")) != "" {
-		out.PasswordLogin = true
-	}
 
 	if listRoleID := rec.GetInt("list_role_id"); listRoleID > 0 {
 		out.ListRoleID = &listRoleID
@@ -495,10 +492,6 @@ func (c *Core) countOtherEnabledSuperAdmins(excludeRecordID string) (int, error)
 func (c *Core) setupUserFields(users []auth.User) []auth.User {
 	for n, u := range users {
 		u := u
-
-		if u.HasPassword {
-			u.PasswordLogin = true
-		}
 
 		if u.Type == auth.UserTypeAPI {
 			u.Email = null.String{}

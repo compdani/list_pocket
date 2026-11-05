@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"ganigeorgiev.com/pocketbase/dbx"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/security"
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/core"
@@ -22,9 +25,6 @@ import (
 	"github.com/compdani/list_pocket/internal/flow/tools"
 	"github.com/compdani/list_pocket/internal/plugins"
 	"github.com/compdani/list_pocket/models"
-	"github.com/pocketbase/dbx"
-	pbcore "github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/security"
 )
 
 const (

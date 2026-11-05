@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	pbcore "github.com/pocketbase/pocketbase/core"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 )
 
 func TestNormalizeSESInboundEmail_Base64MIME(t *testing.T) {

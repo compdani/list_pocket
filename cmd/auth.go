@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
-	pbcore "github.com/pocketbase/pocketbase/core"
 	"image/png"
 	"net/http"
 	"net/url"
@@ -24,8 +24,7 @@ import (
 )
 
 const (
-	passwordResetTTL = 30 * time.Minute
-	twofaTokenTTL    = 5 * time.Minute
+	twofaTokenTTL = 5 * time.Minute
 
 	// Length of reset and 2FA auth tokens.
 	tmpAuthTokenLen = 64
@@ -315,19 +314,20 @@ func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 	}
 
 	// If the password login is disabled, do not proceed, but show success message to prevent email enumeration.
-	if !user.PasswordLogin {
+	if !user.PasswordLogin || user.Status != auth.UserStatusEnabled {
 		return re.JSON(http.StatusOK, success)
 	}
 
-	// Generate a random token.
-	token, err := generateRandomString(tmpAuthTokenLen)
+	// Use PocketBase signed reset tokens, bound to the current password.
+	record, err := re.App.FindRecordById("users", user.RecordID)
+	if err != nil {
+		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
+	}
+	token, err := record.NewPasswordResetToken()
 	if err != nil {
 		a.log.Printf("error generating reset token: %v", err)
 		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
-
-	// Store the reset token in tmptokens.
-	tmptokens.Set(email, passwordResetTTL, token)
 
 	// Prepare the reset URL.
 	resetURL := fmt.Sprintf("%s/admin/reset?token=%s&email=%s", a.urlCfg.RootURL, token, url.QueryEscape(email))
@@ -364,7 +364,7 @@ func (a *App) AuthForgotPassword(re *pbcore.RequestEvent) error {
 	return re.JSON(http.StatusOK, success)
 }
 
-// AuthResetPassword validates a reset token and signs the user in with the new password.
+// AuthResetPassword validates a native reset token and returns to ordinary login.
 func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 	var req resetPasswordReq
 	if err := bindJSON(re, &req); err != nil {
@@ -384,14 +384,8 @@ func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 		return apperr.BadRequest(a.i18n.T("users.passwordMismatch"))
 	}
 
-	// Validate and consume the token (this deletes it).
-	data, err := tmptokens.Get(email)
-	if err != nil {
-		return apperr.BadRequest(a.i18n.T("users.invalidResetLink"))
-	}
-
-	tk, ok := data.(string)
-	if !ok || tk != token {
+	record, err := re.App.FindAuthRecordByToken(token, pbcore.TokenTypePasswordReset)
+	if err != nil || record.Collection().Name != "users" || !strings.EqualFold(record.Email(), email) {
 		return apperr.BadRequest(a.i18n.T("users.invalidResetLink"))
 	}
 
@@ -402,7 +396,7 @@ func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 	}
 
 	// Password login is disabled for the user.
-	if !user.PasswordLogin {
+	if !user.PasswordLogin || user.Status != auth.UserStatusEnabled {
 		return apperr.BadRequest(a.i18n.T("public.invalidFeature"))
 	}
 
@@ -412,7 +406,7 @@ func (a *App) AuthResetPassword(re *pbcore.RequestEvent) error {
 		return apperr.Internal(a.i18n.T("globals.messages.internalError"))
 	}
 
-	return a.writeClientAuth(re, user, uriAdmin)
+	return okJSON(re, map[string]string{"status": "ok", "next": path.Join(uriAdmin, "login")})
 }
 
 // AuthVerifyTwoFA completes a TOTP challenge and returns PocketBase auth payload.

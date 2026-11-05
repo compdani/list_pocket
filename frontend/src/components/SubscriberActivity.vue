@@ -31,10 +31,9 @@
               <a
                 v-for="(attachment, attachmentIdx) in emailAttachments(event)"
                 :key="`${event.occurredAt}-${attachmentLabel(attachment)}-${attachmentIdx}`"
-                :href="attachmentLink(attachment)"
+                href="#"
+                @click.prevent="$api.downloadInboundEmailAttachment(attachment)"
                 class="attachment-link"
-                target="_blank"
-                rel="noopener noreferrer"
               >
                 {{ attachmentLabel(attachment) }}
               </a>
@@ -236,10 +235,6 @@ export default {
         || attachment.fileName
         || attachment.file_name
         || 'Attachment';
-    },
-
-    attachmentLink(attachment) {
-      return attachment.downloadUrl || attachment.download_url || '#';
     },
 
     async hydrateAttachmentLinks(events) {

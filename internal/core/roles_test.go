@@ -5,11 +5,11 @@ import (
 	"log"
 	"testing"
 
+	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/tools/types"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/pbdb"
-	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/tools/types"
 	null "gopkg.in/volatiletech/null.v6"
 )
 

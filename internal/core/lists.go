@@ -5,9 +5,9 @@ import (
 	"github.com/compdani/list_pocket/internal/apperr"
 	"strings"
 
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/models"
 	"github.com/gofrs/uuid/v5"
-	pbcore "github.com/pocketbase/pocketbase/core"
 )
 
 type listType struct {
