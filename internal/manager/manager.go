@@ -372,6 +372,14 @@ func (m *Manager) Run() {
 		has, err := p.NextSubscribers()
 		if err != nil {
 			m.log.Printf("error processing campaign batch (%s): %v", p.camp.Name, err)
+			// Retry later rather than stranding the pipe or spinning on the DB.
+			if !m.waitOrStop(5 * time.Second) {
+				return
+			}
+			select {
+			case m.nextPipes <- p:
+			default:
+			}
 			continue
 		}
 

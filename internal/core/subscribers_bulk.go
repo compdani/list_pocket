@@ -156,28 +156,39 @@ func (c *Core) bulkUpdateSubscriberTags(emails, tagsAdd, tagsRemove []string) (i
 	if pb == nil {
 		return 0, fmt.Errorf("pocketbase is not initialized")
 	}
-	err := pb.RunInTransaction(func(tx pbcore.App) error {
-		for _, email := range emails {
-			rec, err := tx.FindFirstRecordByFilter("subscribers", "email = {:email}", dbx.Params{"email": email})
-			if err != nil {
-				return err
-			}
-			attribs := models.JSON{}
-			if err := rec.UnmarshalJSONField("attribs", &attribs); err != nil {
-				return err
-			}
-			rec.Set("attribs", subimporter.ApplyImportTagChanges(attribs, tagsAdd, tagsRemove))
-			// Use Record Save so individual and bulk tag edits share workflow hooks.
-			if err := tx.Save(rec); err != nil {
-				return err
-			}
-			updated++
+	// Short transactions keep SQLite's single writer available to other requests.
+	const chunk = 100
+	for i := 0; i < len(emails); i += chunk {
+		end := i + chunk
+		if end > len(emails) {
+			end = len(emails)
 		}
-
-		return nil
-	})
-	if err != nil {
-		return 0, err
+		batch := emails[i:end]
+		n := 0
+		err := pb.RunInTransaction(func(tx pbcore.App) error {
+			n = 0
+			for _, email := range batch {
+				rec, err := tx.FindFirstRecordByFilter("subscribers", "email = {:email}", dbx.Params{"email": email})
+				if err != nil {
+					return err
+				}
+				attribs := models.JSON{}
+				if err := rec.UnmarshalJSONField("attribs", &attribs); err != nil {
+					return err
+				}
+				rec.Set("attribs", subimporter.ApplyImportTagChanges(attribs, tagsAdd, tagsRemove))
+				// Use Record Save so individual and bulk tag edits share workflow hooks.
+				if err := tx.Save(rec); err != nil {
+					return err
+				}
+				n++
+			}
+			return nil
+		})
+		if err != nil {
+			return updated, err
+		}
+		updated += n
 	}
 
 	return updated, nil
