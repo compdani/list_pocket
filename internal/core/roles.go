@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
@@ -409,6 +411,7 @@ func (c *Core) GetListRoles() ([]auth.ListRole, error) {
 
 // CreateRole creates a new role.
 func (c *Core) CreateRole(r auth.Role) (auth.Role, error) {
+	defer c.invalidateRoleCache()
 	if err := c.ensureRolesCollection(); err != nil {
 		return auth.Role{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
 	}
@@ -469,6 +472,7 @@ func (c *Core) CreateRole(r auth.Role) (auth.Role, error) {
 
 // CreateListRole creates a new list role.
 func (c *Core) CreateListRole(r auth.ListRole) (auth.ListRole, error) {
+	defer c.invalidateRoleCache()
 	if err := c.ensureRolesCollection(); err != nil {
 		return auth.ListRole{}, apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", err.Error()))
 	}
@@ -521,6 +525,7 @@ func (c *Core) CreateListRole(r auth.ListRole) (auth.ListRole, error) {
 
 // UpsertListPermissions upserts permission for a role.
 func (c *Core) UpsertListPermissions(roleRecordID string, lp []auth.ListPermission) error {
+	defer c.invalidateRoleCache()
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return apperr.Internal(c.i18n.Ts("globals.messages.errorCreating", "name", "{users.role}", "error", "pocketbase unavailable"))
@@ -588,6 +593,7 @@ func (c *Core) UpsertListPermissions(roleRecordID string, lp []auth.ListPermissi
 
 // DeleteListPermission deletes a list permission entry from a role.
 func (c *Core) DeleteListPermission(roleRecordID string, listID string) error {
+	defer c.invalidateRoleCache()
 	pb := c.db.PocketBase()
 	if pb == nil {
 		return apperr.Internal(c.i18n.Ts("globals.messages.errorDeleting", "name", "{users.role}", "error", "pocketbase unavailable"))
@@ -622,6 +628,7 @@ func (c *Core) DeleteListPermission(roleRecordID string, listID string) error {
 
 // UpdateUserRole updates a given role.
 func (c *Core) UpdateUserRole(recordID string, r auth.Role) (auth.Role, error) {
+	defer c.invalidateRoleCache()
 	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		return auth.Role{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{users.userRole}"))
@@ -645,6 +652,7 @@ func (c *Core) UpdateUserRole(recordID string, r auth.Role) (auth.Role, error) {
 
 // UpdateListRole updates a given role.
 func (c *Core) UpdateListRole(recordID string, r auth.ListRole) (auth.ListRole, error) {
+	defer c.invalidateRoleCache()
 	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		return auth.ListRole{}, apperr.BadRequest(c.i18n.Ts("globals.messages.notFound", "name", "{users.listRole}"))
@@ -670,6 +678,7 @@ func (c *Core) UpdateListRole(recordID string, r auth.ListRole) (auth.ListRole, 
 
 // DeleteRole deletes a given role.
 func (c *Core) DeleteRole(recordID string) error {
+	defer c.invalidateRoleCache()
 	rec, err := c.getRoleByRecordID(recordID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -686,4 +695,43 @@ func (c *Core) DeleteRole(recordID string) error {
 	}
 
 	return nil
+}
+
+// roleCacheTTL bounds staleness for role changes made outside Core's role methods.
+const roleCacheTTL = 5 * time.Second
+
+type roleCacheEntry struct {
+	userRoles []auth.Role
+	listRoles []auth.ListRole
+	at        time.Time
+}
+
+type roleCache struct {
+	mu    sync.Mutex
+	entry *roleCacheEntry
+}
+
+func (c *Core) invalidateRoleCache() {
+	c.roles.mu.Lock()
+	c.roles.entry = nil
+	c.roles.mu.Unlock()
+}
+
+// cachedRoles avoids reloading every role on each authenticated request.
+func (c *Core) cachedRoles() ([]auth.Role, []auth.ListRole, error) {
+	c.roles.mu.Lock()
+	defer c.roles.mu.Unlock()
+	if e := c.roles.entry; e != nil && time.Since(e.at) < roleCacheTTL {
+		return e.userRoles, e.listRoles, nil
+	}
+	userRoles, err := c.GetRoles()
+	if err != nil {
+		return nil, nil, err
+	}
+	listRoles, err := c.GetListRoles()
+	if err != nil {
+		return nil, nil, err
+	}
+	c.roles.entry = &roleCacheEntry{userRoles: userRoles, listRoles: listRoles, at: time.Now()}
+	return userRoles, listRoles, nil
 }

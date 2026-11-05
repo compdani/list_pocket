@@ -38,6 +38,7 @@ type Core struct {
 	setSettingsByKey func(string, json.RawMessage) error
 
 	stats statsCacheMem
+	roles roleCache
 }
 
 // Constants represents constant config.

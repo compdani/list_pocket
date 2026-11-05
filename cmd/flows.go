@@ -112,10 +112,11 @@ func (a *App) initFlows(passive bool) {
 	if err := outbox.Recover(); err != nil {
 		a.log.Printf("workflow delivery recovery: %v", err)
 	}
-	q.Start(ctx)
+	// Enqueue everything before workers start so recovery does not race the drain.
 	if err := engine.Recover(); err != nil {
 		a.log.Printf("error recovering workflow runs: %v", err)
 	}
+	q.Start(ctx)
 	if a.cronJobs == nil {
 		a.cronJobs = &backgroundCallbacks{}
 	}

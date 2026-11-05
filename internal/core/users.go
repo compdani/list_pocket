@@ -415,12 +415,7 @@ func parseNullTime(value string) null.Time {
 }
 
 func (c *Core) hydrateUsers(users []auth.User) ([]auth.User, error) {
-	userRoles, err := c.GetRoles()
-	if err != nil {
-		return nil, err
-	}
-
-	listRoles, err := c.GetListRoles()
+	userRoles, listRoles, err := c.cachedRoles()
 	if err != nil {
 		return nil, err
 	}

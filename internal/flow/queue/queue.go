@@ -88,10 +88,14 @@ func (q *Queue) EnqueueWithApp(app core.App, kind, target string, payload map[st
 		at = time.Now()
 	}
 	var existing int
-	_ = app.DB().NewQuery(`SELECT COUNT(*) FROM flow_jobs WHERE kind = {:kind} AND target_id = {:target}
+	if err := app.DB().NewQuery(`SELECT COUNT(*) FROM flow_jobs WHERE kind = {:kind} AND target_id = {:target}
 		AND (locked_until = '' OR locked_until IS NULL) AND available_at <= {:at}`).
-		Bind(dbx.Params{"kind": kind, "target": target, "at": dbTime(at)}).Row(&existing)
-	if existing > 0 && payload == nil {
+		Bind(dbx.Params{"kind": kind, "target": target, "at": dbTime(at)}).Row(&existing); err != nil {
+		return err
+	}
+	// An earlier unclaimed job already advances this target; extra rows only
+	// grow the table and keep workers spinning.
+	if existing > 0 {
 		return nil
 	}
 
@@ -130,6 +134,9 @@ func (q *Queue) Start(ctx context.Context) {
 // Wait blocks until workers stop (after ctx cancellation).
 func (q *Queue) Wait() { q.wg.Wait() }
 
+// jobYield is the pause between consecutive jobs on one worker.
+const jobYield = 25 * time.Millisecond
+
 func (q *Queue) loop(ctx context.Context, worker string) {
 	defer q.wg.Done()
 	ticker := time.NewTicker(q.Poll)
@@ -141,6 +148,12 @@ func (q *Queue) loop(ctx context.Context, worker string) {
 		job, ok := q.claim(worker)
 		if ok {
 			q.run(ctx, job)
+			// Yield so a hot job source cannot monopolize the SQLite writer.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(jobYield):
+			}
 			continue
 		}
 		select {

@@ -126,8 +126,17 @@ func startSIGHUPReload(sigChan chan os.Signal, closer func()) {
 
 // reloadAfterCleanup preserves the resource ownership boundary: replacement
 // must wait until all cleanup has completed.
+// A stuck cleanup (for example a blocked provider send) must not hang the
+// reload forever, so replacement proceeds after reloadCleanupTimeout.
+const reloadCleanupTimeout = 2 * time.Minute
+
 func reloadAfterCleanup(closer, replace func()) {
-	closer()
+	done := make(chan struct{})
+	go func() { defer close(done); closer() }()
+	select {
+	case <-done:
+	case <-time.After(reloadCleanupTimeout):
+	}
 	replace()
 }
 

@@ -286,6 +286,9 @@ func classifySpam(fromAddress, subject, bodyText string, rules []spamRuleMatch) 
 	return level, score
 }
 
+// spamKeywordLookupChunk bounds bound parameters per keyword rule query.
+const spamKeywordLookupChunk = 500
+
 // CheckInboundSpamRules evaluates active spam rules against the incoming email fields.
 // See the evidence constants for the level and score policy.
 // Returns ("", 0, nil) when the message should stay clean.
@@ -303,8 +306,10 @@ func (c *Core) CheckInboundSpamRules(ctx context.Context, fromAddress, subject, 
 		SpamLevel     string  `db:"spam_level"`
 		CleanOverride bool    `db:"clean_override"`
 	}
-	rows := []ruleRow{}
-	if err := c.db.Select(&rows, `
+
+	// Look up only the rules that can match this message so cost does not grow
+	// with the number of rows returned to Go. Matching is case-insensitive.
+	const rulesSelect = `
 		SELECT
 			type,
 			value,
@@ -317,9 +322,39 @@ func (c *Core) CheckInboundSpamRules(ctx context.Context, fromAddress, subject, 
 		    COALESCE(spam_level, '') != ''
 		    OR COALESCE(clean_override, 0) = 1
 		  )
-		ORDER BY rowid ASC
-	`); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		  AND `
+	rows := []ruleRow{}
+	exact := []any{fromAddress}
+	exactCond := `(type = 'sender' AND LOWER(value) = ?)`
+	if domain := extractDomain(fromAddress); domain != "" {
+		exactCond = `(type = 'sender' AND LOWER(value) = ?) OR (type = 'domain' AND LOWER(value) = ?)`
+		exact = append(exact, domain)
+	}
+	if err := c.db.Select(&rows, rulesSelect+`(`+exactCond+`) ORDER BY rowid ASC`, exact...); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", 0, err
+	}
+
+	tokens := make([]string, 0)
+	for token := range spamWordCounts(subject, bodyText) {
+		tokens = append(tokens, token)
+	}
+	sort.Strings(tokens)
+	for i := 0; i < len(tokens); i += spamKeywordLookupChunk {
+		end := i + spamKeywordLookupChunk
+		if end > len(tokens) {
+			end = len(tokens)
+		}
+		chunk := tokens[i:end]
+		args := make([]any, len(chunk))
+		for j, token := range chunk {
+			args[j] = token
+		}
+		cond := `type = 'keyword' AND LOWER(value) IN (?` + strings.Repeat(`,?`, len(chunk)-1) + `)`
+		kw := []ruleRow{}
+		if err := c.db.Select(&kw, rulesSelect+`(`+cond+`) ORDER BY rowid ASC`, args...); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return "", 0, err
+		}
+		rows = append(rows, kw...)
 	}
 
 	rules := make([]spamRuleMatch, 0, len(rows))

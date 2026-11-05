@@ -139,6 +139,7 @@ func (p *pipe) NextSubscribers() (bool, error) {
 	}
 
 	// Push messages.
+	pushed := 0
 	for _, s := range subs {
 		select {
 		case <-p.m.stop:
@@ -156,6 +157,7 @@ func (p *pipe) NextSubscribers() (bool, error) {
 			if rbErr := p.m.store.RollbackCampaignLedgerInflight(p.camp.ID, s.RecordID); rbErr != nil {
 				p.m.log.Printf("error rolling back campaign ledger inflight after render error (%s): %v", p.camp.Name, rbErr)
 			}
+			p.OnError()
 			continue
 		}
 
@@ -170,6 +172,7 @@ func (p *pipe) NextSubscribers() (bool, error) {
 			p.wg.Done()
 			return false, nil
 		}
+		pushed++
 
 		// Check if the sliding window is active.
 		if hasSliding {
@@ -215,6 +218,14 @@ func (p *pipe) NextSubscribers() (bool, error) {
 				}
 			}
 		}
+	}
+
+	// Nothing could be rendered. Requeueing would claim and roll back the same
+	// rows forever, so pause the campaign instead.
+	if pushed == 0 {
+		p.Stop(true)
+		p.m.log.Printf("no messages could be rendered for campaign %s. pausing", p.camp.Name)
+		return false, nil
 	}
 
 	if batching.Enabled {
