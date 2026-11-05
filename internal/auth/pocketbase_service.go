@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -90,6 +91,12 @@ func (s *PocketBaseAuthService) UpsertUser(u User, lookupUsername string) (*pbco
 		placeholder := fmt.Sprintf("lm-disabled-%d-%d", u.ID, time.Now().UnixNano())
 		rec.Set(pbcore.FieldNamePassword, placeholder)
 		rec.Set("passwordConfirm", placeholder)
+	}
+
+	// Skip the write when nothing changed so logins don't queue behind the
+	// single SQLite writer just to re-save an identical record.
+	if !rec.IsNew() && reflect.DeepEqual(rec.Original().FieldsData(), rec.FieldsData()) {
+		return rec, nil
 	}
 
 	if err := s.a.pb.Save(rec); err != nil {

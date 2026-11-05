@@ -93,12 +93,14 @@ type Manager struct {
 	links    map[string]string
 	linksMut sync.RWMutex
 
-	nextPipes      chan *pipe
-	campMsgQ       chan CampaignMessage
-	msgQ           chan models.Message
-	deliveryQ      chan deliveryRequest
-	deliveryRateMu sync.Mutex
-	deliveryStates map[string]*deliveryRateState
+	nextPipes chan *pipe
+	// fetchRetryDelay is how long Run waits before retrying a failed batch fetch.
+	fetchRetryDelay time.Duration
+	campMsgQ        chan CampaignMessage
+	msgQ            chan models.Message
+	deliveryQ       chan deliveryRequest
+	deliveryRateMu  sync.Mutex
+	deliveryStates  map[string]*deliveryRateState
 
 	// Sliding window keeps track of the total number of messages sent in a period
 	// and on reaching the specified limit, waits until the window is over before
@@ -208,6 +210,7 @@ func New(cfg Config, store Store, i *i18n.I18n, l *log.Logger) *Manager {
 		links:           make(map[string]string),
 		stop:            make(chan struct{}),
 		nextPipes:       make(chan *pipe, 1000),
+		fetchRetryDelay: 5 * time.Second,
 		campMsgQ:        make(chan CampaignMessage, cfg.Concurrency*cfg.MessageRate*2),
 		msgQ:            make(chan models.Message, cfg.Concurrency*cfg.MessageRate*2),
 		deliveryQ:       make(chan deliveryRequest, cfg.Concurrency),
@@ -373,7 +376,7 @@ func (m *Manager) Run() {
 		if err != nil {
 			m.log.Printf("error processing campaign batch (%s): %v", p.camp.Name, err)
 			// Retry later rather than stranding the pipe or spinning on the DB.
-			if !m.waitOrStop(5 * time.Second) {
+			if !m.waitOrStop(m.fetchRetryDelay) {
 				return
 			}
 			select {
