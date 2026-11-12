@@ -1,11 +1,12 @@
-# AGENTS.md: the assistant side panel
+# AGENTS.md: the assistant side panel and the Agent page
 
-The assistant side panel is built on the **`agent-panel`** package
+The assistant side panel (`<lp-agent-panel>`) and the full Agent page (`<lp-agent-page>`)
+are both built on the **`agent-panel`** package
 (https://github.com/compdani/agent-panel). It's installed from GitHub and pinned to a tag
 in `frontend/package.json`. The package's own contract is in
 `node_modules/agent-panel/AGENTS.md`, and its human guide is in
 `node_modules/agent-panel/README.md`. Read the contract before changing anything here.
-This file covers only how List Pocket extends and hosts the panel.
+This file covers only how List Pocket extends and hosts the two elements.
 
 ## Rules
 
@@ -15,33 +16,47 @@ This file covers only how List Pocket extends and hosts the panel.
      the pin here with `npm install github:compdani/agent-panel#vX.Y.Z`.
    - Behaviour specific to List Pocket goes in `lp-agent-panel.js` (a subclass) or
      `AIAssistant.vue` (the host).
-2. **Import the panel by package name**: `agent-panel/element` for the class and `h()`;
-   `agent-panel` defines the plain `<agent-panel>` tag. Never import the files by path.
-3. **Register the tag with Vue's compiler.** `vite.config.js` lists `lp-agent-panel` and
-   `agent-panel` in `compilerOptions.isCustomElement`. A new custom-element tag must be
-   added there.
+2. **Import by package name**: `agent-panel/element` (panel class, `h`, `icon`) and
+   `agent-panel/page-element` (page class). These define no tags. Never import the
+   package's files by path.
+3. **Register the tags with Vue's compiler.** `vite.config.js` lists `agent-panel`,
+   `agent-page`, `lp-agent-panel` and `lp-agent-page` in
+   `compilerOptions.isCustomElement`. A new custom-element tag must be added there.
+4. **Shared behaviour goes in `lp-agent-common.js`.** That covers the theme, labels,
+   markdown, proposal cards and reference icons. Both subclasses use it, and it defines
+   no tags.
 
 ## Files
 
 | File | Role |
 |---|---|
+| `lp-agent-common.js` | `LP_STYLES` (Vuetify theme mapping and card CSS), `LP_LABELS`, `renderMarkdown`, `renderProposal(el, entry)`, `referenceIcon(ref)` (`@mdi/js` paths per context type) |
 | `lp-agent-panel.js` | `ListPocketAgentPanel` (`<lp-agent-panel>`) and `ASSISTANT_ACCEPT` |
+| `lp-agent-page.js` | `ListPocketAgentPage` (`<lp-agent-page>`) and `AGENT_PAGE_ACCEPT`; adds the server's 2 MB limit for text files through `fileProblem` |
+| `../views/Agent.vue` | The Agent page host: server-side conversations, turns, uploads, context picker, proposal decisions |
 | `../components/AIAssistant.vue` | The host: chats kept in the browser, streaming turns, proposal decisions, and the Vuetify controls placed in slots |
 | `markdown.mjs`, `threads.mjs`, `transcript.mjs`, `patches.mjs`, `client.js`, `context.js` | Conversation logic, independent of the panel |
 | `../../cypress/e2e/assistant.cy.js` | Browser tests for the side panel, including paste, drop and keeping attachments for the next message |
+| `../../cypress/e2e/agent-page.cy.js` + `fixtures/agent-page-harness.*` | Browser tests for the Agent page: conversations, references, `@` picker, paste and upload, rename and delete, narrow-screen drawer |
 
-## `<lp-agent-panel>`
+## `<lp-agent-panel>` and `<lp-agent-page>`
+
+Both subclasses do the following (from `lp-agent-common.js`):
 
 - `renderMarkdown` uses `renderAssistantMarkdown` (markdown-it with `html: false`, images
   disabled, and links opening in a new tab with `rel=noopener`).
 - The theme tokens map to Vuetify's `--v-theme-*` variables, with fallbacks.
+- `referenceIcon` maps the context types in `CONTEXT_ICONS` (`agent/parts.mjs`) to
+  `@mdi/js` paths. Add new types in both places.
+- `defaultLabels` adds `review`, `view`, `discard`, `open` and `proposedEdit`. The side
+  panel uses the English defaults; the Agent page passes translated ones.
 - It adds the entry type `{ id, type: 'proposal', proposal, busy: boolean, running:
-  boolean }`. `proposal` follows the server's proposal object: `id`, `tool`, `status`,
+  boolean, actionId? }`. `proposal` follows the server's proposal object: `id`, `tool`, `status`,
   `arguments` (with an optional `operations[]`), `warnings[]`, `result.source.href`.
   - The card shows the title from `proposalTitle()`, the kind from `proposalInfo()`, a
     status badge once the proposal is no longer pending, any warnings, and each
     operation's before and after text.
-- Proposal buttons call `emitAction(action, { id: proposal.id })`:
+- Proposal buttons call `emitAction(action, { id: actionId ?? proposal.id })`:
   - `apply`: shown when the status is `pending` and `!proposalInfo(tool).reviewFirst`.
     Disabled when `busy || running`.
   - `review`: shown when there are no `operations`. Labelled "Review" while pending and
@@ -57,7 +72,47 @@ This file covers only how List Pocket extends and hosts the panel.
   - Change both sides together. Otherwise files pass the browser and then fail on the
     server.
 
-## `AIAssistant.vue`, the host
+## `Agent.vue`, the Agent page host
+
+- **Conversations live on the server**, unlike the side panel's, which live in the
+  browser. The host loads `agent/conversations` and sets `conversations` (with `href`
+  from the router), `active`, `heading`, `renamable` (once the conversation exists),
+  `contextReferences` (`contextInUse(messages)`), `formatDate` (`shortStamp`) and
+  translated `labels`.
+- **`entries`** is built from the server's messages:
+  - user messages become text entries with `references` (from `msg.context`);
+  - assistant messages become a tools entry (status `failed` with the error as the
+    detail when a tool erred), then the text, then one proposal entry per proposal part,
+    with `actionId: "<messageId>:<partIndex>"`;
+  - while a turn streams, `live:tools` and `live:text` entries are added.
+- **Sending:**
+  - `agent-submit` calls `send(text, attachments, references)`.
+  - **Files are uploaded when sending**, not when attached, through `agent/attachments`
+    (base64 for images and PDFs, text otherwise), after `ensureConversation()`. They're
+    then sent as `{ type: 'file', id, label }` context together with the references.
+  - If something fails, the draft, the references and (if the upload never finished)
+    the files are put back in the composer.
+- **The context picker:** `mention-trigger="@"`. `ContextPicker` sits in
+  `<div slot="mention">` and is shown while `agent-mention.open`. `agent-mention-key` is
+  forwarded to `pickerRef.key(event)`, and the event is cancelled when the picker used
+  the key. A pick calls `page.addReference()`. The **Context** button
+  (`composer-actions`) toggles `openMention()` / `closeMention()`.
+- **Paste data** (`composer-actions`) is a Vuetify dialog that adds a text `File`
+  through `page.addFiles()`.
+- **Other events:**
+
+  | Event | Response |
+  |---|---|
+  | `agent-select-conversation` | `preventDefault()`, then `router.push` |
+  | `agent-new-conversation` | Opens a new chat |
+  | `agent-delete-conversation` | `DELETE` |
+  | `agent-rename` | `PATCH` |
+  | `agent-action` | `apply` / `discard` → the parts endpoints; `review` → `ReviewModal` |
+  | `agent-reference-open` | `ContextPreviewModal` |
+
+- **`?ref=<type>&id=…&label=…` in the URL** pre-attaches a reference on mount.
+
+## `AIAssistant.vue`, the side panel host
 
 - **Attributes and properties it sets:** `closable`, `sticky-attachments`, `accept`, the
   text attributes, `entries`, `suggestions`, `running`, `error`.
@@ -100,9 +155,15 @@ Run from `frontend/`:
 ```sh
 npm run test:unit
 npx vite build
-npx vite --port 5199 &
-npx cypress run --spec cypress/e2e/assistant.cy.js --config baseUrl=http://localhost:5199
+npx vite --port 5199 --force &   # --force: re-bundle agent-panel if it changed
+npx cypress run --spec cypress/e2e/assistant.cy.js,cypress/e2e/agent-page.cy.js \
+  --config baseUrl=http://localhost:5199
 ```
+
+To try package changes before releasing them, copy the package into `node_modules`
+(`rsync -a --exclude .git /Volumes/mini512/Components/agent-panel/ node_modules/agent-panel/`)
+and restart Vite with `--force`. Afterwards, release a tag and install it, which restores
+`package.json` and the lockfile to a pinned version.
 
 Known state: the test "streams replies, reviews targeted changes and supports undo across
 navigation" fails before and after the panel was introduced. It waits for the text

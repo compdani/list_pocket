@@ -11,7 +11,7 @@ export default defineConfig(({ _, mode }) => {
   return {
     plugins: [
       // The agent panel is a framework-free custom element (the agent-panel package).
-      vue({ template: { compilerOptions: { isCustomElement: (tag) => tag === 'agent-panel' || tag === 'lp-agent-panel' } } }),
+      vue({ template: { compilerOptions: { isCustomElement: (tag) => ['agent-panel', 'agent-page', 'lp-agent-panel', 'lp-agent-page'].includes(tag) } } }),
       vuetify({ autoImport: true, styles: { configFile: 'src/styles/settings.scss' } }),
     ],
     base: '/admin/',
