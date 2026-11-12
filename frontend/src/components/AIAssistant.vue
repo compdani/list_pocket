@@ -6,11 +6,9 @@ import { pb } from '../api';
 import { assistantContext } from '../assistant/context';
 import { assistantJSON, streamAssistant } from '../assistant/client';
 import { anchorLegacyActivity, appendAssistantEvent, conversationTranscript } from '../assistant/transcript.mjs';
-import { renderAssistantMarkdown } from '../assistant/markdown.mjs';
-import {
-  groupToolRows, removeThread, toolGroupStatus, toolLabel,
-} from '../assistant/threads.mjs';
-import { proposalInfo, proposalTitle } from '../agent/parts.mjs';
+import { groupToolRows, removeThread, toolLabel } from '../assistant/threads.mjs';
+// Defines <lp-agent-panel>, which draws the chat itself; this component feeds it.
+import { ASSISTANT_ACCEPT } from '../assistant/lp-agent-panel';
 import { shortStamp } from '../utils/crm.mjs';
 import ModelPicker from './agent/ModelPicker.vue';
 import ReviewModal from './agent/ReviewModal.vue';
@@ -20,21 +18,16 @@ const Media = defineAsyncComponent(() => import('../views/Media.vue'));
 
 const route = useRoute();
 const { proxy } = getCurrentInstance();
-const threads = ref([]); const active = ref(''); const draft = ref(''); const running = ref(false);
-const files = ref([]); const mediaOpen = ref(false);
-const scrollArea = ref(null);
-const composer = ref(null);
-const fileInput = ref(null);
+const threads = ref([]); const active = ref(''); const running = ref(false);
+const mediaOpen = ref(false);
+const panel = ref(null);
 const chatsOpen = ref(false);
 const confirmingDelete = ref('');
 const reviewing = ref(null);
 const reviewError = ref('');
-const followOutput = ref(true);
 const error = ref(''); const controller = ref(null); const busy = ref(false); const undo = shallowRef(null);
 const current = computed(() => threads.value.find((thread) => thread.id === active.value));
 const messages = computed(() => current.value?.messages || []);
-const tools = computed(() => current.value?.tools || []);
-const proposals = computed(() => current.value?.proposals || []);
 const transcript = computed(() => groupToolRows(conversationTranscript(current.value)));
 const MODEL_KEY = 'listpocket_agent_model';
 const contextLabel = computed(() => {
@@ -49,6 +42,26 @@ const hasLegacyChats = computed(() => {
     return false;
   }
 });
+// The panel compares entries by value, so they're plain copies; reading every field here
+// also re-renders when a tool or proposal changes in place.
+const entries = computed(() => transcript.value.map((entry) => {
+  if (entry.type === 'text') return { id: entry.id, type: 'text', role: entry.role, content: entry.content };
+  if (entry.type === 'tools' || entry.type === 'legacy_tools') {
+    const legacy = entry.type === 'legacy_tools';
+    return {
+      id: entry.id,
+      type: 'tools',
+      label: legacy ? `Earlier activity · ${entry.tools.length} tools` : undefined,
+      tools: entry.tools.map((tool) => ({
+        id: tool.id, key: tool.key || tool.id, name: tool.name, label: toolLabel(tool.name), status: legacy ? 'completed' : tool.status, detail: tool.result ?? null,
+      })),
+    };
+  }
+  if (entry.type === 'proposal') {
+    return { id: entry.id, type: 'proposal', proposal: JSON.parse(JSON.stringify(entry.proposal)), busy: busy.value, running: running.value };
+  }
+  return null;
+}).filter(Boolean));
 const key = () => `listpocket_assistant_v1:${pb.authStore.record?.id || 'signed-out'}`;
 function persist() {
   try { localStorage.setItem(key(), JSON.stringify({ active: active.value, threads: threads.value })); } catch { error.value = 'Browser storage is full. This conversation is available until you close the page.'; }
@@ -100,15 +113,10 @@ let sessionEpoch = 0;
 const unsubscribe = pb.authStore.onChange(() => {
   if (loadedOwner === pb.authStore.record?.id) return;
   loadedOwner = pb.authStore.record?.id; sessionEpoch += 1;
-  controller.value?.abort(); running.value = false; undo.value = null; files.value = []; load();
+  controller.value?.abort(); running.value = false; undo.value = null; panel.value?.clearAttachments(); load();
 });
 onBeforeUnmount(() => { controller.value?.abort(); unsubscribe(); });
-watch(active, () => { followOutput.value = true; persist(); });
-function trackScroll() {
-  const area = scrollArea.value;
-  if (area) followOutput.value = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
-}
-watch(() => [messages.value.at(-1)?.content, proposals.value.length, tools.value.length], async () => { await nextTick(); if (scrollArea.value && followOutput.value) scrollArea.value.scrollTop = scrollArea.value.scrollHeight; });
+watch(active, async () => { persist(); await nextTick(); panel.value?.scrollToBottom({ force: true }); });
 async function listen(thread) {
   const epoch = sessionEpoch;
   controller.value = new AbortController(); running.value = true;
@@ -131,38 +139,48 @@ async function listen(thread) {
   if (epoch !== sessionEpoch) return;
   running.value = false; persist();
 }
-function growComposer() {
-  const el = composer.value;
-  if (!el) return;
-  el.style.height = 'auto';
-  el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-}
-watch(draft, () => nextTick(growComposer));
-async function send(text = draft.value) {
+// Attachments stay in the composer after sending (sticky-attachments), so each turn
+// sends them again and follow-up questions can still see them.
+async function send(text, attachments = []) {
   if (!text.trim() || running.value) return;
   const epoch = sessionEpoch;
-  followOutput.value = true;
-  const thread = current.value; error.value = ''; draft.value = ''; undo.value = null;
-  thread.messages.push({ role: 'user', content: text });
-  thread.updated = new Date().toISOString();
-  if (thread.title === 'New conversation') thread.title = text.slice(0, 50);
-  const editor = assistantContext.editor; const snapshot = editor?.snapshot();
-  thread.editorKey = editor?.key;
+  const thread = current.value; error.value = ''; undo.value = null;
+  running.value = true;
   try {
-    running.value = true;
+    const files = await Promise.all(attachments.map(async (file) => ({ filename: file.name, mimeType: file.type || 'text/plain', data: await file.base64() })));
+    if (epoch !== sessionEpoch) return;
+    thread.messages.push({ role: 'user', content: text });
+    thread.updated = new Date().toISOString();
+    if (thread.title === 'New conversation') thread.title = text.slice(0, 50);
+    const editor = assistantContext.editor; const snapshot = editor?.snapshot();
+    thread.editorKey = editor?.key;
     const result = await assistantJSON('turns', {
       ...(thread.ai?.model ? { ai: thread.ai } : {}),
-      attachments: files.value.map(({ size, ...file }) => file), conversation: thread.id, messages: thread.messages.filter((message) => message.content).slice(-60),
+      attachments: files, conversation: thread.id, messages: thread.messages.filter((message) => message.content).slice(-60),
       context: { pictureReferences: thread.pictures || [], path: route.path, page: route.name, params: route.params, filters: route.query,
         editor: snapshot ? { key: editor.key, unsaved: true, revision: revision(snapshot), current: snapshot, selection: editor.selection?.() || window.getSelection()?.toString().slice(0, 4000) } : null },
     });
     if (epoch !== sessionEpoch) return;
-    thread.attachments = [...(thread.attachments || []), ...files.value.map(({ data, ...file }) => file)];
+    thread.attachments = [...(thread.attachments || []), ...files.map(({ data, ...file }) => file)];
     thread.turn = result.id; thread.after = 0; thread.messages.push({ role: 'assistant', content: '', parts: [] }); persist(); await listen(thread);
   } catch (err) { if (epoch !== sessionEpoch) return; error.value = err.message; running.value = false; persist(); }
 }
+function onSubmit(event) {
+  if (running.value || !current.value) { event.preventDefault(); return; }
+  send(event.detail.text, event.detail.attachments);
+}
+function retry() {
+  send([...messages.value].reverse().find((m) => m.role === 'user')?.content || '', panel.value?.attachments || []);
+}
 async function stop() {
   try { if (current.value.turn) await assistantJSON(`turns/${current.value.turn}/cancel`, {}); } catch (err) { error.value = err.message; }
+}
+function onAction(event) {
+  const proposal = current.value?.proposals.find((p) => p.id === event.detail.id);
+  if (!proposal) return;
+  if (event.detail.action === 'apply') decide(proposal, true);
+  else if (event.detail.action === 'discard') decide(proposal, false);
+  else if (event.detail.action === 'review') reviewing.value = proposal;
 }
 async function decide(proposal, approve, edited) {
   busy.value = true; error.value = ''; reviewError.value = '';
@@ -211,16 +229,6 @@ async function undoEdit() {
     await entry.editor.apply(entry.before); undo.value = null;
   } catch (err) { error.value = err.message; }
 }
-async function attach(event) {
-  try {
-    for (const file of event.target.files || []) {
-      if (file.size > 6 * 1024 * 1024 || files.value.reduce((total, item) => total + item.size, 0) + file.size > 20 * 1024 * 1024) throw new Error('Use files up to 6 MiB each and 20 MiB total.');
-      const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(file); });
-      files.value.push({ filename: file.name, mimeType: file.type || 'text/plain', data, size: file.size });
-    }
-  } catch (err) { error.value = err.message; }
-  event.target.value = '';
-}
 // Media library pictures go to the model as name + hosted URL, so it can place them in content.
 function addPicture(media) {
   mediaOpen.value = false;
@@ -257,13 +265,32 @@ const suggestions = computed(() => {
   if (route.path.includes('subscribers')) return ['Summarize this contact', 'Suggest the next step for this contact'];
   return ['Analyze recent campaign performance', 'Suggest a campaign for an engaged audience', 'Build a workflow for new subscribers'];
 });
-const statusColors = { pending: 'warning', applying: 'info', applied: 'success', approved: 'success', failed: 'error', discarded: 'default' };
 </script>
 
 <template>
-  <AppRightSidebar v-model="assistantContext.open" :width="440" overlay disable-route-watcher>
-    <template #header>
-      <div class="ai-head">
+  <AppRightSidebar v-model="assistantContext.open" :width="440" overlay disable-route-watcher :show-resize-controls="false">
+    <lp-agent-panel
+      ref="panel"
+      class="assistant-panel"
+      closable
+      sticky-attachments
+      :accept="ASSISTANT_ACCEPT"
+      :entries="entries"
+      :suggestions="suggestions"
+      :running="running"
+      :error="error"
+      placeholder="Message the assistant…"
+      hint="You review changes before they apply"
+      empty-title="How can I help?"
+      empty-text="Ask about your data, plan a campaign, or edit what you're working on. You review every change first."
+      data-cy="assistant-panel"
+      @agent-submit="onSubmit"
+      @agent-stop="stop"
+      @agent-close="assistantContext.open = false"
+      @agent-action="onAction"
+      @agent-error-dismiss="error = ''"
+    >
+      <div slot="header-start" class="ai-head">
         <span class="ai-mark"><v-icon icon="mdi-creation-outline" size="16" /></span>
         <v-menu v-model="chatsOpen" :close-on-content-click="false" location="bottom start" max-width="400">
           <template #activator="{ props: menuProps }">
@@ -307,120 +334,31 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
             </div>
           </v-card>
         </v-menu>
-        <v-spacer />
-        <v-btn icon="mdi-plus" size="small" variant="text" aria-label="New chat" title="New chat" :disabled="running" data-cy="assistant-new" @click="startNewChat" />
-        <v-btn icon="mdi-close" size="small" variant="text" aria-label="Close assistant" @click="assistantContext.open = false" />
       </div>
-      <div class="ai-subhead">
+      <span slot="header-actions">
+        <v-btn icon="mdi-plus" size="small" variant="text" aria-label="New chat" title="New chat" :disabled="running" data-cy="assistant-new" @click="startNewChat" />
+      </span>
+      <div slot="subheader" class="ai-subhead">
         <model-picker v-if="assistantContext.open" :value="current?.ai || null" @change="setModel" />
         <span v-if="contextLabel" class="ai-context text-truncate" :title="`Looking at: ${contextLabel}`" data-cy="assistant-context">{{ contextLabel }}</span>
       </div>
-    </template>
 
-    <div class="assistant-panel">
-      <div ref="scrollArea" class="assistant-scroll" aria-live="polite" @scroll="trackScroll">
-        <div v-if="!messages.length" class="ai-empty" data-cy="assistant-empty">
-          <span class="ai-empty-mark"><v-icon icon="mdi-creation-outline" size="26" /></span>
-          <h2 class="ai-empty-title">How can I help?</h2>
-          <p class="ai-empty-text">Ask about your data, plan a campaign, or edit what you're working on. You review every change first.</p>
-          <button v-for="suggestion in suggestions" :key="suggestion" type="button" class="ai-suggestion" @click="send(suggestion)">
-            <span>{{ suggestion }}</span>
-            <v-icon icon="mdi-arrow-up" size="14" />
-          </button>
-        </div>
-
-        <template v-for="entry in transcript" :key="entry.id">
-          <div v-if="entry.type === 'text' && entry.role === 'user'" class="ai-bubble" data-cy="assistant-user">{{ entry.content }}</div>
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div v-else-if="entry.type === 'text'" class="assistant-message" data-cy="assistant-reply" v-html="renderAssistantMarkdown(entry.content)" />
-
-          <details v-else-if="entry.type === 'tools'" class="ai-tools" data-cy="assistant-tools">
-            <summary>
-              <v-progress-circular v-if="toolGroupStatus(entry.tools) === 'running'" indeterminate size="12" width="2" />
-              <v-icon v-else :icon="toolGroupStatus(entry.tools) === 'failed' ? 'mdi-alert-circle-outline' : 'mdi-check'" :color="toolGroupStatus(entry.tools) === 'failed' ? 'error' : undefined" size="14" />
-              <span>{{ entry.tools.length === 1 ? toolLabel(entry.tools[0].name) : `Used ${entry.tools.length} tools` }}</span>
-              <v-icon class="ai-tools-chevron" icon="mdi-chevron-right" size="14" />
-            </summary>
-            <details v-for="tool in entry.tools" :key="tool.key || tool.id" class="ai-tool">
-              <summary :class="{ 'text-error': tool.status === 'failed' }">{{ toolLabel(tool.name) }}</summary>
-              <pre>{{ JSON.stringify(tool.result, null, 2) }}</pre>
-            </details>
-          </details>
-
-          <details v-else-if="entry.type === 'legacy_tools'" class="ai-tools">
-            <summary><v-icon icon="mdi-check" size="14" /><span>Earlier activity · {{ entry.tools.length }} tools</span><v-icon class="ai-tools-chevron" icon="mdi-chevron-right" size="14" /></summary>
-            <details v-for="tool in entry.tools" :key="tool.id" class="ai-tool"><summary>{{ toolLabel(tool.name) }}</summary><pre>{{ JSON.stringify(tool.result, null, 2) }}</pre></details>
-          </details>
-
-          <article v-else-if="entry.type === 'proposal'" class="ai-card" data-cy="assistant-proposal">
-            <div class="d-flex align-start ga-2">
-              <div class="flex-grow-1" style="min-width: 0">
-                <div class="ai-card-title">{{ proposalTitle(entry.proposal) === entry.proposal.tool ? 'Proposed edit' : proposalTitle(entry.proposal) }}</div>
-                <div v-if="proposalInfo(entry.proposal.tool).label !== entry.proposal.tool" class="ai-card-kind">{{ proposalInfo(entry.proposal.tool).label }}</div>
-              </div>
-              <v-chip v-if="entry.proposal.status !== 'pending'" size="x-small" label :color="statusColors[entry.proposal.status]" data-cy="assistant-proposal-status">{{ entry.proposal.status }}</v-chip>
-            </div>
-            <v-alert v-for="warning in entry.proposal.warnings || []" :key="warning" type="warning" variant="tonal" density="compact" class="mt-2 text-caption">{{ warning }}</v-alert>
-            <!-- Edits to the open editor are short, so they show in place. -->
-            <div v-for="(op, index) in entry.proposal.arguments.operations || []" :key="index" class="ai-op">
-              <div class="ai-op-field">{{ op.field || op.blockId || op.id || op.op }}</div>
-              <pre v-if="op.before" class="ai-op-before">{{ op.before }}</pre>
-              <pre class="ai-op-after">{{ op.after || JSON.stringify(op.value) }}</pre>
-            </div>
-            <div class="ai-card-actions">
-              <template v-if="entry.proposal.status === 'pending'">
-                <v-btn v-if="!proposalInfo(entry.proposal.tool).reviewFirst" size="small" color="primary" variant="flat" class="text-none" :loading="busy" :disabled="running" data-cy="assistant-apply" @click="decide(entry.proposal, true)">{{ proposalInfo(entry.proposal.tool).apply }}</v-btn>
-                <v-btn v-if="!entry.proposal.arguments.operations" size="small" variant="tonal" class="text-none" prepend-icon="mdi-eye-outline" data-cy="assistant-review" @click="reviewing = entry.proposal">Review</v-btn>
-                <v-btn size="small" variant="text" class="text-none" :disabled="busy || running" data-cy="assistant-discard" @click="decide(entry.proposal, false)">Discard</v-btn>
-              </template>
-              <template v-else>
-                <v-btn v-if="!entry.proposal.arguments.operations" size="small" variant="text" class="text-none" @click="reviewing = entry.proposal">View</v-btn>
-                <v-btn v-if="entry.proposal.status === 'applied' && entry.proposal.result?.source?.href" :href="entry.proposal.result.source.href" size="small" variant="text" class="text-none" append-icon="mdi-open-in-new" data-cy="assistant-open-result">Open</v-btn>
-              </template>
-            </div>
-          </article>
-        </template>
-
-        <div v-if="running" class="ai-working" data-cy="assistant-working" role="status" aria-label="Working">
-          <span /><span /><span />
-        </div>
-        <v-btn v-if="undo" size="small" variant="tonal" class="text-none mt-2 align-self-start" prepend-icon="mdi-undo" @click="undoEdit">Undo last edit</v-btn>
-        <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mt-2 text-body-2" data-cy="assistant-error">{{ error }}</v-alert>
-        <div v-if="!running && (current?.turn || error)" class="d-flex ga-2">
+      <div v-if="undo || (!running && (current?.turn || error))" slot="transcript-end" class="d-flex flex-wrap ga-2">
+        <v-btn v-if="undo" size="small" variant="tonal" class="text-none" prepend-icon="mdi-undo" @click="undoEdit">Undo last edit</v-btn>
+        <template v-if="!running">
           <v-btn v-if="current?.turn" size="small" variant="tonal" class="text-none" @click="listen(current)">Resume</v-btn>
-          <v-btn v-if="error" size="small" variant="tonal" class="text-none" @click="send([...messages].reverse().find(m => m.role === 'user')?.content || '')">Retry</v-btn>
-        </div>
+          <v-btn v-if="error" size="small" variant="tonal" class="text-none" @click="retry">Retry</v-btn>
+        </template>
       </div>
 
-      <form class="ai-composer" @submit.prevent="send()">
-        <div v-if="files.length || current?.pictures?.length" class="d-flex flex-wrap ga-1 mb-2" data-cy="assistant-attached">
-          <v-chip v-for="(file, index) in files" :key="index" closable size="small" prepend-icon="mdi-paperclip" @click:close="files.splice(index, 1)">{{ file.filename }}</v-chip>
-          <v-chip v-for="(picture, index) in current?.pictures || []" :key="picture.url" closable size="small" prepend-icon="mdi-image-outline" :title="picture.url" @click:close="removePicture(index)">{{ picture.name || picture.url.split('/').pop() }}</v-chip>
-        </div>
-        <div class="ai-box">
-          <textarea
-            ref="composer"
-            v-model="draft"
-            class="ai-input"
-            rows="1"
-            placeholder="Message the assistant…"
-            aria-label="Message assistant"
-            :disabled="running"
-            data-cy="assistant-input"
-            @keydown.enter.exact.prevent="send()"
-          />
-          <div class="ai-box-row">
-            <v-btn icon="mdi-paperclip" size="small" variant="text" density="comfortable" aria-label="Attach a file" title="Attach a file" :disabled="running" data-cy="assistant-attach" @click="fileInput.click()" />
-            <v-btn icon="mdi-image-plus-outline" size="small" variant="text" density="comfortable" aria-label="Add a picture from media" title="Add a picture from media" :disabled="running" @click="mediaOpen = true" />
-            <input ref="fileInput" type="file" multiple hidden accept="image/*,application/pdf,text/*" data-cy="assistant-file-input" @change="attach" />
-            <span class="ai-hint">You review changes before they apply</span>
-            <v-spacer />
-            <v-btn v-if="running" icon="mdi-stop" size="small" variant="tonal" density="comfortable" aria-label="Stop" title="Stop" data-cy="assistant-stop" @click="stop" />
-            <v-btn v-else type="submit" icon="mdi-arrow-up" size="small" color="primary" variant="flat" density="comfortable" aria-label="Send" title="Send" :disabled="!draft.trim()" data-cy="assistant-send" />
-          </div>
-        </div>
-      </form>
-    </div>
+      <span v-if="current?.pictures?.length" slot="composer-chips" class="d-contents" data-cy="assistant-attached">
+        <v-chip v-for="(picture, index) in current.pictures" :key="picture.url" closable size="small" prepend-icon="mdi-image-outline" :title="picture.url" @click:close="removePicture(index)">{{ picture.name || picture.url.split('/').pop() }}</v-chip>
+      </span>
+      <span slot="composer-actions">
+        <v-btn icon="mdi-image-plus-outline" size="small" variant="text" density="comfortable" aria-label="Add a picture from media" title="Add a picture from media" :disabled="running" @click="mediaOpen = true" />
+      </span>
+    </lp-agent-panel>
+
     <v-dialog v-model="mediaOpen" max-width="900"><v-card><v-card-text class="pt-0"><Media v-if="mediaOpen" is-modal type="pictures" @selected="addPicture" @close="mediaOpen = false" /></v-card-text></v-card></v-dialog>
     <review-modal
       v-if="reviewing"
@@ -436,12 +374,13 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
 </template>
 
 <style scoped>
-.ai-head { align-items: center; display: flex; gap: 8px; padding: 10px 8px 6px 14px; }
+.assistant-panel { display: block; height: 100%; }
+.ai-head { align-items: center; display: flex; gap: 8px; min-width: 0; }
 .ai-mark { align-items: center; background: rgba(var(--v-theme-primary), 0.14); border-radius: 8px; color: rgb(var(--v-theme-primary)); display: flex; flex: none; height: 28px; justify-content: center; width: 28px; }
 .ai-title { align-items: center; background: none; border: 0; border-radius: 6px; color: inherit; cursor: pointer; display: flex; font: inherit; font-size: 14px; font-weight: 600; gap: 2px; max-width: 280px; min-width: 0; padding: 4px 6px; }
 .ai-title:hover:not(:disabled) { background: rgb(var(--v-theme-surface-light)); }
 .ai-title:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); }
-.ai-subhead { align-items: center; display: flex; gap: 8px; padding: 0 14px 10px; }
+.ai-subhead { align-items: center; display: flex; gap: 8px; }
 .ai-context { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 12px; margin-left: auto; min-width: 0; }
 .ai-chats { width: min(380px, 88vw); }
 .ai-chats-list { max-height: 340px; overflow-y: auto; padding: 4px; }
@@ -450,76 +389,5 @@ const statusColors = { pending: 'warning', applying: 'info', applied: 'success',
 .ai-chat-open { align-items: center; background: none; border: 0; color: inherit; cursor: pointer; display: flex; flex: 1; font: inherit; font-size: 13px; gap: 8px; justify-content: space-between; min-width: 0; padding: 6px 8px; text-align: left; }
 .ai-chat--active .ai-chat-open { color: rgb(var(--v-theme-primary)); font-weight: 500; }
 .ai-chat-when { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); flex: none; font-size: 11px; font-weight: 400; }
-
-.assistant-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.assistant-scroll { display: flex; flex: 1; flex-direction: column; gap: 12px; min-height: 0; overflow-y: auto; padding: 16px; }
-/* Rows that clip overflow (replies, alerts) would otherwise shrink to nothing once the chat outgrows the panel. */
-.assistant-scroll > * { flex: none; }
-
-.ai-empty { align-items: center; display: flex; flex-direction: column; margin: auto 0; padding: 16px 4px; text-align: center; }
-.ai-empty-mark { align-items: center; background: rgba(var(--v-theme-primary), 0.12); border-radius: 14px; color: rgb(var(--v-theme-primary)); display: flex; height: 52px; justify-content: center; margin-bottom: 12px; width: 52px; }
-.ai-empty-title { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-.ai-empty-text { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 13px; line-height: 1.5; margin-bottom: 16px; max-width: 340px; }
-.ai-suggestion { align-items: center; background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), 0.22); border-radius: 10px; color: inherit; cursor: pointer; display: flex; font: inherit; font-size: 13px; gap: 10px; justify-content: space-between; margin-bottom: 8px; padding: 10px 12px; text-align: left; transition: background-color 0.15s, border-color 0.15s; width: 100%; }
-.ai-suggestion .v-icon { color: rgba(var(--v-theme-on-surface), 0.4); flex: none; }
-.ai-suggestion:hover { background: rgba(var(--v-theme-primary), 0.06); border-color: rgba(var(--v-theme-primary), 0.4); }
-.ai-suggestion:focus-visible { outline: 2px solid rgb(var(--v-theme-primary)); }
-
-.ai-bubble { align-self: flex-end; background: rgba(var(--v-theme-primary), 0.13); border-radius: 14px 14px 4px 14px; font-size: 14px; line-height: 1.5; max-width: 88%; overflow-wrap: anywhere; padding: 8px 12px; white-space: pre-wrap; }
-.assistant-message { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; overflow-x: auto; }
-.assistant-message :deep(p), .assistant-message :deep(ul), .assistant-message :deep(ol), .assistant-message :deep(blockquote) { margin-bottom: 10px; }
-.assistant-message :deep(:last-child) { margin-bottom: 0; }
-.assistant-message :deep(h1), .assistant-message :deep(h2), .assistant-message :deep(h3) { font-size: 15px; font-weight: 600; line-height: 1.4; margin: 14px 0 6px; }
-.assistant-message :deep(:first-child) { margin-top: 0; }
-.assistant-message :deep(ul), .assistant-message :deep(ol) { padding-left: 22px; }
-.assistant-message :deep(table) { border-collapse: collapse; font-size: 13px; margin: 10px 0; width: 100%; }
-.assistant-message :deep(th), .assistant-message :deep(td) { border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); padding: 6px 8px; vertical-align: top; }
-.assistant-message :deep(th) { background: rgba(var(--v-theme-on-surface), 0.04); font-weight: 600; }
-.assistant-message :deep(code) { background: rgba(var(--v-theme-on-surface), 0.07); border-radius: 4px; font-size: 12px; padding: 1px 4px; }
-.assistant-message :deep(pre) { background: rgba(var(--v-theme-on-surface), 0.05); border-radius: 8px; margin-bottom: 10px; overflow-x: auto; padding: 10px 12px; }
-.assistant-message :deep(pre code) { background: none; padding: 0; }
-.assistant-message :deep(blockquote) { border-left: 3px solid rgba(var(--v-border-color), 0.3); padding-left: 12px; }
-
-.ai-tools { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 12px; }
-.ai-tools > summary { align-items: center; cursor: pointer; display: inline-flex; gap: 6px; list-style: none; }
-.ai-tools > summary::-webkit-details-marker { display: none; }
-.ai-tools > summary:hover { color: rgb(var(--v-theme-on-surface)); }
-.ai-tools-chevron { transition: transform 0.15s; }
-.ai-tools[open] .ai-tools-chevron { transform: rotate(90deg); }
-.ai-tool { border-left: 2px solid rgba(var(--v-border-color), 0.2); margin: 6px 0 0 6px; padding-left: 10px; }
-.ai-tool summary { cursor: pointer; }
-.ai-tool pre { background: rgba(var(--v-theme-on-surface), 0.04); border-radius: 6px; font-size: 11px; margin-top: 4px; max-height: 200px; overflow: auto; padding: 8px; white-space: pre-wrap; word-break: break-word; }
-
-.ai-card { background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), 0.22); border-radius: 12px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); padding: 12px; }
-.ai-card-title { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.ai-card-kind { color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity)); font-size: 12px; }
-.ai-card-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.ai-card-actions:empty { display: none; }
-.ai-op { margin-top: 10px; }
-.ai-op-field { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
-.ai-op-before, .ai-op-after { border-radius: 6px; font-family: inherit; font-size: 12px; line-height: 1.5; margin: 0 0 4px; max-height: 180px; overflow: auto; padding: 6px 8px; white-space: pre-wrap; word-break: break-word; }
-.ai-op-before { background: rgba(var(--v-theme-error), 0.08); text-decoration: line-through; text-decoration-color: rgba(var(--v-theme-error), 0.5); }
-.ai-op-after { background: rgba(var(--v-theme-success), 0.1); }
-
-.ai-working { display: flex; gap: 4px; padding: 4px 0; }
-.ai-working span { animation: ai-pulse 1.2s infinite ease-in-out; background: rgb(var(--v-theme-primary)); border-radius: 50%; height: 6px; width: 6px; }
-.ai-working span:nth-child(2) { animation-delay: 0.15s; }
-.ai-working span:nth-child(3) { animation-delay: 0.3s; }
-@keyframes ai-pulse {
-  0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-2px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ai-working span { animation: none; opacity: 0.6; }
-}
-
-.ai-composer { flex: none; padding: 8px 12px 12px; }
-.ai-box { background: rgb(var(--v-theme-surface)); border: 1px solid rgba(var(--v-border-color), 0.28); border-radius: 14px; padding: 8px 8px 6px; transition: border-color 0.15s, box-shadow 0.15s; }
-.ai-box:focus-within { border-color: rgb(var(--v-theme-primary)); box-shadow: 0 0 0 3px rgba(var(--v-theme-primary), 0.12); }
-.ai-input { background: none; border: 0; color: inherit; display: block; font: inherit; font-size: 14px; line-height: 1.5; max-height: 180px; min-height: 44px; outline: none; padding: 2px 6px; resize: none; width: 100%; }
-.ai-box-row { align-items: center; display: flex; gap: 2px; margin-top: 2px; }
-.ai-hint { color: rgba(var(--v-theme-on-surface), 0.45); font-size: 11px; margin-left: 6px; white-space: nowrap; }
-@media (max-width: 420px) {
-  .ai-hint { display: none; }
-}
+.d-contents { display: contents; }
 </style>

@@ -10,7 +10,8 @@ export default defineConfig(({ _, mode }) => {
   const apiTarget = env.LISTPOCKET_API_URL || 'http://127.0.0.1:9000';
   return {
     plugins: [
-      vue(),
+      // The agent panel is a framework-free custom element (the agent-panel package).
+      vue({ template: { compilerOptions: { isCustomElement: (tag) => tag === 'agent-panel' || tag === 'lp-agent-panel' } } }),
       vuetify({ autoImport: true, styles: { configFile: 'src/styles/settings.scss' } }),
     ],
     base: '/admin/',
