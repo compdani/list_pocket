@@ -201,6 +201,7 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 	api.DELETE("/subscribers/{id}/bounces", asHandler(pmRE(a.DeleteSubscriberBounces, "bounces:manage")))
 	api.POST("/subscribers", asHandler(pmRE(a.CreateSubscriber, "subscribers:manage")))
 	api.PUT("/subscribers/{id}", asHandler(pmRE(a.UpdateSubscriber, "subscribers:manage")))
+	api.PATCH("/subscribers/{id}", asHandler(pmRE(a.PatchSubscriber, "subscribers:manage")))
 	api.POST("/subscribers/{id}/optin", asHandler(pmRE(a.SubscriberSendOptin, "subscribers:manage")))
 	api.POST("/subscribers/{id}/sms-opt-out", asHandler(pmRE(a.SubscriberSMSOptOut, "subscribers:manage")))
 	api.PUT("/subscribers/blocklist", asHandler(pmRE(a.BlocklistSubscribers, "subscribers:manage")))

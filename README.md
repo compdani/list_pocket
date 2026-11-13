@@ -14,6 +14,9 @@ builds this application from source; it does not download a prebuilt PocketBase 
 
 The admin UI lives at `/admin/`. Public subscription, tracking, and archive URLs are served from the same process.
 
+An optional [MCP server](docs/mcp.md) connects external AI clients to the existing
+HTTP APIs over stdio, with reads by default and optional record creation and contact update tools.
+
 ## Capabilities
 
 **Audience**
