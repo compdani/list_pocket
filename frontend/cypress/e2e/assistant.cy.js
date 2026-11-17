@@ -24,7 +24,7 @@ describe('Context-aware assistant', { includeShadowDom: true }, () => {
   beforeEach(() => { cy.visit(fixture, { onBeforeLoad: win => win.localStorage.clear() }); });
   it('streams replies, reviews targeted changes and supports undo across navigation', () => {
     setupTurn();
-    cy.get('textarea').type('Shorten the CTA{enter}');
+    cy.get('.input--rich').type('Shorten the CTA{enter}');
     cy.contains('strong', 'Updated').should('be.visible');
     cy.contains('h2', 'Campaign performance').should('be.visible');
     cy.get('.message table').should('be.visible');
@@ -42,7 +42,7 @@ describe('Context-aware assistant', { includeShadowDom: true }, () => {
     cy.get('[data-cy=fixture-body]').should('contain.text', '<a>Shop today</a>');
   });
   it('rejects proposals after an unsaved manual edit', () => {
-    setupTurn(); cy.get('textarea').type('Shorten the CTA{enter}');
+    setupTurn(); cy.get('.input--rich').type('Shorten the CTA{enter}');
     cy.contains('Shorten CTA').should('be.visible');
     cy.window().then(win => win.assistantFixture.change());
     cy.contains('button', 'Apply').click();
@@ -73,13 +73,13 @@ describe('Context-aware assistant', { includeShadowDom: true }, () => {
       return transfer;
     };
     // A screenshot: an image with no useful name.
-    cy.get('textarea').then($input => {
+    cy.get('.input--rich').then($input => {
       const win = $input[0].ownerDocument.defaultView;
       $input[0].dispatchEvent(new win.ClipboardEvent('paste', { clipboardData: withFiles(win, [['image.png', 'image/png', png]]), bubbles: true, composed: true, cancelable: true }));
     });
     cy.get('.chip').should('have.length', 1).and('contain.text', 'pasted-image-').find('img.thumb').should('be.visible');
     // Text copied from a spreadsheet comes with a picture of the cells; it stays text.
-    cy.get('textarea').then($input => {
+    cy.get('.input--rich').then($input => {
       const win = $input[0].ownerDocument.defaultView;
       const transfer = withFiles(win, [['image.png', 'image/png', png]]);
       transfer.setData('text/plain', 'Name\tEmail');
@@ -103,9 +103,9 @@ describe('Context-aware assistant', { includeShadowDom: true }, () => {
     cy.get('.attach-error').should('contain.text', "leads.csv isn't a type that can be attached");
     cy.get('.chip').should('have.length', 2);
 
-    cy.get('textarea').type('What is in this screenshot?{enter}');
+    cy.get('.input--rich').type('What is in this screenshot?{enter}');
     cy.get('[data-role=user]').should('contain.text', 'What is in this screenshot?');
-    cy.get('textarea').should('have.value', '');
+    cy.get('[data-cy=assistant-panel]').should(($panel) => expect($panel[0].draft).to.eq(''));
     cy.get('.chip').should('have.length', 2).then(() => {
       const [first] = bodies;
       expect(first.attachments.map(a => a.mimeType)).to.deep.eq(['image/png', 'text/plain']);
@@ -114,7 +114,7 @@ describe('Context-aware assistant', { includeShadowDom: true }, () => {
       expect(first.attachments[1].data).to.eq(btoa('hello'));
     });
     cy.get('.working').should('not.be.visible');
-    cy.get('textarea').type('And the notes?{enter}');
+    cy.get('.input--rich').type('And the notes?{enter}');
     cy.get('[data-role=user]').should('have.length', 2).then(() => {
       expect(bodies).to.have.length(2);
       expect(bodies[1].attachments).to.have.length(2);

@@ -10,7 +10,7 @@ import { groupToolRows, removeThread, toolLabel } from '../assistant/threads.mjs
 // Defines <lp-agent-panel>, which draws the chat itself; this component feeds it.
 import { ASSISTANT_ACCEPT } from '../assistant/lp-agent-panel';
 import { shortStamp } from '../utils/crm.mjs';
-import ModelPicker from './agent/ModelPicker.vue';
+import { modelFromKey, modelKey, useAgentModels } from '../assistant/models';
 import ReviewModal from './agent/ReviewModal.vue';
 import { applyEditorPatch, revision } from '../assistant/patches.mjs';
 
@@ -20,6 +20,14 @@ const route = useRoute();
 const { proxy } = getCurrentInstance();
 const threads = ref([]); const active = ref(''); const running = ref(false);
 const mediaOpen = ref(false);
+// The panel's built-in "+" menu (with the media library) and model menu.
+const { models, defaultModel } = useAgentModels();
+const addMenu = ['attach', 'paste', { id: 'media', label: 'Add a picture from media', icon: 'image' }];
+function onMenuSelect(event) {
+  if (event.detail.id !== 'media') return;
+  event.preventDefault();
+  mediaOpen.value = true;
+}
 const panel = ref(null);
 const chatsOpen = ref(false);
 const confirmingDelete = ref('');
@@ -279,6 +287,10 @@ const suggestions = computed(() => {
       :suggestions="suggestions"
       :running="running"
       :error="error"
+      :models="models"
+      :model="modelKey(current?.ai)"
+      :default-model="defaultModel"
+      :addMenu="addMenu"
       placeholder="Message the assistant…"
       hint="You review changes before they apply"
       empty-title="How can I help?"
@@ -289,6 +301,8 @@ const suggestions = computed(() => {
       @agent-close="assistantContext.open = false"
       @agent-action="onAction"
       @agent-error-dismiss="error = ''"
+      @agent-model-change="setModel(modelFromKey($event.detail.model))"
+      @agent-menu-select="onMenuSelect"
     >
       <div slot="header-start" class="ai-head">
         <span class="ai-mark"><v-icon icon="mdi-creation-outline" size="16" /></span>
@@ -338,8 +352,7 @@ const suggestions = computed(() => {
       <span slot="header-actions">
         <v-btn icon="mdi-plus" size="small" variant="text" aria-label="New chat" title="New chat" :disabled="running" data-cy="assistant-new" @click="startNewChat" />
       </span>
-      <div slot="subheader" class="ai-subhead">
-        <model-picker v-if="assistantContext.open" :value="current?.ai || null" @change="setModel" />
+      <div v-if="contextLabel" slot="subheader" class="ai-subhead">
         <span v-if="contextLabel" class="ai-context text-truncate" :title="`Looking at: ${contextLabel}`" data-cy="assistant-context">{{ contextLabel }}</span>
       </div>
 
@@ -353,9 +366,6 @@ const suggestions = computed(() => {
 
       <span v-if="current?.pictures?.length" slot="composer-chips" class="d-contents" data-cy="assistant-attached">
         <v-chip v-for="(picture, index) in current.pictures" :key="picture.url" closable size="small" prepend-icon="mdi-image-outline" :title="picture.url" @click:close="removePicture(index)">{{ picture.name || picture.url.split('/').pop() }}</v-chip>
-      </span>
-      <span slot="composer-actions">
-        <v-btn icon="mdi-image-plus-outline" size="small" variant="text" density="comfortable" aria-label="Add a picture from media" title="Add a picture from media" :disabled="running" @click="mediaOpen = true" />
       </span>
     </lp-agent-panel>
 

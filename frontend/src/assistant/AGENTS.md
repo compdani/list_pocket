@@ -33,6 +33,7 @@ This file covers only how List Pocket extends and hosts the two elements.
 | `lp-agent-common.js` | `LP_STYLES` (Vuetify theme mapping and card CSS), `LP_LABELS`, `renderMarkdown`, `renderProposal(el, entry)`, `referenceIcon(ref)` (`@mdi/js` paths per context type) |
 | `lp-agent-panel.js` | `ListPocketAgentPanel` (`<lp-agent-panel>`) and `ASSISTANT_ACCEPT` |
 | `lp-agent-page.js` | `ListPocketAgentPage` (`<lp-agent-page>`) and `AGENT_PAGE_ACCEPT`; adds the server's 2 MB limit for text files through `fileProblem` |
+| `models.js` | `useAgentModels()` (loads `agent/models` into the panel's built-in model menu: one entry per provider model, grouped by provider, provider errors as disabled entries), `modelKey(ai)` and `modelFromKey(id)` (menu ids are `provider/model`) |
 | `../views/Agent.vue` | The Agent page host: server-side conversations, turns, uploads, context picker, proposal decisions |
 | `../components/AIAssistant.vue` | The host: chats kept in the browser, streaming turns, proposal decisions, and the Vuetify controls placed in slots |
 | `markdown.mjs`, `threads.mjs`, `transcript.mjs`, `patches.mjs`, `client.js`, `context.js` | Conversation logic, independent of the panel |
@@ -95,10 +96,13 @@ Both subclasses do the following (from `lp-agent-common.js`):
 - **The context picker:** `mention-trigger="@"`. `ContextPicker` sits in
   `<div slot="mention">` and is shown while `agent-mention.open`. `agent-mention-key` is
   forwarded to `pickerRef.key(event)`, and the event is cancelled when the picker used
-  the key. A pick calls `page.addReference()`. The **Context** button
-  (`composer-actions`) toggles `openMention()` / `closeMention()`.
-- **Paste data** (`composer-actions`) is a Vuetify dialog that adds a text `File`
-  through `page.addFiles()`.
+  the key. A pick calls `page.addReference()`. **Context** in the page's built-in "+"
+  menu (agent-panel 0.3.0) opens the picker without typing `@`.
+- **Paste data** is the "+" menu's built-in paste form (labels from `agent.pasteData`,
+  `agent.pasteName`, `agent.pasteContent`); it adds a text `File` whose type follows the
+  extension (`leads.csv` → `text/csv`).
+- **The model** is the page's built-in model menu: `:models` / `:model` /
+  `:default-model` from `useAgentModels()`, and `agent-model-change` → `setModel`.
 - **Other events:**
 
   | Event | Response |
@@ -136,10 +140,14 @@ Both subclasses do the following (from `lp-agent-common.js`):
   |---|---|
   | `header-start` | Chat switcher menu |
   | `header-actions` | New-chat button |
-  | `subheader` | Model picker and the label of the page being looked at |
+  | `subheader` | The label of the page being looked at (hidden when there is none) |
   | `transcript-end` | Undo, Resume and Retry |
   | `composer-chips` | Media-library pictures |
-  | `composer-actions` | Media-library button |
+
+- **Built-in composer menus (agent-panel 0.3.0):** the model menu (`useAgentModels()`,
+  `agent-model-change` → `setModel`) and the "+" menu, set with `:addMenu` to attach
+  files, paste text, and "Add a picture from media" (handled in `agent-menu-select`,
+  which opens the media library).
 
 - **Methods it calls through the ref:** `scrollToBottom({ force: true })` when switching
   chats, `clearAttachments()` when the signed-in account changes, and `attachments` for
@@ -164,6 +172,10 @@ To try package changes before releasing them, copy the package into `node_module
 (`rsync -a --exclude .git /Volumes/mini512/Components/agent-panel/ node_modules/agent-panel/`)
 and restart Vite with `--force`. Afterwards, release a tag and install it, which restores
 `package.json` and the lockfile to a pinned version.
+
+The composer is agent-panel's rich-text editor (a `contenteditable`, not a
+`textarea`): tests type into `.input--rich` and read the text from the element's
+`draft` property.
 
 Known state: the test "streams replies, reviews targeted changes and supports undo across
 navigation" fails before and after the panel was introduced. It waits for the text

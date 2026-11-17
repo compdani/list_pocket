@@ -13,6 +13,9 @@
       :contextReferences="inContext"
       :formatDate="shortStamp"
       :labels="labels"
+      :models="models"
+      :model="modelKey(ai)"
+      :default-model="defaultModel"
       :entries="entries"
       :suggestions="suggestions"
       :running="busy"
@@ -31,15 +34,11 @@
       @agent-mention="picker = $event.detail.open ? { query: $event.detail.query } : null"
       @agent-mention-key="onMentionKey"
       @agent-reference-open="previewing = $event.detail.reference"
+      @agent-model-change="setModel(modelFromKey($event.detail.model))"
     >
-      <span slot="header-actions"><model-picker :value="ai" @change="setModel" /></span>
       <div slot="mention">
         <context-picker v-if="picker" ref="pickerRef" :query="picker.query" @pick="pickContext" @close="page?.closeMention()" />
       </div>
-      <span slot="composer-actions" class="agent-actions">
-        <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-at" data-cy="agent-context" @click="toggleMention">{{ $t('agent.context') }}</v-btn>
-        <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-content-paste" data-cy="agent-paste" @click="pasting = { name: '', content: '' }">{{ $t('agent.pasteData') }}</v-btn>
-      </span>
     </lp-agent-page>
 
     <review-modal
@@ -54,20 +53,6 @@
     />
     <context-preview-modal v-if="previewing" :item="previewing" @close="previewing = null" />
 
-    <v-dialog :model-value="Boolean(pasting)" max-width="680" @update:model-value="pasting = null">
-      <v-card v-if="pasting">
-        <v-card-title>{{ $t('agent.pasteData') }}</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="pasting.name" :label="$t('agent.pasteName')" placeholder="leads.csv" density="compact" variant="outlined" class="mb-2" hide-details data-cy="agent-paste-name" />
-          <v-textarea v-model="pasting.content" :label="$t('agent.pasteContent')" rows="12" density="compact" variant="outlined" hide-details data-cy="agent-paste-content" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn class="text-none" @click="pasting = null">{{ $t('globals.buttons.cancel') }}</v-btn>
-          <v-btn color="primary" variant="flat" class="text-none" :disabled="!pasting.content.trim()" data-cy="agent-paste-attach" @click="savePaste">{{ $t('agent.attach') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </section>
 </template>
 
@@ -86,9 +71,9 @@ import { streamAssistant } from '../assistant/client';
 import { assistantContext } from '../assistant/context';
 // Defines <lp-agent-page>, which draws the page; this component feeds it.
 import { AGENT_PAGE_ACCEPT } from '../assistant/lp-agent-page';
+import { modelFromKey, modelKey, useAgentModels } from '../assistant/models';
 import ContextPicker from '../components/agent/ContextPicker.vue';
 import ContextPreviewModal from '../components/agent/ContextPreviewModal.vue';
-import ModelPicker from '../components/agent/ModelPicker.vue';
 import ReviewModal from '../components/agent/ReviewModal.vue';
 import { shortStamp } from '../utils/crm.mjs';
 
@@ -114,7 +99,8 @@ const reviewing = ref(null);
 const reviewError = ref('');
 const busyPart = ref('');
 const previewing = ref(null);
-const pasting = ref(null);
+// Context, Paste data and the model picker are the page's built-in composer menus.
+const { models, defaultModel } = useAgentModels();
 let turnId = '';
 let controller = null;
 // A new conversation gets its ID mid-send, and that mustn't reload the page.
@@ -127,7 +113,16 @@ const conversationRows = computed(() => conversations.value.map((c) => ({
 })));
 const suggestions = computed(() => [$t('agent.suggest.overview'), $t('agent.suggest.replies'), $t('agent.suggest.workflow')]);
 const labels = computed(() => ({
+  addContext: $t('agent.context'),
+  addFile: $t('agent.attach'),
   attach: $t('agent.attachFile'),
+  attachFiles: $t('agent.attachFile'),
+  defaultModel: $t('agent.defaultModel'),
+  defaultModelNamed: (model) => $t('agent.defaultNamed', { model }),
+  pasteContent: $t('agent.pasteContent'),
+  pasteName: $t('agent.pasteName'),
+  pasteText: $t('agent.pasteData'),
+  searchModels: $t('agent.searchModels'),
   attachHint: $t('agent.attachFile'),
   cancel: $t('globals.buttons.cancel'),
   conversations: $t('agent.conversations'),
@@ -350,23 +345,12 @@ async function stop() {
   }
 }
 
-function toggleMention() {
-  if (page.value?.mention.open) page.value.closeMention();
-  else page.value?.openMention();
-}
-
 function onMentionKey(event) {
   if (pickerRef.value?.key(event.detail.event)) event.preventDefault();
 }
 
 function pickContext(item) {
   page.value?.addReference({ type: item.type, id: item.id, label: item.label });
-}
-
-function savePaste() {
-  const { name, content } = pasting.value;
-  pasting.value = null;
-  page.value?.addFiles([new File([content], name.trim() || 'pasted.txt', { type: 'text/plain' })]);
 }
 
 async function rename(next) {
@@ -487,10 +471,4 @@ onBeforeUnmount(() => controller?.abort());
   overflow: hidden;
 }
 
-.agent-actions {
-  align-items: center;
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
 </style>
