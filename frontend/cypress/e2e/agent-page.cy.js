@@ -81,37 +81,40 @@ describe('Agent page', { includeShadowDom: true }, () => {
     cy.intercept('GET', '**/mailapi/agent/conversations/new1', { data: { id: 'new1', title: 'Launch questions', messages: [{ id: 'u1', role: 'user', content: 'Compare these', context: [] }, { id: 'a1', role: 'assistant', content: 'Looking' }] } });
     cy.visit(fixture);
 
-    cy.get('textarea').type('Compare @Spr');
+    cy.get('.input--rich').type('Compare @Spr');
     cy.wait('@mentions');
     cy.get('[data-cy=agent-context-picker]').should('be.visible');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.get('.chips [data-reference="campaign:7"]').should('be.visible');
-    cy.get('textarea').should('have.value', 'Compare ');
+    cy.get('lp-agent-page').should(($page) => expect($page[0].draft).to.eq('Compare '));
     cy.get('[data-cy=agent-context-picker]').should('not.exist');
 
-    // The Context button opens the picker without typing @.
-    cy.get('[data-cy=agent-context]').click();
+    // Context in the composer's "+" menu opens the picker without typing @.
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Context').click();
     cy.get('[data-cy=agent-context-option]').eq(1).click();
     cy.get('.chips [data-reference="list:3"]').should('be.visible');
 
-    cy.get('textarea').then(($input) => {
+    cy.get('.input--rich').then(($input) => {
       const win = $input[0].ownerDocument.defaultView;
       const transfer = new win.DataTransfer();
       transfer.items.add(new win.File([Uint8Array.from(atob(png), (c) => c.charCodeAt(0))], 'image.png', { type: 'image/png' }));
       $input[0].dispatchEvent(new win.ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, composed: true, cancelable: true }));
     });
-    cy.get('[data-cy=agent-paste]').click();
-    cy.get('[data-cy=agent-paste-name] input').type('leads.csv');
-    cy.get('[data-cy=agent-paste-content] textarea').type('name,email');
-    cy.get('[data-cy=agent-paste-attach]').click();
+    // Paste data is the "+" menu's paste form.
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Paste data').click();
+    cy.get('[part=menu] input').type('leads.csv');
+    cy.get('[part=menu] textarea').type('name,email');
+    cy.contains('[part=menu] button', 'Attach').click();
     cy.get('.chip[data-attachment-id]').should('have.length', 2);
 
-    cy.get('textarea').type('these{enter}');
+    cy.get('.input--rich').type('these{enter}');
     cy.wait(['@create', '@upload', '@upload', '@turn']);
     cy.get('[data-role=user]').should('contain.text', 'Compare these');
     cy.get('.chips').should('not.be.visible');
     cy.then(() => {
-      expect(uploads.map((u) => [u.mime, u.binary])).to.deep.eq([['image/png', true], ['text/plain', false]]);
+      expect(uploads.map((u) => [u.mime, u.binary])).to.deep.eq([['image/png', true], ['text/csv', false]]);
       expect(uploads[0].content).to.eq(png);
       expect(uploads[0].name).to.match(/^pasted-image-\d{8}-\d{6}\.png$/);
       expect(uploads[1]).to.include({ name: 'leads.csv', content: 'name,email', conversation: 'new1' });
