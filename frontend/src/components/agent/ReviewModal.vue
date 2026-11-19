@@ -95,7 +95,7 @@
           </details>
         </template>
 
-        <v-alert v-if="part.error || error" type="error" variant="tonal" density="compact" class="mt-3 text-body-2">{{ part.error || error }}</v-alert>
+        <v-alert v-if="part.error || part.result?.error || error" type="error" variant="tonal" density="compact" class="mt-3 text-body-2">{{ part.error || part.result?.error || error }}</v-alert>
       </v-card-text>
       <v-card-actions>
         <a v-if="resultHref" :href="resultHref" class="text-body-2 ml-2" data-cy="agent-review-open">{{ $t('agent.open') }}</a>

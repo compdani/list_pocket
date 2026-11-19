@@ -104,7 +104,7 @@ export function renderProposal(el, { proposal, busy = false, running = false, ac
       ),
       proposal.status === 'pending' ? null : h('span', { class: `badge tone-${STATUS_TONES[proposal.status] || 'muted'}`, 'data-cy': 'assistant-proposal-status' }, proposal.status),
     ),
-    proposal.error ? h('div', { class: 'proposal-error' }, proposal.error) : null,
+    (proposal.error || proposal.result?.error) ? h('div', { class: 'proposal-error' }, proposal.error || proposal.result?.error) : null,
     (proposal.warnings || []).map((warning) => h('div', { class: 'alert tone-warning' }, h('span', null, warning))),
     // Edits to the open editor are short, so they show in place.
     (operations || []).map((op) => h(

@@ -73,12 +73,16 @@ func bindCampaignReq(re *pbcore.RequestEvent, out *campReq) error {
 		return err
 	}
 
+	// Malformed input is the caller's mistake, so it's a 400: nothing was written, and
+	// callers such as the assistant can correct it and try again.
 	normalized, err := normalizeCampaignReqBody(body)
 	if err != nil {
-		return err
+		return apperr.BadRequest("invalid campaign data: " + err.Error())
 	}
-
-	return json.Unmarshal(normalized, out)
+	if err := json.Unmarshal(normalized, out); err != nil {
+		return apperr.BadRequest("invalid campaign data: " + err.Error())
+	}
+	return nil
 }
 
 func normalizeCampaignReqBody(body []byte) ([]byte, error) {
@@ -99,6 +103,56 @@ func normalizeCampaignReqBody(body []byte) ([]byte, error) {
 				return nil, err
 			}
 			payload["body_source"] = encoded
+		}
+	}
+
+	// "lists" takes int IDs, but a campaign read back lists them as {"id", "name"}
+	// objects with record IDs. Accept those (and bare record ID strings) too.
+	if raw, ok := payload["lists"]; ok && string(bytes.TrimSpace(raw)) != "null" {
+		var vals []any
+		if err := json.Unmarshal(raw, &vals); err != nil {
+			return nil, fmt.Errorf("lists must be an array: %w", err)
+		}
+		listIDs := make([]int, 0, len(vals))
+		listRecordIDs := []string{}
+		if raw, ok := payload["list_record_ids"]; ok {
+			_ = json.Unmarshal(raw, &listRecordIDs)
+		}
+		seen := map[string]bool{}
+		for _, id := range listRecordIDs {
+			seen[id] = true
+		}
+		addRecordID := func(id string) {
+			if id = strings.TrimSpace(id); id != "" && !seen[id] {
+				seen[id] = true
+				listRecordIDs = append(listRecordIDs, id)
+			}
+		}
+		for _, v := range vals {
+			if obj, ok := v.(map[string]any); ok {
+				v = obj["id"]
+			}
+			switch n := v.(type) {
+			case float64:
+				listIDs = append(listIDs, int(n))
+			case string:
+				if id, err := strconv.Atoi(strings.TrimSpace(n)); err == nil {
+					listIDs = append(listIDs, id)
+				} else {
+					addRecordID(n)
+				}
+			}
+		}
+		encoded, err := json.Marshal(listIDs)
+		if err != nil {
+			return nil, err
+		}
+		payload["lists"] = encoded
+		if len(listRecordIDs) > 0 {
+			if encoded, err = json.Marshal(listRecordIDs); err != nil {
+				return nil, err
+			}
+			payload["list_record_ids"] = encoded
 		}
 	}
 
