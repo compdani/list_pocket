@@ -1,18 +1,14 @@
 package main
 
-// The chat module's turn API, behind LISTPOCKET_CHAT_BACKEND=module. It shares
-// the assistant's tools, prompt and limits with cmd/ai_assistant.go and
-// cmd/agent.go, so a turn behaves like the surface it came from while the
-// legacy endpoints keep serving the front end.
+// The chat module's turn API at /api/mcp/chat/v1. It backs both the side panel
+// and the Agent page, sharing tools, prompts, limits and reference reads with
+// cmd/ai_assistant.go, cmd/agent.go and cmd/mcp_tools.go.
 
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"strings"
 	"time"
 
-	"github.com/compdani/list_pocket/internal/auth"
 	pbmcp "github.com/compdani/pocketbase-mcp"
 	pbadapter "github.com/compdani/pocketbase-mcp/adapters/pocketbase"
 	"github.com/compdani/pocketbase-mcp/chat"
@@ -22,12 +18,10 @@ import (
 // screen, and a turn with no context, is treated as the side panel.
 const chatAgentScreen = "agent"
 
-// chatPageContext is the page-context contract both surfaces send. Only Screen,
-// Path and References drive a turn today; the rest is for the front ends that
-// move over in later phases (params, filters, the unsaved editor snapshot and
-// media-library pictures). Nothing here is trusted: references are read as the
-// caller through permission-checked handlers, and limits come from the screen
-// alone, never from a number the browser sent.
+// chatPageContext is the page-context contract both surfaces send. Nothing here
+// is trusted: references are read as the caller through permission-checked
+// handlers, and limits come from the screen alone, never from a number the
+// browser sent.
 //
 //	{"screen": "panel"|"agent", "path": "...", "page": "...",
 //	 "params": {...}, "filters": {...},
@@ -43,21 +37,6 @@ type chatPageContext struct {
 	Editor            json.RawMessage `json:"editor"`
 	PictureReferences json.RawMessage `json:"pictureReferences"`
 	References        []agentRef      `json:"references"`
-}
-
-// chatModuleEnabled reports the opt-in flag. Anything else, including unset,
-// leaves chat off and only /mcp mounted.
-func chatModuleEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("LISTPOCKET_CHAT_BACKEND")), "module")
-}
-
-// chatBackendName is what /api/config tells the admin UI, and what
-// views/AgentRoute.vue uses to pick the Agent page host.
-func chatBackendName() string {
-	if chatModuleEnabled() {
-		return "module"
-	}
-	return "legacy"
 }
 
 // enableChat builds the module's chat surface for List Pocket's existing
@@ -152,7 +131,7 @@ func (a *App) chatTurnSetup(ctx context.Context, in chat.TurnInput) (chat.TurnSe
 		// the same string the legacy agent turn builds.
 		agentPage, _ := json.Marshal(map[string]string{"page": "agent", "path": page.Path})
 		system := a.assistantSystemPrompt(agentPage, superAdmin)
-		if extra := a.agentContextText(e, refs, auth.GetUserRE(e).RecordID); extra != "" {
+		if extra := a.agentContextText(e, refs); extra != "" {
 			system += "\n\n" + extra
 		}
 		return chat.TurnSetup{

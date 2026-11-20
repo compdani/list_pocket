@@ -422,7 +422,6 @@ func TestShutdownAppCancelsAndJoinsChatReload(t *testing.T) {
 	a := chatProvidersTestApp(t)
 	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
 	t.Setenv("LISTPOCKET_AI_BASE_URL", "http://"+listener.Addr().String()+"/v1")
-	t.Setenv("LISTPOCKET_CHAT_BACKEND", "module")
 	a.plugins = &plugins.Manager{}
 	// No cached models: EnableChat's first snapshot comes from the cache-only
 	// path, and its background reload is the one that blocks.

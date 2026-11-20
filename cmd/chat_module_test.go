@@ -1,13 +1,14 @@
 package main
 
-// The chat module's API behind LISTPOCKET_CHAT_BACKEND. These tests drive the
-// real HTTP surface (mounted the way cmd/mcp.go mounts it) against a fake
-// OpenAI-compatible provider, so the prompt, tools, events and proposals are
-// checked end to end instead of through the runner's internals.
+// The chat module's API at /api/mcp/chat/v1. These tests drive the real HTTP
+// surface (mounted the way cmd/mcp.go mounts it) against a fake OpenAI-compatible
+// provider, so the prompt, tools, events and proposals are checked end to end
+// instead of through the runner's internals.
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,8 +23,12 @@ import (
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/flow"
+	"github.com/compdani/list_pocket/internal/flow/agent"
 	"github.com/compdani/list_pocket/internal/flow/llm"
+	"github.com/compdani/list_pocket/internal/flow/queue"
+	"github.com/compdani/list_pocket/internal/flow/tools"
 	"github.com/compdani/list_pocket/internal/plugins"
+	pbmcp "github.com/compdani/pocketbase-mcp"
 	"github.com/compdani/pocketbase-mcp/chat"
 )
 
@@ -76,9 +81,10 @@ func (c fakeChatCall) toolNames() map[string]bool {
 // fakeChatModel streams canned Chat Completions frames. reply sees the request
 // body, which is how a test scripts "call a tool first, then answer".
 type fakeChatModel struct {
-	mu     sync.Mutex
-	bodies [][]byte
-	reply  func(call int, body []byte) []string
+	mu      sync.Mutex
+	bodies  [][]byte
+	reply   func(call int, body []byte) []string
+	handler func(w http.ResponseWriter, r *http.Request, call int, body []byte)
 }
 
 func (f *fakeChatModel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +93,13 @@ func (f *fakeChatModel) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.bodies = append(f.bodies, body)
 	call := len(f.bodies) - 1
 	reply := f.reply
+	handler := f.handler
 	f.mu.Unlock()
+
+	if handler != nil {
+		handler(w, r, call, body)
+		return
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)
@@ -135,18 +147,21 @@ type chatTestFixture struct {
 	fake   *fakeChatModel
 }
 
-// newChatTestFixture mounts the MCP module (and chat, when backend is
-// "module") on the fixture app, exactly as cmd/mcp.go does in production.
-func newChatTestFixture(t *testing.T, backend string) *chatTestFixture {
+// newChatTestFixture mounts the MCP module and chat API on the fixture app,
+// along with the app's real routes (including the "GET /" catch-all), exactly
+// as cmd/mcp.go does in production.
+func newChatTestFixture(t *testing.T, opts ...func(*mcpFixture)) *chatTestFixture {
 	t.Helper()
 	f := newMCPFixture(t)
 	f.app.chatgpt = newChatGPTService(f.app.pb)
+	for _, opt := range opts {
+		opt(f)
+	}
 
 	fake := &fakeChatModel{reply: func(int, []byte) []string { return chatTextFrames("ok") }}
 	fakeServer := httptest.NewServer(fake)
 	t.Cleanup(fakeServer.Close)
 
-	t.Setenv("LISTPOCKET_CHAT_BACKEND", backend)
 	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
 	t.Setenv("LISTPOCKET_AI_BASE_URL", fakeServer.URL+"/v1")
 	t.Setenv("LISTPOCKET_AI_MODEL", "")
@@ -164,15 +179,11 @@ func newChatTestFixture(t *testing.T, backend string) *chatTestFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if backend == "module" {
-		// The app's own routes go in too, as registerServeRoutes does, including
-		// the "GET /" catch-all. The chat API is registered per method, so the
-		// two must coexist; BuildMux below fails the test if serve would panic.
-		// Without the module that catch-all answers every unknown path, so the
-		// legacy fixture leaves it out to keep "no chat route" observable as a 404.
-		router.BindFunc(func(e *pbcore.RequestEvent) error { e.Set(appContextKey, f.app); return e.Next() })
-		registerHandlers(router, f.app)
-	}
+	// The app's own routes go in too, as registerServeRoutes does, including
+	// the "GET /" catch-all. The chat API is registered per method, so the
+	// two must coexist; BuildMux below fails the test if serve would panic.
+	router.BindFunc(func(e *pbcore.RequestEvent) error { e.Set(appContextKey, f.app); return e.Next() })
+	registerHandlers(router, f.app)
 	f.app.mountMCP(&pbcore.ServeEvent{App: f.app.pb, Router: router})
 	if f.app.mcp == nil {
 		t.Fatal("the module was not mounted")
@@ -187,7 +198,16 @@ func newChatTestFixture(t *testing.T, backend string) *chatTestFixture {
 }
 
 func (f *chatTestFixture) setReplies(reply func(call int, body []byte) []string) {
+	f.fake.mu.Lock()
+	f.fake.handler = nil
 	f.fake.reply = reply
+	f.fake.mu.Unlock()
+}
+
+func (f *chatTestFixture) setHandler(handler func(w http.ResponseWriter, r *http.Request, call int, body []byte)) {
+	f.fake.mu.Lock()
+	f.fake.handler = handler
+	f.fake.mu.Unlock()
 }
 
 // do sends one JSON request to the mounted app.
@@ -364,28 +384,21 @@ func decodeChatCall(t *testing.T, body []byte) fakeChatCall {
 	return call
 }
 
-// a. The flag decides whether the chat routes exist at all, and /mcp never
-// depends on them.
-func TestChatModuleFlag(t *testing.T) {
-	off := newChatTestFixture(t, "legacy")
-	if _, ok := off.app.mcp.ChatRouter(); ok {
-		t.Fatal("chat must be off without the flag")
-	}
-	if code, raw := off.do(t, off.scopedToken, http.MethodGet, chatAPI+"/status", nil); code != http.StatusNotFound {
-		t.Fatalf("status without the flag: %d %s", code, raw)
-	}
-	code, raw := off.do(t, off.adminToken, http.MethodPost, "/mcp", map[string]any{
+// a. Chat and /mcp are both mounted by default, the legacy chat routes and
+// agent_* collections are gone, and ai_settings / oauth_credentials stay.
+func TestChatModuleMountedByDefault(t *testing.T) {
+	on := newChatTestFixture(t)
+	code, raw := on.do(t, on.adminToken, http.MethodPost, "/mcp", map[string]any{
 		"jsonrpc": "2.0", "id": 1, "method": "initialize",
 		"params": map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "test", "version": "1"}},
 	})
 	if code != http.StatusOK {
-		t.Fatalf("mcp with chat off: %d %s", code, raw)
+		t.Fatalf("mcp initialize: %d %s", code, raw)
 	}
 
-	on := newChatTestFixture(t, "module")
 	code, raw = on.do(t, on.scopedToken, http.MethodGet, chatAPI+"/status", nil)
 	if code != http.StatusOK {
-		t.Fatalf("status with the flag: %d %s", code, raw)
+		t.Fatalf("chat status: %d %s", code, raw)
 	}
 	var status struct {
 		Choices []struct {
@@ -393,6 +406,7 @@ func TestChatModuleFlag(t *testing.T) {
 		} `json:"choices"`
 		Features struct {
 			Context bool `json:"context"`
+			Ready   bool `json:"ready"`
 		} `json:"features"`
 	}
 	if err := json.Unmarshal(raw, &status); err != nil {
@@ -407,15 +421,38 @@ func TestChatModuleFlag(t *testing.T) {
 	if !found {
 		t.Fatalf("status choices: %+v", status.Choices)
 	}
-	if !status.Features.Context {
-		t.Fatal("turns must accept a page context")
+	if !status.Features.Context || !status.Features.Ready {
+		t.Fatalf("status features = %+v", status.Features)
+	}
+
+	// Legacy turn and conversation routes are removed.
+	for _, legacy := range []struct{ method, path string }{
+		{http.MethodPost, "/mailapi/ai/assistant/turns"},
+		{http.MethodPost, "/mailapi/agent/conversations"},
+		{http.MethodPost, "/mailapi/agent/attachments"},
+	} {
+		if code, _ := on.do(t, on.adminToken, legacy.method, legacy.path, map[string]any{}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+			t.Errorf("legacy %s %s: got %d, want 404/405", legacy.method, legacy.path, code)
+		}
+	}
+
+	// Migration 000063 dropped agent_* collections while keeping ai_settings and oauth_credentials.
+	for _, gone := range []string{"agent_conversations", "agent_messages", "agent_attachments"} {
+		if col, err := on.app.pb.FindCollectionByNameOrId(gone); err == nil && col != nil {
+			t.Errorf("legacy collection %q still exists after migrations", gone)
+		}
+	}
+	for _, kept := range []string{"ai_settings", "oauth_credentials"} {
+		if _, err := on.app.pb.FindCollectionByNameOrId(kept); err != nil {
+			t.Errorf("required collection %q missing: %v", kept, err)
+		}
 	}
 }
 
 // b. A side-panel turn behaves like today's assistant: same prompt, editor
 // tool offered, 128k ceiling, no parallel tool calls, tool events and text.
 func TestChatModuleSidePanelTurn(t *testing.T) {
-	f := newChatTestFixture(t, "module")
+	f := newChatTestFixture(t)
 	pageContext := json.RawMessage(`{"screen":"panel","path":"/admin/campaigns","page":"campaigns","params":{},"filters":{},"editor":null,"pictureReferences":[],"references":[]}`)
 
 	f.setReplies(func(_ int, body []byte) []string {
@@ -477,10 +514,10 @@ func TestChatModuleSidePanelTurn(t *testing.T) {
 	}
 }
 
-// c. The Agent page reads its references as the user, keeps them across turns
-// (StoreContext) and hides the editor tool.
+// c. The Agent page reads its references as the user, reports unreadable ones,
+// keeps them across turns (StoreContext) and hides the editor tool.
 func TestChatModuleAgentTurns(t *testing.T) {
-	f := newChatTestFixture(t, "module")
+	f := newChatTestFixture(t)
 	list, err := f.app.pb.FindFirstRecordByData("lists", "name", "MCP list")
 	if err != nil {
 		t.Fatal(err)
@@ -490,7 +527,10 @@ func TestChatModuleAgentTurns(t *testing.T) {
 	conv := f.conversation(t, f.scopedToken)
 	first, _ := json.Marshal(map[string]any{
 		"screen": "agent", "path": "/admin/agent",
-		"references": []map[string]string{{"type": "list", "id": list.Id, "label": "MCP list"}},
+		"references": []map[string]string{
+			{"type": "list", "id": list.Id, "label": "MCP list"},
+			{"type": "campaign", "id": "missing-id", "label": "Missing campaign"},
+		},
 	})
 	f.runTurn(t, f.scopedToken, conv, first)
 	second := json.RawMessage(`{"screen":"agent","path":"/admin/agent","references":[]}`)
@@ -507,6 +547,9 @@ func TestChatModuleAgentTurns(t *testing.T) {
 	}
 	if !strings.Contains(system, `label="MCP list"`) || !strings.Contains(system, "MCP list") {
 		t.Errorf("first turn doesn't include the list read as the user:\n%s", system)
+	}
+	if !strings.Contains(system, `(can't be read:`) {
+		t.Errorf("first turn doesn't report the unreadable reference:\n%s", system)
 	}
 	if !strings.Contains(system, `Current page/context: {"page":"agent","path":"/admin/agent"}`) {
 		t.Errorf("first turn doesn't use the agent page context:\n%s", system)
@@ -604,10 +647,11 @@ func refKeys(refs []agentRef) []string {
 	return keys
 }
 
-// d. A write becomes a proposal, approval applies it once, and a handler's
-// refusal comes back as 422 with the proposal still pending.
+// d. A write becomes a proposal, approval applies it once (re-approving fails),
+// reject declines it, edit-then-apply re-validates, and a handler's 400 refusal
+// comes back as 422 with the proposal still pending.
 func TestChatModuleProposals(t *testing.T) {
-	f := newChatTestFixture(t, "module")
+	f := newChatTestFixture(t)
 
 	// Approved: a valid list body.
 	f.setReplies(func(_ int, body []byte) []string {
@@ -647,8 +691,34 @@ func TestChatModuleProposals(t *testing.T) {
 	if _, err := f.app.pb.FindFirstRecordByData("lists", "name", "Proposal list"); err != nil {
 		t.Fatalf("the approved list wasn't created: %v", err)
 	}
+	// A second approve on the same revision must not run the write again.
+	if code, raw = f.decide(t, f.adminToken, proposal, revision, "approve"); code != http.StatusConflict && code != http.StatusOK {
+		t.Fatalf("duplicate approve: %d %s", code, raw)
+	}
+	if lists, err := f.app.pb.FindRecordsByFilter("lists", "name = 'Proposal list'", "", 10, 0); err != nil || len(lists) != 1 {
+		t.Fatalf("duplicate approve created extra lists: count=%d err=%v", len(lists), err)
+	}
 
-	// Refused: the handler answers 400, so the proposal stays pending.
+	// Reject: declines the proposal without writing.
+	f.setReplies(func(_ int, body []byte) []string {
+		if bytes.Contains(body, []byte(`"role":"tool"`)) {
+			return chatTextFrames("Waiting for your review.")
+		}
+		return chatToolFrames("call_reject", "propose_create_list", map[string]any{
+			"body": map[string]any{"name": "Rejected list", "type": "public", "optin": "single"},
+		})
+	})
+	rejEvents := f.runTurn(t, f.adminToken, f.conversation(t, f.adminToken), nil)
+	rejID, rejRev := chatProposalFrom(t, rejEvents)
+	if code, raw = f.decide(t, f.adminToken, rejID, rejRev, "reject"); code != http.StatusOK || !strings.Contains(string(raw), `"state":"rejected"`) {
+		t.Fatalf("reject: %d %s", code, raw)
+	}
+	if _, err := f.app.pb.FindFirstRecordByData("lists", "name", "Rejected list"); err == nil {
+		t.Fatal("a rejected proposal wrote the list")
+	}
+
+	// Refused: the handler answers 400, so the proposal stays pending. Editing
+	// the arguments to a valid list and approving then succeeds.
 	f.setReplies(func(_ int, body []byte) []string {
 		if bytes.Contains(body, []byte(`"role":"tool"`)) {
 			return chatTextFrames("That was refused.")
@@ -684,7 +754,8 @@ func TestChatModuleProposals(t *testing.T) {
 	}
 	var stored struct {
 		Proposal struct {
-			State string `json:"state"`
+			State    string `json:"state"`
+			Revision int    `json:"revision"`
 		} `json:"proposal"`
 	}
 	if err := json.Unmarshal(raw, &stored); err != nil {
@@ -692,6 +763,18 @@ func TestChatModuleProposals(t *testing.T) {
 	}
 	if stored.Proposal.State != "pending" {
 		t.Fatalf("stored state = %q", stored.Proposal.State)
+	}
+	// Edit-then-apply on the pending proposal succeeds at the bumped revision.
+	code, raw = f.do(t, f.adminToken, http.MethodPost, chatAPI+"/proposals/"+badProposal+"/decision", map[string]any{
+		"decision":  "approve",
+		"revision":  stored.Proposal.Revision,
+		"arguments": map[string]any{"body": map[string]any{"name": "Edited list", "type": "public", "optin": "single"}},
+	})
+	if code != http.StatusOK || !strings.Contains(string(raw), `"state":"succeeded"`) {
+		t.Fatalf("edit-then-apply: %d %s", code, raw)
+	}
+	if _, err := f.app.pb.FindFirstRecordByData("lists", "name", "Edited list"); err != nil {
+		t.Fatalf("edited proposal did not create list: %v", err)
 	}
 
 	// PATCH: the id becomes the route value and the body a JSON patch.
@@ -728,7 +811,7 @@ func TestChatModuleProposals(t *testing.T) {
 // e. An unknown reference type in this message is refused before anything is
 // stored.
 func TestChatModuleUnknownReference(t *testing.T) {
-	f := newChatTestFixture(t, "module")
+	f := newChatTestFixture(t)
 	conv := f.conversation(t, f.scopedToken)
 	pageContext := json.RawMessage(`{"screen":"agent","path":"/admin/agent","references":[{"type":"bogus","id":"x","label":"X"}]}`)
 	_, code, raw := f.startTurn(t, f.scopedToken, conv, "what is this?", pageContext)
@@ -751,7 +834,7 @@ func TestChatModuleUnknownReference(t *testing.T) {
 
 // f. Plugin tools are only in a super admin's tool list.
 func TestChatModulePluginTools(t *testing.T) {
-	f := newChatTestFixture(t, "module")
+	f := newChatTestFixture(t)
 	f.setReplies(func(_ int, _ []byte) []string { return chatTextFrames("ok") })
 
 	f.runTurn(t, f.adminToken, f.conversation(t, f.adminToken), nil)
@@ -825,7 +908,6 @@ func TestEnableChatDoesNotFetchModelsAtStartup(t *testing.T) {
 	t.Cleanup(func() { shutdownApp(a) })
 	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
 	t.Setenv("LISTPOCKET_AI_BASE_URL", "http://"+listener.Addr().String()+"/v1")
-	t.Setenv("LISTPOCKET_CHAT_BACKEND", "module")
 	a.plugins = &plugins.Manager{}
 	cacheModels(a, llm.ProviderAPI, cachedAIModels{models: []aiModel{{ID: "cached-model", Name: "Cached"}}})
 
@@ -855,5 +937,303 @@ func TestEnableChatDoesNotFetchModelsAtStartup(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("first snapshot choices = %+v", choices)
+	}
+}
+
+// i. Flow proposal warnings are stored on the proposal and sent back in the
+// model's tool result.
+func TestChatModuleFlowProposalWarnings(t *testing.T) {
+	f := newChatTestFixture(t, func(m *mcpFixture) {
+		m.app.flows = &flowEngine{engine: flow.NewEngine(m.app.pb, &agent.Runner{Tools: tools.NewRegistry()}, nil, queue.New(m.app.pb))}
+	})
+	// An unreachable node produces a validation warning without blocking the proposal.
+	def := map[string]any{
+		"name":    "warning_workflow",
+		"trigger": map[string]any{"type": "manual"},
+		"nodes": []any{
+			map[string]any{"id": "start", "type": "start", "next": "done"},
+			map[string]any{"id": "done", "type": "end"},
+			map[string]any{"id": "orphan", "type": "end"},
+		},
+	}
+	f.setReplies(func(_ int, body []byte) []string {
+		if bytes.Contains(body, []byte(`"role":"tool"`)) {
+			return chatTextFrames("Noted the warning.")
+		}
+		return chatToolFrames("call_wf", "propose_workflow", map[string]any{
+			"name":       "warning_workflow",
+			"summary":    "Create workflow with unreachable step",
+			"definition": def,
+		})
+	})
+
+	conv := f.conversation(t, f.adminToken)
+	events := f.runTurn(t, f.adminToken, conv, nil)
+
+	var foundWarning bool
+	for _, ev := range events {
+		if ev.Type != "proposal.created" {
+			continue
+		}
+		var data struct {
+			Proposal struct {
+				Warnings []string `json:"warnings"`
+			} `json:"proposal"`
+		}
+		chatEventData(t, ev, &data)
+		if len(data.Proposal.Warnings) > 0 {
+			foundWarning = true
+		}
+	}
+	if !foundWarning {
+		t.Fatalf("proposal.created missing flow warnings: %+v", events)
+	}
+	calls := f.fake.recorded()
+	if len(calls) < 2 || !bytes.Contains(calls[1], []byte("orphan")) {
+		t.Fatalf("model tool result missing flow warning: calls=%d", len(calls))
+	}
+}
+
+// j. Plugin proposals snapshot draft files via ToolSpec.Prepare so editing the
+// live draft after proposal creation never changes what approval installs.
+func TestChatModulePluginProposalSnapshot(t *testing.T) {
+	f := newChatTestFixture(t, func(m *mcpFixture) {
+		m.app.plugins = plugins.New(m.app.pb, plugins.Options{Dir: t.TempDir()})
+	})
+	manifestV1 := `{"schemaVersion":1,"id":"snap_test","name":"Snap Test","version":"1.0.0","server":{"entry":"server.js"}}`
+	serverV1 := `// v1`
+	if _, err := f.app.plugins.WriteDraft("snap_test", []plugins.SourceFile{
+		{Path: "plugin.json", Content: manifestV1},
+		{Path: "server.js", Content: serverV1},
+	}, nil, true); err != nil {
+		t.Fatal(err)
+	}
+
+	f.setReplies(func(_ int, body []byte) []string {
+		if bytes.Contains(body, []byte(`"role":"tool"`)) {
+			return chatTextFrames("Ready to install.")
+		}
+		return chatToolFrames("call_plug", "propose_plugin", map[string]any{
+			"summary": "Install snap_test v1",
+			"plugin":  "snap_test",
+		})
+	})
+	conv := f.conversation(t, f.adminToken)
+	events := f.runTurn(t, f.adminToken, conv, nil)
+	proposalID, revision := chatProposalFrom(t, events)
+
+	// Mutate the live draft after the proposal was created.
+	if _, err := f.app.plugins.WriteDraft("snap_test", []plugins.SourceFile{
+		{Path: "plugin.json", Content: `{"schemaVersion":1,"id":"snap_test","name":"Snap Test","version":"2.0.0","server":{"entry":"server.js"}}`},
+		{Path: "server.js", Content: `// mutated v2`},
+	}, nil, true); err != nil {
+		t.Fatal(err)
+	}
+
+	code, raw := f.decide(t, f.adminToken, proposalID, revision, "approve")
+	if code != http.StatusOK || !strings.Contains(string(raw), `"state":"succeeded"`) {
+		t.Fatalf("approve plugin proposal: %d %s", code, raw)
+	}
+	installed, err := f.app.plugins.ReadSource("snap_test", plugins.MaxReadBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotServer string
+	for _, file := range installed.Files {
+		if file.Path == "server.js" {
+			gotServer = file.Content
+		}
+	}
+	if gotServer != serverV1 {
+		t.Fatalf("installed server.js = %q, want snapshotted %q", gotServer, serverV1)
+	}
+}
+
+// k. Turn limits match the legacy surfaces: 1 hour on the Agent page and for
+// super admins with plugins on the side panel, AI builder timeout otherwise,
+// and 16 tool steps everywhere.
+func TestChatTurnSetupLimits(t *testing.T) {
+	f := newChatTestFixture(t)
+	ctx := context.Background()
+
+	usersColID := f.scoped.Collection().Id
+	agentSetup, err := f.app.chatTurnSetup(ctx, chat.TurnInput{
+		Identity: pbmcp.Principal{ID: f.scoped.Id, CollectionName: "users", CollectionID: usersColID, Token: f.scopedToken},
+		Context:  json.RawMessage(`{"screen":"agent","path":"/agent"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agentSetup.TurnTimeout != time.Duration(agentTurnTimeoutSeconds)*time.Second || agentSetup.MaxSteps != assistantMaxRounds {
+		t.Errorf("agent limits = (%s, %d)", agentSetup.TurnTimeout, agentSetup.MaxSteps)
+	}
+	if agentSetup.Tools == nil || agentSetup.Tools("propose_editor_patch") || !agentSetup.Tools("lists") {
+		t.Error("agent setup must hide propose_editor_patch only")
+	}
+
+	staffPanel, err := f.app.chatTurnSetup(ctx, chat.TurnInput{
+		Identity: pbmcp.Principal{ID: f.scoped.Id, CollectionName: "users", CollectionID: usersColID, Token: f.scopedToken},
+		Context:  json.RawMessage(`{"screen":"panel","path":"/campaigns"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staffPanel.TurnTimeout != time.Duration(defaultAIBuilderTimeoutSeconds)*time.Second || staffPanel.MaxSteps != assistantMaxRounds {
+		t.Errorf("staff panel limits = (%s, %d)", staffPanel.TurnTimeout, staffPanel.MaxSteps)
+	}
+
+	adminPanel, err := f.app.chatTurnSetup(ctx, chat.TurnInput{
+		Identity: pbmcp.Principal{ID: f.admin.Id, CollectionName: "users", CollectionID: usersColID, Token: f.adminToken},
+		Context:  json.RawMessage(`{"screen":"panel","path":"/plugins"}`),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adminPanel.TurnTimeout != time.Duration(agentTurnTimeoutSeconds)*time.Second || adminPanel.MaxSteps != assistantMaxRounds {
+		t.Errorf("super admin panel limits = (%s, %d)", adminPanel.TurnTimeout, adminPanel.MaxSteps)
+	}
+}
+
+// l. Refused max_completion_tokens retries without it, finish_reason:length
+// fails the turn, and 401 surfaces as provider_auth.
+func TestChatModuleOutputLimitAndTruncation(t *testing.T) {
+	f := newChatTestFixture(t)
+
+	// 1. Model refuses max_completion_tokens -> module retries once without it.
+	var seenLimits []int
+	f.setHandler(func(w http.ResponseWriter, _ *http.Request, _ int, body []byte) {
+		call := decodeChatCall(t, body)
+		seenLimits = append(seenLimits, call.MaxCompletionTokens)
+		if call.MaxCompletionTokens > 0 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"Unsupported parameter: 'max_completion_tokens' is not supported with this model."}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, frame := range chatTextFrames("Retried fine.") {
+			fmt.Fprintf(w, "data: %s\n\n", frame)
+		}
+	})
+	f.runTurn(t, f.scopedToken, f.conversation(t, f.scopedToken), nil)
+	if fmt.Sprint(seenLimits) != fmt.Sprintf("[%d 0]", assistantMaxOutputTokens) {
+		t.Fatalf("seen max_completion_tokens = %v, want [%d 0]", seenLimits, assistantMaxOutputTokens)
+	}
+
+	// 2. finish_reason: length fails the turn instead of keeping a truncated reply.
+	f.setReplies(func(_ int, _ []byte) []string {
+		return []string{
+			`{"choices":[{"delta":{"content":"Cut off"}}]}`,
+			`{"choices":[{"delta":{},"finish_reason":"length"}]}`,
+			`[DONE]`,
+		}
+	})
+	turnID, code, raw := f.startTurn(t, f.scopedToken, f.conversation(t, f.scopedToken), "long reply", nil)
+	if code != http.StatusAccepted {
+		t.Fatalf("start truncated turn: %d %s", code, raw)
+	}
+	if events := f.events(t, f.scopedToken, turnID); !chatEventSeen(events, "turn.failed") {
+		t.Fatalf("truncated reply should fail the turn: %+v", events)
+	}
+
+	// 3. 401 from provider surfaces as failure code provider_auth.
+	f.setHandler(func(w http.ResponseWriter, _ *http.Request, _ int, _ []byte) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"bad key"}}`))
+	})
+	turnID, code, raw = f.startTurn(t, f.scopedToken, f.conversation(t, f.scopedToken), "auth fail", nil)
+	if code != http.StatusAccepted {
+		t.Fatalf("start auth-fail turn: %d %s", code, raw)
+	}
+	events := f.events(t, f.scopedToken, turnID)
+	var gotCode string
+	for _, ev := range events {
+		if ev.Type == "turn.failed" {
+			var d struct {
+				Code string `json:"code"`
+			}
+			chatEventData(t, ev, &d)
+			gotCode = d.Code
+		}
+	}
+	if gotCode != "provider_auth" {
+		t.Fatalf("401 failure code = %q, want provider_auth (%+v)", gotCode, events)
+	}
+}
+
+// m. First-message titles, one active turn per conversation (409), stop
+// (cancel), and SSE replay after a cursor without re-running tools.
+func TestChatModuleTurnLifecycle(t *testing.T) {
+	f := newChatTestFixture(t)
+
+	// 1. First message sets the conversation title, and reconnecting after seq 1
+	// replays remaining events without calling the model or tools again.
+	toolCalls := 0
+	f.setReplies(func(_ int, body []byte) []string {
+		if bytes.Contains(body, []byte(`"role":"tool"`)) {
+			return chatTextFrames("Done listing.")
+		}
+		toolCalls++
+		return chatToolFrames("call_1", "lists", map[string]any{})
+	})
+	conv := f.conversation(t, f.scopedToken)
+	turnID, code, raw := f.startTurn(t, f.scopedToken, conv, "Show my lists please", nil)
+	if code != http.StatusAccepted {
+		t.Fatalf("start turn: %d %s", code, raw)
+	}
+	allEvents := f.events(t, f.scopedToken, turnID)
+	if !chatEventSeen(allEvents, "turn.completed") || toolCalls != 1 {
+		t.Fatalf("events=%+v toolCalls=%d", allEvents, toolCalls)
+	}
+	// Replay from after=first seq: must not re-run tools and must omit seq 1.
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s%s/turns/%s/events?after=%d", f.server.URL, chatAPI, turnID, allEvents[0].Seq), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+f.scopedToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayBody, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(replayBody), `"turn.completed"`) || toolCalls != 1 {
+		t.Fatalf("replay failed or reran tool: toolCalls=%d body=%s", toolCalls, replayBody)
+	}
+
+	code, raw = f.do(t, f.scopedToken, http.MethodGet, chatAPI+"/conversations/"+conv, nil)
+	if code != http.StatusOK || !strings.Contains(string(raw), `"title":"Show my lists please"`) {
+		t.Fatalf("first-message title missing: %d %s", code, raw)
+	}
+
+	// 2. Active turn rejects a second turn with 409, and cancel stops it.
+	started := make(chan struct{}, 1)
+	f.setHandler(func(w http.ResponseWriter, r *http.Request, _ int, _ []byte) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	})
+	conv2 := f.conversation(t, f.scopedToken)
+	activeTurn, code, raw := f.startTurn(t, f.scopedToken, conv2, "block me", nil)
+	if code != http.StatusAccepted {
+		t.Fatalf("start blocking turn: %d %s", code, raw)
+	}
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocking turn never reached provider")
+	}
+	if _, conflictCode, conflictBody := f.startTurn(t, f.scopedToken, conv2, "second turn", nil); conflictCode != http.StatusConflict {
+		t.Fatalf("concurrent turn on same conversation: %d %s, want 409", conflictCode, conflictBody)
+	}
+	if code, raw := f.do(t, f.scopedToken, http.MethodPost, chatAPI+"/turns/"+activeTurn+"/cancel", map[string]any{}); code != http.StatusOK {
+		t.Fatalf("cancel turn: %d %s", code, raw)
+	}
+	events := f.events(t, f.scopedToken, activeTurn)
+	if !chatEventSeen(events, "turn.cancelled") && !chatEventSeen(events, "turn.failed") {
+		t.Fatalf("cancelled turn did not end: %+v", events)
 	}
 }

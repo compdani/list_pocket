@@ -64,12 +64,9 @@ func (a *App) mountMCP(se *pbcore.ServeEvent) {
 		return
 	}
 	a.mcp = srv
-	// Chat is opt-in: the legacy endpoints stay the live surface until the flag
-	// moves a front end over. A failure here leaves /mcp mounted as it is.
-	if chatModuleEnabled() {
-		if err := a.enableChat(srv); err != nil {
-			a.logf("chat: API disabled: %v", err)
-		}
+	// Enable the chat API alongside /mcp. A failure here leaves /mcp mounted.
+	if err := a.enableChat(srv); err != nil {
+		a.logf("chat: API disabled: %v", err)
 	}
 	if err := srv.RegisterRoutes(se.Router); err != nil {
 		a.logf("mcp: registering routes: %v", err)
