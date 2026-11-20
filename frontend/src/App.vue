@@ -215,7 +215,7 @@
       </div>
     </v-overlay>
 
-    <AIAssistantHost v-if="$root.isLoaded && !isAuthPage" />
+    <AIAssistantChat v-if="$root.isLoaded && !isAuthPage" />
     <confirm-dialog />
 
     <v-snackbar-queue
@@ -236,7 +236,7 @@ import logoLight from './assets/logo.svg';
 import logoDark from './assets/logo-dark.svg';
 import { uris } from './constants';
 import { pb } from './api';
-import AIAssistantHost from './components/AIAssistantHost.vue';
+import AIAssistantChat from './components/AIAssistantChat.vue';
 import { assistantContext } from './assistant/context';
 import Navigation from './components/Navigation.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
@@ -258,7 +258,7 @@ export default {
 
   components: {
     Navigation,
-    AIAssistantHost,
+    AIAssistantChat,
     ConfirmDialog,
   },
 

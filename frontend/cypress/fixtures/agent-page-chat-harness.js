@@ -1,12 +1,11 @@
-// Mounts views/AgentRoute.vue with /api/config saying the chat module is on, so the
-// route picks views/AgentChat.vue (the module chat API at /api/mcp/chat/v1).
+// Mounts views/AgentChat.vue directly (the module chat API at /api/mcp/chat/v1).
 // The spec stubs the module API with cy.intercept.
 import { createApp, h } from 'vue';
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
 import { VApp, VMain } from 'vuetify/components';
 import vuetify from '../../src/plugins/vuetify';
 import store from '../../src/store';
-import AgentRoute from '../../src/views/AgentRoute.vue';
+import AgentChat from '../../src/views/AgentChat.vue';
 import { pb } from '../../src/api';
 
 // Enough English to read the page; other keys show as themselves.
@@ -23,13 +22,9 @@ const EN = {
 };
 const t = (key, params = {}) => (EN[key] || key).replace(/\{(\w+)\}/g, (_, k) => params[k] ?? '');
 
-// views/AgentRoute.vue decides from the store's serverConfig, which main.js loads
-// from /api/config before mounting. Here the fixture states it directly.
-store.commit('setModelResponse', { model: 'serverConfig', data: { chat_backend: 'module' } });
-
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/agent/:id?', name: 'agent', component: AgentRoute }, { path: '/:rest(.*)*', component: { render: () => h('div') } }],
+  routes: [{ path: '/agent/:id?', name: 'agent', component: AgentChat }, { path: '/:rest(.*)*', component: { render: () => h('div') } }],
 });
 await router.push(new URLSearchParams(location.search).get('path') || '/agent');
 pb.authStore.save('fixture-token', { id: 'fixture-owner', collectionId: 'users' });

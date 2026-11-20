@@ -1,4 +1,4 @@
-// The Agent page on the module chat API: views/AgentRoute.vue → views/AgentChat.vue
+// The Agent page on the module chat API: views/AgentChat.vue
 // hosting <lp-agent-page>, with /api/mcp/chat/v1 stubbed. The page draws inside the
 // element's shadow root.
 const fixture = '/admin/cypress/fixtures/agent-page-chat-harness.html';

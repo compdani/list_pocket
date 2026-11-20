@@ -81,9 +81,10 @@ import { ChatController } from '@pocketbase-mcp/chat-client';
 import { ChatClient } from '@pocketbase-mcp/chat-client';
 import { assistantContext } from '../assistant/context';
 import {
-  chatErrorText, choiceIdFor, cleanPictures, createEditorAdapter, editorContextOf,
-  editorPrecheckError, moveDraftPictures, panelPageContext, picturesFor, referencesFromContext,
-  retryText, reviewPartOf, savePictures, storedModelFor, undoLastEdit,
+  chatErrorText, choiceIdFor, cleanPictures, clearLegacyAssistantStorage,
+  createEditorAdapter, editorContextOf, editorPrecheckError, moveDraftPictures,
+  panelPageContext, picturesFor, referencesFromContext, retryText, reviewPartOf,
+  savePictures, storedModelFor, undoLastEdit,
 } from '../assistant/chat-host.mjs';
 import {
   createSubmitCapture, decideModuleProposal, holdComposerUntilReady,
@@ -424,6 +425,7 @@ watch(() => assistantContext.editor, (next, prev) => {
 });
 
 onMounted(async () => {
+  clearLegacyAssistantStorage(localStorage);
   const el = panel.value;
   el.chat = chat;
   el.disabled = true;

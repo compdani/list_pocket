@@ -1,5 +1,4 @@
-// Mounts components/AIAssistantHost.vue with /api/config saying the chat module
-// is on, so the side panel is components/AIAssistantChat.vue. The spec stubs
+// Mounts components/AIAssistantChat.vue directly. The spec stubs
 // /api/mcp/chat/v1. ?path= sets the route the turn's context describes.
 // ?editor=campaign|template|workflow|visual registers that editor.
 import { createApp, h, ref } from 'vue';
@@ -7,7 +6,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import { VApp, VMain } from 'vuetify/components';
 import vuetify from '../../src/plugins/vuetify';
 import store from '../../src/store';
-import AIAssistantHost from '../../src/components/AIAssistantHost.vue';
+import AIAssistantChat from '../../src/components/AIAssistantChat.vue';
 import { pb } from '../../src/api';
 import { assistantContext, registerAssistantEditor } from '../../src/assistant/context';
 import { events } from '../../src/utils/events';
@@ -17,8 +16,6 @@ const EN = {
   Campaign: 'Campaign',
 };
 const t = (key, params = {}) => (EN[key] || key).replace(/\{(\w+)\}/g, (_, name) => params[name] ?? '');
-
-store.commit('setModelResponse', { model: 'serverConfig', data: { chat_backend: 'module' } });
 
 const router = createRouter({
   history: createMemoryHistory(),
@@ -85,7 +82,7 @@ const app = createApp({
   render: () => h(VApp, {}, () => [h(VMain, {}, () => [
     h('pre', { 'data-cy': 'fixture-body' }, JSON.stringify(snapshot.value)),
     h('button', { 'data-cy': 'fixture-edit', onClick: change }, 'Manual edit'),
-    h(AIAssistantHost),
+    h(AIAssistantChat),
   ])]),
 });
 app.config.globalProperties.$t = t;

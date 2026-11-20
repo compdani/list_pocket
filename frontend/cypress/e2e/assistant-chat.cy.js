@@ -1,4 +1,4 @@
-// The side panel on the module chat API: AIAssistantHost → AIAssistantChat,
+// The side panel on the module chat API: AIAssistantChat,
 // hosting <lp-agent-panel>, with /api/mcp/chat/v1 stubbed.
 const fixture = '/admin/cypress/fixtures/assistant-chat-harness.html';
 
@@ -618,6 +618,24 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
       expect(retried.length).to.be.greaterThan(1);
       expect(retried[1].text).to.eq('Hello there');
       expect(retried[1].model).to.eq('gpt-4.1-mini');
+    });
+  });
+
+  it('clears legacy assistant localStorage keys on load while keeping remembered model', () => {
+    stubList([]);
+    cy.visit(`${fixture}?editor=none`, {
+      onBeforeLoad: (win) => {
+        win.localStorage.clear();
+        win.localStorage.setItem('listpocket_assistant_v1:fixture-owner', '{"threads":[]}');
+        win.localStorage.setItem('listpocket_ai_builder_legacy_owner', 'fixture-owner');
+        win.localStorage.setItem('listpocket_agent_model', JSON.stringify({ provider: 'api', model: 'gpt-4.1-mini' }));
+      },
+    });
+    cy.wait('@status');
+    cy.window().then((win) => {
+      expect(win.localStorage.getItem('listpocket_assistant_v1:fixture-owner')).to.eq(null);
+      expect(win.localStorage.getItem('listpocket_ai_builder_legacy_owner')).to.eq(null);
+      expect(win.localStorage.getItem('listpocket_agent_model')).to.contain('gpt-4.1-mini');
     });
   });
 });

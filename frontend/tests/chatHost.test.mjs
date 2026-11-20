@@ -5,12 +5,12 @@ import { bindAgentPanel, errorText, PROPOSAL_STATE_TEXT as BINDING_PROPOSAL_STAT
 import { applyEditorPatch, revision } from '../src/assistant/patches.mjs';
 import {
   AGENT_REF_CAP, MID_APPLY_TEXT, PANEL_DRAFT_PICTURES, PROPOSAL_STATE_TEXT, PROVIDER_AUTH_TEXT,
-  UNDO_CHANGED_TEXT, USAGE_LIMIT_TEXT, WRONG_EDITOR_TEXT, backendOf,
-  cardProposalOf, chatErrorText, choiceIdFor, cleanPictures, contextReferencesFromTranscript,
-  createEditorAdapter, editorContextOf, editorPrecheckError, judgeEditorProposal, labelToolEntries,
-  moveDraftPictures, navigationWrite, pageContext, panelPageContext, picturesFor,
-  proposalProblemText, referencesFromContext, referencesOf, retryText,
-  reviewPartOf, savePictures, storedModelFor, undoLastEdit,
+  UNDO_CHANGED_TEXT, USAGE_LIMIT_TEXT, WRONG_EDITOR_TEXT,
+  cardProposalOf, chatErrorText, choiceIdFor, cleanPictures, clearLegacyAssistantStorage,
+  contextReferencesFromTranscript, createEditorAdapter, editorContextOf, editorPrecheckError,
+  judgeEditorProposal, labelToolEntries, moveDraftPictures, navigationWrite, pageContext,
+  panelPageContext, picturesFor, proposalProblemText, referencesFromContext, referencesOf,
+  retryText, reviewPartOf, savePictures, storedModelFor, toolLabel, undoLastEdit,
 } from '../src/assistant/chat-host.mjs';
 
 // --- page context -----------------------------------------------------------
@@ -216,16 +216,35 @@ test('only a refusal carries the server message; every other code stays generic'
   assert.equal(proposalProblemText(null), '');
 });
 
-// --- host choice and model memory ------------------------------------------
+// --- tool labels, legacy cleanup and model memory ---------------------------
 
-test('the /agent route waits for config, then picks exactly one host', () => {
-  assert.equal(backendOf(undefined), '');
-  assert.equal(backendOf([]), '');
-  assert.equal(backendOf({}), '');
-  assert.equal(backendOf({ chat_backend: 'module' }), 'module');
-  assert.equal(backendOf({ chat_backend: 'legacy' }), 'legacy');
-  assert.equal(backendOf({ chat_backend: 'something' }), 'legacy');
-  assert.equal(backendOf({ from_email: 'x' }), 'legacy');
+test('tool labels format tool names plainly', () => {
+  assert.equal(toolLabel('propose_editor_patch'), 'Editor patch');
+  assert.equal(toolLabel('create_campaign_draft'), 'Create campaign draft');
+  assert.equal(toolLabel('lists'), 'Lists');
+});
+
+test('legacy side-panel storage is cleared while kept keys stay intact', () => {
+  const map = new Map([
+    ['listpocket_assistant_v1:u1', '{"threads":[]}'],
+    ['listpocket_assistant_v1:u2', '{"threads":[]}'],
+    ['listpocket_ai_builder_legacy_owner', 'u1'],
+    ['listpocket_agent_model', '{"provider":"api","model":"gpt-4.1"}'],
+    ['listpocket_assistant_pictures_v1:u1', '{}'],
+    ['listpocket_ai_builder_threads_v1', '{"bySessionKey":{}}'],
+  ]);
+  const storage = {
+    get length() { return map.size; },
+    key: (i) => Array.from(map.keys())[i] ?? null,
+    removeItem: (k) => { map.delete(k); },
+  };
+  clearLegacyAssistantStorage(storage);
+  assert.equal(map.has('listpocket_assistant_v1:u1'), false);
+  assert.equal(map.has('listpocket_assistant_v1:u2'), false);
+  assert.equal(map.has('listpocket_ai_builder_legacy_owner'), false);
+  assert.equal(map.has('listpocket_agent_model'), true);
+  assert.equal(map.has('listpocket_assistant_pictures_v1:u1'), true);
+  assert.equal(map.has('listpocket_ai_builder_threads_v1'), true);
 });
 
 test('the remembered legacy model preselects a matching choice, or none', () => {

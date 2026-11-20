@@ -1,21 +1,14 @@
 // <lp-agent-page>: the agent page (the agent-panel package's <agent-page>) as List Pocket
-// uses it: the app's theme, markdown, proposal cards, icons for context references, and
-// the server's size limits for attachments. views/Agent.vue supplies the data.
+// uses it: the app's theme, markdown, proposal cards, and icons for context references.
+// views/AgentChat.vue sets `chat` to its ChatController and binds it.
 //
-// The module-backed host (views/AgentChat.vue) also sets `chat` to its ChatController.
 // The overridden `entries` setter copies busy/running onto proposal cards. That
 // setter is the single choke point: the binding writes `entries` on every
 // controller change, so no watcher can race it.
 import { AgentPageElement } from 'agent-panel/page-element';
-import { fileProblem } from '../agent/parts.mjs';
 import {
-  LP_LABELS, LP_STYLES, referenceIcon, renderMarkdown, renderProposal,
+  LP_LABELS, LP_STYLES, referenceIcon, renderMarkdown,
 } from './lp-agent-common';
-
-// What `agent/attachments` takes: images and PDFs up to 6 MB, text files up to 2 MB.
-// The module-backed host takes its accept and size limits from /status instead (the
-// binding mirrors them onto the element), so neither this nor fileProblem applies there.
-export const AGENT_PAGE_ACCEPT = 'image/*,application/pdf,text/*,.csv,.json,.txt,.md,.tsv,.html,.xml,.yaml,.yml';
 
 export class ListPocketAgentPage extends AgentPageElement {
   static tagName = 'lp-agent-page';
@@ -26,8 +19,6 @@ export class ListPocketAgentPage extends AgentPageElement {
 
   constructor() {
     super();
-    // The module-backed host's controller (null on the legacy page) and the
-    // proposals with a decision in flight, which the proposal renderer reads.
     this.chat = null;
     this.busyProposals = new Set();
     this.rawEntries = [];
@@ -63,24 +54,8 @@ export class ListPocketAgentPage extends AgentPageElement {
     return renderMarkdown(text);
   }
 
-  renderEntry(entry) {
-    // The legacy host's card is `{ proposal, busy, running }` with no
-    // proposalId. The module binding's entry also has a `proposal`, plus
-    // proposalId, and its renderer is registered with defineEntry.
-    if (entry.type === 'proposal' && entry.proposal && !entry.proposalId) return renderProposal(this, entry);
-    return super.renderEntry(entry);
-  }
-
   referenceIcon(ref) {
     return referenceIcon(ref);
-  }
-
-  // Text files have a lower limit than images and PDFs on the legacy host. The
-  // module host takes its accept and size limits from /status (the binding
-  // mirrors them onto the element), so this override would undercut them.
-  fileProblem(file, current) {
-    if (this.chat) return super.fileProblem(file, current);
-    return fileProblem(file) || super.fileProblem(file, current);
   }
 }
 

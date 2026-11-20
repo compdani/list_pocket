@@ -75,11 +75,32 @@ export function navigationWrite({
   return { method: intent === 'push' ? 'push' : 'replace', id: active };
 }
 
-/** Which host the /agent route renders, from /api/config. '' means not loaded. */
-export function backendOf(serverConfig) {
-  if (!serverConfig || typeof serverConfig !== 'object' || Array.isArray(serverConfig)) return '';
-  if (Object.keys(serverConfig).length === 0) return '';
-  return serverConfig.chat_backend === 'module' ? 'module' : 'legacy';
+/** Plain-English label for one assistant tool name. */
+export function toolLabel(name) {
+  const text = String(name || '').replace(/^propose_/, '').replace(/_/g, ' ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Remove the legacy side panel's localStorage keys on load. Keeps
+ * `listpocket_agent_model`, `listpocket_assistant_pictures_v1:*`, and
+ * `listpocket_ai_builder_threads_v1` (still used by TemplateForm's AI dialog).
+ */
+export function clearLegacyAssistantStorage(storage) {
+  if (!storage || typeof storage.removeItem !== 'function') return;
+  try {
+    const keys = [];
+    if (typeof storage.length === 'number' && typeof storage.key === 'function') {
+      for (let i = 0; i < storage.length; i += 1) {
+        const key = storage.key(i);
+        if (typeof key === 'string' && key.startsWith('listpocket_assistant_v1:')) keys.push(key);
+      }
+    }
+    keys.push('listpocket_ai_builder_legacy_owner');
+    for (const key of keys) storage.removeItem(key);
+  } catch {
+    // Storage access can be blocked in private contexts.
+  }
 }
 
 /**
