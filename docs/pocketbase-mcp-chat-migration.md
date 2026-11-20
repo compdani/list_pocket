@@ -293,7 +293,7 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 | 1. Backend behind the flag | Items 1–8 | `go test ./cmd` green. Golden tool tests pass. Both engines selectable. **Done in `ea69a35..HEAD`** ✅ |
 | 2. Agent page | Item 10 for `Agent.vue` | `agent-page.cy.js` parity suite passes on `module`. **Done:** `AgentRoute.vue` picks the host, `AgentChat.vue` binds the module controller, `chat-host.mjs` holds the pure logic, and `agent-page-chat.cy.js` passes; the legacy `agent-page.cy.js` is unchanged ✅ |
 | 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant-chat.cy.js` passes on `module`. Editor apply and undo work on campaign, template and workflow editors. **Done:** `AIAssistantHost.vue` picks the host, `AIAssistantChat.vue` binds the module controller, and the legacy `assistant.cy.js` is unchanged ✅ |
-| 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated. `GET /` stays the public catch-all (see notes) |
+| 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated. `GET /` stays the public catch-all (see notes). **Done:** chat module always mounted, `LISTPOCKET_CHAT_BACKEND` and `chat_backend` removed, migration `000063_drop_legacy_agent_tables.go` drops `agent_*`, legacy Go handlers/routes and legacy Vue/Cypress/helper files removed, side panel clears legacy `localStorage` keys on load ✅ |
 
 ### Phase 1 notes
 
@@ -330,43 +330,46 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 
 ### Phase 4 notes
 
-- `GET /` is the public catch-all for both backends. Since module v0.1.7 the chat routes are registered per HTTP method, so they no longer conflict with that pattern and unknown public paths still render the home page. The chat fixture mounts the app's real routes with the module on; `BuildMux` failing there means serve would panic.
+- `GET /` is the public catch-all. Since module v0.1.7 the chat routes are registered per HTTP method, so they do not conflict with that pattern and unknown public paths still render the home page. `TestChatModuleMountedByDefault` mounts the app's real routes together with `/mcp` and `/api/mcp/chat/v1`; `BuildMux` failing there means serve would panic.
+- Migration `internal/migrations/000063_drop_legacy_agent_tables.go` drops `agent_attachments`, `agent_messages`, and `agent_conversations`, keeping `ai_settings` and `oauth_credentials`.
+- `clearLegacyAssistantStorage` removes `listpocket_assistant_v1:*` and `listpocket_ai_builder_legacy_owner` on side-panel mount. `listpocket_ai_builder_threads_v1` is intentionally kept because `views/TemplateForm.vue` still uses `components/AICampaignBuilderDialog.vue` (`store/modules/aiCampaignBuilderThreads.js`).
+- `listpocket_agent_model` and `listpocket_assistant_pictures_v1:*` are kept.
 
 ## Parity checklist
 
-Each line needs a test (Go or Cypress) on the module backend before cutover.
+Each line is covered by a Go or Cypress test on the module backend:
 
-- [ ] Every tool returns the same data as legacy, for an admin, a list-scoped user and a
-      user without the permission
-- [ ] Plugin tools are invisible and uncallable for non-super-admins
-- [ ] Analytics argument checks, the subscribers SQL refusal and the query-key allowlist
-- [ ] Each write tool creates a proposal. Approve runs it exactly once (double click, two
-      tabs). Reject. Edit-then-apply re-validates
-- [ ] A 400 from a handler keeps the proposal pending with the message (B8). Other
-      failures are never retried
-- [ ] Flow proposal warnings appear on the card and in the model's tool result (B6)
-- [ ] Plugin proposal approves the snapshotted files, not the live draft (B7)
+- [x] Every tool returns the same data as legacy, for an admin, a list-scoped user and a
+      user without the permission (`TestMCPToolHandlersMatchAssistantTools`, `TestMCPToolSpecsCoverAssistantTools`)
+- [x] Plugin tools are invisible and uncallable for non-super-admins (`TestChatModulePluginTools`, `TestAssistantPluginToolsAreSuperAdminOnly`, `TestMCPEndpointHTTP`)
+- [x] Analytics argument checks, the subscribers SQL refusal and the query-key allowlist (`TestAssistantToolsEnforcePermissionsAndApproval`)
+- [x] Each write tool creates a proposal. Approve runs it exactly once (double click, two
+      tabs). Reject. Edit-then-apply re-validates (`TestChatModuleProposals`, `agent-page-chat.cy.js`)
+- [x] A 400 from a handler keeps the proposal pending with the message (B8). Other
+      failures are never retried (`TestChatModuleProposals`, `TestMCPToolCallErrorMapping`, `agent-page-chat.cy.js`)
+- [x] Flow proposal warnings appear on the card and in the model's tool result (B6) (`TestChatModuleFlowProposalWarnings`, `tests/chatHost.test.mjs`)
+- [x] Plugin proposal approves the snapshotted files, not the live draft (B7) (`TestChatModulePluginProposalSnapshot`, `TestExpandPluginProposal`)
 - [x] Editor patch: set, replace_text, replace_body, block, node and edge ops. Revision
       mismatch. Wrong editor open. Undo until the next edit or turn (`assistant-chat.cy.js`, `tests/chatHost.test.mjs`)
 - [x] Applied proposal shows an Open link from `result.source.href`.
       `assistant-applied` fires (`assistant-chat.cy.js`, `agent-page-chat.cy.js`)
-- [ ] `@` references: picker, chips on the sent message, preview modal, re-read fresh
-      every turn, unreadable reference reported, cap of the 30 most recent (B4, B5)
-- [ ] Attachments: images, PDF, text and pasted data. Size errors match the limits the
-      UI states. Follow-up turns still see them
-- [x] Media-library pictures are passed as name and URL (`assistant-chat.cy.js`)
-- [ ] Model picker per conversation, last pick remembered. ChatGPT sign-in and the API
-      key provider both work from Settings → AI, with no second sign-in
-- [ ] Super-admin and Agent-page turns allow 1 hour. Side panel uses the AI builder
-      timeout. 16 steps. Tool-limit message
-- [ ] Output limit of 128k, `LISTPOCKET_AI_MAX_OUTPUT_TOKENS`, retry when refused,
-      truncated reply fails (B9)
-- [ ] Provider errors show the same actionable text (B11)
-- [ ] One active turn per conversation (409). Global cap of 4. Stop. Reconnect resumes
-      without re-running tools
-- [ ] Titles from the first message. Rename, delete, account switch clears state
-- [ ] After cutover, old chats are gone: `agent_*` collections dropped, legacy
-      `localStorage` keys cleared, no import UI left
+- [x] `@` references: picker, chips on the sent message, preview modal, re-read fresh
+      every turn, unreadable reference reported, cap of the 30 most recent (B4, B5) (`TestChatModuleAgentTurns`, `TestChatAgentRefsKeepCurrentFirst`, `TestChatModuleUnknownReference`, `agent-page-chat.cy.js`, `tests/chatHost.test.mjs`)
+- [x] Attachments: images, PDF, text and pasted data. Size errors match the limits the
+      UI states. Follow-up turns still see them (`agent-page-chat.cy.js`, `cmd/chat_module.go` `Uploads: true, AcceptOtherImages: true`)
+- [x] Media-library pictures are passed as name and URL (`assistant-chat.cy.js`, `tests/chatHost.test.mjs`)
+- [x] Model picker per conversation, last pick remembered. ChatGPT sign-in and the API
+      key provider both work from Settings → AI, with no second sign-in (`cmd/chat_providers_test.go`, `assistant-chat.cy.js`, `agent-page-chat.cy.js`)
+- [x] Super-admin and Agent-page turns allow 1 hour. Side panel uses the AI builder
+      timeout. 16 steps. Tool-limit message (`TestChatTurnSetupLimits`)
+- [x] Output limit of 128k, `LISTPOCKET_AI_MAX_OUTPUT_TOKENS`, retry when refused,
+      truncated reply fails (B9) (`TestChatModuleSidePanelTurn`, `TestAssistantOutputTokens`, `TestChatModuleOutputLimitAndTruncation`)
+- [x] Provider errors show the same actionable text (B11) (`TestChatModuleOutputLimitAndTruncation`, `tests/chatHost.test.mjs`)
+- [x] One active turn per conversation (409). Global cap of 4. Stop. Reconnect resumes
+      without re-running tools (`TestChatModuleTurnLifecycle`, `cmd/chat_module.go`)
+- [x] Titles from the first message. Rename, delete, account switch clears state (`TestChatModuleTurnLifecycle`, `agent-page-chat.cy.js`, `assistant-chat.cy.js`)
+- [x] After cutover, old chats are gone: `agent_*` collections dropped, legacy
+      `localStorage` keys cleared, no import UI left (`TestChatModuleMountedByDefault`, `tests/chatHost.test.mjs`, `assistant-chat.cy.js`)
 
 ## What we gain
 
