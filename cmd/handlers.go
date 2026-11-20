@@ -352,17 +352,11 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 		public.Route(method, "/webhooks/plugins/{plugin}/{path...}", asHandler(a.PluginWebhook))
 	}
 
-	// Home page. Without the chat module, "GET /" is a catch-all and renders
-	// the home page for unknown paths. With the module mounted, Go's ServeMux
-	// refuses that catch-all next to the module's all-method pattern, so this
-	// is the exact root "/{$}" and unknown paths 404. This branch has to stay
-	// as long as the chat module is mounted: putting "GET /" back makes serve
-	// panic (the chat fixture test catches it).
-	homeRoute := "/"
-	if chatModuleEnabled() {
-		homeRoute = "/{$}"
-	}
-	public.GET(homeRoute, asHandler(func(re *pbcore.RequestEvent) error {
+	// Home page. "GET /" is a catch-all and renders the home page for unknown
+	// paths. The chat module registers its prefix per HTTP method, so this
+	// catch-all no longer conflicts with it (the chat fixture test mounts
+	// both and fails if serve panics).
+	public.GET("/", asHandler(func(re *pbcore.RequestEvent) error {
 		return renderTpl(re, http.StatusOK, "home", publicTpl{Title: "listpocket"})
 	}))
 

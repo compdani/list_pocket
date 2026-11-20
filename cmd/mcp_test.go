@@ -702,28 +702,40 @@ func TestMCPEndpointOffersOptedInWrites(t *testing.T) {
 }
 
 // Error mapping: a 400 on a write keeps a proposal pending (Refused), a 400 on a
-// read is Invalid, 403 and 404 keep their meaning, and any other write failure is
-// never an AccessError (the module reports a generic failure and never retries).
+// read is Invalid, 403 and 404 keep their meaning, and a 4xx conflict stays a
+// definite failure. A 5xx or an untyped error on a write is OutcomeUnknown: the
+// handler may already have applied the change, and the message stays user-safe.
 func TestMCPToolCallErrorMapping(t *testing.T) {
 	var accessErr pbmcp.AccessError
 	cases := []struct {
-		name   string
-		write  bool
-		err    error
-		kind   string
-		access bool
+		name    string
+		write   bool
+		err     error
+		kind    string
+		access  bool
+		unknown bool
 	}{
-		{"write 400", true, apperr.BadRequest("bad input"), "refused", true},
-		{"read 400", false, apperr.BadRequest("bad input"), "invalid", true},
-		{"403", false, apperr.Forbidden("permission denied: subscribers:get"), "denied", true},
-		{"404", false, apperr.NotFound("missing"), "not_found", true},
-		{"write 500", true, apperr.Internal("failed"), "", false},
-		{"write other", true, errors.New("boom"), "", false},
-		{"read 500", false, apperr.Internal("failed"), "invalid", true},
-		{"read other", false, errors.New("boom"), "invalid", true},
+		{"write 400", true, apperr.BadRequest("bad input"), "refused", true, false},
+		{"read 400", false, apperr.BadRequest("bad input"), "invalid", true, false},
+		{"403", false, apperr.Forbidden("permission denied: subscribers:get"), "denied", true, false},
+		{"404", false, apperr.NotFound("missing"), "not_found", true, false},
+		{"write 409", true, apperr.Conflict("already exists"), "", false, false},
+		{"write 500", true, apperr.Internal("sql: connection reset"), "", false, true},
+		{"write other", true, errors.New("boom"), "", false, true},
+		{"read 500", false, apperr.Internal("failed"), "invalid", true, false},
+		{"read other", false, errors.New("boom"), "invalid", true, false},
 	}
 	for _, tc := range cases {
 		err := mcpToolCallError(tc.write, tc.err)
+		if tc.unknown {
+			if !errors.As(err, &accessErr) || accessErr.Kind != "unknown" {
+				t.Errorf("%s: got %v, want OutcomeUnknown", tc.name, err)
+			}
+			if accessErr.Message != mcpWriteOutcomeUnknown || strings.Contains(accessErr.Message, "sql:") || strings.Contains(accessErr.Message, "boom") {
+				t.Errorf("%s: message %q is not the user-safe line", tc.name, accessErr.Message)
+			}
+			continue
+		}
 		if tc.access {
 			if !errors.As(err, &accessErr) || accessErr.Kind != tc.kind {
 				t.Errorf("%s: got %v, want kind %q", tc.name, err, tc.kind)
@@ -731,7 +743,7 @@ func TestMCPToolCallErrorMapping(t *testing.T) {
 			continue
 		}
 		if errors.As(err, &accessErr) {
-			t.Errorf("%s: a failed write must not be an AccessError: %v", tc.name, err)
+			t.Errorf("%s: a definite write failure must not be an AccessError: %v", tc.name, err)
 		}
 		if !errors.Is(err, tc.err) {
 			t.Errorf("%s: the write error must wrap the cause: %v", tc.name, err)

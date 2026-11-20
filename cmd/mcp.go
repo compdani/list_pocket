@@ -22,9 +22,9 @@ endpoint runs immediately, without a proposal: look a record up first, keep chan
 and never retry a write that failed because it may already have applied.`
 
 // assistantToolTimeout bounds one tool call and the approval that can precede it.
-// The module cuts a chat tool off at MaxToolTimeout while the person reviewing it
-// has DecisionTimeout to approve, so the two must stay equal: an approved change
-// runs inside the decision request and would otherwise be cut off mid-write.
+// MCP uses Config.MaxToolTimeout. Chat uses ChatOptions.ToolTimeout, and an
+// approved change runs inside the decision request. v0.1.8 refuses a
+// DecisionTimeout longer than that chat tool timeout, so the two stay equal.
 const assistantToolTimeout = 5 * time.Minute
 
 // mountMCP builds the endpoint once per serve and registers its routes. A failure

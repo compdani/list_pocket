@@ -79,9 +79,12 @@ func (a *App) enableChat(srv *pbadapter.Server) error {
 			AutoApprove:        true,
 			AllowArgumentEdits: true,
 			// Approvals run plugin installs, workflow publishes and sends inside
-			// the decision request, so they get longer than the module default
-			// and the same bound as the tool call itself.
+			// the decision request, so they get longer than the module default.
+			// ToolTimeout is the same value: a DecisionTimeout longer than the
+			// chat tool timeout is refused at startup, and the write would be
+			// cut off first.
 			DecisionTimeout:   assistantToolTimeout,
+			ToolTimeout:       assistantToolTimeout,
 			Uploads:           true,
 			AcceptOtherImages: true,
 			TurnContext:       true,

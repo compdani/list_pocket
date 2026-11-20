@@ -267,15 +267,21 @@ func (a *App) mcpCallerUser(record *pbcore.Record) (auth.User, error) {
 	return user, nil
 }
 
+// mcpWriteOutcomeUnknown is the reviewer-facing line when a write may already
+// have been applied. It stays generic: the handler's own text can be a driver
+// error, and the module stores this string as the proposal's failure.
+const mcpWriteOutcomeUnknown = "This change may or may not have been applied. Check before trying again."
+
 // mcpToolCallError maps an application error onto the module's outcomes:
 //   - 400 on a write was refused before writing, so a chat proposal stays pending
 //     (pbmcp.Refused). On a read the model gets the reason.
-//   - 403 is a permission refusal, 404 a missing record.
-//   - Anything else on a write is returned as a plain error. The module's custom
-//     tool layer turns that into "Tool execution failed." and records the
-//     proposal as failed; only a timeout or cancellation is unknown. List Pocket
-//     never retries a write that might have committed. On a read the model sees
-//     the message, as it does today.
+//   - 403 is a permission refusal, 404 a missing record. Other 4xx statuses are
+//     definite refusals (a conflict, for example) and stay plain errors, so the
+//     proposal ends failed.
+//   - A 5xx on a write, or a write error with no status, means the handler
+//     started and then lost track. That is pbmcp.OutcomeUnknown, so the
+//     proposal ends unknown instead of failed and is not retried. On a read
+//     the model sees the message, as it does today.
 func mcpToolCallError(write bool, err error) error {
 	msg := agentErrorText(err)
 	var appErr *apperr.Error
@@ -291,6 +297,11 @@ func mcpToolCallError(write bool, err error) error {
 		case http.StatusNotFound:
 			return pbmcp.NotFound(msg)
 		}
+		if write && appErr.Status >= http.StatusInternalServerError {
+			return pbmcp.OutcomeUnknown(mcpWriteOutcomeUnknown)
+		}
+	} else if write {
+		return pbmcp.OutcomeUnknown(mcpWriteOutcomeUnknown)
 	}
 	if write {
 		return fmt.Errorf("%s: %w", msg, err)

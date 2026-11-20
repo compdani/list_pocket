@@ -8,8 +8,8 @@ require (
 	ganigeorgiev.com/pocketbase/pocketbase v0.41.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/altcha-org/altcha-lib-go v1.0.0
-	github.com/compdani/pocketbase-mcp v0.1.6
-	github.com/compdani/pocketbase-mcp/adapters/pocketbase v0.1.6
+	github.com/compdani/pocketbase-mcp v0.1.8
+	github.com/compdani/pocketbase-mcp/adapters/pocketbase v0.1.8
 	github.com/disintegration/imaging v1.6.2
 	github.com/dop251/goja v0.0.0-20261023121931-6ace4dde0b29
 	github.com/emersion/go-message v0.18.2
@@ -45,7 +45,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/boombuler/barcode v1.1.0 // indirect
-	github.com/compdani/pocketbase-mcp/auth/stockoauth v0.1.6 // indirect
+	github.com/compdani/pocketbase-mcp/auth/stockoauth v0.1.8 // indirect
 	github.com/dlclark/regexp2/v2 v2.9.1 // indirect
 	github.com/domodwyer/mailyak/v3 v3.6.2 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect

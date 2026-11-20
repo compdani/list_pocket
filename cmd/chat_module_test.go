@@ -165,11 +165,11 @@ func newChatTestFixture(t *testing.T, backend string) *chatTestFixture {
 		t.Fatal(err)
 	}
 	if backend == "module" {
-		// The app's own routes go in too, as registerServeRoutes does: the chat
-		// API's all-method pattern must coexist with them (a "GET /" catch-all
-		// once made serve panic with the module on). Without the module that
-		// catch-all answers every unknown path, so the legacy fixture leaves it
-		// out to keep "no chat route" observable as a 404.
+		// The app's own routes go in too, as registerServeRoutes does, including
+		// the "GET /" catch-all. The chat API is registered per method, so the
+		// two must coexist; BuildMux below fails the test if serve would panic.
+		// Without the module that catch-all answers every unknown path, so the
+		// legacy fixture leaves it out to keep "no chat route" observable as a 404.
 		router.BindFunc(func(e *pbcore.RequestEvent) error { e.Set(appContextKey, f.app); return e.Next() })
 		registerHandlers(router, f.app)
 	}
