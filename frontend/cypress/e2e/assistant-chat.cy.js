@@ -382,19 +382,24 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('[data-cy=fixture-body]').should('contain.text', 'Shop today');
   });
 
-  it('refuses a patch for a different editor with the legacy message', () => {
-    stubEditorTurn(
-      [{ op: 'set', field: 'subject', before: 'Hello', after: 'Hi' }],
-      'campaign:example',
-    );
-    visit('?editor=template');
+  it('refuses a patch for a different editor without closing it, and applies once that editor is open again', () => {
+    stubEditorTurn([{ op: 'replace_text', before: 'Shop today', after: 'Shop' }]);
+    visit();
     cy.wait(['@status', '@list']);
     cy.get('textarea').type('Edit this{enter}');
     cy.wait('@events');
+    cy.window().then((win) => win.assistantFixture.useEditor('template'));
     cy.get('[data-cy=assistant-apply]').click();
-    cy.wait('@outcome').its('request.body.status').should('eq', 'failed');
-    cy.contains('Open the original editor before applying this proposal.').should('be.visible');
+    cy.get('[data-cy=assistant-action-error]').should('contain.text', 'Open the original editor before applying this proposal.');
     cy.get('[data-cy=fixture-body]').should('contain.text', '"subject":"Hello"');
+    cy.get('[data-cy=assistant-apply]').should('be.visible');
+
+    cy.window().then((win) => win.assistantFixture.useEditor('campaign'));
+    cy.get('[data-cy=assistant-apply]').click();
+    cy.wait(['@decision', '@outcome']).then(([, outcome]) => {
+      expect(outcome.request.body.status).to.eq('applied');
+    });
+    cy.get('[data-cy=fixture-body]').should('contain.text', '<a>Shop</a>');
   });
 
   it('refuses undo after a further edit', () => {
@@ -585,9 +590,6 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('textarea').should('not.be.disabled');
 
     cy.intercept('POST', '**/api/mcp/chat/v1/conversations', conversation('new1', '')).as('create');
-    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/new1/turns', (req) => {
-      req.reply({ turn: { id: 't1', conversationId: 'new1', state: 'running' }, created: true });
-    }).as('turn');
     cy.intercept('GET', '**/api/mcp/chat/v1/turns/t1/events', sse([
       frame(1, 'turn.started'),
       frame(2, 'turn.failed', { code: 'provider_error', message: 'The provider refused the key.' }),
@@ -608,12 +610,14 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
       }
       req.reply({ turn: { id: 't2', conversationId: 'new1', state: 'completed' }, created: true });
     });
+    cy.get('lp-agent-panel').then(($el) => { $el[0].model = 'api::gpt-4.1-mini'; });
     cy.get('textarea').type('Hello there{enter}');
     cy.wait('@events');
     cy.get('[data-cy=assistant-retry]').click();
     cy.wrap(null).should(() => {
       expect(retried.length).to.be.greaterThan(1);
       expect(retried[1].text).to.eq('Hello there');
+      expect(retried[1].model).to.eq('gpt-4.1-mini');
     });
   });
 });

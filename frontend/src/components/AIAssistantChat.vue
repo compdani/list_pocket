@@ -82,7 +82,7 @@ import { ChatClient } from '@pocketbase-mcp/chat-client';
 import { assistantContext } from '../assistant/context';
 import {
   chatErrorText, choiceIdFor, cleanPictures, createEditorAdapter, editorContextOf,
-  moveDraftPictures, panelPageContext, picturesFor, referencesFromContext,
+  editorPrecheckError, moveDraftPictures, panelPageContext, picturesFor, referencesFromContext,
   retryText, reviewPartOf, savePictures, storedModelFor, undoLastEdit,
 } from '../assistant/chat-host.mjs';
 import {
@@ -118,7 +118,9 @@ const reviewError = ref('');
 const busyId = ref('');
 let binding = null;
 let unsubscribeAuth = null;
+let unmounted = false;
 let heldUntilReady = true;
+let loadedAccount = '';
 // Set when a submit starts with no conversation, so that draft's pictures
 // follow the id the first send creates and are not left on the draft.
 let pendingDraftMove = false;
@@ -252,6 +254,17 @@ function onNewConversation() {
   undo.value = null;
 }
 
+function onDeleteConversation(event) {
+  const id = event.detail?.id;
+  if (id == null) return;
+  const key = String(id);
+  savePictures(localStorage, userId(), key, []);
+  if (key === activePictureId()) {
+    pendingDraftMove = false;
+    undo.value = null;
+  }
+}
+
 function onModelChange(event) {
   const choiceId = typeof event.detail?.model === 'string' ? event.detail.model : '';
   try {
@@ -292,6 +305,16 @@ function closeReview() {
 }
 
 async function approve(id) {
+  const entries = panel.value?.entries || [];
+  const entry = entries.find((item) => item
+    && item.type === 'proposal'
+    && (item.proposalId === id || item.proposal?.id === id));
+  const proposal = proposalFor(chat, id, entry?.proposal);
+  const precheck = editorPrecheckError(proposal, assistantContext.editor);
+  if (precheck) {
+    actionError.value = precheck;
+    return;
+  }
   const out = await decideProposal(id, 'approve');
   if (!out.ok && out.error && !out.proposal) actionError.value = out.error;
 }
@@ -374,7 +397,12 @@ function retry() {
   const text = retryText(chat.state);
   if (!text) return;
   undo.value = null;
-  void chat.send(text);
+  const model = typeof panel.value?.model === 'string' ? panel.value.model : '';
+  const effort = typeof panel.value?.optionValues?.effort === 'string' ? panel.value.optionValues.effort : '';
+  void chat.send(text, {
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+  });
 }
 
 function addPicture(media) {
@@ -407,6 +435,7 @@ onMounted(async () => {
   el.addEventListener('agent-submit', onPanelSubmit);
   el.addEventListener('agent-select-conversation', onSelectConversation);
   el.addEventListener('agent-new-conversation', onNewConversation);
+  el.addEventListener('agent-delete-conversation', onDeleteConversation);
   el.addEventListener('agent-action', onAction);
   el.addEventListener('agent-model-change', onModelChange);
   el.addEventListener('agent-close', () => { assistantContext.open = false; });
@@ -417,18 +446,29 @@ onMounted(async () => {
     contextReferences: referencesFromContext,
   });
   chat.addEventListener('change', onChange);
+  const currentAccountId = () => {
+    const key = accountKey();
+    return `${key.authCollectionId}:${key.userId}`;
+  };
+  loadedAccount = currentAccountId();
   unsubscribeAuth = pb.authStore.onChange(async () => {
+    const next = currentAccountId();
+    if (next === loadedAccount) return;
+    loadedAccount = next;
     undo.value = null;
     pendingDraftMove = false;
     try {
       await chat.setAccount(accountKey());
+      if (unmounted) return;
       chat.startDraft();
+      preselectModel();
     } finally {
-      loadPictures('');
+      if (!unmounted) loadPictures('');
     }
   });
 
   await chat.init();
+  if (unmounted) return;
   chat.startDraft();
   preselectModel();
   loadPictures(chat.state.activeConversationId ? String(chat.state.activeConversationId) : '');
@@ -436,6 +476,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  unmounted = true;
   binding?.unbind();
   chat.dispose();
   unsubscribeAuth?.();

@@ -513,6 +513,21 @@ function proposalEditorId(proposal) {
 }
 
 /**
+ * Check before sending an approval to the server: if an editor proposal targets
+ * an editor that is not currently open, refuse locally so the proposal stays
+ * pending and the user can open that editor and apply it.
+ */
+export function editorPrecheckError(proposal, editor) {
+  if (!proposal || (proposal.location !== 'editor' && proposal.tool !== 'propose_editor_patch')) return '';
+  if (!editor || typeof editor.snapshot !== 'function' || editor.key == null || String(editor.key) === '') {
+    return WRONG_EDITOR_TEXT;
+  }
+  const editorId = proposalEditorId(proposal);
+  if (editorId !== String(editor.key)) return WRONG_EDITOR_TEXT;
+  return '';
+}
+
+/**
  * Whether an editor proposal still applies to the open editor.
  * No editor, or a revision that is no longer current, is not applicable
  * (the controller reports stale). The wrong editor, or a patch the editor

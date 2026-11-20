@@ -275,15 +275,19 @@ panel has no `@` picker, Paste data or `?ref=` pre-attach, and this host does
 not add them.
 
 **Editor adapter.** `snapshot()` is the open editor (`editorId` is `editor.key`,
-revision from `patches.mjs`), or null when none is open. `validatePatch` is not
-applicable when no editor is open or `baseRevision` is stale, and throws
-"Open the original editor before applying this proposal." when `editorId` is
-not the open editor. `applyPatch` applies with `editor.apply` and returns the
-new revision. The controller reports the outcome; the host does not call
-`reportOutcome`. Undo is a button that restores the `before` snapshot while the
-editor is still that one and unchanged since. The next turn, switching
-conversation, or switching editor clears it. A further edit makes Undo report
-"The editor changed after this edit; use its undo controls."
+revision from `patches.mjs`), or null when none is open. Before calling
+`chat.decide`, the host checks `editorPrecheckError`: if no editor or a
+different editor is open, it shows "Open the original editor before applying
+this proposal." and leaves the proposal pending so the user can return to the
+original editor and apply it. Inside the adapter, `validatePatch` returns not
+applicable (`stale`) when no editor is open or `baseRevision` is stale, and
+throws the same message when `editorId` is not the open editor. `applyPatch`
+applies with `editor.apply` and returns the new revision. The controller reports
+the outcome; the host does not call `reportOutcome`. Undo is a button that
+restores the `before` snapshot while the editor is still that one and unchanged
+since. The next turn, switching/deleting the conversation, or switching editor
+clears it. A further edit makes Undo report "The editor changed after this edit;
+use its undo controls."
 
 `ListPocketAgentPanel` copies `busy`/`running` onto proposal entries and adds
 `toolLabel` when `this.chat` is set (the module host). With `chat` left null,

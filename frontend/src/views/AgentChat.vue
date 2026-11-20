@@ -428,13 +428,18 @@ onMounted(async () => {
     return pending;
   };
   chat.addEventListener('change', onChange);
+  let loadedAccount = `${accountKey().authCollectionId}:${accountKey().userId}`;
   unsubscribeAuth = pb.authStore.onChange(async () => {
+    const key = accountKey();
+    const next = `${key.authCollectionId}:${key.userId}`;
+    if (next === loadedAccount) return;
+    loadedAccount = next;
     // setAccount clears the state, which would look like "no conversation";
     // don't rewrite the URL while the route's own conversation is reloaded.
     switchingAccount = true;
     const id = String(route.params.id || '');
     try {
-      await chat.setAccount(accountKey());
+      await chat.setAccount(key);
       if (id) await chat.open(id);
     } finally {
       switchingAccount = false;

@@ -7,7 +7,7 @@ import {
   AGENT_REF_CAP, MID_APPLY_TEXT, PANEL_DRAFT_PICTURES, PROPOSAL_STATE_TEXT, PROVIDER_AUTH_TEXT,
   UNDO_CHANGED_TEXT, USAGE_LIMIT_TEXT, WRONG_EDITOR_TEXT, backendOf,
   cardProposalOf, chatErrorText, choiceIdFor, cleanPictures, contextReferencesFromTranscript,
-  createEditorAdapter, editorContextOf, judgeEditorProposal, labelToolEntries,
+  createEditorAdapter, editorContextOf, editorPrecheckError, judgeEditorProposal, labelToolEntries,
   moveDraftPictures, navigationWrite, pageContext, panelPageContext, picturesFor,
   proposalProblemText, referencesFromContext, referencesOf, retryText,
   reviewPartOf, savePictures, storedModelFor, undoLastEdit,
@@ -613,6 +613,23 @@ test('a revision mismatch is stale and the wrong editor is refused', () => {
   assert.equal(wrong.applicable, false);
   assert.equal(wrong.reason, 'refused');
   assert.equal(wrong.message, WRONG_EDITOR_TEXT);
+});
+
+test('pre-checking an editor proposal refuses a missing or different editor without approving it', () => {
+  const campaign = fakeEditor('campaign:example', { subject: 'Welcome', body: 'Shop today', contentType: 'html' });
+  const template = fakeEditor('template:other', { subject: 'Hello', body: 'Hi', contentType: 'plain' });
+  const editorProp = {
+    id: 'e1',
+    location: 'editor',
+    tool: 'propose_editor_patch',
+    arguments: { editorId: 'campaign:example', baseRevision: 'r1', operations: [] },
+  };
+  const serverProp = { id: 'p1', location: 'server', tool: 'create_campaign_draft', arguments: {} };
+
+  assert.equal(editorPrecheckError(serverProp, null), '');
+  assert.equal(editorPrecheckError(editorProp, campaign), '');
+  assert.equal(editorPrecheckError(editorProp, template), WRONG_EDITOR_TEXT);
+  assert.equal(editorPrecheckError(editorProp, null), WRONG_EDITOR_TEXT);
 });
 
 test('the adapter reports a stale patch as not applicable and refuses the wrong editor', async () => {
