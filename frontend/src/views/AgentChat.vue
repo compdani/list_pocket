@@ -64,16 +64,19 @@ import {
 import { useRoute, useRouter } from 'vue-router';
 import { pb } from '../api';
 import {
-  bindAgentPanel, renderContextMarkerEntry, renderNoticeEntry, proposalErrorText,
+  bindAgentPanel, renderContextMarkerEntry,
 } from '@pocketbase-mcp/chat-client/agent-panel';
 import { ChatController } from '@pocketbase-mcp/chat-client';
 import { ChatClient } from '@pocketbase-mcp/chat-client';
 import { assistantContext } from '../assistant/context';
 import {
-  cardProposalOf, chatErrorText, choiceIdFor, contextReferencesFromTranscript,
+  chatErrorText, choiceIdFor, contextReferencesFromTranscript,
   navigationWrite, pageContext, referencesFromContext, reviewPartOf, storedModelFor,
 } from '../assistant/chat-host.mjs';
-import { renderProposal } from '../assistant/lp-agent-common';
+import {
+  createSubmitCapture, decideModuleProposal, holdComposerUntilReady,
+  proposalFor, renderModuleProposal, renderNoticeWithOpen,
+} from '../assistant/chat-ui.mjs';
 import { CONTEXT_ICONS } from '../agent/parts.mjs';
 // Defines <lp-agent-page>; this host feeds it through the chat binding.
 import '../assistant/lp-agent-page';
@@ -121,14 +124,10 @@ let pendingNavId = null;
 // disables it once features.ready is false, and it will not re-enable a
 // composer it did not disable itself.
 let heldUntilReady = true;
-// The @ chips of the submit being sent. The binding reads the context during
-// its own agent-submit handler, but with files attached it clears the
-// composer's chips first, so the element's references are empty by then.
-// This listener runs before the binding's and keeps the event's copy.
-let submitReferences = null;
-function captureSubmitReferences(event) {
-  submitReferences = Array.isArray(event.detail?.references) ? event.detail.references : null;
-}
+// The @ chips of the submit being sent. Registered before the binding's
+// agent-submit listener, because a message with files has its chips cleared
+// before the binding reads the context.
+const submitCapture = createSubmitCapture();
 
 const reviewPart = computed(() => (reviewProposal.value ? reviewPartOf(reviewProposal.value) : null));
 const formatDate = shortStamp;
@@ -174,11 +173,7 @@ const client = new ChatClient({
 const chat = new ChatController({
   client,
   storageKey: accountKey(),
-  context: () => {
-    const references = submitReferences ?? page.value?.references;
-    submitReferences = null;
-    return pageContext(route.fullPath, references);
-  },
+  context: () => pageContext(route.fullPath, submitCapture.consume(page.value?.references)),
 });
 
 function lastModel() {
@@ -219,17 +214,8 @@ function syncUrl() {
   });
 }
 
-function holdComposerUntilReady(state) {
-  const el = page.value;
-  if (!el) return;
-  if (state.status !== 'ready') {
-    el.disabled = true;
-    heldUntilReady = true;
-    return;
-  }
-  if (!heldUntilReady) return;
-  heldUntilReady = false;
-  if (state.features?.ready !== false) el.disabled = false;
+function syncComposer(state) {
+  heldUntilReady = holdComposerUntilReady(page.value, state, heldUntilReady);
 }
 
 function onChange() {
@@ -237,7 +223,7 @@ function onChange() {
   syncUrl();
   inContext.value = contextReferencesFromTranscript(state.transcript);
   renamable.value = Boolean(state.activeConversationId);
-  holdComposerUntilReady(state);
+  syncComposer(state);
 }
 
 function armHistoryPush() {
@@ -272,52 +258,29 @@ function onModelChange(event) {
   }
 }
 
-async function decideProposal(id, decision, edited) {
-  if (!chat || !id || busyId.value === id) return { ok: false };
-  busyId.value = id;
-  page.value?.busyProposals.add(id);
-  page.value?.repaint();
-  actionError.value = '';
-  try {
-    const out = await chat.decide(id, decision, edited ? { arguments: edited } : undefined);
-    const stored = out?.proposal ?? null;
-    if (out?.error) {
-      return { ok: false, proposal: stored, error: proposalErrorText(out.error) };
-    }
-    if (decision === 'approve' && stored?.state === 'succeeded') {
-      window.dispatchEvent(new CustomEvent('assistant-applied', { detail: { tool: stored.tool, result: stored.result } }));
-    }
-    const problem = stored ? reviewPartOf(stored)?.error || '' : '';
-    return {
-      ok: Boolean(stored) && stored.state !== 'failed',
-      proposal: stored,
-      error: stored?.state === 'failed' ? problem : '',
-    };
-  } catch (err) {
-    return { ok: false, error: proposalErrorText(err) };
-  } finally {
-    busyId.value = '';
-    page.value?.busyProposals.delete(id);
-    page.value?.repaint();
-  }
+function decideProposal(id, decision, edited) {
+  return decideModuleProposal({
+    chat,
+    element: page.value,
+    id,
+    decision,
+    edited,
+    isBusy: (value) => busyId.value === value,
+    setBusy: (value) => { busyId.value = value; },
+    onStart: () => { actionError.value = ''; },
+  });
 }
 
 // entry.proposal is the stored proposal. The binding omits the controller's
 // `error` (a 409 conflict or a 422 refusal), so that one field still comes
 // from state; everything else the card and the review modal show is on the entry.
-function proposalFor(id, stored) {
-  const live = [...(chat.state.proposals || []), ...(chat.state.decidedProposals || [])]
-    .find((item) => item && String(item.id) === String(id));
-  if (stored && typeof stored === 'object') return { ...stored, error: stored.error ?? live?.error };
-  return live || null;
-}
 
 function openReview(id) {
   const entries = page.value?.entries || [];
   const entry = entries.find((item) => item
     && item.type === 'proposal'
     && (item.proposalId === id || item.proposal?.id === id));
-  const proposal = proposalFor(id, entry?.proposal);
+  const proposal = proposalFor(chat, id, entry?.proposal);
   if (!proposal) return;
   reviewProposal.value = JSON.parse(JSON.stringify(proposal));
   reviewError.value = '';
@@ -399,38 +362,8 @@ function savePaste() {
   page.value?.addFiles([new File([content], name.trim() || 'pasted.txt', { type: 'text/plain' })]);
 }
 
-// One card per proposal the binding reports. The entry carries the stored
-// proposal (arguments, warnings, result), including decided ones after a reopen.
 function renderProposalEntry(entry, panel) {
-  const full = proposalFor(entry.proposalId, entry.proposal) || {
-    id: entry.proposalId,
-    tool: entry.tool,
-    state: entry.state,
-    revision: entry.revision,
-    arguments: {},
-    warnings: [],
-  };
-  const card = cardProposalOf(full, {
-    busy: entry.busy === true || busyId.value === entry.proposalId,
-    running: entry.running === true || panel.chat?.state?.running === true,
-  });
-  return card ? renderProposal(panel, card) : null;
-}
-
-// The binding's notice is the outcome line. A decided proposal's stored result
-// rides on that entry, so the same Open link the applied card shows is still
-// there after the conversation is reopened.
-function renderNotice(entry, panel) {
-  const node = renderNoticeEntry(entry);
-  const href = entry?.result?.source?.href;
-  if (!node || typeof href !== 'string' || href === '') return node;
-  const link = document.createElement('a');
-  link.className = 'btn btn--text';
-  link.href = href;
-  link.setAttribute('data-cy', 'assistant-open-result');
-  link.textContent = panel?.labels?.open || 'Open';
-  node.append(document.createTextNode(' '), link);
-  return node;
+  return renderModuleProposal(entry, panel, { chat, busyId: busyId.value });
 }
 
 function preAttach() {
@@ -465,11 +398,11 @@ onMounted(async () => {
   el.chat = chat;
   el.disabled = true;
   el.defineEntry('proposal', renderProposalEntry);
-  el.defineEntry('notice', renderNotice);
+  el.defineEntry('notice', renderNoticeWithOpen);
   el.defineEntry('context-marker', renderContextMarkerEntry);
 
   // Before bindAgentPanel(), so it runs before the binding's agent-submit.
-  el.addEventListener('agent-submit', captureSubmitReferences);
+  el.addEventListener('agent-submit', submitCapture.onSubmit);
   el.addEventListener('agent-select-conversation', onSelectConversation);
   el.addEventListener('agent-new-conversation', onNewConversation);
   el.addEventListener('agent-delete-conversation', onDeleteConversation);
