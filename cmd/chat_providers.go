@@ -104,14 +104,14 @@ func (s *chatProviderStore) apiProvider(ctx context.Context) (catalog.Provider, 
 		models = []catalog.Model{{ID: fallback, Label: fallback}}
 	}
 	p := catalog.Provider{
-		ID:       llm.ProviderAPI,
-		Label:    "API key",
-		Kind:     catalog.KindOpenAI,
-		Enabled:  true,
-		BaseURL:  chatEnvOr("LISTPOCKET_AI_BASE_URL", llm.DefaultBaseURL),
-		WireAPI:  "chat",
-		APIKey:   strings.TrimSpace(os.Getenv("LISTPOCKET_AI_API_KEY")),
-		Models:   models,
+		ID:      llm.ProviderAPI,
+		Label:   "API key",
+		Kind:    catalog.KindOpenAI,
+		Enabled: true,
+		BaseURL: chatEnvOr("LISTPOCKET_AI_BASE_URL", llm.DefaultBaseURL),
+		WireAPI: "chat",
+		APIKey:  strings.TrimSpace(os.Getenv("LISTPOCKET_AI_API_KEY")),
+		Models:  models,
 	}
 	wanted := a.aiAPIDefaultModel()
 	if _, ok := p.Model(wanted); ok {
