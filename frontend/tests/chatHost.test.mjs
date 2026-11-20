@@ -2,11 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { bindAgentPanel, errorText, PROPOSAL_STATE_TEXT as BINDING_PROPOSAL_STATE_TEXT } from '@pocketbase-mcp/chat-client/agent-panel';
+import { applyEditorPatch, revision } from '../src/assistant/patches.mjs';
 import {
-  AGENT_REF_CAP, PROPOSAL_STATE_TEXT, PROVIDER_AUTH_TEXT, USAGE_LIMIT_TEXT, backendOf,
-  cardProposalOf, chatErrorText, choiceIdFor, contextReferencesFromTranscript,
-  navigationWrite, pageContext, proposalProblemText, referencesFromContext, referencesOf,
-  reviewPartOf, storedModelFor,
+  AGENT_REF_CAP, MID_APPLY_TEXT, PANEL_DRAFT_PICTURES, PROPOSAL_STATE_TEXT, PROVIDER_AUTH_TEXT,
+  UNDO_CHANGED_TEXT, USAGE_LIMIT_TEXT, WRONG_EDITOR_TEXT, backendOf,
+  cardProposalOf, chatErrorText, choiceIdFor, cleanPictures, contextReferencesFromTranscript,
+  createEditorAdapter, editorContextOf, judgeEditorProposal, labelToolEntries,
+  moveDraftPictures, navigationWrite, pageContext, panelPageContext, picturesFor,
+  proposalProblemText, referencesFromContext, referencesOf, retryText,
+  reviewPartOf, savePictures, storedModelFor, undoLastEdit,
 } from '../src/assistant/chat-host.mjs';
 
 // --- page context -----------------------------------------------------------
@@ -417,4 +421,255 @@ test('history push is for a choice and replace is for a draft\'s new id', () => 
   assert.equal(navigationWrite({
     activeId: 'c1', routeId: 'c2', intent: 'replace', suspended: true,
   }), null);
+});
+
+// --- side panel context -----------------------------------------------------
+
+test('the side panel context describes the page, the editor and the pictures', () => {
+  const current = { subject: 'Hello', body: 'Shop today', contentType: 'html' };
+  const editor = {
+    key: 'campaign:example',
+    label: 'Unsaved campaign editor',
+    snapshot: () => current,
+    selection: () => 'Shop',
+  };
+  assert.deepEqual(panelPageContext({
+    path: '/campaigns/example',
+    page: 'campaign',
+    params: { id: 'example' },
+    filters: { status: 'live' },
+    references: [{ type: 'list', id: '3', label: 'Customers' }, { type: 'file', id: 'f1' }],
+    editor: editorContextOf(editor, revision, 'window selection'),
+    pictures: [{ name: 'hero.png', url: 'https://cdn.example/hero.png' }, { url: 'https://cdn.example/hero.png' }],
+  }), {
+    screen: 'panel',
+    path: '/campaigns/example',
+    page: 'campaign',
+    params: { id: 'example' },
+    filters: { status: 'live' },
+    editor: {
+      key: 'campaign:example',
+      unsaved: true,
+      revision: revision(current),
+      current,
+      selection: 'Shop',
+      label: 'Unsaved campaign editor',
+    },
+    pictureReferences: [{ name: 'hero.png', url: 'https://cdn.example/hero.png' }],
+    references: [{ type: 'list', id: '3', label: 'Customers' }],
+  });
+  assert.equal(editorContextOf(null, revision), null);
+  assert.equal(editorContextOf({ key: 'campaign:1', snapshot: () => { throw new Error('closed'); } }, revision), null);
+  const bare = { key: 'campaign:1', snapshot: () => current };
+  assert.equal(editorContextOf(bare, revision, 'from the window').selection, 'from the window');
+});
+
+test('media pictures are stored per conversation and a draft moves on the first send', () => {
+  const storage = new Map();
+  const box = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => { storage.set(key, String(value)); },
+  };
+  assert.equal(savePictures(box, 'user-1', '', [{ name: 'hero.png', url: 'https://cdn.example/hero.png' }]), true);
+  assert.deepEqual(picturesFor(box, 'user-1', ''), [{ name: 'hero.png', url: 'https://cdn.example/hero.png' }]);
+  assert.deepEqual(picturesFor(box, 'user-2', ''), []);
+  assert.deepEqual(
+    moveDraftPictures(box, 'user-1', 'conv-1'),
+    [{ name: 'hero.png', url: 'https://cdn.example/hero.png' }],
+  );
+  assert.deepEqual(picturesFor(box, 'user-1', ''), []);
+  assert.deepEqual(picturesFor(box, 'user-1', 'conv-1'), [{ name: 'hero.png', url: 'https://cdn.example/hero.png' }]);
+  savePictures(box, 'user-1', 'conv-1', [
+    { name: 'hero.png', url: 'https://cdn.example/hero.png' },
+    { name: 'side.png', url: 'https://cdn.example/side.png' },
+  ]);
+  savePictures(box, 'user-1', '', [{ name: 'other.png', url: 'https://cdn.example/side.png' }]);
+  assert.deepEqual(moveDraftPictures(box, 'user-1', 'conv-1').map((picture) => picture.url), [
+    'https://cdn.example/hero.png',
+    'https://cdn.example/side.png',
+  ]);
+  assert.equal(picturesFor(box, 'user-1', PANEL_DRAFT_PICTURES).length, 0);
+  assert.deepEqual(cleanPictures([{ url: '' }, null, { url: 'https://cdn.example/a.png' }]), [
+    { name: '', url: 'https://cdn.example/a.png' },
+  ]);
+});
+
+test('picture storage failures leave the caller with nothing new', () => {
+  const broken = {
+    getItem: () => { throw new Error('denied'); },
+    setItem: () => { throw new Error('full'); },
+  };
+  assert.deepEqual(picturesFor(broken, 'user-1', 'conv-1'), []);
+  assert.equal(savePictures(broken, 'user-1', 'conv-1', [{ url: 'https://cdn.example/a.png' }]), false);
+  assert.deepEqual(moveDraftPictures(broken, 'user-1', 'conv-1'), []);
+});
+
+test('tool rows gain the legacy label when the binding did not set one', () => {
+  assert.deepEqual(labelToolEntries([
+    { type: 'tools', tools: [{ name: 'propose_editor_patch' }, { name: 'campaigns', label: 'Kept' }] },
+    { type: 'text' },
+  ], (name) => String(name).replace(/^propose_/, '')), [
+    { type: 'tools', tools: [{ name: 'propose_editor_patch', label: 'editor_patch' }, { name: 'campaigns', label: 'Kept' }] },
+    { type: 'text' },
+  ]);
+});
+
+function fakeEditor(key, value) {
+  const editor = {
+    key,
+    label: key,
+    value,
+    snapshot: () => editor.value,
+    apply: async (next) => { editor.value = next; },
+  };
+  return editor;
+}
+
+test('an editor patch applies on a campaign, a template and a workflow', async () => {
+  const cases = [
+    {
+      key: 'campaign:example',
+      value: { subject: 'Welcome', preheader: 'Preview', body: '<a>Shop today</a>', contentType: 'html' },
+      operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }],
+      check: (value) => assert.equal(value.body, '<a>Shop</a>'),
+    },
+    {
+      key: 'campaign:body',
+      value: { subject: 'Hello', preheader: 'Old', body: '<p>Old</p>', contentType: 'html' },
+      operations: [{ op: 'replace_body', before: '<p>Old</p>', after: '<p>New</p>' }],
+      check: (value) => assert.equal(value.body, '<p>New</p>'),
+    },
+    {
+      key: 'template:example:campaign:html',
+      value: { subject: 'Hello', preheader: '', body: 'Hello there', contentType: 'plain' },
+      operations: [{ op: 'set', field: 'subject', before: 'Hello', after: 'Hi' }],
+      check: (value) => assert.equal(value.subject, 'Hi'),
+    },
+    {
+      key: 'workflow:example',
+      value: {
+        kind: 'workflow',
+        nodes: [{ id: 'wait', type: 'wait', config: { days: 1 } }],
+        edges: [{ id: 'e1', source: 'trigger', target: 'wait' }],
+      },
+      operations: [
+        { op: 'node_upsert', id: 'wait', value: { id: 'wait', type: 'wait', config: { days: 2 } } },
+        { op: 'edge_remove', id: 'e1' },
+      ],
+      check: (value) => {
+        assert.equal(value.nodes[0].config.days, 2);
+        assert.deepEqual(value.edges, []);
+      },
+    },
+  ];
+  for (const item of cases) {
+    const editor = fakeEditor(item.key, item.value);
+    let applied = null;
+    const adapter = createEditorAdapter({
+      getEditor: () => editor,
+      revisionOf: revision,
+      applyPatch: applyEditorPatch,
+      onApplied: (entry) => { applied = entry; },
+    });
+    const proposal = {
+      id: 'e1',
+      arguments: { editorId: item.key, baseRevision: revision(item.value), operations: item.operations },
+    };
+    assert.deepEqual(adapter.snapshot(), { editorId: item.key, revision: revision(item.value) });
+    assert.equal(await adapter.validatePatch(proposal), true);
+    const result = await adapter.applyPatch(proposal);
+    item.check(editor.value);
+    assert.equal(result.revision, revision(editor.value));
+    assert.equal(applied.editor, editor);
+    assert.deepEqual(undoLastEdit(applied, editor, revision), { ok: true, before: applied.before });
+  }
+});
+
+test('a revision mismatch is stale and the wrong editor is refused', () => {
+  const editor = fakeEditor('campaign:example', { subject: 'Welcome', body: 'Shop today', contentType: 'html' });
+  const proposal = {
+    id: 'e1',
+    arguments: {
+      editorId: 'campaign:example',
+      baseRevision: revision(editor.value),
+      operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }],
+    },
+  };
+  editor.value = { ...editor.value, body: 'Shop today, edited' };
+  assert.deepEqual(
+    judgeEditorProposal(proposal, editor, { revisionOf: revision, applyPatch: applyEditorPatch }),
+    { applicable: false, reason: 'stale' },
+  );
+  assert.deepEqual(
+    judgeEditorProposal(proposal, null, { revisionOf: revision, applyPatch: applyEditorPatch }),
+    { applicable: false, reason: 'stale' },
+  );
+  const other = fakeEditor('template:example', { subject: 'Hello', body: 'Hi', contentType: 'plain' });
+  const wrong = judgeEditorProposal(
+    { ...proposal, arguments: { ...proposal.arguments, baseRevision: revision(other.value) } },
+    other,
+    { revisionOf: revision, applyPatch: applyEditorPatch },
+  );
+  assert.equal(wrong.applicable, false);
+  assert.equal(wrong.reason, 'refused');
+  assert.equal(wrong.message, WRONG_EDITOR_TEXT);
+});
+
+test('the adapter reports a stale patch as not applicable and refuses the wrong editor', async () => {
+  const editor = fakeEditor('campaign:example', { subject: 'Welcome', body: 'Shop today', contentType: 'html' });
+  const adapter = createEditorAdapter({
+    getEditor: () => editor,
+    revisionOf: revision,
+    applyPatch: applyEditorPatch,
+  });
+  const proposal = {
+    id: 'e1',
+    arguments: { editorId: 'campaign:example', baseRevision: 'stale', operations: [{ op: 'set', field: 'subject', after: 'Hi' }] },
+  };
+  assert.equal(await adapter.validatePatch(proposal), false);
+  const wrong = {
+    id: 'e2',
+    arguments: { editorId: 'template:other', baseRevision: revision(editor.value), operations: [] },
+  };
+  await assert.rejects(adapter.validatePatch(wrong), { message: WRONG_EDITOR_TEXT });
+});
+
+test('applying after the editor changed refuses with the legacy message', async () => {
+  const editor = fakeEditor('campaign:example', { subject: 'Welcome', body: 'Shop today', contentType: 'html' });
+  const adapter = createEditorAdapter({
+    getEditor: () => editor,
+    revisionOf: revision,
+    applyPatch: applyEditorPatch,
+  });
+  const proposal = {
+    id: 'e1',
+    arguments: {
+      editorId: 'campaign:example',
+      baseRevision: revision(editor.value),
+      operations: [{ op: 'replace_text', before: 'Shop today', after: 'Shop' }],
+    },
+  };
+  assert.equal(await adapter.validatePatch(proposal), true);
+  editor.value = { ...editor.value, body: 'Shop today!' };
+  await assert.rejects(adapter.applyPatch(proposal), { message: MID_APPLY_TEXT });
+  assert.equal(editor.value.body, 'Shop today!');
+});
+
+test('undo is refused once the editor has moved on', () => {
+  const editor = fakeEditor('campaign:example', { body: 'Shop' });
+  const entry = { editor, before: { body: 'Shop today' }, after: revision(editor.value) };
+  editor.value = { body: 'Shop now' };
+  assert.deepEqual(undoLastEdit(entry, editor, revision), { ok: false, message: UNDO_CHANGED_TEXT });
+  assert.deepEqual(undoLastEdit(entry, fakeEditor('other', editor.value), revision).ok, false);
+});
+
+test('retry is the last user message after a failed turn, and nothing while one is running', () => {
+  const transcript = [
+    { role: 'user', type: 'text', text: 'First' },
+    { role: 'assistant', type: 'text', text: 'Ok' },
+    { role: 'user', type: 'text', text: 'Second' },
+  ];
+  assert.equal(retryText({ running: false, transcript, turn: { error: { code: 'provider_error' } } }), 'Second');
+  assert.equal(retryText({ running: true, transcript, error: { code: 'network' } }), '');
+  assert.equal(retryText({ running: false, transcript }), '');
 });
