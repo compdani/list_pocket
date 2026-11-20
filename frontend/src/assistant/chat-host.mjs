@@ -5,7 +5,7 @@
 // Views/AgentChat.vue only wires these to the chat client, the controller and
 // <lp-agent-page>. Keeping them here makes them testable with `node --test`
 // (tests/chatHost.test.mjs), and keeps this module free of imports so the
-// legacy page and the route loader don't pull in the vendored chat client.
+// legacy page and the route loader don't pull in the chat client.
 //
 // The chat module's stored page context is one `context` part on a user message
 // (StoreContext). Its `result` is the object the browser sent:
@@ -329,7 +329,7 @@ const CARD_STATE = Object.freeze({
   stale: { status: 'stale', label: 'Out of date' },
 });
 
-// What happened, in the same plain words the vendored binding uses. Copied
+// What happened, in the same plain words the installed binding uses. Copied
 // here so this module stays import-free; tests/chatHost.test.mjs checks the two
 // stay identical.
 export const PROPOSAL_STATE_TEXT = Object.freeze({
@@ -463,7 +463,7 @@ export function reviewPartOf(proposal) {
 // List Pocket's wording for the two provider failures the module reports, as
 // the legacy engine did (cmd/ai_assistant.go runAssistant). The binding's own
 // generic lines are reproduced here so this module stays import-free; tests
-// compare them with the vendored errorText().
+// compare them with the installed client's errorText().
 export const PROVIDER_AUTH_TEXT = 'The AI provider did not accept this app\'s credentials. Check the API key, or sign in to ChatGPT again under Settings → AI.';
 export const USAGE_LIMIT_TEXT = 'Your ChatGPT plan\'s usage limit has been reached. Wait for it to reset, or switch models.';
 export const BINDING_PROVIDER_AUTH_TEXT = 'The AI provider rejected its credentials. Ask an administrator to check the key or sign in again in the provider settings.';

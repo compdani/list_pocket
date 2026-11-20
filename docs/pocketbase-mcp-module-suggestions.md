@@ -21,7 +21,8 @@ Still open:
 
 - **#12** is prepared but not live: `scripts/release-chat-client.sh` tags a split of
   `frontend/client`, but `github.com/compdani/pocketbase-mcp-chat-client` doesn't exist
-  yet, so the client stays vendored until the mirror is created and the tag pushed.
+  yet. The mirror now exists: List Pocket installs `@pocketbase-mcp/chat-client`
+  v0.1.8 from it, and the copy under `frontend/src/vendor/chat-client/` is gone.
 
 ## 1. "No provider configured" should have its own error code
 
@@ -191,8 +192,8 @@ Also clear `state.error` synchronously at the start of `send()`, so a stale erro
 - Mirror it to its own repo with tags, like agent-panel, so hosts can `npm install github:compdani/pocketbase-mcp-chat-client#vX.Y.Z`.
 
 **List Pocket today.**
-- It's vendored from the Go module cache into `frontend/src/vendor/chat-client/`, with a Vite alias.
-- A unit test keeps its version in step with `go.mod`.
+- Installed as `@pocketbase-mcp/chat-client` from the mirror's v0.1.8 tag (a codeload tarball).
+- `frontend/tests/chatClientVersion.test.mjs` keeps that package's version in step with `go.mod`.
 
 ## agent-panel (separate repo)
 

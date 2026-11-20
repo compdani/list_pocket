@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { bindAgentPanel, errorText } from '../src/vendor/chat-client/agent-panel.mjs';
-import { PROPOSAL_STATE_TEXT as BINDING_PROPOSAL_STATE_TEXT } from '../src/vendor/chat-client/agent-panel.mjs';
+import { bindAgentPanel, errorText, PROPOSAL_STATE_TEXT as BINDING_PROPOSAL_STATE_TEXT } from '@pocketbase-mcp/chat-client/agent-panel';
 import {
   AGENT_REF_CAP, BINDING_PROVIDER_AUTH_TEXT, BINDING_USAGE_LIMIT_TEXT, PROPOSAL_STATE_TEXT,
   PROVIDER_AUTH_TEXT, USAGE_LIMIT_TEXT, attachSubmitTracking, backendOf, cardProposalOf,
@@ -206,7 +205,7 @@ test('an unknown proposal state keeps its name on the card instead of guessing',
 
 // --- errors -----------------------------------------------------------------
 
-test('the card wording matches the vendored binding', () => {
+test('the card wording matches the installed binding', () => {
   assert.deepEqual(PROPOSAL_STATE_TEXT, BINDING_PROPOSAL_STATE_TEXT);
   assert.equal(errorText({ code: 'provider_auth' }), BINDING_PROVIDER_AUTH_TEXT);
   assert.equal(errorText({ code: 'usage_limit' }), BINDING_USAGE_LIMIT_TEXT);

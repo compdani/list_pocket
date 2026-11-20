@@ -18,14 +18,6 @@ export default defineConfig(({ _, mode }) => {
     mode,
     resolve: {
       alias: [
-        // Vendored from the pocketbase-mcp module (see src/vendor/chat-client/VENDORED.md).
-        // Most specific first, so the subpaths don't fall through to index.mjs.
-        { find: /^@pocketbase-mcp\/chat-client\/agent-panel$/, replacement: path.resolve(__dirname, './src/vendor/chat-client/agent-panel.mjs') },
-        { find: /^@pocketbase-mcp\/chat-client\/controller$/, replacement: path.resolve(__dirname, './src/vendor/chat-client/controller.mjs') },
-        { find: /^@pocketbase-mcp\/chat-client\/client$/, replacement: path.resolve(__dirname, './src/vendor/chat-client/client.mjs') },
-        { find: /^@pocketbase-mcp\/chat-client\/sse$/, replacement: path.resolve(__dirname, './src/vendor/chat-client/sse.mjs') },
-        { find: /^@pocketbase-mcp\/chat-client\/reducer$/, replacement: path.resolve(__dirname, './src/vendor/chat-client/reducer.mjs') },
-        { find: /^@pocketbase-mcp\/chat-client$/, replacement: path.resolve(__dirname, './src/vendor/chat-client/index.mjs') },
         { find: '@', replacement: path.resolve(__dirname, './src') },
       ],
     },

@@ -71,7 +71,7 @@ import {
   bindAgentPanel, renderContextMarkerEntry, renderNoticeEntry, proposalErrorText,
 } from '@pocketbase-mcp/chat-client/agent-panel';
 import { ChatController } from '@pocketbase-mcp/chat-client';
-import { ChatClient } from '@pocketbase-mcp/chat-client/client';
+import { ChatClient } from '@pocketbase-mcp/chat-client';
 import { assistantContext } from '../assistant/context';
 import {
   attachSubmitTracking, cardProposalOf, choiceIdFor, contextReferencesFromTranscript,

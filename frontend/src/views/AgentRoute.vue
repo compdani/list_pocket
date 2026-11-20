@@ -9,7 +9,7 @@ import { computed, defineAsyncComponent } from 'vue';
 import { useStore } from 'vuex';
 import { backendOf } from '../assistant/chat-host.mjs';
 
-// Both hosts load their own code; the module host pulls in the vendored chat
+// Both hosts load their own code; the module host pulls in the installed chat
 // client and is only fetched when the flag is on.
 const Agent = defineAsyncComponent(() => import('./Agent.vue'));
 const AgentChat = defineAsyncComponent(() => import('./AgentChat.vue'));

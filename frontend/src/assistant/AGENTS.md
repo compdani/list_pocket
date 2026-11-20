@@ -3,7 +3,7 @@
 The assistant side panel (`<lp-agent-panel>`) and the full Agent page (`<lp-agent-page>`)
 are both built on the **`agent-panel`** package
 (https://github.com/compdani/agent-panel). It's installed from GitHub and pinned to
-v0.5.0 in `frontend/package.json`. The package's own contract is in
+v0.5.1 in `frontend/package.json`. The package's own contract is in
 `node_modules/agent-panel/AGENTS.md`, and its human guide is in
 `node_modules/agent-panel/README.md`. Read the contract before changing anything here.
 This file covers only how List Pocket extends and hosts the two elements.
