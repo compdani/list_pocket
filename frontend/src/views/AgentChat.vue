@@ -18,7 +18,6 @@
       :formatDate="formatDate"
       :labels="labels"
       :suggestions="suggestions"
-      :disabled="!chatReady || noProvider"
       :placeholder="$t('agent.placeholder', { at: '@' })"
       :empty-title="$t('agent.welcomeTitle')"
       :empty-text="$t('agent.welcomeHelp', { at: '@' })"
@@ -74,8 +73,8 @@ import { ChatController } from '@pocketbase-mcp/chat-client';
 import { ChatClient } from '@pocketbase-mcp/chat-client';
 import { assistantContext } from '../assistant/context';
 import {
-  attachSubmitTracking, cardProposalOf, choiceIdFor, contextReferencesFromTranscript,
-  createSubmitTracker, navigationWrite, reviewPartOf, storedModelFor,
+  cardProposalOf, chatErrorText, choiceIdFor, contextReferencesFromTranscript,
+  navigationWrite, pageContext, referencesFromContext, reviewPartOf, storedModelFor,
 } from '../assistant/chat-host.mjs';
 import { renderProposal } from '../assistant/lp-agent-common';
 import { CONTEXT_ICONS } from '../agent/parts.mjs';
@@ -99,7 +98,6 @@ const pickerRef = ref(null);
 const picker = ref(null);
 const inContext = ref([]);
 const renamable = ref(false);
-const chatReady = ref(false);
 const noProvider = ref(false);
 const actionError = ref('');
 const previewing = ref(null);
@@ -123,7 +121,10 @@ let urlIntent = 'replace';
 // that same id must not write again: the first write is the one that counts,
 // and a replace behind a push would drop the history step.
 let pendingNavId = null;
-const submits = createSubmitTracker();
+// The composer stays disabled until /status has answered. The binding only
+// disables it once features.ready is false, and it will not re-enable a
+// composer it did not disable itself.
+let heldUntilReady = true;
 
 const reviewPart = computed(() => (reviewProposal.value ? reviewPartOf(reviewProposal.value) : null));
 const formatDate = shortStamp;
@@ -169,10 +170,10 @@ const client = new ChatClient({
 const chat = new ChatController({
   client,
   storageKey: accountKey(),
-  context: () => submits.readContext(),
-});
-attachSubmitTracking(chat, submits, (outcome) => {
-  if (outcome.action === 'restore') restoreFailedSend(outcome.submit);
+  // The binding calls readContext() synchronously at the start of its
+  // agent-submit handler, before the element clears the composer, so these
+  // are the @ chips of the message being sent.
+  context: () => pageContext(route.fullPath, page.value?.references),
 });
 
 function lastModel() {
@@ -213,15 +214,17 @@ function syncUrl() {
   });
 }
 
-// A send that failed before the server accepted it puts the draft and its
-// references back, as the legacy page did. Upload failures are reported by the
-// binding itself and keep their chips. A send the server accepted is not put
-// back, including one that follows an earlier failure.
-function restoreFailedSend(submit) {
+function holdComposerUntilReady(state) {
   const el = page.value;
-  if (!el || !submit) return;
-  if (!el.draft) el.draft = submit.text;
-  if (el.references.length === 0 && submit.references.length > 0) el.references = submit.references;
+  if (!el) return;
+  if (state.status !== 'ready') {
+    el.disabled = true;
+    heldUntilReady = true;
+    return;
+  }
+  if (!heldUntilReady) return;
+  heldUntilReady = false;
+  if (state.features?.ready !== false) el.disabled = false;
 }
 
 function onChange() {
@@ -229,36 +232,8 @@ function onChange() {
   syncUrl();
   inContext.value = contextReferencesFromTranscript(state.transcript);
   renamable.value = Boolean(state.activeConversationId);
-  chatReady.value = state.status === 'ready';
-  noProvider.value = chatReady.value
-    && state.models.length === 0 && state.choices.length === 0;
-}
-
-// Registered before bindAgentPanel(), so it runs before the binding's own
-// agent-submit handler. The path and chips are captured here, before
-// newConversation and uploads; the controller reads them from context() later.
-function onSubmit(event) {
-  const { blocked, submit } = submits.start({
-    path: route.fullPath,
-    references: event.detail?.references,
-    text: event.detail?.text,
-    error: chat.state.error,
-    turn: chat.state.turn,
-  });
-  if (blocked) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    return;
-  }
-  // The binding's handler runs before this microtask. If it refused the submit
-  // (uploads off, empty text, no conversation without autoCreate), it never
-  // calls send, and the snapshot must not stick.
-  queueMicrotask(() => {
-    if (submits.current === submit) {
-      const outcome = submits.abandonIfUnstarted();
-      if (outcome.action === 'restore') restoreFailedSend(outcome.submit);
-    }
-  });
+  noProvider.value = state.features?.ready === false;
+  holdComposerUntilReady(state);
 }
 
 function armHistoryPush() {
@@ -323,8 +298,22 @@ async function decideProposal(id, decision, edited) {
   }
 }
 
+// entry.proposal is the stored proposal. The binding omits the controller's
+// `error` (a 409 conflict or a 422 refusal), so that one field still comes
+// from state; everything else the card and the review modal show is on the entry.
+function proposalFor(id, stored) {
+  const live = [...(chat.state.proposals || []), ...(chat.state.decidedProposals || [])]
+    .find((item) => item && String(item.id) === String(id));
+  if (stored && typeof stored === 'object') return { ...stored, error: stored.error ?? live?.error };
+  return live || null;
+}
+
 function openReview(id) {
-  const proposal = chat.state.proposals.find((item) => item && item.id === id);
+  const entries = page.value?.entries || [];
+  const entry = entries.find((item) => item
+    && item.type === 'proposal'
+    && (item.proposalId === id || item.proposal?.id === id));
+  const proposal = proposalFor(id, entry?.proposal);
   if (!proposal) return;
   reviewProposal.value = JSON.parse(JSON.stringify(proposal));
   reviewError.value = '';
@@ -406,11 +395,10 @@ function savePaste() {
   page.value?.addFiles([new File([content], name.trim() || 'pasted.txt', { type: 'text/plain' })]);
 }
 
-// One card per proposal the binding reports; the full proposal (arguments,
-// warnings, result, error) lives in the controller's state.
+// One card per proposal the binding reports. The entry carries the stored
+// proposal (arguments, warnings, result), including decided ones after a reopen.
 function renderProposalEntry(entry, panel) {
-  const proposals = panel.chat?.state?.proposals || [];
-  const full = proposals.find((item) => item && item.id === entry.proposalId) || {
+  const full = proposalFor(entry.proposalId, entry.proposal) || {
     id: entry.proposalId,
     tool: entry.tool,
     state: entry.state,
@@ -423,6 +411,22 @@ function renderProposalEntry(entry, panel) {
     running: entry.running === true || panel.chat?.state?.running === true,
   });
   return card ? renderProposal(panel, card) : null;
+}
+
+// The binding's notice is the outcome line. A decided proposal's stored result
+// rides on that entry, so the same Open link the applied card shows is still
+// there after the conversation is reopened.
+function renderNotice(entry, panel) {
+  const node = renderNoticeEntry(entry);
+  const href = entry?.result?.source?.href;
+  if (!node || typeof href !== 'string' || href === '') return node;
+  const link = document.createElement('a');
+  link.className = 'btn btn--text';
+  link.href = href;
+  link.setAttribute('data-cy', 'assistant-open-result');
+  link.textContent = panel?.labels?.open || 'Open';
+  node.append(document.createTextNode(' '), link);
+  return node;
 }
 
 function preAttach() {
@@ -455,13 +459,11 @@ onMounted(async () => {
   assistantContext.open = false;
   const el = page.value;
   el.chat = chat;
+  el.disabled = true;
   el.defineEntry('proposal', renderProposalEntry);
-  el.defineEntry('notice', renderNoticeEntry);
+  el.defineEntry('notice', renderNotice);
   el.defineEntry('context-marker', renderContextMarkerEntry);
 
-  // Before bindAgentPanel(): this listener must run before the binding's
-  // agent-submit, which starts the turn that reads the page context.
-  el.addEventListener('agent-submit', onSubmit);
   el.addEventListener('agent-select-conversation', onSelectConversation);
   el.addEventListener('agent-new-conversation', onNewConversation);
   el.addEventListener('agent-delete-conversation', onDeleteConversation);
@@ -471,7 +473,11 @@ onMounted(async () => {
   el.addEventListener('agent-reference-open', onReferenceOpen);
   el.addEventListener('agent-model-change', onModelChange);
 
-  binding = bindAgentPanel(el, chat, { registerEntries: false });
+  binding = bindAgentPanel(el, chat, {
+    registerEntries: false,
+    errorText: (code) => chatErrorText(code, $t('agent.noProvider')),
+    contextReferences: referencesFromContext,
+  });
   const removeConversation = chat.remove.bind(chat);
   chat.remove = (id) => {
     const deletingOpen = String(id) === activeId();

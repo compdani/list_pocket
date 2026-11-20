@@ -11,8 +11,9 @@
 // (StoreContext). Its `result` is the object the browser sent:
 //   { "screen": "agent", "path": "/agent/1",
 //     "references": [{"type": "contact", "id": "…", "label": "…"}] }
-// The binding ignores those parts, so withContextReferences() puts their
-// references on the user's text entry as chips.
+// referencesFromContext() is the bindAgentPanel `contextReferences` option:
+// the binding puts those chips on the user message. contextReferencesFromTranscript()
+// is the "In context" list; the module has no equivalent.
 
 /** The most references the backend keeps for a conversation (cmd/chat_module.go). */
 export const AGENT_REF_CAP = 30;
@@ -58,151 +59,6 @@ export function pageContext(path, references) {
 }
 
 /**
- * An error counts for this send only when it is a different object from the
- * one already stored at submit time. The controller replaces `state.error`
- * on a new failure and clears it with null; a leftover object from an earlier
- * failure must not restore that send's draft.
- */
-export function isFreshError(before, after) {
-  if (after == null || after === '') return false;
-  return !Object.is(before, after);
-}
-
-/**
- * One in-flight composer submit. `start` captures the path and references for
- * that submit. A later start is blocked until `readContext` consumes the
- * snapshot or the attempt is settled, so a second submit cannot overwrite
- * them while uploads or `newConversation` are still running. `running`
- * becoming true is not consumption: the controller sets it only after
- * `context()`, and a host must not drop the snapshot on that signal.
- */
-export function createSubmitTracker() {
-  let current = null;
-
-  function finish(submit, info) {
-    if (!submit || submit.settled) return { action: 'none', submit };
-    submit.settled = true;
-    if (current === submit) current = null;
-    return { action: classifySettlement(submit, info), submit };
-  }
-
-  return {
-    get current() {
-      return current;
-    },
-    start({ path, references, text, error, turn } = {}) {
-      if (current && !current.consumed && !current.settled) {
-        return { blocked: true, submit: current };
-      }
-      current = {
-        path: typeof path === 'string' ? path : '',
-        references: referencesOf(references),
-        text: typeof text === 'string' ? text : '',
-        error: error ?? null,
-        turn: turn ?? null,
-        consumed: false,
-        started: false,
-        settled: false,
-      };
-      return { blocked: false, submit: current };
-    },
-    noteStarted() {
-      if (current && !current.settled) current.started = true;
-    },
-    /** The binding returned without calling send or newConversation. */
-    abandonIfUnstarted() {
-      if (!current || current.started || current.settled) return { action: 'none', submit: current };
-      const submit = current;
-      submit.settled = true;
-      current = null;
-      return { action: 'release', submit };
-    },
-    readContext() {
-      if (!current || current.settled) return pageContext('', []);
-      current.consumed = true;
-      return pageContext(current.path, current.references);
-    },
-    settle(submit, info) {
-      return finish(submit, info);
-    },
-  };
-}
-
-/**
- * The outcome of the send promise, not of a `running` change.
- * `rejected` is an upload or a precondition throw: the binding keeps the draft.
- * A resolved turn is acceptance. A new error with no turn is a failure before
- * the server accepted the turn.
- */
-export function classifySettlement(submit, { result, rejected = false, error = null } = {}) {
-  if (!submit) return 'none';
-  if (rejected) return 'release';
-  if (result && result.turn) return 'accept';
-  if (isFreshError(submit.error, error)) return 'restore';
-  return 'release';
-}
-
-/**
- * What a controller `change` means for a submit. A turn object that was already
- * current at submit time is not this send being accepted, and `running: true`
- * before the snapshot has been read is not acceptance either (that flag is set
- * before `submitTurn`). A stale error object is ignored.
- */
-export function observeSubmit(submit, { running = false, turn = null, error = null } = {}) {
-  if (!submit || submit.settled) return 'keep';
-  if (turn && turn !== submit.turn) return 'accept';
-  // The snapshot is still the one this send will read. `running` flipping
-  // true first is not acceptance, and it must not drop the snapshot.
-  if (!submit.consumed) return 'keep';
-  if (isFreshError(submit.error, error) && running !== true) return 'restore';
-  return 'keep';
-}
-
-/**
- * Wrap `send` and `newConversation` so the host hears the attempt's outcome.
- * The binding calls these; the host never sees the promises otherwise.
- * Upload rejections are reported as `release` (the binding restores files).
- * A conversation that fails to appear, with nothing left open, is a failure
- * before accept.
- */
-export function attachSubmitTracking(controller, tracker, onOutcome) {
-  const send = controller.send.bind(controller);
-  const create = controller.newConversation.bind(controller);
-  const report = (outcome) => {
-    if (outcome && outcome.action && outcome.action !== 'none') onOutcome(outcome);
-  };
-  controller.send = (text, options) => {
-    tracker.noteStarted();
-    const submit = tracker.current;
-    if (submit) submit.sawSend = true;
-    let promise;
-    try {
-      promise = send(text, options);
-    } catch (err) {
-      report(tracker.settle(submit, { rejected: true, error: controller.state?.error }));
-      throw err;
-    }
-    Promise.resolve(promise).then(
-      (result) => report(tracker.settle(submit, { result, error: controller.state?.error })),
-      () => report(tracker.settle(submit, { rejected: true, error: controller.state?.error })),
-    );
-    return promise;
-  };
-  controller.newConversation = (title) => {
-    tracker.noteStarted();
-    const submit = tracker.current;
-    const promise = create(title);
-    Promise.resolve(promise).then((conversation) => {
-      if (!submit || submit.settled || submit.sawSend || conversation) return;
-      if (controller.state?.activeConversationId) return;
-      report(tracker.settle(submit, { result: null, error: controller.state?.error }));
-    });
-    return promise;
-  };
-  return controller;
-}
-
-/**
  * The history write for a conversation-id change. `push` is a person selecting
  * a conversation, starting a new chat, or deleting the open one. `replace` is
  * the id a draft's first send assigns, so `/agent` does not stay under the new
@@ -227,65 +83,14 @@ export function backendOf(serverConfig) {
 }
 
 /**
- * The references each user message was sent with, keyed by message id, from the
- * controller's transcript (`type: 'context'` parts).
+ * Chips for one stored page context, for bindAgentPanel's `contextReferences`
+ * option. Same `{ type, id, label }` list the composer sent. The binding
+ * places them on that user message, ahead of its attachment chips, and drops
+ * a chip that has no label.
  */
-function contextReferencesByMessage(transcript) {
-  const byMessage = new Map();
-  if (!Array.isArray(transcript)) return byMessage;
-  for (const part of transcript) {
-    if (!part || part.type !== 'context' || part.role !== 'user') continue;
-    const messageId = part.messageId === undefined || part.messageId === null
-      ? ''
-      : String(part.messageId);
-    if (messageId === '') continue;
-    const result = part.result && typeof part.result === 'object' ? part.result : part;
-    const references = referencesOf(result.references);
-    if (references.length > 0) byMessage.set(messageId, references);
-  }
-  return byMessage;
-}
-
-/** The message id a transcript text entry belongs to (`msg:<id>[:n]`). */
-function messageIdOfEntry(entry, byMessage) {
-  const id = typeof entry?.id === 'string' ? entry.id : '';
-  if (!id.startsWith('msg:')) return '';
-  const rest = id.slice(4);
-  if (byMessage.has(rest)) return rest;
-  const cut = rest.lastIndexOf(':');
-  if (cut > 0 && byMessage.has(rest.slice(0, cut))) return rest.slice(0, cut);
-  return '';
-}
-
-/**
- * Put each user turn's stored references on its text entry as `{ type, id,
- * label }` chips, before the attachment chips the binding already added.
- *
- * Pure: returns the same array when no turn has stored references, so the
- * legacy host's entries are untouched. Applied once, in ListPocketAgentPage's
- * `entries` setter, which runs on every binding write.
- */
-export function withContextReferences(entries, transcript) {
-  if (!Array.isArray(entries)) return entries;
-  const byMessage = contextReferencesByMessage(transcript);
-  if (byMessage.size === 0) return entries;
-
-  let changed = false;
-  const out = entries.map((entry) => {
-    if (!entry || entry.type !== 'text' || entry.role !== 'user') return entry;
-    const messageId = messageIdOfEntry(entry, byMessage);
-    if (messageId === '') return entry;
-    const stored = byMessage.get(messageId);
-    const existing = Array.isArray(entry.references) ? entry.references : [];
-    // A stored reference that is also an attachment chip keeps the chip's
-    // fields (its download marker), so only add what isn't there yet.
-    const seen = new Set(existing.map((ref) => `${ref?.type}:${ref?.id}`));
-    const added = stored.filter((ref) => !seen.has(`${ref.type}:${ref.id}`));
-    if (added.length === 0) return entry;
-    changed = true;
-    return { ...entry, references: [...added, ...existing] };
-  });
-  return changed ? out : entries;
+export function referencesFromContext(context) {
+  if (!context || typeof context !== 'object') return [];
+  return referencesOf(context.references);
 }
 
 /**
@@ -461,27 +266,21 @@ export function reviewPartOf(proposal) {
 }
 
 // List Pocket's wording for the two provider failures the module reports, as
-// the legacy engine did (cmd/ai_assistant.go runAssistant). The binding's own
-// generic lines are reproduced here so this module stays import-free; tests
-// compare them with the installed client's errorText().
+// the legacy engine did (cmd/ai_assistant.go runAssistant). chatErrorText()
+// is bindAgentPanel's errorText option, so the wording is chosen by code.
 export const PROVIDER_AUTH_TEXT = 'The AI provider did not accept this app\'s credentials. Check the API key, or sign in to ChatGPT again under Settings → AI.';
 export const USAGE_LIMIT_TEXT = 'Your ChatGPT plan\'s usage limit has been reached. Wait for it to reset, or switch models.';
-export const BINDING_PROVIDER_AUTH_TEXT = 'The AI provider rejected its credentials. Ask an administrator to check the key or sign in again in the provider settings.';
-export const BINDING_USAGE_LIMIT_TEXT = 'The AI provider\'s usage limit was reached. Wait a while or switch to another model.';
-
-const BINDING_ALIASES = new Map([
-  [BINDING_PROVIDER_AUTH_TEXT, PROVIDER_AUTH_TEXT],
-  [BINDING_USAGE_LIMIT_TEXT, USAGE_LIMIT_TEXT],
-]);
 
 /**
- * Replace the binding's generic provider wording with List Pocket's, and leave
- * every other line alone. Used by <lp-agent-page> so the element's own error
- * banner keeps the wording the app used before the module.
+ * The line bindAgentPanel should show for a code it knows, or undefined to
+ * keep the binding's own English. `noProviderText` is the translated
+ * agent.noProvider string; this module does not import vue-i18n.
  */
-export function hostErrorText(text) {
-  if (typeof text !== 'string' || text === '') return text ?? '';
-  return BINDING_ALIASES.get(text) ?? text;
+export function chatErrorText(code, noProviderText) {
+  if (code === 'provider_auth') return PROVIDER_AUTH_TEXT;
+  if (code === 'usage_limit') return USAGE_LIMIT_TEXT;
+  if (code === 'no_provider' && typeof noProviderText === 'string' && noProviderText !== '') return noProviderText;
+  return undefined;
 }
 
 /**

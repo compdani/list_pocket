@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 
 import { bindAgentPanel, errorText, PROPOSAL_STATE_TEXT as BINDING_PROPOSAL_STATE_TEXT } from '@pocketbase-mcp/chat-client/agent-panel';
 import {
-  AGENT_REF_CAP, BINDING_PROVIDER_AUTH_TEXT, BINDING_USAGE_LIMIT_TEXT, PROPOSAL_STATE_TEXT,
-  PROVIDER_AUTH_TEXT, USAGE_LIMIT_TEXT, attachSubmitTracking, backendOf, cardProposalOf,
-  choiceIdFor, classifySettlement, contextReferencesFromTranscript, createSubmitTracker,
-  hostErrorText, isFreshError, navigationWrite, observeSubmit, pageContext,
-  proposalProblemText, referencesOf, reviewPartOf, storedModelFor, withContextReferences,
+  AGENT_REF_CAP, PROPOSAL_STATE_TEXT, PROVIDER_AUTH_TEXT, USAGE_LIMIT_TEXT, backendOf,
+  cardProposalOf, chatErrorText, choiceIdFor, contextReferencesFromTranscript,
+  navigationWrite, pageContext, proposalProblemText, referencesFromContext, referencesOf,
+  reviewPartOf, storedModelFor,
 } from '../src/assistant/chat-host.mjs';
 
 // --- page context -----------------------------------------------------------
@@ -33,38 +32,21 @@ test('the page context names the agent screen and carries only references', () =
 
 // --- stored references on user turns ---------------------------------------
 
-test('stored references become chips on the user turn, before attachment chips', () => {
-  const transcript = [
-    {
-      id: 'm1:1',
-      messageId: 'm1',
-      role: 'user',
-      type: 'context',
-      result: { screen: 'agent', path: '/agent/c1', references: [{ type: 'campaign', id: '7', label: 'Spring sale' }] },
-    },
-    { id: 'm1:2', messageId: 'm1', role: 'user', type: 'attachment', uploadId: 'u1', name: 'shot.png' },
-  ];
-  const attachment = { type: 'attachment', id: 'u1', label: 'shot.png', attachment: true, mime: 'image/png' };
-  const entries = [
-    { id: 'msg:m1', type: 'text', role: 'user', content: 'Draft it', references: [attachment] },
-    { id: 'msg:m1:1', type: 'text', role: 'user', content: 'Again', references: [attachment] },
-    { id: 'msg:m2', type: 'text', role: 'assistant', content: 'Sure' },
-  ];
-  const out = withContextReferences(entries, transcript);
-
-  assert.notEqual(out, entries);
-  assert.deepEqual(out[0].references, [{ type: 'campaign', id: '7', label: 'Spring sale' }, attachment]);
-  // A later part of the same message finds its message id too.
-  assert.deepEqual(out[1].references, [{ type: 'campaign', id: '7', label: 'Spring sale' }, attachment]);
-  assert.equal(out[2], entries[2]);
-  // The input is not mutated.
-  assert.deepEqual(entries[0].references, [attachment]);
-});
-
-test('a turn without stored references is left exactly as it was', () => {
-  const entries = [{ id: 'msg:m1', type: 'text', role: 'user', content: 'Hi' }];
-  assert.equal(withContextReferences(entries, []), entries);
-  assert.equal(withContextReferences(entries, undefined), entries);
+test('stored references become the chips the binding option returns', () => {
+  assert.deepEqual(
+    referencesFromContext({
+      screen: 'agent',
+      path: '/agent/c1',
+      references: [
+        { type: 'campaign', id: '7', label: 'Spring sale' },
+        { type: 'file', id: 'f1', label: 'leads.csv' },
+        { type: 'list', id: 3 },
+      ],
+    }),
+    [{ type: 'campaign', id: '7', label: 'Spring sale' }, { type: 'list', id: '3' }],
+  );
+  assert.deepEqual(referencesFromContext(null), []);
+  assert.deepEqual(referencesFromContext({}), []);
 });
 
 test('"in context" keeps the most recent distinct references newest first', () => {
@@ -207,16 +189,19 @@ test('an unknown proposal state keeps its name on the card instead of guessing',
 
 test('the card wording matches the installed binding', () => {
   assert.deepEqual(PROPOSAL_STATE_TEXT, BINDING_PROPOSAL_STATE_TEXT);
-  assert.equal(errorText({ code: 'provider_auth' }), BINDING_PROVIDER_AUTH_TEXT);
-  assert.equal(errorText({ code: 'usage_limit' }), BINDING_USAGE_LIMIT_TEXT);
+  assert.match(errorText({ code: 'provider_auth' }), /provider/i);
+  assert.match(errorText({ code: 'usage_limit' }), /usage limit/i);
+  assert.match(errorText({ code: 'no_provider' }), /isn't set up/);
 });
 
-test('provider failures use the app wording, everything else is unchanged', () => {
-  assert.equal(hostErrorText(errorText({ code: 'provider_auth' })), PROVIDER_AUTH_TEXT);
-  assert.equal(hostErrorText(errorText({ code: 'usage_limit' })), USAGE_LIMIT_TEXT);
-  assert.match(hostErrorText(errorText({ code: 'provider_auth' })), /Settings → AI/);
-  assert.equal(hostErrorText('A reply is already in progress.'), 'A reply is already in progress.');
-  assert.equal(hostErrorText(''), '');
+test('provider failures and a missing provider use the app wording', () => {
+  const noProvider = "AI isn't set up. Add an API key or sign in with ChatGPT in Settings → AI, then reload this page.";
+  assert.equal(chatErrorText('provider_auth', noProvider), PROVIDER_AUTH_TEXT);
+  assert.equal(chatErrorText('usage_limit', noProvider), USAGE_LIMIT_TEXT);
+  assert.match(PROVIDER_AUTH_TEXT, /Settings → AI/);
+  assert.equal(chatErrorText('no_provider', noProvider), noProvider);
+  assert.equal(chatErrorText('internal', noProvider), undefined);
+  assert.equal(chatErrorText('no_provider', ''), undefined);
 });
 
 test('only a refusal carries the server message; every other code stays generic', () => {
@@ -253,22 +238,27 @@ test('the remembered legacy model preselects a matching choice, or none', () => 
   assert.equal(storedModelFor('', choices), null);
 });
 
-// --- listener order ---------------------------------------------------------
-
-// The page context is read by the controller at send time, while the binding's
-// agent-submit starts the send. The host's listener must be registered first.
+// The binding reads the page context synchronously inside its agent-submit
+// handler, before a later listener (the element's own cleanup) clears the
+// composer. The host's context() can therefore read the element directly.
 class FakePage extends EventTarget {
   constructor() {
     super();
     this.tagName = 'AGENT-PAGE';
     this.entries = [];
     this.running = false;
+    this.sending = false;
+    this.disabled = false;
+    this.draft = '';
+    this.references = [];
     this.error = '';
     this.models = [];
     this.model = '';
     this.options = [];
     this.conversations = [];
     this.active = '';
+    this.heading = '';
+    this.hasMore = false;
     this.attributes = new Map();
   }
 
@@ -281,9 +271,7 @@ class FakePage extends EventTarget {
   emitAction() { return true; }
 }
 
-test('the host captures a submit\'s references before the binding starts the send', async () => {
-  const order = [];
-  const element = new FakePage();
+function readyController() {
   const controller = new EventTarget();
   controller.state = {
     status: 'ready',
@@ -293,11 +281,13 @@ test('the host captures a submit\'s references before the binding starts the sen
     messages: [],
     transcript: [],
     proposals: [],
+    decidedProposals: [],
     pendingUploads: [],
     turn: null,
     running: false,
+    sending: false,
     error: null,
-    features: null,
+    features: { context: true, ready: true, uploads: true },
     limits: null,
     models: [],
     choices: [],
@@ -305,23 +295,36 @@ test('the host captures a submit\'s references before the binding starts the sen
     choice: '',
     context: null,
   };
-  controller.send = (text) => {
-    order.push(`binding:${text}:${captured.length}`);
-    return Promise.resolve();
-  };
+  return controller;
+}
 
-  let captured = [];
-  element.addEventListener('agent-submit', (event) => {
-    captured = event.detail.references;
-    order.push('host');
-  });
+test('the binding reads page context during submit, before the composer is cleared', async () => {
+  const element = new FakePage();
+  const chips = [{ type: 'campaign', id: '7', label: 'Spring sale' }];
+  element.references = chips;
+  element.draft = 'Compare these';
+  const seen = [];
+  const controller = readyController();
+  controller.readContext = () => {
+    seen.push(element.references.map((ref) => ({ ...ref })));
+    return pageContext('/agent/c1', element.references);
+  };
+  let sent = null;
+  controller.send = (_text, options) => {
+    sent = options;
+    return Promise.resolve({ turn: { id: 't1' }, created: true });
+  };
   bindAgentPanel(element, controller, { registerEntries: false });
+  element.addEventListener('agent-submit', () => {
+    element.references = [];
+    element.draft = '';
+  });
 
   element.dispatchEvent(new CustomEvent('agent-submit', {
     detail: {
       text: 'Compare these',
       attachments: [],
-      references: [{ type: 'campaign', id: '7', label: 'Spring sale' }],
+      references: chips,
       fromDraft: true,
       model: '',
       options: {},
@@ -329,137 +332,70 @@ test('the host captures a submit\'s references before the binding starts the sen
   }));
   await Promise.resolve();
 
-  assert.deepEqual(order, ['host', 'binding:Compare these:1']);
-  assert.deepEqual(captured, [{ type: 'campaign', id: '7', label: 'Spring sale' }]);
+  assert.deepEqual(seen, [chips]);
+  assert.deepEqual(sent.context, pageContext('/agent/c1', chips));
 });
 
-// --- one submit's snapshot, and which error belongs to it -------------------
-
-test('a second submit is blocked until this submit\'s snapshot is read', () => {
-  const tracker = createSubmitTracker();
-  const first = tracker.start({
-    path: '/agent/c1',
-    references: [
-      { type: 'campaign', id: '7', label: 'Spring sale' },
-      { type: 'file', id: 'f1', label: 'leads.csv' },
-    ],
-    text: 'Compare these',
-    error: null,
-    turn: null,
-  });
-  const second = tracker.start({
-    path: '/agent/c2',
-    references: [{ type: 'list', id: '3', label: 'Customers' }],
-    text: 'Other',
-    error: null,
-  });
-
-  assert.equal(second.blocked, true);
-  assert.equal(second.submit, first.submit);
-  assert.deepEqual(tracker.readContext(), {
-    screen: 'agent',
-    path: '/agent/c1',
-    references: [{ type: 'campaign', id: '7', label: 'Spring sale' }],
-  });
-  assert.equal(first.submit.consumed, true);
-
-  const next = tracker.start({
-    path: '/agent/c2',
-    references: [{ type: 'list', id: '3', label: 'Customers' }],
-    text: 'Other',
-    error: null,
-  });
-  assert.equal(next.blocked, false);
-  assert.equal(tracker.readContext().path, '/agent/c2');
-  // Settling the first send does not drop the second snapshot.
-  assert.equal(tracker.settle(first.submit, { result: { turn: { id: 't1' } } }).action, 'accept');
-  assert.equal(tracker.current, next.submit);
-});
-
-test('running before the snapshot is read does not accept the send or drop it', () => {
-  const tracker = createSubmitTracker();
-  const stale = { code: 'error', message: 'earlier' };
-  const { submit } = tracker.start({
-    path: '/agent', references: [], text: 'Hi', error: stale, turn: null,
-  });
-  assert.equal(observeSubmit(submit, { running: true, turn: null, error: stale }), 'keep');
-  assert.equal(submit.consumed, false);
-  assert.equal(tracker.current, submit);
-});
-
-test('a stale error is not a failure, and a new error before a turn restores', () => {
-  const stale = { code: 'error', message: 'earlier' };
-  const fresh = { code: 'internal', message: 'nope' };
-  const tracker = createSubmitTracker();
-  const { submit } = tracker.start({
-    path: '/agent', references: [], text: 'Hi', error: stale, turn: null,
-  });
-  tracker.noteStarted();
-  tracker.readContext();
-
-  assert.equal(isFreshError(stale, stale), false);
-  assert.equal(isFreshError(stale, fresh), true);
-  assert.equal(isFreshError(stale, null), false);
-  assert.equal(observeSubmit(submit, { running: false, turn: null, error: stale }), 'keep');
-  assert.equal(classifySettlement(submit, { result: null, error: stale }), 'release');
-  assert.equal(classifySettlement(submit, { result: null, error: fresh }), 'restore');
-  assert.equal(classifySettlement(submit, { rejected: true, error: fresh }), 'release');
-  assert.equal(classifySettlement(submit, { result: { turn: { id: 't1' } }, error: fresh }), 'accept');
-  // The turn already on screen when this send started is not this send's turn.
-  assert.equal(observeSubmit(submit, { turn: null, error: fresh, running: false }), 'restore');
-});
-
-test('a refused submit drops its snapshot so the next send is not blocked', () => {
-  const tracker = createSubmitTracker();
-  const { submit } = tracker.start({ path: '/agent', references: [], text: 'Hi', error: null });
-  assert.deepEqual(tracker.abandonIfUnstarted(), { action: 'release', submit });
-  assert.equal(tracker.current, null);
-  tracker.noteStarted();
-  assert.equal(tracker.abandonIfUnstarted().action, 'none');
-});
-
-test('tracking the controller send promise tells a failure from an upload and from a success', async () => {
-  const tracker = createSubmitTracker();
-  const actions = [];
-  const controller = {
-    state: { error: null, activeConversationId: null },
-    send(text) {
-      if (text === 'upload') return Promise.reject(new Error('upload'));
-      if (text === 'bad') {
-        controller.state.error = { code: 'internal', message: 'nope' };
-        return Promise.resolve(null);
-      }
-      return Promise.resolve({ turn: { id: 't1' } });
-    },
-    newConversation() {
-      controller.state.error = { code: 'internal', message: 'create failed' };
-      return Promise.resolve(null);
-    },
+test('a second submit is refused while the first is still being sent', async () => {
+  const element = new FakePage();
+  const controller = readyController();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const sent = [];
+  controller.readContext = () => ({ screen: 'agent', path: '/agent', references: [] });
+  controller.send = (text) => {
+    sent.push(text);
+    return gate.then(() => ({ turn: { id: 't1' }, created: true }));
   };
-  attachSubmitTracking(controller, tracker, (outcome) => actions.push(outcome.action));
+  const outcomes = [];
+  bindAgentPanel(element, controller, {
+    registerEntries: false,
+    onSend: (result) => outcomes.push(result),
+  });
 
-  tracker.start({ path: '/agent', references: [], text: 'bad', error: null });
-  await controller.send('bad');
-  await Promise.resolve();
-  assert.deepEqual(actions, ['restore']);
+  const detail = {
+    attachments: [], references: [], fromDraft: true, model: '', options: {},
+  };
+  element.dispatchEvent(new CustomEvent('agent-submit', { detail: { ...detail, text: 'One' } }));
+  element.dispatchEvent(new CustomEvent('agent-submit', { detail: { ...detail, text: 'Two' } }));
+  assert.deepEqual(sent, ['One']);
+  assert.deepEqual(outcomes.map((result) => result.code), ['busy']);
+  release();
+  await gate;
+  for (let i = 0; i < 5; i += 1) await Promise.resolve();
+  assert.equal(outcomes.at(-1).status, 'accepted');
+});
 
-  const stale = controller.state.error;
-  tracker.start({ path: '/agent', references: [], text: 'ok', error: stale });
-  await controller.send('ok');
-  await Promise.resolve();
-  assert.deepEqual(actions, ['restore', 'accept']);
+test('a failed send puts the draft and its references back', async () => {
+  const element = new FakePage();
+  const chips = [{ type: 'campaign', id: '7', label: 'Spring sale' }];
+  element.draft = 'Keep this';
+  element.references = chips.slice();
+  const controller = readyController();
+  controller.readContext = () => pageContext('/agent/c1', element.references);
+  controller.send = () => {
+    controller.state = { ...controller.state, error: { code: 'internal', message: 'nope' } };
+    return Promise.resolve(null);
+  };
+  bindAgentPanel(element, controller, { registerEntries: false });
+  element.addEventListener('agent-submit', () => {
+    element.draft = '';
+    element.references = [];
+  });
 
-  tracker.start({ path: '/agent', references: [], text: 'file', error: null });
-  await controller.send('upload').catch(() => {});
-  await Promise.resolve();
-  assert.deepEqual(actions, ['restore', 'accept', 'release']);
-
-  tracker.start({ path: '/agent', references: [], text: 'new', error: null });
-  await controller.newConversation();
-  await Promise.resolve();
-  assert.deepEqual(actions, ['restore', 'accept', 'release', 'restore']);
-  assert.equal(tracker.current, null);
-  assert.equal(tracker.start({ path: '/agent', text: 'later', references: [], error: null }).blocked, false);
+  element.dispatchEvent(new CustomEvent('agent-submit', {
+    detail: {
+      text: 'Keep this',
+      attachments: [],
+      references: chips,
+      fromDraft: true,
+      model: '',
+      options: {},
+    },
+  }));
+  for (let i = 0; i < 6; i += 1) await Promise.resolve();
+  assert.equal(element.draft, 'Keep this');
+  assert.deepEqual(element.references, chips);
 });
 
 test('history push is for a choice and replace is for a draft\'s new id', () => {

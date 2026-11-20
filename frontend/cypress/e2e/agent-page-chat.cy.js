@@ -103,6 +103,7 @@ function stubPage({
       conversation: conversation(detail.id, detail.title),
       messages: detail.messages || [],
       proposals: detail.proposals || [],
+      decidedProposals: detail.decidedProposals || [],
       activeTurn: null,
       context: contextStatus(),
     }).as('conversation');
@@ -340,8 +341,53 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.get('[data-cy=assistant-proposal-status]').should('not.exist');
   });
 
+  it('shows the Open link for a decided proposal after the conversation is reopened', () => {
+    stubPage({
+      detail: {
+        id: 'c1',
+        title: 'Spring launch',
+        messages: [{
+          id: 'n1',
+          conversationId: 'c1',
+          turnId: 't0',
+          role: 'notice',
+          createdAt: '2026-11-11T09:00:03Z',
+          parts: [{
+            type: 'proposal_outcome',
+            proposalId: 'p9',
+            state: 'succeeded',
+            tool: 'create_campaign_draft',
+            text: 'Created the Spring campaign.',
+            result: { source: { href: '/admin/campaigns/9' } },
+          }],
+        }],
+        proposals: [],
+        decidedProposals: [{
+          id: 'p9',
+          tool: 'create_campaign_draft',
+          state: 'succeeded',
+          revision: 2,
+          arguments: {},
+          result: { source: { href: '/admin/campaigns/9' } },
+        }],
+      },
+    });
+
+    cy.visit(`${fixture}?path=/agent/c1`);
+    cy.wait(['@status', '@list', '@conversation']);
+    cy.contains('[part=notice]', 'Created the Spring campaign.').should('be.visible');
+    cy.get('[part=notice] [data-cy=assistant-open-result]').should('have.attr', 'href', '/admin/campaigns/9');
+  });
+
   it('explains that AI is not set up instead of a generic error and disables sending', () => {
-    stubPage({ status: statusBody({ models: [], choices: [], defaultChoice: '' }) });
+    stubPage({
+      status: statusBody({
+        models: [],
+        choices: [],
+        defaultChoice: '',
+        features: { proposals: true, uploads: true, context: true, ready: false },
+      }),
+    });
     cy.visit(fixture);
     cy.wait(['@status', '@list']);
     cy.get('[data-cy=agent-no-provider]').should('be.visible').and('contain.text', "AI isn't set up");
