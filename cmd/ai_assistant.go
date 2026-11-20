@@ -353,6 +353,8 @@ func (a *App) assistantTools() []assistantTool {
 		{name: "templates", description: "Read reusable campaign templates", handler: a.GetTemplates, perms: []string{"templates:get"}},
 		{name: "media", description: "Read hosted media and image URLs", handler: a.GetAllMedia, perms: []string{"media:get"}},
 		{name: "inbox", description: "Read permitted inbound email", handler: a.GetInboundEmailInbox, perms: []string{"inbox:get"}},
+		{name: "dashboard_counts", description: "Read the dashboard's totals: subscribers, campaigns, messages and recent activity", handler: a.GetDashboardCounts},
+		{name: "dashboard_charts", description: "Read the dashboard's chart data for the last 30 days. Query: tz=<IANA time zone>, default UTC", handler: a.GetDashboardCharts},
 	}
 	for i := range tools {
 		tools[i].properties = query
@@ -510,6 +512,11 @@ func (a *App) executeAssistantTool(re *pbcore.RequestEvent, name string, raw jso
 		if args.ID != "" {
 			handler = a.GetFlowRun
 		}
+	case "propose_subscriber_update":
+		e.Request.Body = io.NopCloser(bytes.NewReader(args.Body))
+		e.Request.Method = http.MethodPatch
+		e.Request.Header = e.Request.Header.Clone()
+		e.Request.Header.Set("Content-Type", "application/json")
 	default:
 		if tool.mutation {
 			e.Request.Body = io.NopCloser(bytes.NewReader(args.Body))
@@ -565,8 +572,10 @@ func (a *App) executeAssistantTool(re *pbcore.RequestEvent, name string, raw jso
 		href = "/admin/crm/boards"
 	case "board_view":
 		href = "/admin/crm/boards/" + url.PathEscape(args.ID)
-	case "contact_profile", "contact_boards", "contact_notes", "contact_tasks", "propose_contact_update", "propose_board_move", "propose_contact_note", "propose_contact_task":
+	case "contact_profile", "contact_boards", "contact_notes", "contact_tasks", "propose_contact_update", "propose_board_move", "propose_contact_note", "propose_contact_task", "subscriber_activity", "subscriber_channels", "propose_subscriber_update":
 		href = "/admin/subscribers/" + url.PathEscape(args.ID)
+	case "dashboard_counts", "dashboard_charts":
+		href = "/admin"
 	}
 	if name == "create_campaign_draft" {
 		payload, _ := result.(map[string]any)

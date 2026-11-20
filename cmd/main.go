@@ -37,6 +37,7 @@ import (
 	"github.com/compdani/list_pocket/internal/plugins"
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
+	pbadapter "github.com/compdani/pocketbase-mcp/adapters/pocketbase"
 	"github.com/joho/godotenv"
 )
 
@@ -68,6 +69,7 @@ type App struct {
 	log               *log.Logger
 	bufLog            *buflog.BufLog
 	pb                *pocketbase.PocketBase
+	mcp               *pbadapter.Server
 	tpl               *template.Template
 	renderer          *tplRenderer
 

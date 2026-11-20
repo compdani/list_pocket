@@ -70,6 +70,8 @@ func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
 	}
 
 	registerHandlers(se.Router, app)
+
+	app.mountMCP(se)
 }
 
 // parsePublicTemplates parses public HTML templates used by public RequestEvent handlers.
