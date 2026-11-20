@@ -162,7 +162,7 @@ describe('Agent page', { includeShadowDom: true }, () => {
     cy.get('.title').should('have.text', 'Inbox triage');
   });
 
-  it('shows a user message as the characters typed', () => {
+  it('renders inline markdown in user messages, as in assistant messages', () => {
     cy.intercept('GET', '**/mailapi/agent/conversations/c1', {
       data: {
         id: 'c1',
@@ -177,8 +177,7 @@ describe('Agent page', { includeShadowDom: true }, () => {
     cy.wait('@plain');
     cy.get('.user-turn').within(() => {
       cy.get('[data-reference="campaign:7"]').should('be.visible');
-      cy.get('[data-role=user]').should('have.text', '2 * 3 and **x**');
-      cy.get('strong, em').should('not.exist');
+      cy.get('[data-role=user] strong').should('have.text', 'x');
     });
     cy.get('.message strong').should('have.text', 'six');
   });

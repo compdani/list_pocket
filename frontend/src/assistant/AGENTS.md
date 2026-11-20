@@ -49,12 +49,9 @@ Both subclasses do the following (from `lp-agent-common.js`):
 
 - `renderMarkdown` uses `renderAssistantMarkdown` (markdown-it with `html: false`, images
   disabled, and links opening in a new tab with `rel=noopener`).
-- User bubbles stay plain text. agent-panel 0.5 formats them with
-  `inlineMarkdownToHTML` inside `renderText`, and that method is the supported
-  hook (there is no separate switch). Both subclasses override `renderText`
-  and pass the result through `plainUserBubble`, which keeps the reference
-  chips and attachments and sets the bubble's text to the characters the
-  person typed. Assistant messages still go through `renderMarkdown`.
+- User bubbles keep agent-panel's own inline markdown (`inlineMarkdownToHTML`
+  in `renderText`), so `**x**` reads as bold there too. This is deliberate;
+  don't override `renderText` to make them plain.
 - The theme tokens map to Vuetify's `--v-theme-*` variables, with fallbacks.
 - `referenceIcon` maps the context types in `CONTEXT_ICONS` (`agent/parts.mjs`) to
   `@mdi/js` paths. Add new types in both places.

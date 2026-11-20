@@ -688,7 +688,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     });
   });
 
-  it('shows a user message as the characters typed, and assistant markdown as markdown', () => {
+  it('renders inline markdown in user messages, as in assistant messages', () => {
     stubPage({
       detail: {
         id: 'c1',
@@ -703,8 +703,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.wait(['@status', '@list', '@conversation']);
     cy.get('.user-turn').within(() => {
       cy.get('[data-reference="campaign:7"]').should('be.visible');
-      cy.get('[data-role=user]').should('have.text', '2 * 3 and **x**');
-      cy.get('strong, em').should('not.exist');
+      cy.get('[data-role=user] strong').should('have.text', 'x');
     });
     cy.get('.message strong').should('have.text', 'six');
   });
