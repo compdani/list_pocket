@@ -484,3 +484,24 @@ func TestShutdownAppCancelsAndJoinsChatReload(t *testing.T) {
 	}
 	a.goReloadChatProviders() // must be a no-op, not a database read
 }
+
+func TestChatProviderStoreChatGPTColdFallback(t *testing.T) {
+	a := chatProvidersTestApp(t)
+	t.Setenv("LISTPOCKET_AI_API_KEY", "")
+	if err := a.chatgpt.store.Save(signedInCreds()); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.setAIDefaults(aiChoice{Provider: llm.ProviderChatGPT, Model: "gpt-5-codex"}); err != nil {
+		t.Fatal(err)
+	}
+	store := &chatProviderStore{app: a}
+	store.cacheOnly.Store(true)
+
+	providers, err := store.ListProviders(context.Background(), catalog.Scope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 1 || providers[0].ID != llm.ProviderChatGPT || providers[0].DefaultModel != "gpt-5-codex" {
+		t.Fatalf("cold ChatGPT provider = %+v, want fallback default gpt-5-codex", providers)
+	}
+}

@@ -672,15 +672,93 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('textarea').should('have.value', 'Second try');
     cy.get('[data-cy=assistant-retry]').should('not.exist');
 
-    // Now accept a turn that fails mid-stream; Retry must resend with the upload ID from the transcript.
+    // Now accept a turn that fails mid-stream; Retry must appear, then hide if a subsequent submit is refused.
     cy.get('textarea').type('{enter}');
+    cy.wait('@failedTurn');
+    cy.get('[data-cy=assistant-retry]').should('be.visible');
+
+    // Submit a new message that gets refused while the earlier failed turn is still in state:
+    // Retry must hide so clicking it cannot resend the older message.
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/c1/turns', {
+      statusCode: 400,
+      body: { error: { code: 'turn_refused', message: 'Still refused.' } },
+    }).as('refusedAfterFail');
+    cy.get('textarea').type('Blocked follow-up{enter}');
+    cy.wait('@refusedAfterFail');
+    cy.get('textarea').should('have.value', 'Blocked follow-up');
+    cy.get('[data-cy=assistant-retry]').should('not.exist');
+  });
+
+  it('retries a failed accepted turn with its stored upload IDs', () => {
+    const turns = [];
+    stubList([conversation('c1', 'With file')]);
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c1', {
+      conversation: conversation('c1', 'With file'),
+      messages: [
+        {
+          id: 'u1',
+          conversationId: 'c1',
+          turnId: 't0',
+          role: 'user',
+          createdAt: '2026-11-11T09:00:00Z',
+          parts: [
+            { type: 'text', text: 'Check brief' },
+            { type: 'attachment', uploadId: 'up1', name: 'brief.txt', mime: 'text/plain' },
+          ],
+        },
+      ],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    }).as('open1');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/c1/turns', (req) => {
+      turns.push(req.body);
+      if (turns.length === 1) {
+        req.reply({ turn: { id: 't1', conversationId: 'c1', state: 'running' }, created: true });
+        return;
+      }
+      req.reply({ turn: { id: 't2', conversationId: 'c1', state: 'completed' }, created: true });
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/turns/t1/events', sse([
+      frame(1, 'turn.started'),
+      frame(2, 'turn.failed', { code: 'provider_error', message: 'Boom.' }),
+    ])).as('failedTurn');
+
+    visit('?editor=none');
+    cy.wait(['@status', '@list']);
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-conversation-id=c1] .conv-link').click();
+    cy.wait('@open1');
+    cy.get('textarea').type('Check brief{enter}');
     cy.wait('@failedTurn');
     cy.get('[data-cy=assistant-retry]').click();
     cy.wrap(null).should(() => {
-      expect(turns).to.have.length(3);
-      expect(turns[2].text).to.eq('Earlier message');
-      expect(turns[2].attachments).to.deep.eq(['up1']);
+      expect(turns).to.have.length(2);
+      expect(turns[1].text).to.eq('Check brief');
+      expect(turns[1].attachments).to.deep.eq(['up1']);
     });
+  });
+
+  it('keeps an init error visible and recovers when AI settings update', () => {
+    let ready = false;
+    cy.intercept('GET', '**/api/mcp/chat/v1/status', (req) => {
+      if (!ready) {
+        req.reply({ statusCode: 503, body: { error: { code: 'unavailable', message: 'Starting up' } } });
+        return;
+      }
+      req.reply(statusBody());
+    }).as('status');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations', { items: [], nextCursor: '' }).as('list');
+
+    visit('?editor=none');
+    cy.wait('@status');
+    cy.get('textarea').should('be.disabled');
+    cy.get('[part=error]').should('be.visible');
+
+    cy.then(() => { ready = true; });
+    cy.window().then((win) => win.dispatchEvent(new win.Event('ai-settings-updated')));
+    cy.wait('@status');
+    cy.get('textarea').should('not.be.disabled');
   });
 
   it('keeps saved media pictures when deleting a conversation fails on the server', () => {

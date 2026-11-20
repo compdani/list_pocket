@@ -71,6 +71,7 @@ func (a *App) mountMCP(se *pbcore.ServeEvent) error {
 		a.mcp = nil
 		return fmt.Errorf("mcp: register routes: %w", err)
 	}
+	a.goReloadChatProviders()
 	return nil
 }
 
@@ -80,23 +81,35 @@ func (a *App) moduleLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(mcpLogWriter{a.log}, &slog.HandlerOptions{Level: slog.LevelWarn}))
 }
 
-// mcpPolicies holds the host policies the tool specs name. lp_super_admin is
-// List Pocket's super admin role, never PocketBase's built-in "superuser".
+// mcpPolicies holds the host policies the tool specs and chat surface name.
+// lp_active_user blocks disabled List Pocket users whose PocketBase token has
+// not yet expired; lp_super_admin is List Pocket's super admin role (active
+// users only), never PocketBase's built-in "superuser".
 func (a *App) mcpPolicies() map[string]pbmcp.PolicyFunc {
+	loadUser := func(p pbmcp.Principal) *pbcore.Record {
+		if a.pb == nil || p.ID == "" || p.IsSuperuser {
+			return nil
+		}
+		collection := p.CollectionName
+		if collection == "" {
+			collection = "users"
+		}
+		record, err := a.pb.FindRecordById(collection, p.ID)
+		if err != nil || record == nil {
+			return nil
+		}
+		if record.GetString("status") != auth.UserStatusEnabled {
+			return nil
+		}
+		return record
+	}
 	return map[string]pbmcp.PolicyFunc{
+		"lp_active_user": func(p pbmcp.Principal) bool {
+			return loadUser(p) != nil
+		},
 		"lp_super_admin": func(p pbmcp.Principal) bool {
-			if a.pb == nil || p.ID == "" || p.IsSuperuser {
-				return false
-			}
-			collection := p.CollectionName
-			if collection == "" {
-				collection = "users"
-			}
-			record, err := a.pb.FindRecordById(collection, p.ID)
-			if err != nil || record == nil {
-				return false
-			}
-			return auth.ExtractRoleIDFromRecord(record) == auth.SuperAdminRoleID
+			record := loadUser(p)
+			return record != nil && auth.ExtractRoleIDFromRecord(record) == auth.SuperAdminRoleID
 		},
 	}
 }

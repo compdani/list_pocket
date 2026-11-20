@@ -70,7 +70,7 @@ import { ChatController } from '@pocketbase-mcp/chat-client';
 import { ChatClient } from '@pocketbase-mcp/chat-client';
 import { assistantContext } from '../assistant/context';
 import {
-  chatErrorText, choiceIdFor, contextReferencesFromTranscript,
+  AGENT_EDITOR_PROPOSAL_TEXT, chatErrorText, choiceIdFor, contextReferencesFromTranscript,
   navigationWrite, pageContext, referencesFromContext, reviewPartOf, storedModelFor,
 } from '../assistant/chat-host.mjs';
 import {
@@ -295,6 +295,15 @@ function closeReview() {
 }
 
 async function approve(id) {
+  const entries = page.value?.entries || [];
+  const entry = entries.find((item) => item
+    && item.type === 'proposal'
+    && (item.proposalId === id || item.proposal?.id === id));
+  const proposal = proposalFor(chat, id, entry?.proposal);
+  if (proposal && (proposal.location === 'editor' || proposal.tool === 'propose_editor_patch')) {
+    actionError.value = AGENT_EDITOR_PROPOSAL_TEXT;
+    return;
+  }
   const out = await decideProposal(id, 'approve');
   // A refusal or a failed effect is shown on its card; a request that threw
   // before the server answered has no card update, so it gets the banner.
@@ -393,7 +402,22 @@ const stopRouteWatch = watch(() => route.params.id, (id) => {
   followRoute(next);
 });
 
+async function refreshIfUnavailable() {
+  if (unmounted || chat.state.status === 'loading') return;
+  if (chat.state.status !== 'error' && chat.state.features?.ready !== false) return;
+  const epoch = accountEpoch;
+  await chat.init();
+  if (unmounted || epoch !== accountEpoch) return;
+  if (chat.state.status === 'ready') preselectModel();
+  onChange();
+}
+
+function onRefreshTrigger() {
+  void refreshIfUnavailable();
+}
+
 onMounted(async () => {
+  const mountEpoch = accountEpoch;
   // The full page does what the side panel does, with more room.
   assistantContext.open = false;
   const el = page.value;
@@ -430,6 +454,8 @@ onMounted(async () => {
     return pending;
   };
   chat.addEventListener('change', onChange);
+  window.addEventListener('focus', onRefreshTrigger);
+  window.addEventListener('ai-settings-updated', onRefreshTrigger);
   let loadedAccount = `${accountKey().authCollectionId}:${accountKey().userId}`;
   unsubscribeAuth = pb.authStore.onChange(async () => {
     const key = accountKey();
@@ -453,9 +479,11 @@ onMounted(async () => {
     try {
       await chat.setAccount(key);
       if (unmounted || epoch !== accountEpoch) return;
-      if (id) await chat.open(id);
-      if (unmounted || epoch !== accountEpoch) return;
-      preselectModel();
+      if (chat.state.status === 'ready') {
+        if (id) await chat.open(id);
+        if (unmounted || epoch !== accountEpoch) return;
+        preselectModel();
+      }
     } finally {
       if (epoch === accountEpoch) {
         switchingAccount = false;
@@ -465,15 +493,17 @@ onMounted(async () => {
   });
 
   await chat.init();
-  if (unmounted) return;
+  if (unmounted || mountEpoch !== accountEpoch) return;
   const id = String(route.params.id || '');
-  if (id) await chat.open(id);
-  else chat.startDraft();
-  if (unmounted) return;
+  if (chat.state.status === 'ready') {
+    if (id) await chat.open(id);
+    else chat.startDraft();
+  }
+  if (unmounted || mountEpoch !== accountEpoch) return;
   aligned = true;
   const queued = sawQueuedRoute ? queuedRoute : undefined;
   sawQueuedRoute = false;
-  preselectModel();
+  if (chat.state.status === 'ready') preselectModel();
   preAttach();
   if (queued !== undefined && queued !== activeId()) followRoute(queued);
   else onChange();
@@ -482,6 +512,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   unmounted = true;
+  window.removeEventListener('focus', onRefreshTrigger);
+  window.removeEventListener('ai-settings-updated', onRefreshTrigger);
   stopRouteWatch();
   binding?.unbind();
   chat.dispose();

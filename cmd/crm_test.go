@@ -1,14 +1,11 @@
 package main
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/compdani/list_pocket/internal/core"
 	"github.com/compdani/list_pocket/models"
-
-	"github.com/compdani/list_pocket/internal/apperr"
 )
 
 func TestEmailReplyTo(t *testing.T) {
@@ -160,17 +157,6 @@ func TestAIChoiceValidate(t *testing.T) {
 	for _, bad := range []aiChoice{{Provider: "other", Model: "m"}, {Provider: "api"}, {Model: "m"}} {
 		if err := bad.validate(); err == nil {
 			t.Errorf("%+v should be refused", bad)
-		}
-	}
-}
-
-func TestApplyRefused(t *testing.T) {
-	if !applyRefused(apperr.BadRequest("no placeholder")) {
-		t.Fatal("a refused input should leave the proposal open to correct")
-	}
-	for _, err := range []error{nil, apperr.Internal("write failed"), apperr.Forbidden("no"), errors.New("plain")} {
-		if applyRefused(err) {
-			t.Fatalf("%v may have written, so it must not be retried", err)
 		}
 	}
 }

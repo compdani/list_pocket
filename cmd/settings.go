@@ -503,6 +503,7 @@ func (a *App) UpdateAIBuilderSettings(re *pbcore.RequestEvent) error {
 	if err := a.upsertTypedSettingsRecord("ai_builder", string(payloadBytes)); err != nil {
 		return err
 	}
+	a.goReloadChatProviders()
 
 	return okJSON(re, aiBuilderSettingsPayload{
 		Model:           model,

@@ -712,8 +712,15 @@ test('retry targets only a failed accepted turn and keeps its uploads and refere
     { text: 'Second', attachments: ['up1'], references: [{ type: 'list', id: '3', label: 'VIP' }] },
   );
   assert.equal(retryText({ running: false, transcript, turn: { error: { code: 'provider_error' } } }), 'Second');
-  // A pre-accept state.error (e.g. refused second submit) restores the draft instead of offering Retry.
+  // A pre-accept state.error (e.g. refused second submit) restores the draft instead of offering Retry,
+  // even when an earlier accepted turn had failed.
   assert.equal(retryPayload({ running: false, transcript, error: { code: 'turn_refused' }, turn: null }), null);
+  assert.equal(retryPayload({
+    running: false,
+    transcript,
+    error: { code: 'turn_refused' },
+    turn: { error: { code: 'provider_error' } },
+  }), null);
   assert.equal(retryText({ running: true, transcript, turn: { error: { code: 'network' } } }), '');
   assert.equal(retryText({ running: false, transcript }), '');
 });

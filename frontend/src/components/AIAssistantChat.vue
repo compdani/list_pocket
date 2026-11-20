@@ -390,14 +390,10 @@ function retry() {
   undo.value = null;
   const model = typeof panel.value?.model === 'string' ? panel.value.model : '';
   const effort = typeof panel.value?.optionValues?.effort === 'string' ? panel.value.optionValues.effort : '';
-  const composerFiles = (panel.value?.attachments || [])
-    .map((item) => item?.file)
-    .filter((file) => file instanceof Blob);
-  const attachments = [...payload.attachments, ...composerFiles];
   const options = {
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
-    ...(attachments.length ? { attachments } : {}),
+    ...(payload.attachments.length ? { attachments: payload.attachments } : {}),
   };
   if (payload.references.length) {
     options.context = panelPageContext({
@@ -427,11 +423,30 @@ function removePicture(index) {
   savePictures(localStorage, userId(), activePictureId(), next);
 }
 
+async function refreshIfUnavailable() {
+  if (unmounted || chat.state.status === 'loading') return;
+  if (chat.state.status !== 'error' && chat.state.features?.ready !== false) return;
+  const epoch = accountEpoch;
+  await chat.init();
+  if (unmounted || epoch !== accountEpoch) return;
+  if (chat.state.status === 'ready') preselectModel();
+  onChange();
+}
+
+function onRefreshTrigger() {
+  void refreshIfUnavailable();
+}
+
 watch(() => assistantContext.editor, (next, prev) => {
   if (next !== prev) undo.value = null;
 });
 
+watch(() => assistantContext.open, (open) => {
+  if (open) void refreshIfUnavailable();
+});
+
 onMounted(async () => {
+  const mountEpoch = accountEpoch;
   clearLegacyAssistantStorage(localStorage);
   const el = panel.value;
   el.chat = chat;
@@ -470,6 +485,8 @@ onMounted(async () => {
     return pending;
   };
   chat.addEventListener('change', onChange);
+  window.addEventListener('focus', onRefreshTrigger);
+  window.addEventListener('ai-settings-updated', onRefreshTrigger);
   const currentAccountId = () => {
     const key = accountKey();
     return `${key.authCollectionId}:${key.userId}`;
@@ -494,21 +511,28 @@ onMounted(async () => {
     pictureConversation = '';
     await chat.setAccount(accountKey());
     if (unmounted || epoch !== accountEpoch) return;
-    chat.startDraft();
-    preselectModel();
+    if (chat.state.status === 'ready') {
+      chat.startDraft();
+      preselectModel();
+    }
     loadPictures('');
+    onChange();
   });
 
   await chat.init();
-  if (unmounted) return;
-  chat.startDraft();
-  preselectModel();
+  if (unmounted || mountEpoch !== accountEpoch) return;
+  if (chat.state.status === 'ready') {
+    chat.startDraft();
+    preselectModel();
+  }
   loadPictures(chat.state.activeConversationId ? String(chat.state.activeConversationId) : '');
   onChange();
 });
 
 onBeforeUnmount(() => {
   unmounted = true;
+  window.removeEventListener('focus', onRefreshTrigger);
+  window.removeEventListener('ai-settings-updated', onRefreshTrigger);
   binding?.unbind();
   chat.dispose();
   unsubscribeAuth?.();

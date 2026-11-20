@@ -54,6 +54,7 @@ func (a *App) enableChat(srv *pbadapter.Server) error {
 	err := srv.EnableChat(pbadapter.ChatConfig{
 		Options: pbmcp.ChatOptions{
 			Namespace:          "listpocket",
+			Policy:             "lp_active_user",
 			Proposals:          true,
 			AutoApprove:        true,
 			AllowArgumentEdits: true,
@@ -96,7 +97,6 @@ func (a *App) enableChat(srv *pbadapter.Server) error {
 		return err
 	}
 	store.cacheOnly.Store(false)
-	a.goReloadChatProviders()
 	return nil
 }
 

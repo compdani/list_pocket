@@ -123,8 +123,11 @@ it.
 
 **Pictures & Retry.** Media pictures persist per user and conversation in
 `localStorage['listpocket_assistant_pictures_v1:<userId>']`; draft pictures move onto the
-created conversation id on first send. Retry resends the last user message with the
-selected `model` and `effort`.
+created conversation id on first send. Retry is offered only for a failed accepted turn
+(`state.turn.error` with no active pre-accept `state.error`) and resends that turn's
+message, stored upload IDs, context references, and the selected `model` and `effort`.
+When `/status` fails or reports `features.ready === false`, opening the panel, regaining
+window focus, or changing Settings → AI (`ai-settings-updated`) re-runs `chat.init()`.
 
 ## Checking a change
 

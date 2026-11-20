@@ -1252,3 +1252,27 @@ func TestMountMCPFailureReturnsError(t *testing.T) {
 		t.Fatal("a.mcp must stay nil after a failed mount")
 	}
 }
+
+// o. Disabled List Pocket users are rejected from every chat endpoint even if
+// their PocketBase auth token has not expired.
+func TestChatModuleDisabledUserBlocked(t *testing.T) {
+	f := newChatTestFixture(t)
+	conv := f.conversation(t, f.scopedToken)
+
+	f.scoped.Set("status", "disabled")
+	if err := f.app.pb.Save(f.scoped); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, req := range []struct{ method, path string }{
+		{http.MethodGet, chatAPI + "/status"},
+		{http.MethodGet, chatAPI + "/conversations"},
+		{http.MethodGet, chatAPI + "/conversations/" + conv},
+		{http.MethodDelete, chatAPI + "/conversations/" + conv},
+	} {
+		code, raw := f.do(t, f.scopedToken, req.method, req.path, nil)
+		if code != http.StatusForbidden {
+			t.Errorf("disabled user %s %s: got %d %s, want 403", req.method, req.path, code, raw)
+		}
+	}
+}

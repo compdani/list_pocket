@@ -354,6 +354,7 @@ export const PANEL_PICTURES_PREFIX = 'listpocket_assistant_pictures_v1:';
 export const PANEL_DRAFT_PICTURES = 'draft';
 
 export const WRONG_EDITOR_TEXT = 'Open the original editor before applying this proposal.';
+export const AGENT_EDITOR_PROPOSAL_TEXT = 'Open the side panel on the original editor before applying this proposal.';
 export const MID_APPLY_TEXT = 'The editor changed during approval. Ask for a fresh proposal.';
 export const UNDO_CHANGED_TEXT = 'The editor changed after this edit; use its undo controls.';
 
@@ -668,7 +669,7 @@ export function undoLastEdit(entry, editor, revisionOf) {
  * (where the binding already restored the refused draft in the composer).
  */
 export function retryPayload(state) {
-  if (!state || state.running || state.sending) return null;
+  if (!state || state.running || state.sending || state.error) return null;
   if (!state.turn || !state.turn.error || !Array.isArray(state.transcript)) return null;
   let text = '';
   let messageId = null;

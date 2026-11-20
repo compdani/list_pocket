@@ -17,18 +17,10 @@ import (
 	"strings"
 
 	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
-	"github.com/compdani/list_pocket/internal/apperr"
 	"github.com/compdani/list_pocket/internal/auth"
 	"github.com/compdani/list_pocket/internal/flow"
 	"github.com/compdani/list_pocket/internal/flow/llm"
 )
-
-// applyRefused says a handler turned the input down before writing anything, so
-// the proposal can be corrected and tried again.
-func applyRefused(err error) bool {
-	var appErr *apperr.Error
-	return errors.As(err, &appErr) && appErr.Status == http.StatusBadRequest
-}
 
 type assistantTool struct {
 	name, description string

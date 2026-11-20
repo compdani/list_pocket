@@ -363,9 +363,11 @@ func (a *App) aiProviderModels(ctx context.Context, provider string, refresh boo
 			out.err = err.Error()
 		}
 	}
-	c.modelsMu.Lock()
-	c.models[provider] = out
-	c.modelsMu.Unlock()
+	if out.err == "" {
+		c.modelsMu.Lock()
+		c.models[provider] = out
+		c.modelsMu.Unlock()
+	}
 	return out
 }
 

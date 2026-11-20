@@ -1,9 +1,9 @@
 # Migrating the assistant to Pocketbase-MCP chat
 
-Status: draft, 2026-11-19. Covers moving the side panel (`AIAssistant.vue`) and the
-Agent page (`Agent.vue`) from List Pocket's own chat code onto the chat module in
-[Pocketbase-MCP](https://github.com/compdani/Pocketbase-MCP) (local:
-`/Volumes/mini512/Components/Pocketbase-MCP`, at `3280275`, tag v0.1.5).
+Status: complete, 2026-11-20. Covers moving the side panel (`AIAssistantChat.vue`) and
+the Agent page (`AgentChat.vue`) from List Pocket's legacy chat code onto the chat
+module in [Pocketbase-MCP](https://github.com/compdani/Pocketbase-MCP) (`v0.1.8` +
+`@pocketbase-mcp/chat-client` `0.1.8` + `agent-panel` `v0.5.1`).
 
 Requirement: feature parity, no regressions. Any behaviour change needs an explicit
 decision (see [Decisions](#decisions)).
@@ -270,11 +270,13 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 
 ## Decisions
 
-- **D1. Should the side panel and the Agent page share one conversation list?** After
-  the move, both are server-side. For strict parity, keep them apart with a
-  conversation `target` (for example `surface:panel` / `surface:agent`) and list by
-  target. Unifying them is nicer but changes behaviour. Recommendation: keep them
-  separate first, unify later as its own change.
+- **D1. Should the side panel and the Agent page share one conversation list?**
+  **Decided at cutover (2026-11-20): unified.** Both surfaces share the server-side
+  conversation list (`ChatController` v0.1.8 does not send a conversation `target`).
+  If a panel conversation with a pending editor proposal is opened on `/agent`,
+  clicking Apply instructs the user to open the side panel on the original editor
+  rather than failing with `editor_unavailable`. Separating them later only requires
+  controller-level `target` support.
 - **D2. Should List Pocket expose `/mcp` over HTTP?** **Decided 2026-11-19: yes.**
   `DisableMCPEndpoint` stays off. See [The `/mcp` endpoint](#the-mcp-endpoint) for
   how it's set up.
@@ -291,8 +293,8 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 |---|---|---|
 | 0. Module | B1–B12, V1–V5 in Pocketbase-MCP. Release with submodule tags. **Done in v0.1.6** | Tagged release that List Pocket's `go.mod` and Docker build can consume ✅ |
 | 1. Backend behind the flag | Items 1–8 | `go test ./cmd` green. Golden tool tests pass. Both engines selectable. **Done in `ea69a35..HEAD`** ✅ |
-| 2. Agent page | Item 10 for `Agent.vue` | `agent-page.cy.js` parity suite passes on `module`. **Done:** `AgentRoute.vue` picks the host, `AgentChat.vue` binds the module controller, `chat-host.mjs` holds the pure logic, and `agent-page-chat.cy.js` passes; the legacy `agent-page.cy.js` is unchanged ✅ |
-| 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant-chat.cy.js` passes on `module`. Editor apply and undo work on campaign, template and workflow editors. **Done:** `AIAssistantHost.vue` picks the host, `AIAssistantChat.vue` binds the module controller, and the legacy `assistant.cy.js` is unchanged ✅ |
+| 2. Agent page | Item 10 for `Agent.vue` | `agent-page-chat.cy.js` passes on `module`. **Done:** `AgentChat.vue` binds the module controller, `chat-host.mjs` holds the pure logic, and Phase 4 removed the temporary `AgentRoute.vue` switcher and legacy `Agent.vue` ✅ |
+| 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant-chat.cy.js` passes on `module`. Editor apply and undo work on campaign, template and workflow editors. **Done:** `AIAssistantChat.vue` binds the module controller, and Phase 4 removed the temporary `AIAssistantHost.vue` switcher and legacy `AIAssistant.vue` ✅ |
 | 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated. `GET /` stays the public catch-all (see notes). **Done:** chat module always mounted, `LISTPOCKET_CHAT_BACKEND` and `chat_backend` removed, migration `000063_drop_legacy_agent_tables.go` drops `agent_*`, legacy Go handlers/routes and legacy Vue/Cypress/helper files removed, side panel clears legacy `localStorage` keys on load ✅ |
 
 ### Phase 1 notes
@@ -324,7 +326,7 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 - Editor patches are applied by the controller's editor adapter (`patches.mjs`). The controller reports the outcome; the host does not call `reportOutcome`. Undo stays in the browser. Approving while no editor or a different editor is open is refused locally with "Open the original editor before applying this proposal." so the proposal stays pending until the user returns to that editor; `validatePatch` still refuses a mid-flight editor switch and reports a revision mismatch as `stale`.
 - `WorkflowBuilder.vue` still does not register an assistant editor, so a workflow canvas is not an open editor until something calls `registerAssistantEditor`. The adapter and `assistant-chat.cy.js` cover a workflow-shaped editor (`kind: "workflow"`) the same way they cover campaign and template editors.
 - Media pictures are stored in `localStorage` under `listpocket_assistant_pictures_v1:<userId>`, keyed by conversation id. A draft's pictures move onto the id its first send creates. The store is wrapped in try/catch.
-- Retry resends the last user message when the turn or the controller recorded an error. There is no Resume button: the controller reconnects a live event stream itself and has no method for a turn it has stopped following.
+- Retry resends the failed accepted turn's user message, upload IDs, references, model and effort (`state.turn.error` only, never after a pre-accept refusal where the binding already restored the draft). There is no Resume button: the controller reconnects a live event stream itself and has no method for a turn it has stopped following.
 - The remembered model is the Agent page's `listpocket_agent_model` choice, not the legacy panel's per-thread model.
 - With files attached, the binding removes the composer chips after the turn is accepted, so `sticky-attachments` does not keep them for the next send. The server keeps the uploads on the conversation.
 
@@ -342,7 +344,7 @@ Covered by Go, unit, and Cypress tests on the module backend (with exact scope n
 - [x] Tool registration covers every assistant tool, and handler output/permissions match the shared executor for an admin, a list-scoped user, and a user without the permission across the representative read tool set (`TestMCPToolSpecsCoverAssistantTools`, `TestMCPToolHandlersMatchAssistantTools`)
 - [x] Plugin tools are invisible and uncallable for non-super-admins (`TestChatModulePluginTools`, `TestAssistantPluginToolsAreSuperAdminOnly`, `TestMCPEndpointHTTP`)
 - [x] Analytics argument checks, the subscribers SQL refusal and the query-key allowlist (`TestAssistantToolsEnforcePermissionsAndApproval`)
-- [x] Write tools create proposals; approve runs once (duplicate approve rejected), reject declines without writing, and edit-then-apply re-validates (`TestChatModuleProposals`, `agent-page-chat.cy.js`)
+- [x] Write tools create proposals; approve runs once (duplicate approve never re-runs the write), reject declines without writing, and edit-then-apply re-validates (`TestChatModuleProposals`, `agent-page-chat.cy.js`)
 - [x] A 400 from a handler keeps the proposal pending with the message (B8). Other failures are never retried (`TestChatModuleProposals`, `TestMCPToolCallErrorMapping`, `agent-page-chat.cy.js`)
 - [x] Flow proposal warnings appear on the card and in the model's tool result (B6) (`TestChatModuleFlowProposalWarnings`, `tests/chatHost.test.mjs`)
 - [x] Plugin proposal approves the snapshotted files, not the live draft (B7) (`TestChatModulePluginProposalSnapshot`, `TestExpandPluginProposal`)
@@ -357,12 +359,14 @@ Covered by Go, unit, and Cypress tests on the module backend (with exact scope n
 - [x] Provider errors show the same actionable text (B11) (`TestChatModuleOutputLimitAndTruncation`, `tests/chatHost.test.mjs`)
 - [x] One active turn per conversation (409), stop/cancel, post-turn SSE replay without re-running tools (`TestChatModuleTurnLifecycle`), and global/per-user cap of 4 configured in `cmd/chat_module.go` (live reconnect & concurrency enforcement owned by `pocketbase-mcp`)
 - [x] Titles from the first message; rename, delete, and in-place account switch clearing composer/dialogs/state (`TestChatModuleTurnLifecycle`, `agent-page-chat.cy.js`, `assistant-chat.cy.js`)
-- [x] After cutover, old chats are gone: `agent_*` collections dropped (with populated Up + Down schema test), `mountMCP` fails startup on init error, legacy `localStorage` keys cleared, no import UI left (`TestDropLegacyAgentTablesMigration`, `TestChatModuleMountedByDefault`, `TestMountMCPFailureReturnsError`, `tests/chatHost.test.mjs`, `assistant-chat.cy.js`)
+- [x] Disabled users are rejected across all chat endpoints via `Policy: "lp_active_user"` (`TestChatModuleDisabledUserBlocked`)
+- [x] After cutover, old chats are gone: `agent_*` collections dropped (with populated Up + Down schema test), `mountMCP` propagates startup errors (`TestMountMCPFailureReturnsError` covers missing app; `mountMCP` wraps `New`, `enableChat`, and `RegisterRoutes`), legacy `localStorage` keys cleared, no import UI left (`TestDropLegacyAgentTablesMigration`, `TestChatModuleMountedByDefault`, `TestMountMCPFailureReturnsError`, `tests/chatHost.test.mjs`, `assistant-chat.cy.js`)
 
 ## What we gain
 
 These aren't needed for parity, but come with the move: proposals and turns survive a
-restart (today they're lost), side-panel history on the server and across devices,
-token-budgeted history with summaries and a context ring, per-turn reasoning effort,
-uploads in PocketBase file storage instead of base64 in records, and failed-turn
-logging.
+restart (today they're lost), side-panel history on the server and across devices
+(note: `StoreContext: true` also stores the turn's editor snapshot and selection on
+the server with the user message), token-budgeted history (summaries/compaction
+remain off while `CompactionModel` is unset), per-turn reasoning effort, uploads in
+PocketBase file storage instead of base64 in records, and failed-turn logging.

@@ -107,7 +107,13 @@ func (s *chatProviderStore) codexProvider(ctx context.Context) (catalog.Provider
 	list := s.providerModels(ctx, llm.ProviderChatGPT)
 	models := catalogModels(list.models)
 	if list.err != "" || len(models) == 0 {
-		return catalog.Provider{}, false
+		// Fall back to the configured ChatGPT default model so a ChatGPT-only
+		// install is immediately ready on cold start before /models answers.
+		if provider, model := a.aiDefaults(); provider == llm.ProviderChatGPT && strings.TrimSpace(model) != "" {
+			models = []catalog.Model{{ID: model, Label: model}}
+		} else {
+			return catalog.Provider{}, false
+		}
 	}
 	// chatgpt.ListModels doesn't parse supported reasoning levels, so these
 	// models carry no efforts and the model's own default applies.
