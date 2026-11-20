@@ -1,11 +1,11 @@
-// The module-backed Agent page's logic, independent of Vue: the page context a
-// turn sends, the stored references on user turns, the proposal card and
-// ReviewModal inputs, and the error wording List Pocket prefers.
+// Logic for both module-backed hosts, independent of Vue: the page context a
+// turn sends, stored references, proposal card and ReviewModal inputs, error
+// wording, and (for the side panel) media pictures and the editor adapter.
 //
-// Views/AgentChat.vue only wires these to the chat client, the controller and
-// <lp-agent-page>. Keeping them here makes them testable with `node --test`
+// The Vue hosts only wire these to the chat client, the controller and the
+// elements. Keeping them here makes them testable with `node --test`
 // (tests/chatHost.test.mjs), and keeps this module free of imports so the
-// legacy page and the route loader don't pull in the chat client.
+// legacy hosts and the route loader don't pull in the chat client.
 //
 // The chat module's stored page context is one `context` part on a user message
 // (StoreContext). Its `result` is the object the browser sent:
@@ -314,4 +314,327 @@ export function storedModelFor(choiceId, choices) {
     provider: typeof choice.provider === 'string' ? choice.provider : '',
     model: typeof choice.model === 'string' ? choice.model : choiceId,
   };
+}
+
+// --- Side panel (screen "panel") -------------------------------------------
+//
+// The module side panel sends the same page context the legacy panel posts
+// (path, page, params, filters, the open editor, media pictures) plus the
+// @ references of the message. Editor patches are applied here, in the
+// browser; the controller reports the outcome.
+
+/** The screen name cmd/chat_module.go treats as the side panel. */
+export const PANEL_SCREEN = 'panel';
+
+/** localStorage prefix for media pictures, one map per signed-in user. */
+export const PANEL_PICTURES_PREFIX = 'listpocket_assistant_pictures_v1:';
+
+/** Pictures added before the draft's first send has a conversation id. */
+export const PANEL_DRAFT_PICTURES = 'draft';
+
+export const WRONG_EDITOR_TEXT = 'Open the original editor before applying this proposal.';
+export const MID_APPLY_TEXT = 'The editor changed during approval. Ask for a fresh proposal.';
+export const UNDO_CHANGED_TEXT = 'The editor changed after this edit; use its undo controls.';
+
+function plainData(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  try {
+    const cloned = JSON.parse(JSON.stringify(value));
+    return cloned && typeof cloned === 'object' && !Array.isArray(cloned) ? cloned : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Media pictures as `{ name, url }`, de-duplicated by URL. */
+export function cleanPictures(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const picture of list) {
+    if (!picture || typeof picture.url !== 'string' || picture.url === '') continue;
+    if (out.some((item) => item.url === picture.url)) continue;
+    out.push({ name: typeof picture.name === 'string' ? picture.name : '', url: picture.url });
+  }
+  return out;
+}
+
+/**
+ * The open editor as the side panel's context carries it, or null when none
+ * is open or its snapshot cannot be read. `selectionText` is the window
+ * selection, used when the editor does not report one (the legacy panel's
+ * `editor.selection?.() || window.getSelection()`).
+ */
+export function editorContextOf(editor, revisionOf, selectionText = '') {
+  if (!editor || typeof editor.snapshot !== 'function') return null;
+  const key = editor.key == null ? '' : String(editor.key);
+  if (key === '') return null;
+  let current;
+  try {
+    current = editor.snapshot();
+  } catch {
+    return null;
+  }
+  if (!current || typeof current !== 'object') return null;
+  let selection = '';
+  if (typeof editor.selection === 'function') {
+    try {
+      const value = editor.selection();
+      if (typeof value === 'string') selection = value;
+    } catch {
+      selection = '';
+    }
+  }
+  if (!selection && typeof selectionText === 'string') selection = selectionText;
+  let body = current;
+  try {
+    body = JSON.parse(JSON.stringify(current));
+  } catch {
+    body = current;
+  }
+  return {
+    key,
+    unsaved: true,
+    revision: typeof revisionOf === 'function' ? revisionOf(current) : '',
+    current: body,
+    selection: selection.slice(0, 4000),
+    label: typeof editor.label === 'string' ? editor.label : '',
+  };
+}
+
+/** The page context of one side-panel turn. Describes the page at send time. */
+export function panelPageContext({
+  path = '', page = '', params, filters, references, editor = null, pictures,
+} = {}) {
+  return {
+    screen: PANEL_SCREEN,
+    path: typeof path === 'string' ? path : '',
+    page: typeof page === 'string' ? page : '',
+    params: plainData(params),
+    filters: plainData(filters),
+    editor: editor || null,
+    pictureReferences: cleanPictures(pictures),
+    references: referencesOf(references),
+  };
+}
+
+function pictureKey(userId) {
+  return `${PANEL_PICTURES_PREFIX}${userId || 'signed-out'}`;
+}
+
+function readPictureMap(storage, userId) {
+  try {
+    const raw = storage.getItem(pictureKey(userId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePictureMap(storage, userId, map) {
+  try {
+    storage.setItem(pictureKey(userId), JSON.stringify(map));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Pictures kept for one conversation, or the draft when `conversationId` is empty. */
+export function picturesFor(storage, userId, conversationId) {
+  if (!storage || typeof storage.getItem !== 'function') return [];
+  const map = readPictureMap(storage, userId);
+  const key = conversationId ? String(conversationId) : PANEL_DRAFT_PICTURES;
+  return cleanPictures(map[key]);
+}
+
+/** Replace one conversation's pictures. A full or blocked store leaves the previous value and returns false. */
+export function savePictures(storage, userId, conversationId, pictures) {
+  if (!storage || typeof storage.getItem !== 'function') return false;
+  const map = readPictureMap(storage, userId);
+  const key = conversationId ? String(conversationId) : PANEL_DRAFT_PICTURES;
+  const clean = cleanPictures(pictures);
+  if (clean.length === 0) delete map[key];
+  else map[key] = clean;
+  return writePictureMap(storage, userId, map);
+}
+
+/**
+ * A draft's pictures move onto the conversation its first send creates.
+ * Pictures already stored for that conversation stay, and the draft is cleared.
+ */
+export function moveDraftPictures(storage, userId, conversationId) {
+  const id = conversationId ? String(conversationId) : '';
+  if (!id) return picturesFor(storage, userId, '');
+  const map = readPictureMap(storage, userId);
+  const draft = cleanPictures(map[PANEL_DRAFT_PICTURES]);
+  const existing = cleanPictures(map[id]);
+  if (draft.length === 0) return existing;
+  const merged = existing.slice();
+  for (const picture of draft) {
+    if (!merged.some((item) => item.url === picture.url)) merged.push(picture);
+  }
+  delete map[PANEL_DRAFT_PICTURES];
+  map[id] = merged;
+  writePictureMap(storage, userId, map);
+  return merged;
+}
+
+/** Add tool labels the binding does not set, leaving a label it did set alone. */
+export function labelToolEntries(entries, labelOf) {
+  if (!Array.isArray(entries)) return [];
+  const label = typeof labelOf === 'function' ? labelOf : (name) => String(name || '');
+  return entries.map((entry) => {
+    if (!entry || entry.type !== 'tools' || !Array.isArray(entry.tools)) return entry;
+    return {
+      ...entry,
+      tools: entry.tools.map((tool) => {
+        if (!tool || typeof tool !== 'object' || tool.label) return tool;
+        return { ...tool, label: label(tool.name) };
+      }),
+    };
+  });
+}
+
+function editorArgs(proposal) {
+  const args = proposal?.arguments;
+  const source = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+  const revision = typeof source.baseRevision === 'string' && source.baseRevision !== ''
+    ? source.baseRevision
+    : source.revision;
+  return { ...source, revision };
+}
+
+function proposalEditorId(proposal) {
+  const args = proposal?.arguments;
+  if (args && typeof args.editorId === 'string') return args.editorId;
+  return '';
+}
+
+/**
+ * Whether an editor proposal still applies to the open editor.
+ * No editor, or a revision that is no longer current, is not applicable
+ * (the controller reports stale). The wrong editor, or a patch the editor
+ * cannot apply, is refused with a message (the controller reports failed).
+ */
+export function judgeEditorProposal(proposal, editor, { revisionOf, applyPatch } = {}) {
+  if (!editor || typeof editor.snapshot !== 'function' || editor.key == null || String(editor.key) === '') {
+    return { applicable: false, reason: 'stale' };
+  }
+  const editorId = proposalEditorId(proposal);
+  if (editorId !== String(editor.key)) {
+    return { applicable: false, reason: 'refused', message: WRONG_EDITOR_TEXT };
+  }
+  let before;
+  try {
+    before = editor.snapshot();
+  } catch (err) {
+    return { applicable: false, reason: 'refused', message: err?.message || WRONG_EDITOR_TEXT };
+  }
+  const revision = typeof revisionOf === 'function' ? revisionOf(before) : '';
+  const args = editorArgs(proposal);
+  if (args.revision !== revision) return { applicable: false, reason: 'stale' };
+  if (typeof applyPatch !== 'function') {
+    return { applicable: false, reason: 'refused', message: 'Empty proposal' };
+  }
+  try {
+    const next = applyPatch(before, args);
+    return {
+      applicable: true, next, before, revision, editorKey: String(editor.key),
+    };
+  } catch (err) {
+    return { applicable: false, reason: 'refused', message: err?.message || 'Empty proposal' };
+  }
+}
+
+/**
+ * The controller's editor adapter. `snapshot` names the open editor.
+ * `validatePatch` returns false when the patch is stale and throws the legacy
+ * message when the wrong editor is open. `applyPatch` applies the checked
+ * snapshot, refuses if the editor changed since the check, and returns the
+ * new revision. The controller reports the outcome; this adapter does not.
+ * Undo stays with the host (`onApplied` hands it the before snapshot).
+ */
+export function createEditorAdapter({ getEditor, revisionOf, applyPatch, onApplied } = {}) {
+  const plans = new Map();
+  return {
+    snapshot() {
+      const editor = typeof getEditor === 'function' ? getEditor() : null;
+      if (!editor || typeof editor.snapshot !== 'function' || editor.key == null || String(editor.key) === '') return null;
+      try {
+        return { editorId: String(editor.key), revision: revisionOf(editor.snapshot()) };
+      } catch {
+        return null;
+      }
+    },
+    async validatePatch(proposal) {
+      const id = proposal?.id == null ? '' : String(proposal.id);
+      plans.delete(id);
+      const verdict = judgeEditorProposal(proposal, typeof getEditor === 'function' ? getEditor() : null, { revisionOf, applyPatch });
+      if (!verdict.applicable) {
+        if (verdict.reason === 'refused') throw new Error(verdict.message || WRONG_EDITOR_TEXT);
+        return false;
+      }
+      if (id !== '') plans.set(id, verdict);
+      return true;
+    },
+    async applyPatch(proposal) {
+      const id = proposal?.id == null ? '' : String(proposal.id);
+      const plan = plans.get(id);
+      plans.delete(id);
+      const editor = typeof getEditor === 'function' ? getEditor() : null;
+      if (!plan || !editor || typeof editor.apply !== 'function' || String(editor.key) !== plan.editorKey) {
+        throw new Error(MID_APPLY_TEXT);
+      }
+      let current;
+      try {
+        current = editor.snapshot();
+      } catch {
+        throw new Error(MID_APPLY_TEXT);
+      }
+      if (revisionOf(current) !== plan.revision) throw new Error(MID_APPLY_TEXT);
+      await editor.apply(plan.next);
+      let afterSnap;
+      try {
+        afterSnap = editor.snapshot();
+      } catch {
+        throw new Error(MID_APPLY_TEXT);
+      }
+      const after = revisionOf(afterSnap);
+      if (typeof onApplied === 'function') onApplied({ editor, before: plan.before, after });
+      return { revision: after };
+    },
+  };
+}
+
+/** Whether Undo can restore `entry`. The editor must still be the one that was patched, unchanged since. */
+export function undoLastEdit(entry, editor, revisionOf) {
+  if (!entry || !editor || editor !== entry.editor || typeof editor.snapshot !== 'function') {
+    return { ok: false, message: UNDO_CHANGED_TEXT };
+  }
+  let current;
+  try {
+    current = editor.snapshot();
+  } catch {
+    return { ok: false, message: UNDO_CHANGED_TEXT };
+  }
+  if (typeof revisionOf !== 'function' || revisionOf(current) !== entry.after) {
+    return { ok: false, message: UNDO_CHANGED_TEXT };
+  }
+  return { ok: true, before: entry.before };
+}
+
+/** The last user message to send again after a failed turn, or '' when a retry would not match the legacy button. */
+export function retryText(state) {
+  if (!state || state.running || state.sending) return '';
+  const failed = Boolean(state.error) || Boolean(state.turn && state.turn.error);
+  if (!failed || !Array.isArray(state.transcript)) return '';
+  for (let i = state.transcript.length - 1; i >= 0; i -= 1) {
+    const part = state.transcript[i];
+    if (part && part.role === 'user' && part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
+      return part.text;
+    }
+  }
+  return '';
 }
