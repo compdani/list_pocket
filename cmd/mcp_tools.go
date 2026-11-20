@@ -304,10 +304,11 @@ func mcpToolCallError(write bool, err error) error {
 // result falls back to the module's default summary.
 func mcpSummarize(name string) func(map[string]any) string {
 	return func(args map[string]any) string {
-		if id := summaryText(args, "id"); id != "" {
-			return "contact " + id
-		}
 		switch name {
+		case "propose_contact_update", "propose_board_move", "propose_contact_note", "propose_subscriber_update", "propose_contact_task":
+			if id := summaryText(args, "id"); id != "" {
+				return "contact " + id
+			}
 		case "propose_editor_patch":
 			if revision := summaryText(args, "baseRevision"); revision != "" {
 				return fmt.Sprintf("%d operations on revision %s", summaryLen(args, "operations"), revision)

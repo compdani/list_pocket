@@ -375,7 +375,7 @@ func TestMCPToolSummariesUseIdentifyingArgumentsOnly(t *testing.T) {
 		{"propose_reply", map[string]any{"summary": prose, "body": map[string]any{"key": "contact1", "channel": "email", "body": prose}}, "reply by email in conversation contact1"},
 		{"propose_editor_patch", map[string]any{"editorId": "campaign:one", "baseRevision": "r1abc", "summary": prose, "operations": []any{map[string]any{"op": "set"}}}, "1 operations on revision r1abc"},
 		{"propose_plugin", map[string]any{"summary": prose, "files": files}, "plugin hello, 2 files"},
-		{"propose_create_list", map[string]any{"summary": prose, "body": map[string]any{"name": "News", "description": prose}}, `list "News"`},
+		{"propose_create_list", map[string]any{"id": "x1", "summary": prose, "body": map[string]any{"name": "News", "description": prose}}, `list "News"`},
 		{"propose_create_contact", map[string]any{"summary": prose, "body": map[string]any{"email": "a@example.com", "name": prose}}, "contact a@example.com"},
 	}
 	for _, tc := range cases {
