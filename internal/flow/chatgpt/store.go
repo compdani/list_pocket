@@ -105,6 +105,26 @@ func (s *Store) Token(ctx context.Context) (string, error) {
 	if c.AccessToken != "" && c.ExpiresAt.Sub(s.OAuth.now()) > refreshAhead {
 		return c.AccessToken, nil
 	}
+	return s.refreshLocked(ctx, c)
+}
+
+// Refresh renews the session now, for a caller just told the access token is
+// stale. It shares Token's lock, so every refresh still goes through one place
+// and the rotating refresh token can't be used twice.
+func (s *Store) Refresh(ctx context.Context) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, err := s.Load()
+	if err != nil {
+		return "", err
+	}
+	if !c.HasPlan() {
+		return "", ErrPlanNotGranted
+	}
+	return s.refreshLocked(ctx, c)
+}
+
+func (s *Store) refreshLocked(ctx context.Context, c *Credentials) (string, error) {
 	if c.RefreshToken == "" {
 		return "", errors.New("ChatGPT session expired; sign in again")
 	}
