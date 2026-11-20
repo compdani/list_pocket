@@ -90,7 +90,8 @@ export function backendOf(serverConfig) {
  */
 export function referencesFromContext(context) {
   if (!context || typeof context !== 'object') return [];
-  return referencesOf(context.references);
+  // The binding drops a chip without a label; a stored reference may lack one.
+  return referencesOf(context.references).map((ref) => (ref.label ? ref : { ...ref, label: ref.id }));
 }
 
 /**

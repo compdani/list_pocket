@@ -13,8 +13,9 @@ List Pocket runs pocketbase-mcp v0.1.8 (and `@pocketbase-mcp/chat-client` 0.1.8,
 agent-panel v0.5.1). v0.1.7 shipped items 1 to 11, and v0.1.8 closed what was left
 of them. The workarounds those items named are gone:
 
-- **#1** The "AI isn't set up" alert follows `features.ready === false`, and
-  `errorText` maps `no_provider`. `disableWhenNotReady` disables the composer.
+- **#1** `disableWhenNotReady` disables the composer and shows the banner, with
+  `errorText` mapping `no_provider` to List Pocket's sentence; the page has no
+  alert of its own.
   The page still disables it until `/status` has answered, which the binding
   does not.
 - **#2 and #3** No submit tracker. The controller reads `context()` when
@@ -38,7 +39,33 @@ of them. The workarounds those items named are gone:
 
 Still kept, because the module does not cover them: the busy/running flags on
 proposal cards (the element redraws only when an entry's JSON changes), the
-"In context" list, and the composer hold until `/status` answers.
+"In context" list, the composer hold until `/status` answers, and a listener
+that captures the submit's `@` references (see below).
+
+## Found while adopting v0.1.8
+
+**A. Context read after the binding clears the chips (attachments).** In
+`bindAgentPanel`'s `onSubmit` (`frontend/client/agent-panel.mjs`, ~1455), a
+submit with files calls `element.clearComposer({ draft, attachments: false })`,
+which also clears the references, and only then `deliver()`, which calls
+`readContext()`. A host whose `context()` reads the element's references gets
+none for a message with an attachment. Without files, `deliver()` runs inside
+the handler before the element clears anything, so it works. Suggested: call
+`readContext()` at the top of `onSubmit`, before any clearing, and pass it to
+`deliver()`; or pass the submit's `detail.references` to the context provider.
+List Pocket captures `detail.references` in an `agent-submit` listener
+registered before the binding's.
+
+**B. `disableWhenNotReady` leaves the composer enabled before `/status`.** It
+only disables once `features.ready === false`, so the composer is usable while
+`features` is still null, and a send then waits on `/status`. It also never
+re-enables a composer the host disabled, so a host that holds it until
+`/status` answers has to release it itself. Suggested: treat `features === null`
+as not ready yet (disable without the `no_provider` line).
+
+**C. `contextReferences` drops chips without a label.** A stored reference that
+only has `type` and `id` disappears. Suggested: fall back to the id as the
+label. List Pocket does that in `referencesFromContext`.
 
 agent-panel v0.5.1 ships `COMPATIBILITY.md`. 0.5.1 itself changes nothing a
 host has to do.

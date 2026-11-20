@@ -220,8 +220,11 @@ that same id does not write again while the navigation is in flight, so a push
 is not followed by a replace. The route watcher opens back/forward targets. A
 change that arrives before the first `open()` resolves is applied once the page
 is aligned, and that load is not written back over the URL. While
-`features.ready` is false the page shows `agent.noProvider`. The binding
-disables the composer and shows the same sentence through `errorText`. The
+`features.ready` is false the binding disables the composer and shows
+`agent.noProvider` in its error banner (through `errorText`); the page adds no
+notice of its own. The page context's references come from the `agent-submit`
+event, captured by a listener registered before the binding: with files
+attached the binding clears the composer's chips before it reads the context. The
 conversation list's own Load more button (while `hasMore`, labelled with
 `agent.loadMore`) fires `agent-load-more`, which the binding handles.
 

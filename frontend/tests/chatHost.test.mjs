@@ -43,7 +43,8 @@ test('stored references become the chips the binding option returns', () => {
         { type: 'list', id: 3 },
       ],
     }),
-    [{ type: 'campaign', id: '7', label: 'Spring sale' }, { type: 'list', id: '3' }],
+    // A reference stored without a label gets its id, or the binding would drop it.
+    [{ type: 'campaign', id: '7', label: 'Spring sale' }, { type: 'list', id: '3', label: '3' }],
   );
   assert.deepEqual(referencesFromContext(null), []);
   assert.deepEqual(referencesFromContext({}), []);

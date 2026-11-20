@@ -390,7 +390,8 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     });
     cy.visit(fixture);
     cy.wait(['@status', '@list']);
-    cy.get('[data-cy=agent-no-provider]').should('be.visible').and('contain.text', "AI isn't set up");
+    cy.get('[part=error]').should('be.visible').and('contain.text', "AI isn't set up");
+    cy.get('[data-cy=agent-no-provider]').should('not.exist');
     cy.get('[part=send]').should('be.disabled');
     cy.get('.empty-title').should('be.visible');
   });
@@ -425,7 +426,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent');
   });
 
-  it('adds pasted data as a text file and uploads it with the turn', () => {
+  it('adds pasted data as a text file and uploads it with the turn and its @ references', () => {
     stubPage();
     const turns = [];
     let messages = [];
@@ -460,8 +461,9 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
       req.reply({ turn: { id: 't1', conversationId: 'c1', state: 'completed' }, created: true });
     }).as('turn');
 
-    cy.visit(`${fixture}?path=/agent/c1`);
+    cy.visit(`${fixture}?path=${encodeURIComponent('/agent/c1?ref=list&id=3&label=Customers')}`);
     cy.wait(['@status', '@list', '@conversation']);
+    cy.get('.chips [data-reference="list:3"]').should('be.visible');
     cy.get('[data-cy=agent-paste]').click();
     cy.get('[data-cy=agent-paste-name] input').type('leads.csv');
     cy.get('[data-cy=agent-paste-content] textarea').type('name,email');
@@ -473,6 +475,8 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.then(() => {
       expect(turns[0].text).to.eq('these');
       expect(turns[0].attachments).to.deep.eq(['u1']);
+      // The binding clears the chips before an upload; the context still has them.
+      expect(turns[0].context.references).to.deep.eq([{ type: 'list', id: '3', label: 'Customers' }]);
     });
     // The stored attachment chip stays on the user turn and still downloads.
     cy.get('.user-turn [data-reference="attachment:u1"]').should('contain.text', 'leads.csv');
@@ -631,12 +635,12 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.visit(fixture);
     cy.get('lp-agent-page').should('have.attr', 'disabled');
     cy.get('textarea').should('be.disabled');
-    cy.get('[data-cy=agent-no-provider]').should('not.exist');
+    cy.get('[part=error]').should('not.be.visible');
     cy.wrap(null).should(() => expect(seenStatus).to.eq(true));
     cy.then(() => releaseStatus());
     cy.wait('@status');
     cy.get('lp-agent-page').should('not.have.attr', 'disabled');
-    cy.get('[data-cy=agent-no-provider]').should('not.exist');
+    cy.get('[part=error]').should('not.be.visible');
     cy.get('textarea').should('not.be.disabled').type('Hello{enter}');
     cy.wait('@turn');
     cy.then(() => {

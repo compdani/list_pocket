@@ -1,8 +1,5 @@
 <template>
   <section class="agent-host" data-cy="agent-page">
-    <v-alert v-if="noProvider" type="info" variant="tonal" density="compact" class="agent-notice" data-cy="agent-no-provider">
-      {{ $t('agent.noProvider') }}
-    </v-alert>
     <v-alert v-if="actionError" type="error" variant="tonal" density="compact" closable class="agent-notice" data-cy="agent-action-error" @click:close="actionError = ''">
       {{ actionError }}
     </v-alert>
@@ -98,7 +95,6 @@ const pickerRef = ref(null);
 const picker = ref(null);
 const inContext = ref([]);
 const renamable = ref(false);
-const noProvider = ref(false);
 const actionError = ref('');
 const previewing = ref(null);
 const pasting = ref(null);
@@ -125,6 +121,14 @@ let pendingNavId = null;
 // disables it once features.ready is false, and it will not re-enable a
 // composer it did not disable itself.
 let heldUntilReady = true;
+// The @ chips of the submit being sent. The binding reads the context during
+// its own agent-submit handler, but with files attached it clears the
+// composer's chips first, so the element's references are empty by then.
+// This listener runs before the binding's and keeps the event's copy.
+let submitReferences = null;
+function captureSubmitReferences(event) {
+  submitReferences = Array.isArray(event.detail?.references) ? event.detail.references : null;
+}
 
 const reviewPart = computed(() => (reviewProposal.value ? reviewPartOf(reviewProposal.value) : null));
 const formatDate = shortStamp;
@@ -170,10 +174,11 @@ const client = new ChatClient({
 const chat = new ChatController({
   client,
   storageKey: accountKey(),
-  // The binding calls readContext() synchronously at the start of its
-  // agent-submit handler, before the element clears the composer, so these
-  // are the @ chips of the message being sent.
-  context: () => pageContext(route.fullPath, page.value?.references),
+  context: () => {
+    const references = submitReferences ?? page.value?.references;
+    submitReferences = null;
+    return pageContext(route.fullPath, references);
+  },
 });
 
 function lastModel() {
@@ -232,7 +237,6 @@ function onChange() {
   syncUrl();
   inContext.value = contextReferencesFromTranscript(state.transcript);
   renamable.value = Boolean(state.activeConversationId);
-  noProvider.value = state.features?.ready === false;
   holdComposerUntilReady(state);
 }
 
@@ -464,6 +468,8 @@ onMounted(async () => {
   el.defineEntry('notice', renderNotice);
   el.defineEntry('context-marker', renderContextMarkerEntry);
 
+  // Before bindAgentPanel(), so it runs before the binding's agent-submit.
+  el.addEventListener('agent-submit', captureSubmitReferences);
   el.addEventListener('agent-select-conversation', onSelectConversation);
   el.addEventListener('agent-new-conversation', onNewConversation);
   el.addEventListener('agent-delete-conversation', onDeleteConversation);
