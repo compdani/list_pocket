@@ -1,7 +1,13 @@
 {
   "compilerOptions": {
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@pocketbase-mcp/chat-client": ["./src/vendor/chat-client/index.mjs"],
+      "@pocketbase-mcp/chat-client/agent-panel": ["./src/vendor/chat-client/agent-panel.mjs"],
+      "@pocketbase-mcp/chat-client/controller": ["./src/vendor/chat-client/controller.mjs"],
+      "@pocketbase-mcp/chat-client/client": ["./src/vendor/chat-client/client.mjs"],
+      "@pocketbase-mcp/chat-client/sse": ["./src/vendor/chat-client/sse.mjs"],
+      "@pocketbase-mcp/chat-client/reducer": ["./src/vendor/chat-client/reducer.mjs"]
     }
   },
   "exclude": ["node_modules", "dist"]

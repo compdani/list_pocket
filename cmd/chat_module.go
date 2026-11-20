@@ -51,6 +51,15 @@ func chatModuleEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("LISTPOCKET_CHAT_BACKEND")), "module")
 }
 
+// chatBackendName is what /api/config tells the admin UI. Nothing chooses a
+// host from it yet; both surfaces still run on the legacy engine.
+func chatBackendName() string {
+	if chatModuleEnabled() {
+		return "module"
+	}
+	return "legacy"
+}
+
 // enableChat builds the module's chat surface for List Pocket's existing
 // settings and tools. Options mirror the legacy engines: review for every
 // server write, no review for the plugin drafts that write today, argument

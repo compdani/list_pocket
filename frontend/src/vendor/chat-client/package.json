@@ -1,0 +1,49 @@
+{
+  "name": "@pocketbase-mcp/chat-client",
+  "version": "0.1.2",
+  "description": "Dependency-free browser client and framework-neutral controller for the MCP chat HTTP API.",
+  "type": "module",
+  "main": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    },
+    "./sse": {
+      "types": "./sse.d.mts",
+      "default": "./sse.mjs"
+    },
+    "./reducer": {
+      "types": "./reducer.d.mts",
+      "default": "./reducer.mjs"
+    },
+    "./controller": {
+      "types": "./controller.d.mts",
+      "default": "./controller.mjs"
+    },
+    "./agent-panel": {
+      "types": "./agent-panel.d.mts",
+      "default": "./agent-panel.mjs"
+    }
+  },
+  "files": [
+    "*.mjs",
+    "*.d.mts",
+    "*.d.ts",
+    "README.md"
+  ],
+  "keywords": [
+    "chat",
+    "sse",
+    "pocketbase",
+    "mcp",
+    "client"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

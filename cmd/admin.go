@@ -42,6 +42,8 @@ type serverConfig struct {
 	NeedsRestart  bool            `json:"needs_restart"`
 	HasLegacyUser bool            `json:"has_legacy_user"`
 	Version       string          `json:"version"`
+	// ChatBackend tells the admin UI which chat API to use: "legacy" or "module".
+	ChatBackend string `json:"chat_backend"`
 }
 
 type smtpSenderConfig struct {
@@ -104,6 +106,7 @@ func (a *App) GetServerConfig(re *pbcore.RequestEvent) error {
 		Lang:          a.cfg.Lang,
 		Permissions:   a.cfg.PermissionsRaw,
 		HasLegacyUser: a.cfg.HasLegacyUser,
+		ChatBackend:   chatBackendName(),
 		Privacy: struct {
 			DisableTracking    bool `json:"disable_tracking"`
 			IndividualTracking bool `json:"individual_tracking"`
