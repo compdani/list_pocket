@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
+	"ganigeorgiev.com/pocketbase/dbx"
 	"ganigeorgiev.com/pocketbase/pocketbase/apis"
 	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/apperr"
@@ -20,6 +22,7 @@ import (
 	"github.com/compdani/list_pocket/internal/i18n"
 	"github.com/compdani/list_pocket/internal/paginator"
 	"github.com/compdani/list_pocket/internal/plugins"
+	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
 	pbmcp "github.com/compdani/pocketbase-mcp"
 	pbadapter "github.com/compdani/pocketbase-mcp/adapters/pocketbase"
@@ -37,12 +40,17 @@ type mcpFixture struct {
 	nopermToken string
 	rootToken   string
 	scopedSub   models.Subscriber
+	outsideSub  models.Subscriber
 	campaign    models.Campaign
 }
 
 func newMCPFixture(t *testing.T) *mcpFixture {
 	t.Helper()
 	a, _, _ := boardsTestApp(t)
+	// Cleanups run last-in-first-out, so stopping the app's background work
+	// happens before boardsTestApp's reset: a leak must never reach a reset
+	// PocketBase.
+	t.Cleanup(func() { shutdownApp(a) })
 	a.log = log.New(io.Discard, "", 0)
 	a.cfg = &Config{}
 	a.urlCfg = &UrlConfig{RootURL: "https://example.com"}
@@ -53,6 +61,7 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 		t.Fatal(err)
 	}
 	a.i18n = lang
+	a.importer = subimporter.New(subimporter.Options{}, nil, lang)
 	a.auth, err = auth.New(auth.Config{}, nil, a.pb, &auth.Callbacks{}, log.New(io.Discard, "", 0))
 	if err != nil {
 		t.Fatal(err)
@@ -66,12 +75,16 @@ func newMCPFixture(t *testing.T) *mcpFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	outside, _, err := a.core.InsertSubscriber(models.Subscriber{Email: "outside@example.com", Name: "Outside"}, nil, nil, true, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	campaign, err := a.core.CreateCampaign(models.Campaign{Name: "MCP campaign", Subject: "Hello", ContentType: models.CampaignContentTypeRichtext}, []int{list.ID}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	f := &mcpFixture{app: a, scopedSub: sub, campaign: campaign}
+	f := &mcpFixture{app: a, scopedSub: sub, outsideSub: outside, campaign: campaign}
 	mcpCreateRole(t, a, 10, "user", []string{"subscribers:get", "campaigns:get"})
 	mcpCreateRole(t, a, 20, "user", []string{})
 	mcpCreateListRole(t, a, 30, 31, list.RecordID)
@@ -342,6 +355,91 @@ func TestMCPToolSpecsOptInWrites(t *testing.T) {
 	}
 }
 
+// Proposal summaries name only identifying arguments. Model-written text, the
+// summary argument and message bodies must never appear: the module writes the
+// line for the reviewer.
+func TestMCPToolSummariesUseIdentifyingArgumentsOnly(t *testing.T) {
+	f := newMCPFixture(t)
+	const prose = "model prose that must never appear"
+	files := []any{
+		map[string]any{"path": "plugin.json", "content": `{"id":"hello","name":"Hello"}`},
+		map[string]any{"path": "index.js", "content": "export default {}"},
+	}
+	cases := []struct {
+		tool string
+		args map[string]any
+		want string
+	}{
+		{"propose_contact_update", map[string]any{"id": "contact1", "summary": prose, "body": map[string]any{"owner": "u1"}}, "contact contact1"},
+		{"propose_workflow_patch", map[string]any{"workflow": "welcome", "summary": prose, "ops": []any{map[string]any{"op": "set"}, map[string]any{"op": "connect"}}}, "workflow welcome, 2 ops"},
+		{"propose_reply", map[string]any{"summary": prose, "body": map[string]any{"key": "contact1", "channel": "email", "body": prose}}, "reply by email in conversation contact1"},
+		{"propose_editor_patch", map[string]any{"editorId": "campaign:one", "baseRevision": "r1abc", "summary": prose, "operations": []any{map[string]any{"op": "set"}}}, "1 operations on revision r1abc"},
+		{"propose_plugin", map[string]any{"summary": prose, "files": files}, "plugin hello, 2 files"},
+		{"propose_create_list", map[string]any{"summary": prose, "body": map[string]any{"name": "News", "description": prose}}, `list "News"`},
+		{"propose_create_contact", map[string]any{"summary": prose, "body": map[string]any{"email": "a@example.com", "name": prose}}, "contact a@example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tool, func(t *testing.T) {
+			spec := f.spec(t, tc.tool)
+			if spec.Summarize == nil {
+				t.Fatal("missing Summarize")
+			}
+			got := spec.Summarize(tc.args)
+			if got != tc.want {
+				t.Fatalf("summary = %q, want %q", got, tc.want)
+			}
+			if strings.Contains(got, prose) {
+				t.Fatalf("model text leaked into the summary: %q", got)
+			}
+		})
+	}
+	// Nothing identifying: the module's default summary applies.
+	if got := f.spec(t, "propose_workflow").Summarize(map[string]any{"summary": prose}); got != "" {
+		t.Fatalf("summary without a workflow name = %q", got)
+	}
+}
+
+// A write can run end to end through /mcp, and propose_create_contact must not
+// preconfirm memberships even when the arguments ask it to.
+func TestMCPWriteCreateContactCannotPreconfirm(t *testing.T) {
+	t.Setenv("LISTPOCKET_MCP_ALLOW_WRITES", "true")
+	s := newMCPTestServer(t)
+	list, err := s.fixture.app.pb.FindFirstRecordByData("lists", "name", "MCP list")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, out := s.rpc(t, s.fixture.adminToken, "tools/call", map[string]any{
+		"name": "propose_create_contact",
+		"arguments": map[string]any{"body": map[string]any{
+			"email":                    "newcontact@example.com",
+			"name":                     "New Contact",
+			"list_record_ids":          []string{list.Id},
+			"preconfirm_subscriptions": true,
+		}},
+	})
+	if code != http.StatusOK {
+		t.Fatalf("tools/call: %d %v", code, out)
+	}
+	result, _ := out["result"].(map[string]any)
+	if result == nil || result["isError"] == true {
+		t.Fatalf("create contact failed: %v", out)
+	}
+	rec, err := s.fixture.app.pb.FindFirstRecordByData("subscribers", "email", "newcontact@example.com")
+	if err != nil {
+		t.Fatalf("the contact wasn't created: %v", err)
+	}
+	membership, err := s.fixture.app.pb.FindFirstRecordByFilter("subscriber_lists", "subscriber_id = {:id}", dbx.Params{"id": rec.Id})
+	if err != nil {
+		t.Fatalf("the contact has no membership: %v", err)
+	}
+	if got := membership.GetString("status"); got != models.SubscriptionStatusUnconfirmed {
+		t.Fatalf("membership status = %q, want unconfirmed", got)
+	}
+	if got := membership.GetString("sms_status"); got != models.SubscriptionStatusUnconfirmed {
+		t.Fatalf("sms status = %q, want unconfirmed", got)
+	}
+}
+
 // The Handler must return exactly what the assistant's executor returns for the
 // same user, and refuse a user without the permission.
 func TestMCPToolHandlersMatchAssistantTools(t *testing.T) {
@@ -358,6 +456,7 @@ func TestMCPToolHandlersMatchAssistantTools(t *testing.T) {
 		{"campaigns", map[string]any{"id": f.campaign.RecordID}, true},
 		{"dashboard_counts", map[string]any{}, false},
 		{"subscriber_activity", map[string]any{"id": f.scopedSub.RecordID}, true},
+		{"subscriber_channels", map[string]any{"id": f.outsideSub.RecordID}, true},
 	}
 	users := []struct {
 		name    string
@@ -401,6 +500,12 @@ func TestMCPToolHandlersMatchAssistantTools(t *testing.T) {
 				}
 			})
 		}
+	}
+
+	// List scope applies to subscriber_channels exactly as it does to
+	// contact_profile: a contact outside the user's lists is refused.
+	if _, err := f.callTool(t, "subscriber_channels", f.scoped, f.scopedToken, map[string]any{"id": f.outsideSub.RecordID}); err == nil {
+		t.Fatal("a list-scoped user read a contact outside their lists")
 	}
 }
 
@@ -598,7 +703,7 @@ func TestMCPEndpointOffersOptedInWrites(t *testing.T) {
 
 // Error mapping: a 400 on a write keeps a proposal pending (Refused), a 400 on a
 // read is Invalid, 403 and 404 keep their meaning, and any other write failure is
-// never an AccessError (the module records an unknown outcome and never retries).
+// never an AccessError (the module reports a generic failure and never retries).
 func TestMCPToolCallErrorMapping(t *testing.T) {
 	var accessErr pbmcp.AccessError
 	cases := []struct {

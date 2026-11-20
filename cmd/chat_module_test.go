@@ -24,6 +24,7 @@ import (
 	"github.com/compdani/list_pocket/internal/flow"
 	"github.com/compdani/list_pocket/internal/flow/llm"
 	"github.com/compdani/list_pocket/internal/plugins"
+	"github.com/compdani/pocketbase-mcp/chat"
 )
 
 const chatAPI = "/api/mcp/chat/v1"
@@ -511,6 +512,89 @@ func TestChatModuleAgentTurns(t *testing.T) {
 	}
 }
 
+// The current message's references are kept first, then older ones newest
+// first, so a long conversation can't crowd out what was just attached.
+func TestChatAgentRefsKeepCurrentFirst(t *testing.T) {
+	page := func(refs ...agentRef) json.RawMessage {
+		raw, _ := json.Marshal(chatPageContext{References: refs})
+		return raw
+	}
+	a := &App{}
+
+	t.Run("de-duplicates and keeps this message first", func(t *testing.T) {
+		earlier := []json.RawMessage{
+			page(agentRef{Type: "list", ID: "one"}, agentRef{Type: "contact", ID: "shared"}),
+			page(agentRef{Type: "list", ID: "two"}, agentRef{Type: "contact", ID: "shared"}, agentRef{Type: "file", ID: "f1"}),
+		}
+		refs, err := a.chatAgentRefs(chat.TurnInput{EarlierContexts: earlier}, []agentRef{
+			{Type: "list", ID: "three"}, {Type: "file", ID: "f2"}, {Type: "list", ID: "two"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"list:three", "list:two", "contact:shared", "list:one"}
+		if len(refs) != len(want) {
+			t.Fatalf("refs = %v, want %v", refKeys(refs), want)
+		}
+		for i, key := range refKeys(refs) {
+			if key != want[i] {
+				t.Fatalf("refs = %v, want %v", refKeys(refs), want)
+			}
+		}
+	})
+
+	t.Run("the cap keeps this message's reference", func(t *testing.T) {
+		var earlier []json.RawMessage
+		for i := 0; i < agentMaxRefs; i++ {
+			earlier = append(earlier, page(agentRef{Type: "list", ID: fmt.Sprintf("e%d", i)}))
+		}
+		refs, err := a.chatAgentRefs(chat.TurnInput{EarlierContexts: earlier}, []agentRef{{Type: "list", ID: "current"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(refs) != agentMaxRefs {
+			t.Fatalf("got %d refs, want %d", len(refs), agentMaxRefs)
+		}
+		if refs[0].key() != "list:current" {
+			t.Fatalf("first ref = %q, want the current message's", refs[0].key())
+		}
+		kept := map[string]bool{}
+		for _, ref := range refs {
+			kept[ref.key()] = true
+		}
+		if !kept["list:e29"] {
+			t.Error("the newest earlier ref was dropped")
+		}
+		if kept["list:e0"] {
+			t.Error("the oldest earlier ref should have been dropped")
+		}
+	})
+
+	t.Run("unknown earlier types are ignored, unknown current types refused", func(t *testing.T) {
+		earlier := []json.RawMessage{
+			page(agentRef{Type: "bogus", ID: "x"}, agentRef{Type: "list", ID: "one"}),
+		}
+		refs, err := a.chatAgentRefs(chat.TurnInput{EarlierContexts: earlier}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(refs) != 1 || refs[0].key() != "list:one" {
+			t.Fatalf("refs = %v, want only list:one", refKeys(refs))
+		}
+		if _, err := a.chatAgentRefs(chat.TurnInput{EarlierContexts: earlier}, []agentRef{{Type: "bogus", ID: "y"}}); err == nil {
+			t.Fatal("an unknown type in this message must be refused")
+		}
+	})
+}
+
+func refKeys(refs []agentRef) []string {
+	keys := make([]string, len(refs))
+	for i, ref := range refs {
+		keys[i] = ref.key()
+	}
+	return keys
+}
+
 // d. A write becomes a proposal, approval applies it once, and a handler's
 // refusal comes back as 422 with the proposal still pending.
 func TestChatModuleProposals(t *testing.T) {
@@ -599,6 +683,36 @@ func TestChatModuleProposals(t *testing.T) {
 	}
 	if stored.Proposal.State != "pending" {
 		t.Fatalf("stored state = %q", stored.Proposal.State)
+	}
+
+	// PATCH: the id becomes the route value and the body a JSON patch.
+	f.setReplies(func(_ int, body []byte) []string {
+		if bytes.Contains(body, []byte(`"role":"tool"`)) {
+			return chatTextFrames("Waiting for your review.")
+		}
+		return chatToolFrames("call_update", "propose_subscriber_update", map[string]any{
+			"id":   f.scopedSub.RecordID,
+			"body": map[string]any{"first_name": "Patched"},
+		})
+	})
+	updateConv := f.conversation(t, f.adminToken)
+	updateEvents := f.runTurn(t, f.adminToken, updateConv, nil)
+	updateProposal, updateRevision := chatProposalFrom(t, updateEvents)
+	if rec, err := f.app.pb.FindRecordById("subscribers", f.scopedSub.RecordID); err != nil {
+		t.Fatal(err)
+	} else if got := rec.GetString("first_name"); got != "Scoped" {
+		t.Fatalf("first_name before approval = %q, want Scoped", got)
+	}
+	code, raw = f.decide(t, f.adminToken, updateProposal, updateRevision, "approve")
+	if code != http.StatusOK {
+		t.Fatalf("approve update: %d %s", code, raw)
+	}
+	rec, err := f.app.pb.FindRecordById("subscribers", f.scopedSub.RecordID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rec.GetString("first_name"); got != "Patched" {
+		t.Fatalf("first_name = %q, want Patched", got)
 	}
 }
 

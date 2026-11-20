@@ -24,8 +24,9 @@ curl -s https://<host>/mailapi/auth/login \
 ```
 
 The users token is `data.token` in the answer. If the account has TOTP enabled,
-login answers `{"status":"twofa_required","token":"...","next":"..."}` instead.
-Post the code to finish the sign-in, then read `data.token` from that answer:
+login answers `{"data":{"status":"twofa_required","token":"...","next":"/admin"}}`
+instead; `next` is the page to open after sign-in. Post the code to finish the
+sign-in, then read `data.token` from that answer:
 
 ```sh
 curl -s https://<host>/mailapi/auth/twofa \
@@ -234,7 +235,7 @@ app.
 
 ## Limits and operations
 
-- Each tool call times out after 2 minutes. A timeout cancels the call and
+- Each tool call times out after 5 minutes. A timeout cancels the call and
   returns an error; a write is never retried after one.
 - The endpoint has no built-in rate limit yet. Put per-IP limits at the reverse
   proxy.

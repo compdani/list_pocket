@@ -511,6 +511,8 @@ func (a *App) executeAssistantTool(re *pbcore.RequestEvent, name string, raw jso
 		}
 	case "propose_subscriber_update":
 		setToolBody(e, http.MethodPatch, args.Body)
+	case "propose_create_contact":
+		setToolBody(e, http.MethodPost, withoutPreconfirm(args.Body))
 	default:
 		if tool.mutation {
 			setToolBody(e, http.MethodPost, args.Body)
@@ -589,6 +591,21 @@ func setToolBody(e *pbcore.RequestEvent, method string, body []byte) {
 	e.Request.Method = method
 	e.Request.Header = e.Request.Header.Clone()
 	e.Request.Header.Set("Content-Type", "application/json")
+}
+
+// withoutPreconfirm drops preconfirm_subscriptions from a new contact: the tool
+// never marks anyone as having consented, and the HTTP route keeps the option.
+func withoutPreconfirm(body json.RawMessage) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if len(body) == 0 || json.Unmarshal(body, &fields) != nil {
+		return body
+	}
+	delete(fields, "preconfirm_subscriptions")
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return body
+	}
+	return out
 }
 
 func (a *App) runAssistant(ctx context.Context, re *pbcore.RequestEvent, t *assistantTurn, in assistantRequest, model string) error {

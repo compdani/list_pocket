@@ -21,6 +21,12 @@ Tools read and write through List Pocket's own permission-checked handlers. A wr
 endpoint runs immediately, without a proposal: look a record up first, keep changes minimal,
 and never retry a write that failed because it may already have applied.`
 
+// assistantToolTimeout bounds one tool call and the approval that can precede it.
+// The module cuts a chat tool off at MaxToolTimeout while the person reviewing it
+// has DecisionTimeout to approve, so the two must stay equal: an approved change
+// runs inside the decision request and would otherwise be cut off mid-write.
+const assistantToolTimeout = 5 * time.Minute
+
 // mountMCP builds the endpoint once per serve and registers its routes. A failure
 // is logged and leaves the rest of the app serving: the assistant doesn't depend
 // on it.
@@ -48,7 +54,7 @@ func (a *App) mountMCP(se *pbcore.ServeEvent) {
 		CustomTools:    a.mcpToolSpecs(),
 		Policies:       a.mcpPolicies(),
 		AllowedOrigins: a.mcpAllowedOrigins(),
-		MaxToolTimeout: 2 * time.Minute,
+		MaxToolTimeout: assistantToolTimeout,
 		AuditFunc:      a.mcpAudit,
 		Logger:         a.moduleLogger(),
 	}

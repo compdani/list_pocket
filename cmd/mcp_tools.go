@@ -77,6 +77,7 @@ func (a *App) mcpToolSpec(tool assistantTool) pbmcp.ToolSpec {
 	if tool.mutation {
 		spec.Effects.Kind = "write"
 		spec.Channels = "chat"
+		spec.Summarize = mcpSummarize(tool.name)
 	}
 	if tool.superAdmin {
 		// Plugin tools are chat-only and hidden from everyone else. "superuser"
@@ -270,9 +271,11 @@ func (a *App) mcpCallerUser(record *pbcore.Record) (auth.User, error) {
 //   - 400 on a write was refused before writing, so a chat proposal stays pending
 //     (pbmcp.Refused). On a read the model gets the reason.
 //   - 403 is a permission refusal, 404 a missing record.
-//   - Anything else on a write is returned as a plain error, so the module records
-//     an unknown outcome. List Pocket never retries a write that might have
-//     committed; on a read the model sees the message, as it does today.
+//   - Anything else on a write is returned as a plain error. The module's custom
+//     tool layer turns that into "Tool execution failed." and records the
+//     proposal as failed; only a timeout or cancellation is unknown. List Pocket
+//     never retries a write that might have committed. On a read the model sees
+//     the message, as it does today.
 func mcpToolCallError(write bool, err error) error {
 	msg := agentErrorText(err)
 	var appErr *apperr.Error
@@ -293,6 +296,114 @@ func mcpToolCallError(write bool, err error) error {
 		return fmt.Errorf("%s: %w", msg, err)
 	}
 	return pbmcp.Invalid(msg)
+}
+
+// mcpSummarize builds a proposal's one-line detail from identifiers in the
+// arguments. The module writes this line for the reviewer, so model prose (the
+// summary argument, a message body, a description) must never reach it. An empty
+// result falls back to the module's default summary.
+func mcpSummarize(name string) func(map[string]any) string {
+	return func(args map[string]any) string {
+		if id := summaryText(args, "id"); id != "" {
+			return "contact " + id
+		}
+		switch name {
+		case "propose_editor_patch":
+			if revision := summaryText(args, "baseRevision"); revision != "" {
+				return fmt.Sprintf("%d operations on revision %s", summaryLen(args, "operations"), revision)
+			}
+		case "propose_workflow_patch":
+			if workflow := summaryText(args, "workflow"); workflow != "" {
+				return fmt.Sprintf("workflow %s, %d ops", workflow, summaryLen(args, "ops"))
+			}
+		case "propose_workflow":
+			if definition := summaryObject(args, "definition"); definition != nil {
+				if workflow := summaryText(definition, "name"); workflow != "" {
+					return "workflow " + workflow
+				}
+			}
+		case "propose_test_run", "propose_publish", "propose_workflow_run":
+			if workflow := summaryText(args, "workflow"); workflow != "" {
+				return "workflow " + workflow
+			}
+		case "propose_approval_decision":
+			if approval := summaryText(args, "approval"); approval != "" {
+				return "approval " + approval
+			}
+		case "propose_reply":
+			body := summaryObject(args, "body")
+			channel, key := summaryText(body, "channel"), summaryText(body, "key")
+			if channel != "" && key != "" {
+				return fmt.Sprintf("reply by %s in conversation %s", channel, key)
+			}
+		case "propose_plugin":
+			id := summaryText(args, "plugin")
+			if id == "" {
+				id = summaryPluginManifestID(args)
+			}
+			if id != "" {
+				return fmt.Sprintf("plugin %s, %d files", id, summaryLen(args, "files"))
+			}
+		case "propose_create_list", "propose_create_template":
+			label := "list"
+			if name == "propose_create_template" {
+				label = "template"
+			}
+			if record := summaryObject(args, "body"); record != nil {
+				if recordName := summaryText(record, "name"); recordName != "" {
+					return fmt.Sprintf("%s %q", label, recordName)
+				}
+			}
+		case "propose_create_contact":
+			if record := summaryObject(args, "body"); record != nil {
+				if email := summaryText(record, "email"); email != "" {
+					return "contact " + email
+				}
+			}
+		case "create_campaign_draft":
+			if draft := summaryObject(args, "draft"); draft != nil {
+				if campaign := summaryText(draft, "name"); campaign != "" {
+					return fmt.Sprintf("campaign %q", campaign)
+				}
+			}
+		}
+		return ""
+	}
+}
+
+func summaryText(args map[string]any, key string) string {
+	text, _ := args[key].(string)
+	return strings.TrimSpace(text)
+}
+
+func summaryObject(args map[string]any, key string) map[string]any {
+	object, _ := args[key].(map[string]any)
+	return object
+}
+
+func summaryLen(args map[string]any, key string) int {
+	values, _ := args[key].([]any)
+	return len(values)
+}
+
+// summaryPluginManifestID reads the ID from a files-only plugin proposal, which
+// is what Prepare stores for a draft submission.
+func summaryPluginManifestID(args map[string]any) string {
+	files, _ := args["files"].([]any)
+	for _, entry := range files {
+		file, _ := entry.(map[string]any)
+		if file["path"] != "plugin.json" {
+			continue
+		}
+		content, _ := file["content"].(string)
+		var manifest struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal([]byte(content), &manifest) == nil {
+			return manifest.ID
+		}
+	}
+	return ""
 }
 
 // mcpToolTitle is the same human label the assistant UI builds for a tool name.

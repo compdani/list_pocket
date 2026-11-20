@@ -67,12 +67,13 @@ import. B10 is therefore not used, and the two import gaps found in the v0.1.6 r
 (no `context` part on imported messages; browser import is text only) no longer
 matter.
 
-**Decided 2026-11-19: the module decides which references stay in view.**
+**Decided 2026-11-19: the host decides which references stay in view.**
 `EarlierContexts` keeps the 30 most recent contexts within the history window the
-runner reads (60 messages for us, via `MaxHistoryMessages`). List Pocket used to keep
-the first 30 distinct references across up to 500 messages. In long conversations,
-early references now drop out instead of late ones. `Setup` only de-duplicates them;
-it doesn't pin early ones.
+runner reads (60 messages for us, via `MaxHistoryMessages`). `Setup` adds the
+current message's references first, then fills the remaining slots from those
+earlier contexts, newest first. List Pocket used to keep the first 30 distinct
+references across up to 500 messages, so early references now drop out instead of
+late ones.
 
 No module work or decisions remain open.
 
@@ -303,6 +304,10 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
   `no_provider`) or a client-side mapping in phase 2.
 - The chat default model, when Settings → AI has none, is the AI builder's model
   on the API key, as in the legacy assistant.
+- A handler error on a write that may already have applied is recorded as failed
+  with the generic "Tool execution failed.", because the module only marks a
+  timeout or cancellation as unknown. Follow-up: ask the module for an exported
+  unknown-outcome error for custom tools.
 - Pre-existing, outside this migration: `internal/core` `HasSubscriberLists` and
   `CampaignHasLists` compare integer list IDs with the text record IDs in
   `subscriber_lists.list_id` / `campaign_lists.list_id`, so list-scoped users are

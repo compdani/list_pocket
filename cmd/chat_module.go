@@ -70,15 +70,16 @@ func (a *App) enableChat(srv *pbadapter.Server) error {
 			AutoApprove:        true,
 			AllowArgumentEdits: true,
 			// Approvals run plugin installs, workflow publishes and sends inside
-			// the decision request, so they get longer than the module default.
-			DecisionTimeout:   5 * time.Minute,
+			// the decision request, so they get longer than the module default
+			// and the same bound as the tool call itself.
+			DecisionTimeout:   assistantToolTimeout,
 			Uploads:           true,
 			AcceptOtherImages: true,
 			TurnContext:       true,
 			StoreContext:      true,
-			// The side panel sends its whole unsaved editor snapshot each turn,
-			// and today's message ceiling is 200,000 characters.
+			// The side panel sends its whole unsaved editor snapshot each turn.
 			MaxContextBytes: 2 << 20,
+			// Today's message ceiling is 200,000 characters.
 			MaxMessageChars: 200000,
 			MaxBodyBytes:    4 << 20,
 			Imports:         false,
@@ -168,12 +169,23 @@ func (a *App) chatTurnSetup(ctx context.Context, in chat.TurnInput) (chat.TurnSe
 	}, nil
 }
 
-// chatAgentRefs accumulates the Agent page's references: earlier turns' contexts
-// first (oldest first), then this message's, de-duplicated by type:id. Files are
-// skipped because they are uploads on this path, not references. An unknown type
-// in this message is refused; one in an older context is ignored, because a
+// chatAgentRefs accumulates the Agent page's references: this message's first,
+// then older turns' newest first, de-duplicated by type:id until the cap. Files
+// are skipped because they are uploads on this path, not references. An unknown
+// type in this message is refused; one in an older context is ignored, because a
 // conversation must stay usable after a release drops a type.
 func (a *App) chatAgentRefs(in chat.TurnInput, current []agentRef) ([]agentRef, error) {
+	if len(current) > agentMaxRefs {
+		return nil, chat.RefuseTurn("that's too much context for one message")
+	}
+	for _, ref := range current {
+		if ref.Type == "file" {
+			continue
+		}
+		if _, ok := agentRefSources[ref.Type]; !ok {
+			return nil, chat.RefuseTurn("unknown context type")
+		}
+	}
 	var refs []agentRef
 	seen := map[string]bool{}
 	add := func(ref agentRef) {
@@ -188,26 +200,17 @@ func (a *App) chatAgentRefs(in chat.TurnInput, current []agentRef) ([]agentRef, 
 			refs = append(refs, ref)
 		}
 	}
-	for _, raw := range in.EarlierContexts {
+	for _, ref := range current {
+		add(ref)
+	}
+	for i := len(in.EarlierContexts) - 1; i >= 0 && len(refs) < agentMaxRefs; i-- {
 		var page chatPageContext
-		if json.Unmarshal(raw, &page) != nil {
+		if json.Unmarshal(in.EarlierContexts[i], &page) != nil {
 			continue
 		}
 		for _, ref := range page.References {
 			add(ref)
 		}
-	}
-	if len(current) > agentMaxRefs {
-		return nil, chat.RefuseTurn("that's too much context for one message")
-	}
-	for _, ref := range current {
-		if ref.Type == "file" {
-			continue
-		}
-		if _, ok := agentRefSources[ref.Type]; !ok {
-			return nil, chat.RefuseTurn("unknown context type")
-		}
-		add(ref)
 	}
 	return refs, nil
 }

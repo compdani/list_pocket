@@ -186,6 +186,13 @@ func (a *App) pluginChannelIDs() []string {
 
 // GetSubscriberChannels returns a subscriber's addresses and consent on plugin channels.
 func (a *App) GetSubscriberChannels(re *pbcore.RequestEvent) error {
+	id, err := a.resolveSubscriberRouteID(re)
+	if err != nil {
+		return err
+	}
+	if err := a.hasSubPerm(auth.GetUserRE(re), []int{id}); err != nil {
+		return err
+	}
 	out, err := a.core.GetSubscriberChannelInfo(pathParam(re, "id"), a.pluginChannelIDs())
 	if err != nil {
 		return apperr.Internal(err.Error())
