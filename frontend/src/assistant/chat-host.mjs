@@ -661,16 +661,43 @@ export function undoLastEdit(entry, editor, revisionOf) {
   return { ok: true, before: entry.before };
 }
 
-/** The last user message to send again after a failed turn, or '' when a retry would not match the legacy button. */
-export function retryText(state) {
-  if (!state || state.running || state.sending) return '';
-  const failed = Boolean(state.error) || Boolean(state.turn && state.turn.error);
-  if (!failed || !Array.isArray(state.transcript)) return '';
+/**
+ * The failed turn's user message, stored upload IDs, and context references to
+ * send again, or null when Retry should not be offered. Only offered when an
+ * accepted turn failed (`state.turn.error`), never on a pre-accept `state.error`
+ * (where the binding already restored the refused draft in the composer).
+ */
+export function retryPayload(state) {
+  if (!state || state.running || state.sending) return null;
+  if (!state.turn || !state.turn.error || !Array.isArray(state.transcript)) return null;
+  let text = '';
+  let messageId = null;
   for (let i = state.transcript.length - 1; i >= 0; i -= 1) {
     const part = state.transcript[i];
     if (part && part.role === 'user' && part.type === 'text' && typeof part.text === 'string' && part.text.trim()) {
-      return part.text;
+      text = part.text;
+      messageId = part.messageId ?? null;
+      break;
     }
   }
-  return '';
+  if (!text) return null;
+  const attachments = [];
+  const references = [];
+  if (messageId !== null) {
+    for (const part of state.transcript) {
+      if (!part || part.role !== 'user' || part.messageId !== messageId) continue;
+      if (part.type === 'attachment' && typeof part.uploadId === 'string' && part.uploadId !== '') {
+        if (!attachments.includes(part.uploadId)) attachments.push(part.uploadId);
+      } else if (part.type === 'context') {
+        const result = part.result && typeof part.result === 'object' ? part.result : part;
+        for (const ref of referencesOf(result.references)) references.push(ref);
+      }
+    }
+  }
+  return { text, attachments, references };
+}
+
+/** The last user message to send again after a failed turn, or '' when Retry does not apply. */
+export function retryText(state) {
+  return retryPayload(state)?.text || '';
 }

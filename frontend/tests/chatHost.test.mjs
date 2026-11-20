@@ -10,7 +10,7 @@ import {
   contextReferencesFromTranscript, createEditorAdapter, editorContextOf, editorPrecheckError,
   judgeEditorProposal, labelToolEntries, moveDraftPictures, navigationWrite, pageContext,
   panelPageContext, picturesFor, proposalProblemText, referencesFromContext, referencesOf,
-  retryText, reviewPartOf, savePictures, storedModelFor, toolLabel, undoLastEdit,
+  retryPayload, retryText, reviewPartOf, savePictures, storedModelFor, toolLabel, undoLastEdit,
 } from '../src/assistant/chat-host.mjs';
 
 // --- page context -----------------------------------------------------------
@@ -699,13 +699,21 @@ test('undo is refused once the editor has moved on', () => {
   assert.deepEqual(undoLastEdit(entry, fakeEditor('other', editor.value), revision).ok, false);
 });
 
-test('retry is the last user message after a failed turn, and nothing while one is running', () => {
+test('retry targets only a failed accepted turn and keeps its uploads and references', () => {
   const transcript = [
-    { role: 'user', type: 'text', text: 'First' },
-    { role: 'assistant', type: 'text', text: 'Ok' },
-    { role: 'user', type: 'text', text: 'Second' },
+    { messageId: 'm1', role: 'user', type: 'text', text: 'First' },
+    { messageId: 'm2', role: 'assistant', type: 'text', text: 'Ok' },
+    { messageId: 'm3', role: 'user', type: 'text', text: 'Second' },
+    { messageId: 'm3', role: 'user', type: 'attachment', uploadId: 'up1', name: 'shot.png', mime: 'image/png' },
+    { messageId: 'm3', role: 'user', type: 'context', result: { references: [{ type: 'list', id: '3', label: 'VIP' }] } },
   ];
+  assert.deepEqual(
+    retryPayload({ running: false, transcript, turn: { error: { code: 'provider_error' } } }),
+    { text: 'Second', attachments: ['up1'], references: [{ type: 'list', id: '3', label: 'VIP' }] },
+  );
   assert.equal(retryText({ running: false, transcript, turn: { error: { code: 'provider_error' } } }), 'Second');
-  assert.equal(retryText({ running: true, transcript, error: { code: 'network' } }), '');
+  // A pre-accept state.error (e.g. refused second submit) restores the draft instead of offering Retry.
+  assert.equal(retryPayload({ running: false, transcript, error: { code: 'turn_refused' }, turn: null }), null);
+  assert.equal(retryText({ running: true, transcript, turn: { error: { code: 'network' } } }), '');
   assert.equal(retryText({ running: false, transcript }), '');
 });

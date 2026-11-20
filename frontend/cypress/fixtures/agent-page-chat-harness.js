@@ -28,7 +28,7 @@ const router = createRouter({
 });
 await router.push(new URLSearchParams(location.search).get('path') || '/agent');
 pb.authStore.save('fixture-token', { id: 'fixture-owner', collectionId: 'users' });
-window.agentFixture = { router, store };
+window.agentFixture = { router, store, pb };
 const app = createApp({ render: () => h(VApp, {}, () => [h(VMain, {}, () => [h('div', { style: 'padding: 16px' }, [h(RouterView)])])]) });
 app.config.globalProperties.$t = t;
 app.use(store).use(router).use(vuetify).mount('#app');

@@ -544,9 +544,8 @@ func newMCPTestServer(t *testing.T) *mcpTestServer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.app.mountMCP(&pbcore.ServeEvent{App: f.app.pb, Router: router})
-	if f.app.mcp == nil {
-		t.Fatal("the MCP endpoint was not mounted")
+	if err := f.app.mountMCP(&pbcore.ServeEvent{App: f.app.pb, Router: router}); err != nil {
+		t.Fatalf("the MCP endpoint was not mounted: %v", err)
 	}
 	mux, err := router.BuildMux()
 	if err != nil {

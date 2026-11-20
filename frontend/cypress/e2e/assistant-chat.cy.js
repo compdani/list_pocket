@@ -621,6 +621,145 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     });
   });
 
+  it('does not offer retry after a refused second submit, and preserves uploads on a failed-turn retry', () => {
+    const turns = [];
+    stubList([conversation('c1', 'Existing')]);
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c1', {
+      conversation: conversation('c1', 'Existing'),
+      messages: [
+        {
+          id: 'u1',
+          conversationId: 'c1',
+          turnId: 't0',
+          role: 'user',
+          createdAt: '2026-11-11T09:00:00Z',
+          parts: [
+            { type: 'text', text: 'Earlier message' },
+            { type: 'attachment', uploadId: 'up1', name: 'brief.txt', mime: 'text/plain' },
+          ],
+        },
+      ],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    }).as('open1');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/c1/turns', (req) => {
+      turns.push(req.body);
+      if (turns.length === 1) {
+        req.reply({ statusCode: 400, body: { error: { code: 'turn_refused', message: 'Refused.' } } });
+        return;
+      }
+      if (turns.length === 2) {
+        req.reply({ turn: { id: 't2', conversationId: 'c1', state: 'running' }, created: true });
+        return;
+      }
+      req.reply({ turn: { id: 't3', conversationId: 'c1', state: 'completed' }, created: true });
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/turns/t2/events', sse([
+      frame(1, 'turn.started', undefined, 't2'),
+      frame(2, 'turn.failed', { code: 'provider_error', message: 'Boom.' }, 't2'),
+    ])).as('failedTurn');
+
+    visit('?editor=none');
+    cy.wait(['@status', '@list']);
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-conversation-id=c1] .conv-link').click();
+    cy.wait('@open1');
+
+    // Refused second submit restores draft and must NOT show Retry (which would resend Earlier message).
+    cy.get('textarea').type('Second try{enter}');
+    cy.wait('@turn');
+    cy.get('textarea').should('have.value', 'Second try');
+    cy.get('[data-cy=assistant-retry]').should('not.exist');
+
+    // Now accept a turn that fails mid-stream; Retry must resend with the upload ID from the transcript.
+    cy.get('textarea').type('{enter}');
+    cy.wait('@failedTurn');
+    cy.get('[data-cy=assistant-retry]').click();
+    cy.wrap(null).should(() => {
+      expect(turns).to.have.length(3);
+      expect(turns[2].text).to.eq('Earlier message');
+      expect(turns[2].attachments).to.deep.eq(['up1']);
+    });
+  });
+
+  it('keeps saved media pictures when deleting a conversation fails on the server', () => {
+    const rows = [conversation('c1', 'Keep me'), conversation('c2', 'Other')];
+    stubList(rows);
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c1', {
+      conversation: conversation('c1', 'Keep me'),
+      messages: [],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    }).as('open1');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c2', {
+      conversation: conversation('c2', 'Other'),
+      messages: [],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    }).as('open2');
+    cy.intercept('DELETE', '**/api/mcp/chat/v1/conversations/c1', {
+      statusCode: 500,
+      body: { error: { code: 'internal', message: 'server error' } },
+    }).as('failDelete');
+
+    visit('?editor=none');
+    cy.wait(['@status', '@list']);
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-conversation-id=c1] .conv-link').click();
+    cy.wait('@open1');
+    cy.get('[data-cy=assistant-add-picture]').click();
+    cy.get('.thumb-link').first().click();
+    cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
+
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-conversation-id=c1] .conv-del').click();
+    cy.get('[data-conversation-id=c1] [data-action=confirm-delete]').click();
+    cy.wait('@failDelete');
+
+    // Switch away and back: the picture must still be stored for c1.
+    cy.get('[data-conversation-id=c2] .conv-link').click();
+    cy.wait('@open2');
+    cy.get('[data-cy=assistant-picture]').should('not.exist');
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-conversation-id=c1] .conv-link').click();
+    cy.wait('@open1');
+    cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
+  });
+
+  it('clears composer draft, attachments, pictures and dialogs on an in-place account switch', () => {
+    stubList([conversation('c1', 'User one chat')]);
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c1', {
+      conversation: conversation('c1', 'User one chat'),
+      messages: [],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    }).as('open1');
+    visit('?editor=none');
+    cy.wait(['@status', '@list']);
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-conversation-id=c1] .conv-link').click();
+    cy.wait('@open1');
+    cy.get('textarea').type('Private draft for user one');
+    cy.get('[data-cy=assistant-add-picture]').click();
+    cy.get('.thumb-link').first().click();
+    cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
+    cy.get('[part=switcher-button]').click();
+    cy.get('[data-cy=assistant-rename]').click();
+    cy.get('[data-cy=assistant-rename-title]').should('be.visible');
+
+    // Switch to a different account in place.
+    cy.window().then((win) => {
+      win.assistantFixture.pb.authStore.save('user-two-token', { id: 'user-two', collectionId: 'users' });
+    });
+    cy.get('textarea').should('have.value', '');
+    cy.get('[data-cy=assistant-picture]').should('not.exist');
+    cy.get('[data-cy=assistant-rename-title]').should('not.exist');
+  });
+
   it('clears legacy assistant localStorage keys on load while keeping remembered model', () => {
     stubList([]);
     cy.visit(`${fixture}?editor=none`, {

@@ -83,11 +83,11 @@ import { assistantContext } from '../assistant/context';
 import {
   chatErrorText, choiceIdFor, cleanPictures, clearLegacyAssistantStorage,
   createEditorAdapter, editorContextOf, editorPrecheckError, moveDraftPictures,
-  panelPageContext, picturesFor, referencesFromContext, retryText, reviewPartOf,
+  panelPageContext, picturesFor, referencesFromContext, retryPayload, reviewPartOf,
   savePictures, storedModelFor, undoLastEdit,
 } from '../assistant/chat-host.mjs';
 import {
-  createSubmitCapture, decideModuleProposal, holdComposerUntilReady,
+  clearHostComposer, createSubmitCapture, decideModuleProposal, holdComposerUntilReady,
   proposalFor, renderModuleProposal, renderNoticeWithOpen,
 } from '../assistant/chat-ui.mjs';
 import { applyEditorPatch, revision } from '../assistant/patches.mjs';
@@ -122,6 +122,7 @@ let unsubscribeAuth = null;
 let unmounted = false;
 let heldUntilReady = true;
 let loadedAccount = '';
+let accountEpoch = 0;
 // Set when a submit starts with no conversation, so that draft's pictures
 // follow the id the first send creates and are not left on the draft.
 let pendingDraftMove = false;
@@ -233,7 +234,7 @@ function syncPictures(state) {
 function onChange() {
   const state = chat.state;
   conversationOpen.value = Boolean(state.activeConversationId);
-  canRetry.value = retryText(state) !== '';
+  canRetry.value = retryPayload(state) !== null;
   sending.value = state.running === true || state.sending === true;
   syncPictures(state);
   heldUntilReady = holdComposerUntilReady(panel.value, state, heldUntilReady);
@@ -253,17 +254,6 @@ function onSelectConversation() {
 function onNewConversation() {
   pendingDraftMove = false;
   undo.value = null;
-}
-
-function onDeleteConversation(event) {
-  const id = event.detail?.id;
-  if (id == null) return;
-  const key = String(id);
-  savePictures(localStorage, userId(), key, []);
-  if (key === activePictureId()) {
-    pendingDraftMove = false;
-    undo.value = null;
-  }
 }
 
 function onModelChange(event) {
@@ -395,15 +385,32 @@ async function undoEdit() {
 }
 
 function retry() {
-  const text = retryText(chat.state);
-  if (!text) return;
+  const payload = retryPayload(chat.state);
+  if (!payload) return;
   undo.value = null;
   const model = typeof panel.value?.model === 'string' ? panel.value.model : '';
   const effort = typeof panel.value?.optionValues?.effort === 'string' ? panel.value.optionValues.effort : '';
-  void chat.send(text, {
+  const composerFiles = (panel.value?.attachments || [])
+    .map((item) => item?.file)
+    .filter((file) => file instanceof Blob);
+  const attachments = [...payload.attachments, ...composerFiles];
+  const options = {
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
-  });
+    ...(attachments.length ? { attachments } : {}),
+  };
+  if (payload.references.length) {
+    options.context = panelPageContext({
+      path: route.path,
+      page: typeof route.name === 'string' ? route.name : '',
+      params: route.params,
+      filters: route.query,
+      references: payload.references,
+      editor: editorContextOf(assistantContext.editor, revision, selectionText()),
+      pictures: pictures.value,
+    });
+  }
+  void chat.send(payload.text, options);
 }
 
 function addPicture(media) {
@@ -437,7 +444,6 @@ onMounted(async () => {
   el.addEventListener('agent-submit', onPanelSubmit);
   el.addEventListener('agent-select-conversation', onSelectConversation);
   el.addEventListener('agent-new-conversation', onNewConversation);
-  el.addEventListener('agent-delete-conversation', onDeleteConversation);
   el.addEventListener('agent-action', onAction);
   el.addEventListener('agent-model-change', onModelChange);
   el.addEventListener('agent-close', () => { assistantContext.open = false; });
@@ -447,6 +453,22 @@ onMounted(async () => {
     errorText: (code) => chatErrorText(code, proxy.$t('agent.noProvider')),
     contextReferences: referencesFromContext,
   });
+  const removeConversation = chat.remove.bind(chat);
+  chat.remove = (id) => {
+    const key = id == null ? '' : String(id);
+    const deletingOpen = key !== '' && key === activePictureId();
+    const owner = userId();
+    const pending = removeConversation(id);
+    Promise.resolve(pending).then((ok) => {
+      if (ok !== true || key === '') return;
+      savePictures(localStorage, owner, key, []);
+      if (deletingOpen) {
+        pendingDraftMove = false;
+        undo.value = null;
+      }
+    });
+    return pending;
+  };
   chat.addEventListener('change', onChange);
   const currentAccountId = () => {
     const key = accountKey();
@@ -457,16 +479,24 @@ onMounted(async () => {
     const next = currentAccountId();
     if (next === loadedAccount) return;
     loadedAccount = next;
+    accountEpoch += 1;
+    const epoch = accountEpoch;
+    submitCapture.clear();
+    clearHostComposer(panel.value);
     undo.value = null;
     pendingDraftMove = false;
-    try {
-      await chat.setAccount(accountKey());
-      if (unmounted) return;
-      chat.startDraft();
-      preselectModel();
-    } finally {
-      if (!unmounted) loadPictures('');
-    }
+    actionError.value = '';
+    closeReview();
+    mediaOpen.value = false;
+    renaming.value = false;
+    renameTitle.value = '';
+    pictures.value = [];
+    pictureConversation = '';
+    await chat.setAccount(accountKey());
+    if (unmounted || epoch !== accountEpoch) return;
+    chat.startDraft();
+    preselectModel();
+    loadPictures('');
   });
 
   await chat.init();

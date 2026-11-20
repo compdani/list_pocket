@@ -76,7 +76,7 @@ function change() {
 
 const editorName = params.get('editor') || 'campaign';
 if (editorName !== 'none') useEditor(editorName);
-window.assistantFixture = { snapshot, change, useEditor, router, store };
+window.assistantFixture = { snapshot, change, useEditor, router, store, pb };
 
 const app = createApp({
   render: () => h(VApp, {}, () => [h(VMain, {}, () => [

@@ -4,6 +4,7 @@ package main
 // /mcp. See docs/mcp.md for what it offers and how clients sign in.
 
 import (
+	"fmt"
 	stdlog "log"
 	"log/slog"
 	"net/url"
@@ -27,13 +28,12 @@ and never retry a write that failed because it may already have applied.`
 // DecisionTimeout longer than that chat tool timeout, so the two stay equal.
 const assistantToolTimeout = 5 * time.Minute
 
-// mountMCP builds the endpoint once per serve and registers its routes. A failure
-// is logged and leaves the rest of the app serving: the assistant doesn't depend
-// on it.
-func (a *App) mountMCP(se *pbcore.ServeEvent) {
+// mountMCP builds the MCP/chat module once per serve and registers its routes.
+// Both the side panel and the Agent page depend on /api/mcp/chat/v1, so a
+// startup failure is returned to fail serve rather than leaving chat broken.
+func (a *App) mountMCP(se *pbcore.ServeEvent) error {
 	if a.pb == nil {
-		a.logf("mcp: endpoint disabled: no PocketBase app")
-		return
+		return fmt.Errorf("mcp: cannot mount without PocketBase app")
 	}
 	cfg := pbmcp.Config{
 		Path:         "/mcp",
@@ -45,8 +45,8 @@ func (a *App) mountMCP(se *pbcore.ServeEvent) {
 		// OAuth stays off: stock OAuth signs in with a password, which would skip
 		// List Pocket's own TOTP second factor (cmd/auth.go).
 		OAuth: pbmcp.OAuthConfig{Enabled: false, Mode: pbmcp.OAuthModeOff},
-		// Required for chat proposals in step 3; writes on MCP are gated by the
-		// tool's channel instead, so they stay off unless the operator opts in.
+		// Required for chat proposals; writes on MCP are gated by the tool's
+		// channel instead, so they stay off unless the operator opts in.
 		AllowWrites: true,
 		// No collections: every tool is a custom tool running List Pocket's own
 		// handlers, so PocketBase collection rules can never widen or narrow them.
@@ -60,18 +60,18 @@ func (a *App) mountMCP(se *pbcore.ServeEvent) {
 	}
 	srv, err := pbadapter.New(se.App, cfg)
 	if err != nil {
-		a.logf("mcp: endpoint disabled: %v", err)
-		return
+		return fmt.Errorf("mcp: initialize module: %w", err)
 	}
 	a.mcp = srv
-	// Enable the chat API alongside /mcp. A failure here leaves /mcp mounted.
 	if err := a.enableChat(srv); err != nil {
-		a.logf("chat: API disabled: %v", err)
+		a.mcp = nil
+		return fmt.Errorf("chat: enable API: %w", err)
 	}
 	if err := srv.RegisterRoutes(se.Router); err != nil {
-		a.logf("mcp: registering routes: %v", err)
 		a.mcp = nil
+		return fmt.Errorf("mcp: register routes: %w", err)
 	}
+	return nil
 }
 
 // moduleLogger is the module's slog sink, so its warnings land where every

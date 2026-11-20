@@ -433,7 +433,9 @@ func TestShutdownAppCancelsAndJoinsChatReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.mountMCP(&pbcore.ServeEvent{App: a.pb, Router: router})
+	if err := a.mountMCP(&pbcore.ServeEvent{App: a.pb, Router: router}); err != nil {
+		t.Fatalf("mountMCP: %v", err)
+	}
 	if _, ok := a.mcp.ChatRouter(); !ok {
 		t.Fatal("chat wasn't enabled")
 	}

@@ -18,7 +18,23 @@ export function createSubmitCapture() {
       submitReferences = null;
       return references;
     },
+    clear() {
+      submitReferences = null;
+    },
   };
+}
+
+/** Clear all unsent composer state (draft, attachments, references, mention picker) on account switch. */
+export function clearHostComposer(el) {
+  if (!el) return;
+  if (typeof el.clearComposer === 'function') {
+    el.clearComposer({ draft: true, attachments: true, references: true });
+    return;
+  }
+  el.draft = '';
+  el.references = [];
+  el.clearAttachments?.();
+  el.closeMention?.();
 }
 
 /**

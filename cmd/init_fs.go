@@ -41,7 +41,7 @@ func initFS(appDir, frontendDir, staticDir, i18nDir string) stdfs.FS {
 	return fsys
 }
 
-func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
+func registerServeRoutes(se *pbcore.ServeEvent, app *App) error {
 	se.Router.BindFunc(func(e *pbcore.RequestEvent) error {
 		e.Set("app", app)
 		return e.Next()
@@ -71,7 +71,7 @@ func registerServeRoutes(se *pbcore.ServeEvent, app *App) {
 
 	registerHandlers(se.Router, app)
 
-	app.mountMCP(se)
+	return app.mountMCP(se)
 }
 
 // parsePublicTemplates parses public HTML templates used by public RequestEvent handlers.

@@ -9,7 +9,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -184,9 +186,8 @@ func newChatTestFixture(t *testing.T, opts ...func(*mcpFixture)) *chatTestFixtur
 	// two must coexist; BuildMux below fails the test if serve would panic.
 	router.BindFunc(func(e *pbcore.RequestEvent) error { e.Set(appContextKey, f.app); return e.Next() })
 	registerHandlers(router, f.app)
-	f.app.mountMCP(&pbcore.ServeEvent{App: f.app.pb, Router: router})
-	if f.app.mcp == nil {
-		t.Fatal("the module was not mounted")
+	if err := f.app.mountMCP(&pbcore.ServeEvent{App: f.app.pb, Router: router}); err != nil {
+		t.Fatalf("the module was not mounted: %v", err)
 	}
 	mux, err := router.BuildMux()
 	if err != nil {
@@ -438,8 +439,8 @@ func TestChatModuleMountedByDefault(t *testing.T) {
 
 	// Migration 000063 dropped agent_* collections while keeping ai_settings and oauth_credentials.
 	for _, gone := range []string{"agent_conversations", "agent_messages", "agent_attachments"} {
-		if col, err := on.app.pb.FindCollectionByNameOrId(gone); err == nil && col != nil {
-			t.Errorf("legacy collection %q still exists after migrations", gone)
+		if _, err := on.app.pb.FindCollectionByNameOrId(gone); !errors.Is(err, sql.ErrNoRows) {
+			t.Errorf("legacy collection %q lookup = %v, want sql.ErrNoRows", gone, err)
 		}
 	}
 	for _, kept := range []string{"ai_settings", "oauth_credentials"} {
@@ -916,7 +917,9 @@ func TestEnableChatDoesNotFetchModelsAtStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := time.Now()
-	a.mountMCP(&pbcore.ServeEvent{App: a.pb, Router: router})
+	if err := a.mountMCP(&pbcore.ServeEvent{App: a.pb, Router: router}); err != nil {
+		t.Fatalf("mountMCP: %v", err)
+	}
 	elapsed := time.Since(start)
 	if elapsed > 3*time.Second {
 		t.Fatalf("mountMCP waited %s on the provider", elapsed)
@@ -1235,5 +1238,17 @@ func TestChatModuleTurnLifecycle(t *testing.T) {
 	events := f.events(t, f.scopedToken, activeTurn)
 	if !chatEventSeen(events, "turn.cancelled") && !chatEventSeen(events, "turn.failed") {
 		t.Fatalf("cancelled turn did not end: %+v", events)
+	}
+}
+
+// n. A chat/MCP startup failure returns an error from mountMCP so serve fails
+// visibly instead of starting without a chat backend.
+func TestMountMCPFailureReturnsError(t *testing.T) {
+	a := &App{}
+	if err := a.mountMCP(&pbcore.ServeEvent{}); err == nil {
+		t.Fatal("expected mountMCP to fail without a PocketBase app")
+	}
+	if a.mcp != nil {
+		t.Fatal("a.mcp must stay nil after a failed mount")
 	}
 }

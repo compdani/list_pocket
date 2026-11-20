@@ -286,7 +286,9 @@ func main() {
 		a := app
 		appMu.Unlock()
 
-		registerServeRoutes(se, a)
+		if err := registerServeRoutes(se, a); err != nil {
+			return err
+		}
 		return se.Next()
 	})
 

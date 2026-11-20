@@ -74,7 +74,7 @@ import {
   navigationWrite, pageContext, referencesFromContext, reviewPartOf, storedModelFor,
 } from '../assistant/chat-host.mjs';
 import {
-  createSubmitCapture, decideModuleProposal, holdComposerUntilReady,
+  clearHostComposer, createSubmitCapture, decideModuleProposal, holdComposerUntilReady,
   proposalFor, renderModuleProposal, renderNoticeWithOpen,
 } from '../assistant/chat-ui.mjs';
 import { CONTEXT_ICONS } from '../agent/parts.mjs';
@@ -107,6 +107,8 @@ const reviewError = ref('');
 const busyId = ref('');
 let binding = null;
 let unsubscribeAuth = null;
+let unmounted = false;
+let accountEpoch = 0;
 let aligned = false;
 let switchingAccount = false;
 // A route change that arrived before the first open finished. The URL wins:
@@ -434,23 +436,40 @@ onMounted(async () => {
     const next = `${key.authCollectionId}:${key.userId}`;
     if (next === loadedAccount) return;
     loadedAccount = next;
+    accountEpoch += 1;
+    const epoch = accountEpoch;
+    submitCapture.clear();
+    clearHostComposer(page.value);
+    actionError.value = '';
+    closeReview();
+    previewing.value = null;
+    pasting.value = null;
+    picker.value = null;
+    inContext.value = [];
     // setAccount clears the state, which would look like "no conversation";
     // don't rewrite the URL while the route's own conversation is reloaded.
     switchingAccount = true;
     const id = String(route.params.id || '');
     try {
       await chat.setAccount(key);
+      if (unmounted || epoch !== accountEpoch) return;
       if (id) await chat.open(id);
+      if (unmounted || epoch !== accountEpoch) return;
+      preselectModel();
     } finally {
-      switchingAccount = false;
-      syncUrl();
+      if (epoch === accountEpoch) {
+        switchingAccount = false;
+        if (!unmounted) syncUrl();
+      }
     }
   });
 
   await chat.init();
+  if (unmounted) return;
   const id = String(route.params.id || '');
   if (id) await chat.open(id);
   else chat.startDraft();
+  if (unmounted) return;
   aligned = true;
   const queued = sawQueuedRoute ? queuedRoute : undefined;
   sawQueuedRoute = false;
@@ -462,6 +481,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  unmounted = true;
   stopRouteWatch();
   binding?.unbind();
   chat.dispose();

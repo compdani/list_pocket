@@ -757,4 +757,26 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     });
     cy.get('.message strong').should('have.text', 'six');
   });
+
+  it('clears draft, references, attachments and paste dialog on an in-place account switch', () => {
+    stubPage({ list: [] });
+    cy.visit(`${fixture}?path=/agent?ref=list&id=7&label=VIP`);
+    cy.wait(['@status', '@list']);
+    cy.get('textarea').type('Secret draft from user one');
+    cy.get('[data-cy=agent-paste]').click();
+    cy.get('[data-cy=agent-paste-content]').type('a,b\n1,2');
+    cy.get('[data-cy=agent-paste-attach]').click();
+    cy.get('[data-cy=agent-paste]').click();
+    cy.get('[data-cy=agent-paste-content]').should('be.visible');
+
+    cy.window().then((win) => {
+      win.agentFixture.pb.authStore.save('user-two-token', { id: 'user-two', collectionId: 'users' });
+    });
+    cy.get('textarea').should('have.value', '');
+    cy.get('lp-agent-page').then(($el) => {
+      expect($el[0].references).to.deep.eq([]);
+      expect($el[0].attachments).to.deep.eq([]);
+    });
+    cy.get('[data-cy=agent-paste-content]').should('not.exist');
+  });
 });
