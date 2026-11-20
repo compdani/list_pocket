@@ -51,8 +51,8 @@ func chatModuleEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("LISTPOCKET_CHAT_BACKEND")), "module")
 }
 
-// chatBackendName is what /api/config tells the admin UI. Nothing chooses a
-// host from it yet; both surfaces still run on the legacy engine.
+// chatBackendName is what /api/config tells the admin UI, and what
+// views/AgentRoute.vue uses to pick the Agent page host.
 func chatBackendName() string {
 	if chatModuleEnabled() {
 		return "module"

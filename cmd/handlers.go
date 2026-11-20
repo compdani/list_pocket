@@ -352,7 +352,15 @@ func registerHandlers(se *router.Router[*pbcore.RequestEvent], a *App) {
 		public.Route(method, "/webhooks/plugins/{plugin}/{path...}", asHandler(a.PluginWebhook))
 	}
 
-	public.GET("/", asHandler(func(re *pbcore.RequestEvent) error {
+	// The chat module mounts its API under one all-method pattern, and Go's
+	// ServeMux refuses that next to a "GET /" catch-all. With the module on,
+	// match the exact root instead, so /api/mcp/chat/v1 keeps working; every
+	// other path is matched by its own route or is a 404 as usual.
+	homeRoute := "/"
+	if chatModuleEnabled() {
+		homeRoute = "/{$}"
+	}
+	public.GET(homeRoute, asHandler(func(re *pbcore.RequestEvent) error {
 		return renderTpl(re, http.StatusOK, "home", publicTpl{Title: "listpocket"})
 	}))
 
