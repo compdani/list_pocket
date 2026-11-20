@@ -696,6 +696,10 @@ func TestEnableChatDoesNotFetchModelsAtStartup(t *testing.T) {
 	t.Cleanup(func() { listener.Close() })
 
 	a := chatProvidersTestApp(t)
+	// Explicitly, before the fixture's own cleanup resets PocketBase: the
+	// reload started by mountMCP below is blocked on the listener and must be
+	// cancelled and joined, not left running against a reset app.
+	t.Cleanup(func() { shutdownApp(a) })
 	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
 	t.Setenv("LISTPOCKET_AI_BASE_URL", "http://"+listener.Addr().String()+"/v1")
 	t.Setenv("LISTPOCKET_CHAT_BACKEND", "module")

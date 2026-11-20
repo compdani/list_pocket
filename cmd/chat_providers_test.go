@@ -5,12 +5,17 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
+	"net/http"
 	"testing"
 	"time"
 
 	"ganigeorgiev.com/pocketbase/pocketbase"
+	"ganigeorgiev.com/pocketbase/pocketbase/apis"
+	pbcore "ganigeorgiev.com/pocketbase/pocketbase/core"
 	"github.com/compdani/list_pocket/internal/flow/chatgpt"
 	"github.com/compdani/list_pocket/internal/flow/llm"
+	"github.com/compdani/list_pocket/internal/plugins"
 	"github.com/compdani/pocketbase-mcp/chat/provider/catalog"
 )
 
@@ -29,6 +34,10 @@ func chatProvidersTestApp(t *testing.T) *App {
 	}
 	a := &App{pb: pbApp, log: log.New(io.Discard, "", 0)}
 	a.chatgpt = newChatGPTService(pbApp)
+	// Cleanups run last-in-first-out, so stopping the app's background work
+	// happens before the reset registered above: a leaked chat reload must
+	// never reach a reset PocketBase.
+	t.Cleanup(func() { shutdownApp(a) })
 	return a
 }
 
@@ -350,4 +359,127 @@ func TestChatProviderStoreWritesAreHostOwned(t *testing.T) {
 	if creds != nil || err != nil {
 		t.Errorf("LoadCredentials should be unused: %+v %v", creds, err)
 	}
+}
+
+// A cancelled reload must return before it reads Settings → AI (or the ChatGPT
+// store), because shutdownApp may already have reset PocketBase.
+func TestChatProviderStoreHonoursCancelledContext(t *testing.T) {
+	a := chatProvidersTestApp(t)
+	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
+	store := &chatProviderStore{app: a}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	scope := catalog.Scope{}
+
+	if _, err := store.ListProviders(ctx, scope); !errors.Is(err, context.Canceled) {
+		t.Errorf("ListProviders: %v", err)
+	}
+	if _, err := store.GetProvider(ctx, scope, llm.ProviderAPI); !errors.Is(err, context.Canceled) {
+		t.Errorf("GetProvider: %v", err)
+	}
+	var choice aiChoice
+	if err := store.LoadSetting(ctx, scope, "defaultChoice", &choice); !errors.Is(err, context.Canceled) {
+		t.Errorf("LoadSetting: %v", err)
+	}
+	if _, err := store.HostID(ctx, scope); !errors.Is(err, context.Canceled) {
+		t.Errorf("HostID: %v", err)
+	}
+	if _, err := store.CodexToken(ctx, scope, llm.ProviderChatGPT, false); !errors.Is(err, context.Canceled) {
+		t.Errorf("CodexToken: %v", err)
+	}
+	if store.CodexSignedIn(ctx, scope, llm.ProviderChatGPT) {
+		t.Error("CodexSignedIn answered from a cancelled context")
+	}
+	// Nothing above touched the database: the app is still bootstrapped and a
+	// live context still works.
+	live := context.Background()
+	if _, err := store.ListProviders(live, scope); err != nil {
+		t.Errorf("live ListProviders: %v", err)
+	}
+}
+
+// A reload stuck on an unanswering /models must be cancelled and joined by
+// shutdownApp, before anything else is torn down, and it must not start
+// another build afterwards.
+func TestShutdownAppCancelsAndJoinsChatReload(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The handler reports the request's context and then never answers: only
+	// cancellation can end the fetch.
+	requested := make(chan context.Context, 1)
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case requested <- r.Context():
+		default:
+		}
+		<-r.Context().Done()
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+
+	a := chatProvidersTestApp(t)
+	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
+	t.Setenv("LISTPOCKET_AI_BASE_URL", "http://"+listener.Addr().String()+"/v1")
+	t.Setenv("LISTPOCKET_CHAT_BACKEND", "module")
+	a.plugins = &plugins.Manager{}
+	// No cached models: EnableChat's first snapshot comes from the cache-only
+	// path, and its background reload is the one that blocks.
+	if err := a.setAIDefaults(aiChoice{Provider: llm.ProviderAPI, Model: "fake-model"}); err != nil {
+		t.Fatal(err)
+	}
+
+	router, err := apis.NewRouter(a.pb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.mountMCP(&pbcore.ServeEvent{App: a.pb, Router: router})
+	if _, ok := a.mcp.ChatRouter(); !ok {
+		t.Fatal("chat wasn't enabled")
+	}
+
+	var fetchCtx context.Context
+	select {
+	case fetchCtx = <-requested:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the background reload never requested /models")
+	}
+
+	start := time.Now()
+	done := make(chan struct{})
+	go func() {
+		shutdownApp(a)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("shutdownApp waited %s on a cancelled reload", time.Since(start))
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("shutdownApp took %s", elapsed)
+	}
+
+	// The fetch itself was cancelled, and its goroutine is gone: the scope's
+	// WaitGroup is idle, so nothing can still reach the database.
+	select {
+	case <-fetchCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the /models request wasn't cancelled by shutdown")
+	}
+	idle := make(chan struct{})
+	go func() {
+		a.chatReloads.wg.Wait()
+		close(idle)
+	}()
+	select {
+	case <-idle:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a chat reload goroutine outlived shutdown")
+	}
+	if _, ok := a.chatReloads.schedule(); ok {
+		t.Fatal("a chat reload can still be scheduled after shutdown")
+	}
+	a.goReloadChatProviders() // must be a no-op, not a database read
 }

@@ -104,7 +104,7 @@ func (a *App) enableChat(srv *pbadapter.Server) error {
 		return err
 	}
 	store.cacheOnly.Store(false)
-	go a.reloadChatProviders(context.Background())
+	a.goReloadChatProviders()
 	return nil
 }
 

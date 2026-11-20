@@ -159,7 +159,7 @@ func (a *App) SetAIDefault(re *pbcore.RequestEvent) error {
 	if err := a.setAIDefaults(in); err != nil {
 		return apperr.Internal(err.Error())
 	}
-	a.reloadChatProvidersSoon()
+	a.goReloadChatProviders()
 	return okJSON(re, in)
 }
 
@@ -192,8 +192,9 @@ func (a *App) ChatGPTLogin(re *pbcore.RequestEvent) error {
 		c.forgetModels()
 		// The plan just became (un)available to chat; refresh the catalog now
 		// that the model cache is empty, in this goroutine rather than the
-		// settings request.
-		a.reloadChatProviders(context.Background())
+		// settings request. It goes through the app's reload scope so shutdown
+		// cancels and joins it like any other reload.
+		a.goReloadChatProviders()
 	}()
 	select {
 	case u := <-urlCh:
@@ -301,7 +302,7 @@ func (a *App) ChatGPTImport(re *pbcore.RequestEvent) error {
 		return apperr.BadRequest(err.Error())
 	}
 	a.chatgpt.forgetModels()
-	a.reloadChatProvidersSoon()
+	a.goReloadChatProviders()
 	return okJSON(re, a.chatgpt.store.Status())
 }
 
@@ -323,7 +324,7 @@ func (a *App) ChatGPTLogout(re *pbcore.RequestEvent) error {
 		}
 	}
 	a.chatgpt.forgetModels()
-	a.reloadChatProvidersSoon()
+	a.goReloadChatProviders()
 	return okJSON(re, out)
 }
 
@@ -422,7 +423,7 @@ func (a *App) GetAgentModels(re *pbcore.RequestEvent) error {
 	}
 	if refresh {
 		// Both lists above are fresh, so Reload reads them from the cache.
-		a.reloadChatProvidersSoon()
+		a.goReloadChatProviders()
 	}
 	return okJSON(re, map[string]any{"default": aiChoice{Provider: provider, Model: model}, "providers": providers})
 }
