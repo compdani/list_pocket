@@ -164,6 +164,15 @@ func newChatTestFixture(t *testing.T, backend string) *chatTestFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if backend == "module" {
+		// The app's own routes go in too, as registerServeRoutes does: the chat
+		// API's all-method pattern must coexist with them (a "GET /" catch-all
+		// once made serve panic with the module on). Without the module that
+		// catch-all answers every unknown path, so the legacy fixture leaves it
+		// out to keep "no chat route" observable as a 404.
+		router.BindFunc(func(e *pbcore.RequestEvent) error { e.Set(appContextKey, f.app); return e.Next() })
+		registerHandlers(router, f.app)
+	}
 	f.app.mountMCP(&pbcore.ServeEvent{App: f.app.pb, Router: router})
 	if f.app.mcp == nil {
 		t.Fatal("the module was not mounted")
