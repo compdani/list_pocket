@@ -43,6 +43,20 @@ are four concurrent model workers, and only one active turn per conversation.
 A failed server mutation is never retried through the same approval, because a
 handler can fail after committing a write; inspect saved data before retrying.
 
+## Chat API (preview)
+
+Set `LISTPOCKET_CHAT_BACKEND=module` to serve the new chat API at
+`/api/mcp/chat/v1`. It backs the upcoming front ends and shares the tools, prompt
+and limits above. The current side panel and Agent page still use the existing
+endpoints; the flag changes nothing for them yet.
+
+- `LISTPOCKET_CHAT_BACKEND` — `module` turns the new API on. Unset or any other
+  value leaves it off.
+- `LISTPOCKET_MCP_ALLOW_WRITES` — `true` or `1` offers the record-writing tools on
+  `/mcp` as well, without a review step there. See [mcp.md](mcp.md).
+- `LISTPOCKET_AI_MAX_OUTPUT_TOKENS` — output-token ceiling for assistant and chat
+  turns; `0` leaves the parameter out.
+
 ## Validation
 
 Run `go test ./cmd ./internal/workflow`, `npm --prefix frontend run test:unit`, and

@@ -3,7 +3,6 @@ pb_data
 .env
 # Local build output and config
 /listpocket
-/listpocket-mcp
 /config.toml
 .DS_Store
 .venv

@@ -288,10 +288,26 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 | Phase | Work | Done when |
 |---|---|---|
 | 0. Module | B1–B12, V1–V5 in Pocketbase-MCP. Release with submodule tags. **Done in v0.1.6** | Tagged release that List Pocket's `go.mod` and Docker build can consume ✅ |
-| 1. Backend behind the flag | Items 1–8 | `go test ./cmd` green. Golden tool tests pass. Both engines selectable |
+| 1. Backend behind the flag | Items 1–8 | `go test ./cmd` green. Golden tool tests pass. Both engines selectable. **Done in `ea69a35..HEAD`** ✅ |
 | 2. Agent page | Item 10 for `Agent.vue` | `agent-page.cy.js` parity suite passes on `module` |
 | 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant.cy.js` parity suite passes. Editor apply and undo work on campaign, template and workflow editors |
 | 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated |
+
+### Phase 1 notes
+
+- In-process tool calls now set `Request.ContentLength` (`setToolBody`). Without
+  it, writes from chat and MCP bound empty bodies.
+- With no provider configured, the module rejects a turn with 400
+  `invalid_request` before `Setup` runs, so the user doesn't get today's "AI
+  isn't set up…" text. Follow-up: a module change (a distinct code such as
+  `no_provider`) or a client-side mapping in phase 2.
+- The chat default model, when Settings → AI has none, is the AI builder's model
+  on the API key, as in the legacy assistant.
+- Pre-existing, outside this migration: `internal/core` `HasSubscriberLists` and
+  `CampaignHasLists` compare integer list IDs with the text record IDs in
+  `subscriber_lists.list_id` / `campaign_lists.list_id`, so list-scoped users are
+  refused single contacts and campaigns everywhere. It fails closed. Track
+  separately.
 
 ## Parity checklist
 

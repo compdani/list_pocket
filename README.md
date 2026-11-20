@@ -14,8 +14,9 @@ builds this application from source; it does not download a prebuilt PocketBase 
 
 The admin UI lives at `/admin/`. Public subscription, tracking, and archive URLs are served from the same process.
 
-An optional [MCP server](docs/mcp.md) connects external AI clients to the existing
-HTTP APIs over stdio, with reads by default and optional record creation and contact update tools.
+MCP is built in: external AI clients connect to `<root URL>/mcp` over streamable
+HTTP and get the assistant's permission-checked tools, with reads by default and
+optional record creation and contact update tools. See [docs/mcp.md](docs/mcp.md).
 
 ## Capabilities
 
