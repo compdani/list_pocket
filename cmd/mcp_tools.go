@@ -215,14 +215,10 @@ func (a *App) mcpToolHandler(tool assistantTool) func(context.Context, pbmcp.Cal
 		if err != nil {
 			return nil, err
 		}
-		user, err := a.mcpCallerUser(caller.Record)
+		e, err := a.callerRequestEvent(ctx, caller)
 		if err != nil {
 			return nil, err
 		}
-		e, _ := caller.RequestEvent(ctx, http.MethodGet, lpHttpsToolPath, nil)
-		e.Set(auth.AuthRecordHTTPCtxKey, caller.Record)
-		e.Set(auth.UserHTTPCtxKey, user)
-		e.Set(appContextKey, a)
 		raw, err := json.Marshal(args)
 		if err != nil {
 			return nil, pbmcp.Invalid("invalid arguments")
@@ -236,6 +232,22 @@ func (a *App) mcpToolHandler(tool assistantTool) func(context.Context, pbmcp.Cal
 		}
 		return result, nil
 	}
+}
+
+// callerRequestEvent rebuilds the signed-in request in-process handlers expect,
+// for a caller the module already validated: the same event and context values
+// an HTTP route would build for that user. A chat Setup hook and a tool call
+// both use it, so both run under exactly the caller's permissions.
+func (a *App) callerRequestEvent(ctx context.Context, caller *pbadapter.Caller) (*pbcore.RequestEvent, error) {
+	user, err := a.mcpCallerUser(caller.Record)
+	if err != nil {
+		return nil, err
+	}
+	e, _ := caller.RequestEvent(ctx, http.MethodGet, lpHttpsToolPath, nil)
+	e.Set(auth.AuthRecordHTTPCtxKey, caller.Record)
+	e.Set(auth.UserHTTPCtxKey, user)
+	e.Set(appContextKey, a)
+	return e, nil
 }
 
 // mcpCallerUser loads the List Pocket user behind the validated PocketBase record,

@@ -50,20 +50,31 @@ func (a *App) mountMCP(se *pbcore.ServeEvent) {
 		AllowedOrigins: a.mcpAllowedOrigins(),
 		MaxToolTimeout: 2 * time.Minute,
 		AuditFunc:      a.mcpAudit,
-		Logger:         slog.New(slog.NewTextHandler(mcpLogWriter{a.log}, &slog.HandlerOptions{Level: slog.LevelWarn})),
+		Logger:         a.moduleLogger(),
 	}
 	srv, err := pbadapter.New(se.App, cfg)
 	if err != nil {
 		a.logf("mcp: endpoint disabled: %v", err)
 		return
 	}
-	// Step 3 enables chat here, before RegisterRoutes mounts its handler:
-	// if err := srv.EnableChat(...); err != nil { ... }
 	a.mcp = srv
+	// Chat is opt-in: the legacy endpoints stay the live surface until the flag
+	// moves a front end over. A failure here leaves /mcp mounted as it is.
+	if chatModuleEnabled() {
+		if err := a.enableChat(srv); err != nil {
+			a.logf("chat: API disabled: %v", err)
+		}
+	}
 	if err := srv.RegisterRoutes(se.Router); err != nil {
 		a.logf("mcp: registering routes: %v", err)
 		a.mcp = nil
 	}
+}
+
+// moduleLogger is the module's slog sink, so its warnings land where every
+// other List Pocket line does.
+func (a *App) moduleLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(mcpLogWriter{a.log}, &slog.HandlerOptions{Level: slog.LevelWarn}))
 }
 
 // mcpPolicies holds the host policies the tool specs name. lp_super_admin is

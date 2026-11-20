@@ -11,6 +11,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/compdani/list_pocket/internal/flow/chatgpt"
 	"github.com/compdani/list_pocket/internal/flow/llm"
@@ -28,6 +29,12 @@ var (
 
 type chatProviderStore struct {
 	app *App
+	// cacheOnly keeps the catalog's first build off the network. EnableChat
+	// builds a snapshot synchronously, and ListProviders may otherwise fetch
+	// /models (up to 20s per provider) before the app can serve anything. The
+	// first build reads only the shared model cache; a background reload then
+	// fills it in.
+	cacheOnly atomic.Bool
 }
 
 // ListProviders returns the providers Settings → AI has ready, keyed by List
@@ -58,6 +65,29 @@ func (s *chatProviderStore) ListProviders(ctx context.Context, _ catalog.Scope) 
 	return out, nil
 }
 
+// providerModels returns one provider's model list. The startup snapshot reads
+// the cache only; the background reload after EnableChat does the fetching.
+func (s *chatProviderStore) providerModels(ctx context.Context, provider string) cachedAIModels {
+	if s.cacheOnly.Load() {
+		if cached, ok := s.app.cachedProviderModels(provider); ok {
+			return cached
+		}
+		return cachedAIModels{err: "the model list hasn't been fetched yet"}
+	}
+	return s.app.aiProviderModels(ctx, provider, false)
+}
+
+// cachedProviderModels reads the 10-minute model cache without any network call.
+func (a *App) cachedProviderModels(provider string) (cachedAIModels, bool) {
+	if a == nil || a.chatgpt == nil {
+		return cachedAIModels{}, false
+	}
+	a.chatgpt.modelsMu.Lock()
+	defer a.chatgpt.modelsMu.Unlock()
+	cached, ok := a.chatgpt.models[provider]
+	return cached, ok
+}
+
 // codexProvider is the signed-in ChatGPT plan. Models come from the same live
 // cache Settings → AI uses, after checking the sign-in so a signed-out install
 // doesn't touch the network.
@@ -66,7 +96,7 @@ func (s *chatProviderStore) codexProvider(ctx context.Context) (catalog.Provider
 	if !codexSignedIn(a.chatgpt.store) {
 		return catalog.Provider{}, false
 	}
-	list := a.aiProviderModels(ctx, llm.ProviderChatGPT, false)
+	list := s.providerModels(ctx, llm.ProviderChatGPT)
 	models := catalogModels(list.models)
 	if list.err != "" || len(models) == 0 {
 		return catalog.Provider{}, false
@@ -97,7 +127,7 @@ func (s *chatProviderStore) apiProvider(ctx context.Context) (catalog.Provider, 
 	if strings.TrimSpace(os.Getenv("LISTPOCKET_AI_API_KEY")) == "" {
 		return catalog.Provider{}, false
 	}
-	list := a.aiProviderModels(ctx, llm.ProviderAPI, false)
+	list := s.providerModels(ctx, llm.ProviderAPI)
 	models := catalogModels(list.models)
 	if list.err != "" || len(models) == 0 {
 		fallback := a.aiAPIDefaultModel()
@@ -114,10 +144,35 @@ func (s *chatProviderStore) apiProvider(ctx context.Context) (catalog.Provider, 
 		Models:  models,
 	}
 	wanted := a.aiAPIDefaultModel()
+	if provider, model := a.chatDefaultChoice(); provider == llm.ProviderAPI && strings.TrimSpace(model) != "" {
+		wanted = model
+		// The builder's model may not be in the gateway's /models list. Chat
+		// still has to offer it, exactly like today's side panel.
+		if _, ok := p.Model(wanted); !ok {
+			p.Models = append(p.Models, catalog.Model{ID: wanted, Label: wanted})
+		}
+	}
 	if _, ok := p.Model(wanted); ok {
 		p.DefaultModel = wanted
 	}
 	return p, true
+}
+
+// chatDefaultChoice is the provider and model a turn uses when it names neither.
+// With no choice in Settings → AI, it is the campaign builder's model on the API
+// key, which is what the assistant uses today (runAssistant).
+func (a *App) chatDefaultChoice() (string, string) {
+	if a == nil {
+		return "", ""
+	}
+	provider, model := a.aiDefaults()
+	if provider != "" || model != "" {
+		return provider, model
+	}
+	if builder, _, _ := a.getAIBuilderSettingsValues(); strings.TrimSpace(builder) != "" {
+		return llm.ProviderAPI, builder
+	}
+	return a.aiResolver().DefaultChoice()
 }
 
 // aiAPIDefaultModel is the model the resolver would use on the API key.
@@ -201,10 +256,7 @@ func (s *chatProviderStore) LoadSetting(_ context.Context, _ catalog.Scope, key 
 	if key != "defaultChoice" {
 		return catalog.ErrSettingNotFound
 	}
-	provider, model := s.app.aiDefaults()
-	if provider == "" && model == "" {
-		provider, model = s.app.aiResolver().DefaultChoice()
-	}
+	provider, model := s.app.chatDefaultChoice()
 	raw, err := json.Marshal(aiChoice{Provider: provider, Model: model})
 	if err != nil {
 		return err

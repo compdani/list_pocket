@@ -72,6 +72,11 @@ func TestChatProviderStoreAPIKey(t *testing.T) {
 		{ID: "gpt-x", Name: "GPT X"},
 		{ID: "gpt-y", Name: "GPT Y"},
 	}})
+	// An explicit Settings → AI default, so this test is not also exercising
+	// the builder-model fallback.
+	if err := a.setAIDefaults(aiChoice{Provider: llm.ProviderAPI, Model: "gpt-y"}); err != nil {
+		t.Fatal(err)
+	}
 	store := &chatProviderStore{app: a}
 
 	providers, err := store.ListProviders(context.Background(), catalog.Scope{})
@@ -122,11 +127,49 @@ func TestChatProviderStoreAPIFallsBackWhenModelsFail(t *testing.T) {
 		t.Fatalf("expected the api provider, got %+v", providers)
 	}
 	p := providers[0]
-	if len(p.Models) != 1 || p.Models[0].ID != llm.DefaultModel {
-		t.Fatalf("expected the fallback model %q, got %+v", llm.DefaultModel, p.Models)
+	// With no Settings → AI default, the campaign builder's model is what the
+	// side panel uses, so that is the one chat offers.
+	if len(p.Models) != 1 || p.Models[0].ID != defaultAIBuilderModel {
+		t.Fatalf("expected the fallback model %q, got %+v", defaultAIBuilderModel, p.Models)
 	}
 	if err := p.Validate(); err != nil {
 		t.Errorf("fallback provider must validate: %v", err)
+	}
+}
+
+func TestChatProviderStoreBuilderModelFallback(t *testing.T) {
+	a := chatProvidersTestApp(t)
+	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
+	t.Setenv("LISTPOCKET_AI_MODEL", "")
+	cacheModels(a, llm.ProviderAPI, cachedAIModels{models: []aiModel{{ID: "gpt-x", Name: "GPT X"}}})
+	// No Settings → AI default: the builder's model on the API key, exactly like
+	// a side-panel turn, and offered even when the gateway's list lacks it.
+	if err := a.upsertTypedSettingsRecord("ai_builder", `{"model":"gpt-5.4-nano","timeout_seconds":300}`); err != nil {
+		t.Fatal(err)
+	}
+	store := &chatProviderStore{app: a}
+
+	providers, err := store.ListProviders(context.Background(), catalog.Scope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(providers) != 1 {
+		t.Fatalf("expected the api provider, got %+v", providers)
+	}
+	p := providers[0]
+	if p.DefaultModel != "gpt-5.4-nano" {
+		t.Errorf("default model = %q, want gpt-5.4-nano", p.DefaultModel)
+	}
+	if _, ok := p.Model("gpt-5.4-nano"); !ok {
+		t.Errorf("the builder model must be offered: %+v", p.Models)
+	}
+
+	var choice aiChoice
+	if err := store.LoadSetting(context.Background(), catalog.Scope{}, "defaultChoice", &choice); err != nil {
+		t.Fatal(err)
+	}
+	if choice.Provider != llm.ProviderAPI || choice.Model != "gpt-5.4-nano" {
+		t.Errorf("defaultChoice = %+v", choice)
 	}
 }
 
@@ -208,12 +251,17 @@ func TestChatProviderStoreSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("LISTPOCKET_AI_MODEL", "env-model")
+	// With no Settings → AI default, chat uses the AI builder's model on the API
+	// key, exactly like a side-panel turn (runAssistant).
+	if err := a.upsertTypedSettingsRecord("ai_builder", `{"model":"gpt-5.4-nano","timeout_seconds":300}`); err != nil {
+		t.Fatal(err)
+	}
 	choice = aiChoice{}
 	if err := store.LoadSetting(ctx, catalog.Scope{}, "defaultChoice", &choice); err != nil {
 		t.Fatal(err)
 	}
-	if choice.Provider != llm.ProviderAPI || choice.Model != "env-model" {
-		t.Errorf("resolver fallback = %+v", choice)
+	if choice.Provider != llm.ProviderAPI || choice.Model != "gpt-5.4-nano" {
+		t.Errorf("builder fallback = %+v", choice)
 	}
 
 	var title struct {
