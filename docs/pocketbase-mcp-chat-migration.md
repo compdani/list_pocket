@@ -78,8 +78,9 @@ late ones.
 No module work or decisions remain open.
 
 Also for List Pocket's side, not the module's: `errorText` in the binding uses generic
-wording ("…in the provider settings"). Our own binding should map `provider_auth` and
-`usage_limit` to today's text ("sign in again under Settings → AI").
+wording ("…in the provider settings"). The Agent page maps `provider_auth` and
+`usage_limit` to today's text ("sign in again under Settings → AI") through the
+`errorText` option. The side panel does this when it moves over in phase 3.
 
 ## What exists today
 
@@ -298,18 +299,17 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 
 - In-process tool calls now set `Request.ContentLength` (`setToolBody`). Without
   it, writes from chat and MCP bound empty bodies.
-- With no provider configured, the module rejects a turn with 400
-  `invalid_request` before `Setup` runs, so the user doesn't get today's "AI
-  isn't set up…" text. Phase 2 handles this on the Agent page: with no
-  `choices` and no `models` from `/status`, `AgentChat.vue` shows the
-  translated setup message and disables sending, so no such turn starts. The
-  side panel still shows the generic line until phase 3.
+- With no provider configured, the module answers `/status` with
+  `features.ready: false` and rejects a turn with `503 no_provider`. The Agent
+  page shows `agent.noProvider` from that flag (`errorText` maps the code) and
+  the binding disables the composer. The side panel still shows the generic
+  line until phase 3.
 - The chat default model, when Settings → AI has none, is the AI builder's model
   on the API key, as in the legacy assistant.
-- A handler error on a write that may already have applied is recorded as failed
-  with the generic "Tool execution failed.", because the module only marks a
-  timeout or cancellation as unknown. Follow-up: ask the module for an exported
-  unknown-outcome error for custom tools.
+- A handler error on a write that may already have applied returns
+  `pbmcp.OutcomeUnknown`, so the proposal ends `unknown` with a user-safe
+  message. A 400 stays pending (`Refused`). A 403, a 404 and any other 4xx
+  stay definite failures.
 - Pre-existing, outside this migration: `internal/core` `HasSubscriberLists` and
   `CampaignHasLists` compare integer list IDs with the text record IDs in
   `subscriber_lists.list_id` / `campaign_lists.list_id`, so list-scoped users are

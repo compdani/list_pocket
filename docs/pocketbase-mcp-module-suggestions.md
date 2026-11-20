@@ -9,20 +9,39 @@ They're ordered by how much they matter to List Pocket.
 
 ## Status in v0.1.8
 
-v0.1.7 shipped items 1 to 11, and v0.1.8 closed what was left of them: the binding refuses
-a second submit while the first is on its way (`running`, plus the controller's
-`state.sending`), puts the draft and references back after any failure before the turn was
-accepted (`restoreDraft`), and disables the composer while `features.ready` is false
-(`disableWhenNotReady`). agent-panel v0.5.1 ships `COMPATIBILITY.md`.
+List Pocket runs pocketbase-mcp v0.1.8 (and `@pocketbase-mcp/chat-client` 0.1.8,
+agent-panel v0.5.1). v0.1.7 shipped items 1 to 11, and v0.1.8 closed what was left
+of them. The workarounds those items named are gone:
 
-List Pocket still runs v0.1.6 and its workarounds; adopting v0.1.8 means deleting them.
+- **#1** The "AI isn't set up" alert follows `features.ready === false`, and
+  `errorText` maps `no_provider`. `disableWhenNotReady` disables the composer.
+  The page still disables it until `/status` has answered, which the binding
+  does not.
+- **#2 and #3** No submit tracker. The controller reads `context()` when
+  `send()` is called, the binding refuses a second submit (`state.sending`),
+  and `restoreDraft` puts the draft and references back after a pre-accept failure.
+- **#5** Chat routes are per HTTP method. The public home route is `GET /` again.
+- **#6** A reopened `proposal_outcome` notice carries `result`, and the page
+  draws the Open link from `result.source.href`.
+- **#7** A write that may already have applied returns `pbmcp.OutcomeUnknown`.
+  Validation and permission errors are unchanged. A 4xx conflict stays a
+  definite failure.
+- **#8** The card and the review modal use `entry.proposal`. The controller's
+  `error` (a 409 or 422) is not on that object, so that one field is still
+  read from state.
+- **#9** `contextReferences` supplies the stored `@` chips. The "In context"
+  list is still `contextReferencesFromTranscript`: the module has no equivalent.
+- **#10** `errorText` maps `provider_auth` and `usage_limit`.
+- **#11** `ChatOptions.ToolTimeout` is set to the same five minutes as
+  `DecisionTimeout`.
+- **#12** The client is the installed package. Nothing is vendored.
 
-Still open:
+Still kept, because the module does not cover them: the busy/running flags on
+proposal cards (the element redraws only when an entry's JSON changes), the
+"In context" list, and the composer hold until `/status` answers.
 
-- **#12** is prepared but not live: `scripts/release-chat-client.sh` tags a split of
-  `frontend/client`, but `github.com/compdani/pocketbase-mcp-chat-client` doesn't exist
-  yet. The mirror now exists: List Pocket installs `@pocketbase-mcp/chat-client`
-  v0.1.8 from it, and the copy under `frontend/src/vendor/chat-client/` is gone.
+agent-panel v0.5.1 ships `COMPATIBILITY.md`. 0.5.1 itself changes nothing a
+host has to do.
 
 ## 1. "No provider configured" should have its own error code
 

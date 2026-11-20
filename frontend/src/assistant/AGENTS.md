@@ -33,7 +33,7 @@ This file covers only how List Pocket extends and hosts the two elements.
 | `lp-agent-common.js` | `LP_STYLES` (Vuetify theme mapping and card CSS), `LP_LABELS`, `renderMarkdown`, `renderProposal(el, entry)`, `referenceIcon(ref)` (`@mdi/js` paths per context type) |
 | `lp-agent-panel.js` | `ListPocketAgentPanel` (`<lp-agent-panel>`) and `ASSISTANT_ACCEPT` |
 | `lp-agent-page.js` | `ListPocketAgentPage` (`<lp-agent-page>`) and `AGENT_PAGE_ACCEPT`; on the legacy host, adds the server's 2 MB limit for text files through `fileProblem` |
-| `chat-host.mjs` | Pure logic for the module-backed Agent page: page context, per-submit snapshots, stale-error detection, history writes, stored `@` chips, `contextReferences`, proposal card and ReviewModal inputs, error wording, remembered model |
+| `chat-host.mjs` | Pure logic for the module-backed Agent page: page context, history writes, stored `@` chips, the "In context" list, proposal card and ReviewModal inputs, error wording, remembered model |
 | `../views/AgentRoute.vue` | The `/agent/:id?` route: renders `Agent.vue` or `AgentChat.vue` from `serverConfig.chat_backend`, and nothing until `/api/config` has answered |
 | `../views/AgentChat.vue` | The module host: `ChatClient` + `ChatController` + `bindAgentPanel`, composer controls, proposal decisions, `ReviewModal` |
 | `../views/Agent.vue` | The Agent page on the legacy engine: server-side conversations, turns, uploads, context picker, proposal decisions |
@@ -141,8 +141,8 @@ conversation), and unmount calls `binding.unbind()` then `chat.dispose()`.
 
 | Owner | Properties |
 |---|---|
-| `bindAgentPanel(page, chat, { registerEntries: false })` | `entries`, `running`, `error`, `models`, `conversations`, `active`, `hasMore`, `heading`, `no-attachments`, `accept`, `max-file-size`, `max-files`, `contextUsage` (the 0.5 ring) |
-| `AgentChat.vue` | `labels`, `formatDate`, `renamable`, `disabled`, `contextReferences`; the `mention` and `composer-actions` slots |
+| `bindAgentPanel(page, chat, { registerEntries: false, errorText, contextReferences })` | `entries`, `running`, `error`, `models`, `conversations`, `active`, `hasMore`, `heading`, `no-attachments`, `accept`, `max-file-size`, `max-files`, `contextUsage` (the 0.5 ring), and `disabled` while `features.ready` is false |
+| `AgentChat.vue` | `labels`, `formatDate`, `renamable`, `contextReferences` (the "In context" list); the `mention` and `composer-actions` slots. It also holds `disabled` until `/status` has answered |
 
 Nothing in the template binds a binding-owned property; two writers would fight. The
 binding registers no entry renderers (`registerEntries: false`), so the host registers
@@ -150,18 +150,22 @@ the proposal card, the binding's `renderNoticeEntry` for `notice`, and
 `renderContextMarkerEntry` for `context-marker`.
 
 **The card and the entries choke point.** `ListPocketAgentPage` (in `lp-agent-page.js`)
-has two overridden accessors, because they run on every binding write:
+overrides the `entries` setter, because it runs on every binding write. It copies
+`busy`/`running` into proposal entries: those flags are host state (a decision in
+flight, a turn still running), and the element only redraws an entry whose JSON
+changed. Stored `@` chips are not added here. `bindAgentPanel`'s `contextReferences`
+option (`referencesFromContext`) does that from each user message's `context` part.
+`chat` is the controller.
 
-- `entries`: applies `withContextReferences(entries, chat.state.transcript)` (the stored
-  `context` part of each user turn becomes `{ type, id, label }` chips before the
-  binding's attachment chips) and copies `busy`/`running` into proposal entries, since
-  the element only redraws an entry whose JSON changed (D3). `chat` is the controller.
-- `error`: `hostErrorText()` swaps the binding's generic `provider_auth` /
-  `usage_limit` lines for the app's wording ("sign in again under Settings → AI").
+`errorText` passed to `bindAgentPanel` maps `provider_auth` and `usage_limit` to
+the app's wording ("sign in again under Settings → AI") and `no_provider` to
+`agent.noProvider`. The element does not rewrite the error string itself.
 
-The proposal renderer looks the full proposal up in `chat.state.proposals` by
-`entry.proposalId` and maps it with `cardProposalOf()`, so the card shows the legacy
-look (operations, warnings, badge, Review/View, Open from `result.source.href`). Module
+The proposal renderer uses `entry.proposal` (arguments, warnings, result) and maps
+it with `cardProposalOf()`, so the card shows the legacy look (operations, warnings,
+badge, Review/View, Open from `result.source.href`). The binding omits the
+controller's `error` (a 409 or a 422) from `entry.proposal`, so that one field is
+still read from state. Module
 states map to `pending`, `applied` (`succeeded`), `failed`, `rejected`, `expired`,
 `applying`, `approved`, `stale`, and `unknown`; `unknown` keeps its own warning line,
 "may or may not have applied — check before retrying", and never reads as success or a
@@ -174,37 +178,33 @@ fires the `assistant-applied` window event with `{ tool, result }`.
 
 **Page context.** `pageContext(path, references)` returns `{ screen: 'agent', path,
 references }`; references are this message's `@` chips as `{ type, id, label }`,
-files excluded. The controller reads `context` only after `newConversation` and
-uploads, so a host `agent-submit` listener is registered *before*
-`bindAgentPanel` and stores that submit's path and chips
-(`createSubmitTracker`). A second submit is cancelled
-(`preventDefault` and `stopImmediatePropagation`) until `context()` has read
-the snapshot or the attempt has settled, so the chips cannot move to the wrong
-turn. `context()` marks the snapshot consumed; `running` becoming true does
-not. If the binding refuses the submit without calling `send`, the snapshot is
-dropped on the next microtask. `tests/chatHost.test.mjs` pins the listener
-order and the snapshot rules. `contextReferences` is the 30 most recent
-distinct references newest-first, matching `chatAgentRefs` in `cmd/chat_module.go`.
+files excluded. The binding calls `readContext()` synchronously at the start of
+its `agent-submit` handler, before the element clears the composer, so
+`context()` reads `route.fullPath` and the element's references directly. A
+second submit is refused by the binding while the first has not been accepted
+(`state.sending`). `contextReferences` (the element's "In context" list) is the
+30 most recent distinct references newest-first, from
+`contextReferencesFromTranscript`, matching `chatAgentRefs` in `cmd/chat_module.go`.
+The module does not build that list.
 
 **Composer.** `plain-text` and `no-add-menu` stay, so the Context/Paste controls and
 the tests match the legacy page. The composer's `disabled` stays set until
-`chat.state.status === 'ready'` (the same mechanism as no provider), because
-`features` is null until `init()` finishes and a send before that would drop
-the page context. An init error leaves it disabled; the module's own error
-banner is the explanation. `@` uses `mention-trigger="@"`, `ContextPicker` in the
+`chat.state.status === 'ready'`. The binding does not disable the composer while
+`features` is still null, and a send before `/status` waits inside the controller;
+holding it closed keeps the old "nothing to type yet" behaviour. Once status has
+answered, `disableWhenNotReady` owns `disabled`: it turns the composer off while
+`features.ready` is false and will not turn a composer back on unless it disabled
+it. An init error leaves it disabled; the module's own error banner is the
+explanation. `@` uses `mention-trigger="@"`, `ContextPicker` in the
 `mention` slot, and `agent-mention` / `agent-mention-key`; a pick calls `addReference`.
 Paste data adds a text `File` through `page.addFiles()`. Accept and size limits are the
 binding's, from `/status`: `AGENT_PAGE_ACCEPT` and `fileProblem` do not apply on this
 host.
 
-**Sending.** The draft and its chips are kept until `send()` settles. A turn in
-the result means the server accepted it, and the draft stays cleared. A new
-`state.error` (a different object from the one at submit time) with no turn
-puts the draft and chips back. An error that was already set, including one
-still present when the send's first `choice` change fires, does not. A rejected
-promise is an upload or a precondition failure; the binding restores that draft
-and its files. `attachSubmitTracking` is what hears the promise: the binding
-does not hand it to the host.
+**Sending.** The binding keeps the draft and its chips until the turn is
+accepted, and puts them back after any failure before that (`restoreDraft`,
+the default). An upload failure keeps the files as well. `onSend` is unused:
+nothing on the page needs the outcome beyond what the binding already does.
 
 **Rest.** `?ref=` pre-attaches on mount. Reference chips (not attachment chips) open
 `ContextPreviewModal` on `agent-reference-open`; an attachment chip still downloads
@@ -219,19 +219,19 @@ so `/agent` does not stay as its own history step. A second state change for
 that same id does not write again while the navigation is in flight, so a push
 is not followed by a replace. The route watcher opens back/forward targets. A
 change that arrives before the first `open()` resolves is applied once the page
-is aligned, and that load is not written back over the URL. With no choices
-and no models from `/status` once status is `ready`, the
-page shows `agent.noProvider` and sets `disabled`, replacing the module's
-generic 400. The conversation list's own Load more button (while `hasMore`,
-labelled with `agent.loadMore`) fires `agent-load-more`, which the binding handles.
+is aligned, and that load is not written back over the URL. While
+`features.ready` is false the page shows `agent.noProvider`. The binding
+disables the composer and shows the same sentence through `errorText`. The
+conversation list's own Load more button (while `hasMore`, labelled with
+`agent.loadMore`) fires `agent-load-more`, which the binding handles.
 
 **Known differences from `Agent.vue`.** Cards follow the transcript (the binding's
-order) rather than sitting inside the assistant message that proposed them. The server
-returns only proposals that can still be decided, so an applied or rejected proposal
-comes back as a notice line after reopening the conversation, without the card's Open
-link. The binding builds conversation rows without `href`, so a modifier-click cannot
-open a conversation in a new tab. The first and third are cosmetic; the second is the
-one place a past result is less reachable than on the legacy page.
+order) rather than sitting inside the assistant message that proposed them. After
+a conversation is reopened, a decided proposal is a `proposal_outcome` notice
+rather than a card; the notice carries `result`, and the page draws the same
+Open link (`result.source.href`) the applied card shows. The binding builds
+conversation rows without `href`, so a modifier-click cannot open a conversation
+in a new tab. Both of those are cosmetic.
 
 ## `AIAssistant.vue`, the side panel host
 
