@@ -70,6 +70,33 @@ label. List Pocket does that in `referencesFromContext`.
 agent-panel v0.5.1 ships `COMPATIBILITY.md`. 0.5.1 itself changes nothing a
 host has to do.
 
+**D. `agent-rename` is only listened for on a page element.** In
+`bindAgentPanel` (`frontend/node_modules/@pocketbase-mcp/chat-client/agent-panel.mjs`,
+the `if (page)` block around the `agent-rename` listener) rename is wired only
+when `isPageElement` is true. `<lp-agent-panel>` has `openConversations`, so
+`isPageElement` is false, and the panel switcher has no rename control of its
+own. List Pocket calls `chat.rename()` from a button in `switcher-end`
+(`frontend/src/components/AIAssistantChat.vue`). Suggested: listen for
+`agent-rename` on any element that shows the conversation list, and give the
+panel switcher a rename affordance.
+
+**E. No way to resume a turn the controller stopped following.** The controller
+reconnects a live event stream by itself (`controller.mjs` reconnect loop) and
+exposes `stop()`, but nothing a host can call to attach again after that loop
+gives up. The legacy side panel's Resume button reopened the stream. List
+Pocket shows Retry instead, which sends the last user message again
+(`retryText` in `frontend/src/assistant/chat-host.mjs`). Suggested: `resume()`
+that reopens the event stream of a non-terminal turn.
+
+**F. `sticky-attachments` does not survive a send that has files.** A submit
+with files is `preventDefault`ed and, once the turn is accepted, each chip is
+removed (`agent-panel.mjs` `onSubmit`, the `attachments: false` clear and the
+later `removeAttachment` loop). The attribute never gets a say. List Pocket
+sets `sticky-attachments` on the side panel for the no-file path; follow-up
+turns still see files because the module stores the uploads. Suggested: when
+the element has `sticky-attachments`, leave the chips, or hand back the upload
+ids so the next send can re-attach them without uploading again.
+
 ## 1. "No provider configured" should have its own error code
 
 **Today.**

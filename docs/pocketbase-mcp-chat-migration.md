@@ -292,7 +292,7 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 | 0. Module | B1–B12, V1–V5 in Pocketbase-MCP. Release with submodule tags. **Done in v0.1.6** | Tagged release that List Pocket's `go.mod` and Docker build can consume ✅ |
 | 1. Backend behind the flag | Items 1–8 | `go test ./cmd` green. Golden tool tests pass. Both engines selectable. **Done in `ea69a35..HEAD`** ✅ |
 | 2. Agent page | Item 10 for `Agent.vue` | `agent-page.cy.js` parity suite passes on `module`. **Done:** `AgentRoute.vue` picks the host, `AgentChat.vue` binds the module controller, `chat-host.mjs` holds the pure logic, and `agent-page-chat.cy.js` passes; the legacy `agent-page.cy.js` is unchanged ✅ |
-| 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant.cy.js` parity suite passes. Editor apply and undo work on campaign, template and workflow editors |
+| 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant-chat.cy.js` passes on `module`. Editor apply and undo work on campaign, template and workflow editors. **Done:** `AIAssistantHost.vue` picks the host, `AIAssistantChat.vue` binds the module controller, and the legacy `assistant.cy.js` is unchanged |
 | 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated. `GET /` stays the public catch-all (see notes) |
 
 ### Phase 1 notes
@@ -302,8 +302,8 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 - With no provider configured, the module answers `/status` with
   `features.ready: false` and rejects a turn with `503 no_provider`. The Agent
   page shows `agent.noProvider` from that flag (`errorText` maps the code) and
-  the binding disables the composer. The side panel still shows the generic
-  line until phase 3.
+  the binding disables the composer. From phase 3 the side panel shows the same
+  `agent.noProvider` line.
 - The chat default model, when Settings → AI has none, is the AI builder's model
   on the API key, as in the legacy assistant.
 - A handler error on a write that may already have applied returns
@@ -315,6 +315,18 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
   `subscriber_lists.list_id` / `campaign_lists.list_id`, so list-scoped users are
   refused single contacts and campaigns everywhere. It fails closed. Track
   separately.
+
+### Phase 3 notes
+
+- `App.vue` mounts `AIAssistantHost.vue`. `serverConfig.chat_backend === 'module'` renders `AIAssistantChat.vue`; anything else renders `AIAssistant.vue`; nothing renders until `/api/config` has answered. The legacy Cypress harness imports `AIAssistant.vue` directly, so it stays on the legacy engine.
+- The module panel uses the binding's conversation list (rename goes through `chat.rename()`, because `bindAgentPanel` only listens for `agent-rename` on a page element). There is no localStorage thread list and no "Import previous campaign chats".
+- Page context is read when the turn is sent: `screen: "panel"`, the route's path, page, params and filters, the open editor (`key`, `unsaved`, `revision`, `current`, `selection`, `label`), `pictureReferences`, and that message's `@` references. The legacy panel has no `@` picker, Paste data or `?ref=` pre-attach, and neither does this host.
+- Editor patches are applied by the controller's editor adapter (`patches.mjs`). The controller reports the outcome; the host does not call `reportOutcome`. Undo stays in the browser. A wrong editor is refused with "Open the original editor before applying this proposal." A revision mismatch is reported `stale`.
+- `WorkflowBuilder.vue` still does not register an assistant editor, so a workflow canvas is not an open editor until something calls `registerAssistantEditor`. The adapter and `assistant-chat.cy.js` cover a workflow-shaped editor (`kind: "workflow"`) the same way they cover campaign and template editors.
+- Media pictures are stored in `localStorage` under `listpocket_assistant_pictures_v1:<userId>`, keyed by conversation id. A draft's pictures move onto the id its first send creates. The store is wrapped in try/catch.
+- Retry resends the last user message when the turn or the controller recorded an error. There is no Resume button: the controller reconnects a live event stream itself and has no method for a turn it has stopped following.
+- The remembered model is the Agent page's `listpocket_agent_model` choice, not the legacy panel's per-thread model.
+- With files attached, the binding removes the composer chips after the turn is accepted, so `sticky-attachments` does not keep them for the next send. The server keeps the uploads on the conversation.
 
 ### Phase 4 notes
 
@@ -334,15 +346,15 @@ Each line needs a test (Go or Cypress) on the module backend before cutover.
       failures are never retried
 - [ ] Flow proposal warnings appear on the card and in the model's tool result (B6)
 - [ ] Plugin proposal approves the snapshotted files, not the live draft (B7)
-- [ ] Editor patch: set, replace_text, replace_body, block, node and edge ops. Revision
-      mismatch. Wrong editor open. Undo until the next edit or turn
-- [ ] Applied proposal shows an Open link from `result.source.href`.
-      `assistant-applied` fires
+- [x] Editor patch: set, replace_text, replace_body, block, node and edge ops. Revision
+      mismatch. Wrong editor open. Undo until the next edit or turn (`assistant-chat.cy.js`, `tests/chatHost.test.mjs`)
+- [x] Applied proposal shows an Open link from `result.source.href`.
+      `assistant-applied` fires (`assistant-chat.cy.js`, `agent-page-chat.cy.js`)
 - [ ] `@` references: picker, chips on the sent message, preview modal, re-read fresh
       every turn, unreadable reference reported, cap of the 30 most recent (B4, B5)
 - [ ] Attachments: images, PDF, text and pasted data. Size errors match the limits the
       UI states. Follow-up turns still see them
-- [ ] Media-library pictures are passed as name and URL
+- [x] Media-library pictures are passed as name and URL (`assistant-chat.cy.js`)
 - [ ] Model picker per conversation, last pick remembered. ChatGPT sign-in and the API
       key provider both work from Settings → AI, with no second sign-in
 - [ ] Super-admin and Agent-page turns allow 1 hour. Side panel uses the AI builder
