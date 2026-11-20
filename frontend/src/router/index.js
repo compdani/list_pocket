@@ -213,7 +213,7 @@ const routes = [
     path: '/agent/:id?',
     name: 'agent',
     meta: { title: 'menu.agent' },
-    component: () => import('../views/Agent.vue'),
+    component: () => import('../views/AgentRoute.vue'),
   },
   {
     path: '/inbox',
