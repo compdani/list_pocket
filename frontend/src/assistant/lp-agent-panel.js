@@ -4,7 +4,7 @@
 // and answers the cards' `agent-action` events. See AGENTS.md in this folder.
 import { AgentPanelElement } from 'agent-panel/element';
 import {
-  LP_LABELS, LP_STYLES, referenceIcon, renderMarkdown, renderProposal,
+  LP_LABELS, LP_STYLES, plainUserBubble, referenceIcon, renderMarkdown, renderProposal,
 } from './lp-agent-common';
 
 // What the server accepts: images, PDFs and plain text.
@@ -19,6 +19,10 @@ export class ListPocketAgentPanel extends AgentPanelElement {
 
   renderMarkdown(text) {
     return renderMarkdown(text);
+  }
+
+  renderText(entry) {
+    return plainUserBubble(entry, super.renderText(entry));
   }
 
   renderEntry(entry) {

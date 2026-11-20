@@ -161,4 +161,25 @@ describe('Agent page', { includeShadowDom: true }, () => {
     cy.get('.page').should('not.have.class', 'page--drawer');
     cy.get('.title').should('have.text', 'Inbox triage');
   });
+
+  it('shows a user message as the characters typed', () => {
+    cy.intercept('GET', '**/mailapi/agent/conversations/c1', {
+      data: {
+        id: 'c1',
+        title: 'Spring launch',
+        messages: [
+          { id: 'm1', role: 'user', content: '2 * 3 and **x**', context: [{ type: 'campaign', id: '7', label: 'Spring sale' }] },
+          { id: 'm2', role: 'assistant', content: 'That is **six**.' },
+        ],
+      },
+    }).as('plain');
+    cy.visit(`${fixture}?path=/agent/c1`);
+    cy.wait('@plain');
+    cy.get('.user-turn').within(() => {
+      cy.get('[data-reference="campaign:7"]').should('be.visible');
+      cy.get('[data-role=user]').should('have.text', '2 * 3 and **x**');
+      cy.get('strong, em').should('not.exist');
+    });
+    cy.get('.message strong').should('have.text', 'six');
+  });
 });

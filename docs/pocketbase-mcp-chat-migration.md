@@ -292,7 +292,7 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
 | 1. Backend behind the flag | Items 1–8 | `go test ./cmd` green. Golden tool tests pass. Both engines selectable. **Done in `ea69a35..HEAD`** ✅ |
 | 2. Agent page | Item 10 for `Agent.vue` | `agent-page.cy.js` parity suite passes on `module`. **Done:** `AgentRoute.vue` picks the host, `AgentChat.vue` binds the module controller, `chat-host.mjs` holds the pure logic, and `agent-page-chat.cy.js` passes; the legacy `agent-page.cy.js` is unchanged ✅ |
 | 3. Side panel | Item 10 for `AIAssistant.vue`, editor adapter | `assistant.cy.js` parity suite passes. Editor apply and undo work on campaign, template and workflow editors |
-| 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated |
+| 4. Cutover | Default to `module`. Delete old chats (item 9). Remove `ai_assistant.go` turn machinery, `agent.go` conversation CRUD and part endpoints, `transcript.mjs`, `threads.mjs` | No legacy code paths or data. Docs updated. Keep `GET /{$}` (see notes) |
 
 ### Phase 1 notes
 
@@ -315,6 +315,10 @@ must move to `https://<host>/mcp` with an `Authorization: Bearer <token>` header
   `subscriber_lists.list_id` / `campaign_lists.list_id`, so list-scoped users are
   refused single contacts and campaigns everywhere. It fails closed. Track
   separately.
+
+### Phase 4 notes
+
+- At cutover, keep `GET /{$}`. The chat module's all-method mount panics `serve` if `GET /` is registered again (the chat fixture test catches it). Without the module flag, `GET /` renders the home page for unknown paths; with `/{$}` those paths 404. Decide deliberately whether unknown public paths should 404.
 
 ## Parity checklist
 

@@ -33,7 +33,7 @@ This file covers only how List Pocket extends and hosts the two elements.
 | `lp-agent-common.js` | `LP_STYLES` (Vuetify theme mapping and card CSS), `LP_LABELS`, `renderMarkdown`, `renderProposal(el, entry)`, `referenceIcon(ref)` (`@mdi/js` paths per context type) |
 | `lp-agent-panel.js` | `ListPocketAgentPanel` (`<lp-agent-panel>`) and `ASSISTANT_ACCEPT` |
 | `lp-agent-page.js` | `ListPocketAgentPage` (`<lp-agent-page>`) and `AGENT_PAGE_ACCEPT`; on the legacy host, adds the server's 2 MB limit for text files through `fileProblem` |
-| `chat-host.mjs` | Pure logic for the module-backed Agent page: page context, stored `@` chips, `contextReferences`, proposal card and ReviewModal inputs, error wording, remembered model |
+| `chat-host.mjs` | Pure logic for the module-backed Agent page: page context, per-submit snapshots, stale-error detection, history writes, stored `@` chips, `contextReferences`, proposal card and ReviewModal inputs, error wording, remembered model |
 | `../views/AgentRoute.vue` | The `/agent/:id?` route: renders `Agent.vue` or `AgentChat.vue` from `serverConfig.chat_backend`, and nothing until `/api/config` has answered |
 | `../views/AgentChat.vue` | The module host: `ChatClient` + `ChatController` + `bindAgentPanel`, composer controls, proposal decisions, `ReviewModal` |
 | `../views/Agent.vue` | The Agent page on the legacy engine: server-side conversations, turns, uploads, context picker, proposal decisions |
@@ -41,7 +41,7 @@ This file covers only how List Pocket extends and hosts the two elements.
 | `markdown.mjs`, `threads.mjs`, `transcript.mjs`, `patches.mjs`, `client.js`, `context.js` | Conversation logic, independent of the panel |
 | `../../cypress/e2e/assistant.cy.js` | Browser tests for the side panel, including paste, drop and keeping attachments for the next message |
 | `../../cypress/e2e/agent-page.cy.js` + `fixtures/agent-page-harness.*` | Browser tests for the legacy Agent page: conversations, references, `@` picker, paste and upload, rename and delete, narrow-screen drawer |
-| `../../cypress/e2e/agent-page-chat.cy.js` + `fixtures/agent-page-chat-harness.*` | Browser tests for the module Agent page: URL loading, `@` context, streams, proposals, refused decisions, no provider, rename/delete, paste upload |
+| `../../cypress/e2e/agent-page-chat.cy.js` + `fixtures/agent-page-chat-harness.*` | Browser tests for the module Agent page: URL loading, `@` context, streams, proposals, refused decisions, no provider, rename/delete, paste upload, overlapping sends, failed-send restore, the status gate, history, one Load more, plain user text |
 
 ## `<lp-agent-panel>` and `<lp-agent-page>`
 
@@ -49,6 +49,12 @@ Both subclasses do the following (from `lp-agent-common.js`):
 
 - `renderMarkdown` uses `renderAssistantMarkdown` (markdown-it with `html: false`, images
   disabled, and links opening in a new tab with `rel=noopener`).
+- User bubbles stay plain text. agent-panel 0.5 formats them with
+  `inlineMarkdownToHTML` inside `renderText`, and that method is the supported
+  hook (there is no separate switch). Both subclasses override `renderText`
+  and pass the result through `plainUserBubble`, which keeps the reference
+  chips and attachments and sets the bubble's text to the characters the
+  person typed. Assistant messages still go through `renderMarkdown`.
 - The theme tokens map to Vuetify's `--v-theme-*` variables, with fallbacks.
 - `referenceIcon` maps the context types in `CONTEXT_ICONS` (`agent/parts.mjs`) to
   `@mdi/js` paths. Add new types in both places.
@@ -139,7 +145,7 @@ conversation), and unmount calls `binding.unbind()` then `chat.dispose()`.
 | Owner | Properties |
 |---|---|
 | `bindAgentPanel(page, chat, { registerEntries: false })` | `entries`, `running`, `error`, `models`, `conversations`, `active`, `hasMore`, `heading`, `no-attachments`, `accept`, `max-file-size`, `max-files`, `contextUsage` (the 0.5 ring) |
-| `AgentChat.vue` | `labels`, `formatDate`, `renamable`, `disabled`, `contextReferences`; the `mention`, `composer-actions` and `sidebar-end` slots |
+| `AgentChat.vue` | `labels`, `formatDate`, `renamable`, `disabled`, `contextReferences`; the `mention` and `composer-actions` slots |
 
 Nothing in the template binds a binding-owned property; two writers would fight. The
 binding registers no entry renderers (`registerEntries: false`), so the host registers
@@ -169,20 +175,39 @@ Approve/Reject call `chat.decide(id, 'approve' | 'reject')`; a 409/422 resolves 
 arguments calls `chat.decide(id, 'approve', { arguments })`. A `succeeded` approval
 fires the `assistant-applied` window event with `{ tool, result }`.
 
-**Page context.** `pageContext(route.fullPath, references)` returns
-`{ screen: 'agent', path, references }`; references are this message's `@` chips as
-`{ type, id, label }`, files excluded. The controller reads `context` at send time,
-after the binding's `agent-submit` starts the turn, so a host `agent-submit` listener
-is registered *before* `bindAgentPanel` and captures `event.detail.references`.
-`tests/chatHost.test.mjs` pins that order. `contextReferences` is the 30 most recent
+**Page context.** `pageContext(path, references)` returns `{ screen: 'agent', path,
+references }`; references are this message's `@` chips as `{ type, id, label }`,
+files excluded. The controller reads `context` only after `newConversation` and
+uploads, so a host `agent-submit` listener is registered *before*
+`bindAgentPanel` and stores that submit's path and chips
+(`createSubmitTracker`). A second submit is cancelled
+(`preventDefault` and `stopImmediatePropagation`) until `context()` has read
+the snapshot or the attempt has settled, so the chips cannot move to the wrong
+turn. `context()` marks the snapshot consumed; `running` becoming true does
+not. If the binding refuses the submit without calling `send`, the snapshot is
+dropped on the next microtask. `tests/chatHost.test.mjs` pins the listener
+order and the snapshot rules. `contextReferences` is the 30 most recent
 distinct references newest-first, matching `chatAgentRefs` in `cmd/chat_module.go`.
 
 **Composer.** `plain-text` and `no-add-menu` stay, so the Context/Paste controls and
-the tests match the legacy page. `@` uses `mention-trigger="@"`, `ContextPicker` in the
+the tests match the legacy page. The composer's `disabled` stays set until
+`chat.state.status === 'ready'` (the same mechanism as no provider), because
+`features` is null until `init()` finishes and a send before that would drop
+the page context. An init error leaves it disabled; the module's own error
+banner is the explanation. `@` uses `mention-trigger="@"`, `ContextPicker` in the
 `mention` slot, and `agent-mention` / `agent-mention-key`; a pick calls `addReference`.
 Paste data adds a text `File` through `page.addFiles()`. Accept and size limits are the
 binding's, from `/status`: `AGENT_PAGE_ACCEPT` and `fileProblem` do not apply on this
 host.
+
+**Sending.** The draft and its chips are kept until `send()` settles. A turn in
+the result means the server accepted it, and the draft stays cleared. A new
+`state.error` (a different object from the one at submit time) with no turn
+puts the draft and chips back. An error that was already set, including one
+still present when the send's first `choice` change fires, does not. A rejected
+promise is an upload or a precondition failure; the binding restores that draft
+and its files. `attachSubmitTracking` is what hears the promise: the binding
+does not hand it to the host.
 
 **Rest.** `?ref=` pre-attaches on mount. Reference chips (not attachment chips) open
 `ContextPreviewModal` on `agent-reference-open`; an attachment chip still downloads
@@ -190,12 +215,18 @@ through the binding. The empty state keeps the translated suggestions, title and
 text, and the composer its translated placeholder and labels. The model menu is the
 element's own (`models` from `/status`); the
 last pick is stored as the legacy `{ provider, model }` under
-`localStorage['listpocket_agent_model']` and preselected when still offered. Rename,
-select, new chat, the first send and deleting the open conversation keep the URL in
-step with `router.replace`; the route watcher opens back/forward targets. With no
-choices and no models from `/status`, the page shows `agent.noProvider` and sets
-`disabled`, replacing the module's generic 400. `sidebar-end` carries a Load more
-button while `hasMore`.
+`localStorage['listpocket_agent_model']` and preselected when still offered. Selecting
+a conversation, starting a new chat, and deleting the open conversation use
+`router.push`. The id assigned to a draft by its first send uses `router.replace`,
+so `/agent` does not stay as its own history step. A second state change for
+that same id does not write again while the navigation is in flight, so a push
+is not followed by a replace. The route watcher opens back/forward targets. A
+change that arrives before the first `open()` resolves is applied once the page
+is aligned, and that load is not written back over the URL. With no choices
+and no models from `/status` once status is `ready`, the
+page shows `agent.noProvider` and sets `disabled`, replacing the module's
+generic 400. The conversation list's own Load more button (while `hasMore`,
+labelled with `agent.loadMore`) fires `agent-load-more`, which the binding handles.
 
 **Known differences from `Agent.vue`.** Cards follow the transcript (the binding's
 order) rather than sitting inside the assistant message that proposed them. The server

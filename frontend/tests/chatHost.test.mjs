@@ -5,8 +5,9 @@ import { bindAgentPanel, errorText } from '../src/vendor/chat-client/agent-panel
 import { PROPOSAL_STATE_TEXT as BINDING_PROPOSAL_STATE_TEXT } from '../src/vendor/chat-client/agent-panel.mjs';
 import {
   AGENT_REF_CAP, BINDING_PROVIDER_AUTH_TEXT, BINDING_USAGE_LIMIT_TEXT, PROPOSAL_STATE_TEXT,
-  PROVIDER_AUTH_TEXT, USAGE_LIMIT_TEXT, backendOf, cardProposalOf,
-  choiceIdFor, contextReferencesFromTranscript, hostErrorText, pageContext,
+  PROVIDER_AUTH_TEXT, USAGE_LIMIT_TEXT, attachSubmitTracking, backendOf, cardProposalOf,
+  choiceIdFor, classifySettlement, contextReferencesFromTranscript, createSubmitTracker,
+  hostErrorText, isFreshError, navigationWrite, observeSubmit, pageContext,
   proposalProblemText, referencesOf, reviewPartOf, storedModelFor, withContextReferences,
 } from '../src/assistant/chat-host.mjs';
 
@@ -331,4 +332,153 @@ test('the host captures a submit\'s references before the binding starts the sen
 
   assert.deepEqual(order, ['host', 'binding:Compare these:1']);
   assert.deepEqual(captured, [{ type: 'campaign', id: '7', label: 'Spring sale' }]);
+});
+
+// --- one submit's snapshot, and which error belongs to it -------------------
+
+test('a second submit is blocked until this submit\'s snapshot is read', () => {
+  const tracker = createSubmitTracker();
+  const first = tracker.start({
+    path: '/agent/c1',
+    references: [
+      { type: 'campaign', id: '7', label: 'Spring sale' },
+      { type: 'file', id: 'f1', label: 'leads.csv' },
+    ],
+    text: 'Compare these',
+    error: null,
+    turn: null,
+  });
+  const second = tracker.start({
+    path: '/agent/c2',
+    references: [{ type: 'list', id: '3', label: 'Customers' }],
+    text: 'Other',
+    error: null,
+  });
+
+  assert.equal(second.blocked, true);
+  assert.equal(second.submit, first.submit);
+  assert.deepEqual(tracker.readContext(), {
+    screen: 'agent',
+    path: '/agent/c1',
+    references: [{ type: 'campaign', id: '7', label: 'Spring sale' }],
+  });
+  assert.equal(first.submit.consumed, true);
+
+  const next = tracker.start({
+    path: '/agent/c2',
+    references: [{ type: 'list', id: '3', label: 'Customers' }],
+    text: 'Other',
+    error: null,
+  });
+  assert.equal(next.blocked, false);
+  assert.equal(tracker.readContext().path, '/agent/c2');
+  // Settling the first send does not drop the second snapshot.
+  assert.equal(tracker.settle(first.submit, { result: { turn: { id: 't1' } } }).action, 'accept');
+  assert.equal(tracker.current, next.submit);
+});
+
+test('running before the snapshot is read does not accept the send or drop it', () => {
+  const tracker = createSubmitTracker();
+  const stale = { code: 'error', message: 'earlier' };
+  const { submit } = tracker.start({
+    path: '/agent', references: [], text: 'Hi', error: stale, turn: null,
+  });
+  assert.equal(observeSubmit(submit, { running: true, turn: null, error: stale }), 'keep');
+  assert.equal(submit.consumed, false);
+  assert.equal(tracker.current, submit);
+});
+
+test('a stale error is not a failure, and a new error before a turn restores', () => {
+  const stale = { code: 'error', message: 'earlier' };
+  const fresh = { code: 'internal', message: 'nope' };
+  const tracker = createSubmitTracker();
+  const { submit } = tracker.start({
+    path: '/agent', references: [], text: 'Hi', error: stale, turn: null,
+  });
+  tracker.noteStarted();
+  tracker.readContext();
+
+  assert.equal(isFreshError(stale, stale), false);
+  assert.equal(isFreshError(stale, fresh), true);
+  assert.equal(isFreshError(stale, null), false);
+  assert.equal(observeSubmit(submit, { running: false, turn: null, error: stale }), 'keep');
+  assert.equal(classifySettlement(submit, { result: null, error: stale }), 'release');
+  assert.equal(classifySettlement(submit, { result: null, error: fresh }), 'restore');
+  assert.equal(classifySettlement(submit, { rejected: true, error: fresh }), 'release');
+  assert.equal(classifySettlement(submit, { result: { turn: { id: 't1' } }, error: fresh }), 'accept');
+  // The turn already on screen when this send started is not this send's turn.
+  assert.equal(observeSubmit(submit, { turn: null, error: fresh, running: false }), 'restore');
+});
+
+test('a refused submit drops its snapshot so the next send is not blocked', () => {
+  const tracker = createSubmitTracker();
+  const { submit } = tracker.start({ path: '/agent', references: [], text: 'Hi', error: null });
+  assert.deepEqual(tracker.abandonIfUnstarted(), { action: 'release', submit });
+  assert.equal(tracker.current, null);
+  tracker.noteStarted();
+  assert.equal(tracker.abandonIfUnstarted().action, 'none');
+});
+
+test('tracking the controller send promise tells a failure from an upload and from a success', async () => {
+  const tracker = createSubmitTracker();
+  const actions = [];
+  const controller = {
+    state: { error: null, activeConversationId: null },
+    send(text) {
+      if (text === 'upload') return Promise.reject(new Error('upload'));
+      if (text === 'bad') {
+        controller.state.error = { code: 'internal', message: 'nope' };
+        return Promise.resolve(null);
+      }
+      return Promise.resolve({ turn: { id: 't1' } });
+    },
+    newConversation() {
+      controller.state.error = { code: 'internal', message: 'create failed' };
+      return Promise.resolve(null);
+    },
+  };
+  attachSubmitTracking(controller, tracker, (outcome) => actions.push(outcome.action));
+
+  tracker.start({ path: '/agent', references: [], text: 'bad', error: null });
+  await controller.send('bad');
+  await Promise.resolve();
+  assert.deepEqual(actions, ['restore']);
+
+  const stale = controller.state.error;
+  tracker.start({ path: '/agent', references: [], text: 'ok', error: stale });
+  await controller.send('ok');
+  await Promise.resolve();
+  assert.deepEqual(actions, ['restore', 'accept']);
+
+  tracker.start({ path: '/agent', references: [], text: 'file', error: null });
+  await controller.send('upload').catch(() => {});
+  await Promise.resolve();
+  assert.deepEqual(actions, ['restore', 'accept', 'release']);
+
+  tracker.start({ path: '/agent', references: [], text: 'new', error: null });
+  await controller.newConversation();
+  await Promise.resolve();
+  assert.deepEqual(actions, ['restore', 'accept', 'release', 'restore']);
+  assert.equal(tracker.current, null);
+  assert.equal(tracker.start({ path: '/agent', text: 'later', references: [], error: null }).blocked, false);
+});
+
+test('history push is for a choice and replace is for a draft\'s new id', () => {
+  assert.deepEqual(
+    navigationWrite({ activeId: 'new1', routeId: '', intent: 'replace' }),
+    { method: 'replace', id: 'new1' },
+  );
+  assert.deepEqual(
+    navigationWrite({ activeId: 'c2', routeId: 'c1', intent: 'push' }),
+    { method: 'push', id: 'c2' },
+  );
+  assert.deepEqual(
+    navigationWrite({ activeId: '', routeId: 'c1', intent: 'push' }),
+    { method: 'push', id: '' },
+  );
+  assert.equal(navigationWrite({ activeId: 'c1', routeId: 'c1', intent: 'push' }), null);
+  // A load that is no longer the URL must not write the URL.
+  assert.equal(navigationWrite({
+    activeId: 'c1', routeId: 'c2', intent: 'replace', suspended: true,
+  }), null);
 });

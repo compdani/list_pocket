@@ -432,4 +432,280 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.get('.user-turn [data-reference="attachment:u1"]').should('contain.text', 'leads.csv');
     cy.get('[part=attachments] .chip[data-attachment-id]').should('not.exist');
   });
+
+  it('blocks a second send while the first snapshot is unread and keeps that draft', () => {
+    const turns = [];
+    let creates = 0;
+    let releaseCreate = null;
+    stubPage();
+    cy.intercept('GET', '**/mailapi/agent/mentions*', (req) => {
+      const q = String(req.query.q || '').toLowerCase();
+      req.reply({
+        data: q.startsWith('cust')
+          ? [{ type: 'list', id: '3', label: 'Customers' }]
+          : [{ type: 'campaign', id: '7', label: 'Spring sale' }],
+      });
+    }).as('mentions');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations', (req) => {
+      creates += 1;
+      if (creates > 1) {
+        req.reply({ statusCode: 500, body: { error: { code: 'internal', message: 'second create' } } });
+        return undefined;
+      }
+      // Hold the response until the second send has been attempted. Returning
+      // the promise keeps this handler alive; req.reply() after it returns is ignored.
+      return new Promise((resolve) => {
+        releaseCreate = () => {
+          req.reply(conversation('new1', ''));
+          resolve();
+        };
+      });
+    }).as('create');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/new1/turns', (req) => {
+      turns.push(req.body);
+      req.reply({ turn: { id: 't1', conversationId: 'new1', state: 'completed' }, created: true });
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/new1', {
+      conversation: conversation('new1', 'One'),
+      messages: [],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    });
+
+    cy.visit(fixture);
+    cy.wait(['@status', '@list']);
+    cy.get('textarea').type('One @Spr');
+    cy.wait('@mentions');
+    cy.get('[data-cy=agent-context-picker]').should('be.visible');
+    cy.get('textarea').type('{enter}');
+    cy.get('[part=attachments] [data-reference="campaign:7"]').should('be.visible');
+    cy.get('textarea').type('{enter}');
+    cy.wrap(null).should(() => expect(creates).to.eq(1));
+
+    cy.get('textarea').should('have.value', '');
+    cy.get('textarea').type('Two @Cust');
+    cy.wait('@mentions');
+    cy.get('[data-cy=agent-context-picker]').should('be.visible');
+    cy.get('textarea').type('{enter}');
+    cy.get('[part=attachments] [data-reference="list:3"]').should('be.visible');
+    cy.get('textarea').type('{enter}');
+
+    cy.get('textarea').should('have.value', 'Two ');
+    cy.get('[part=attachments] [data-reference="list:3"]').should('be.visible');
+    cy.wrap(null).should(() => {
+      expect(creates).to.eq(1);
+      expect(turns).to.have.length(0);
+    });
+
+    cy.then(() => releaseCreate());
+    cy.wait(['@create', '@turn']);
+    cy.then(() => {
+      expect(turns).to.have.length(1);
+      expect(turns[0].text).to.eq('One');
+      expect(turns[0].context).to.deep.eq({
+        screen: 'agent',
+        path: '/agent',
+        references: [{ type: 'campaign', id: '7', label: 'Spring sale' }],
+      });
+    });
+    cy.get('textarea').should('have.value', 'Two ');
+    cy.get('[part=attachments] [data-reference="list:3"]').should('be.visible');
+  });
+
+  it('restores the draft when the turn is refused and keeps a later success cleared', () => {
+    let fail = true;
+    let messages = [];
+    stubPage();
+    cy.intercept('GET', '**/mailapi/agent/mentions*', { data: [{ type: 'campaign', id: '7', label: 'Spring sale' }] }).as('mentions');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c1', (req) => req.reply({
+      conversation: conversation('c1', 'Spring launch'),
+      messages,
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    })).as('conversation');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/c1/turns', (req) => {
+      if (fail) {
+        req.reply({ statusCode: 500, body: { error: { code: 'internal', message: 'nope' } } });
+        return;
+      }
+      messages = [userMessage('u1', req.body.text, req.body.context?.references || [])];
+      req.reply({ turn: { id: 't1', conversationId: 'c1', state: 'completed' }, created: true });
+    }).as('turn');
+
+    cy.visit(`${fixture}?path=/agent/c1`);
+    cy.wait(['@status', '@list', '@conversation']);
+    cy.get('textarea').type('Keep @Spr');
+    cy.wait('@mentions');
+    cy.get('textarea').type('{enter}');
+    cy.get('[part=attachments] [data-reference="campaign:7"]').should('be.visible');
+    cy.get('textarea').type('this{enter}');
+    cy.wait('@turn');
+    cy.get('textarea').should('have.value', 'Keep this');
+    cy.get('[part=attachments] [data-reference="campaign:7"]').should('be.visible');
+
+    // Cypress runs this function before the queued commands, so the flag has to
+    // change inside the queue, after the refused send has restored the draft.
+    cy.then(() => { fail = false; });
+    cy.get('textarea').type('{enter}');
+    cy.wait('@turn');
+    cy.contains('[data-role=user]', 'Keep this').should('be.visible');
+    cy.get('textarea').should('have.value', '');
+    cy.get('[part=attachments] [data-reference="campaign:7"]').should('not.exist');
+  });
+
+  it('keeps the composer disabled until status is ready, then sends the page context', () => {
+    let releaseStatus = null;
+    let seenStatus = false;
+    const turns = [];
+    cy.intercept('GET', '**/api/mcp/chat/v1/status', (req) => {
+      seenStatus = true;
+      return new Promise((resolve) => {
+        releaseStatus = () => {
+          req.reply(statusBody());
+          resolve();
+        };
+      });
+    }).as('status');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations', { items: conversations, nextCursor: '' }).as('list');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations', conversation('new1', '')).as('create');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/new1/turns', (req) => {
+      turns.push(req.body);
+      req.reply({ turn: { id: 't1', conversationId: 'new1', state: 'completed' }, created: true });
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/new1', {
+      conversation: conversation('new1', 'Hello'),
+      messages: [userMessage('u1', 'Hello')],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    });
+
+    cy.visit(fixture);
+    cy.get('lp-agent-page').should('have.attr', 'disabled');
+    cy.get('textarea').should('be.disabled');
+    cy.get('[data-cy=agent-no-provider]').should('not.exist');
+    cy.wrap(null).should(() => expect(seenStatus).to.eq(true));
+    cy.then(() => releaseStatus());
+    cy.wait('@status');
+    cy.get('lp-agent-page').should('not.have.attr', 'disabled');
+    cy.get('[data-cy=agent-no-provider]').should('not.exist');
+    cy.get('textarea').should('not.be.disabled').type('Hello{enter}');
+    cy.wait('@turn');
+    cy.then(() => {
+      expect(turns[0].text).to.eq('Hello');
+      expect(turns[0].context).to.deep.eq({ screen: 'agent', path: '/agent', references: [] });
+    });
+  });
+
+  it('pushes conversation choices and replaces the id a draft gets on its first send', () => {
+    const detail = (id, title, text) => ({
+      conversation: conversation(id, title),
+      messages: [{
+        id: `m-${id}`,
+        conversationId: id,
+        turnId: 't0',
+        role: 'user',
+        createdAt: '2026-11-11T09:00:00Z',
+        parts: [{ type: 'text', text }],
+      }],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    });
+    stubPage();
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c1', detail('c1', 'Spring launch', 'Alpha')).as('c1');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/c2', detail('c2', 'Inbox triage', 'Beta')).as('c2');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations', conversation('new1', '')).as('create');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/new1/turns', {
+      turn: { id: 't1', conversationId: 'new1', state: 'completed' }, created: true,
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/new1', {
+      conversation: conversation('new1', 'Hello'),
+      messages: [userMessage('u1', 'Hello')],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    });
+
+    cy.visit(fixture);
+    cy.wait(['@status', '@list']);
+    cy.contains('.conv-link', 'Spring launch').click();
+    cy.wait('@c1');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent/c1');
+    cy.contains('[data-role=user]', 'Alpha').should('be.visible');
+
+    cy.contains('.conv-link', 'Inbox triage').click();
+    cy.wait('@c2');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent/c2');
+    cy.contains('[data-role=user]', 'Beta').should('be.visible');
+
+    cy.window().its('agentFixture.router').invoke('back');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent/c1');
+    cy.contains('[data-role=user]', 'Alpha').should('be.visible');
+    cy.contains('[data-role=user]', 'Beta').should('not.exist');
+
+    cy.window().its('agentFixture.router').invoke('forward');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent/c2');
+    cy.contains('[data-role=user]', 'Beta').should('be.visible');
+
+    cy.window().its('agentFixture.router').invoke('push', '/before');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/before');
+    cy.window().its('agentFixture.router').invoke('push', '/agent');
+    cy.wait(['@status', '@list']);
+    cy.get('textarea').should('not.be.disabled').type('Hello{enter}');
+    cy.wait('@turn');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent/new1');
+    cy.window().its('agentFixture.router').invoke('back');
+    cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/before');
+  });
+
+  it('shows a single Load more and requests the next page from it', () => {
+    const cursors = [];
+    cy.intercept('GET', '**/api/mcp/chat/v1/status', statusBody()).as('status');
+    // The query string is part of the URL glob, so match the path and read cursor from the query.
+    cy.intercept({ method: 'GET', pathname: '/api/mcp/chat/v1/conversations' }, (req) => {
+      const cursor = String(req.query.cursor || '');
+      cursors.push(cursor);
+      if (cursor === 'p2') {
+        req.reply({ items: [conversation('c3', 'Older one', '2026-11-01T09:00:00Z')], nextCursor: '' });
+        return;
+      }
+      req.reply({ items: conversations, nextCursor: 'p2' });
+    }).as('list');
+
+    cy.visit(fixture);
+    cy.wait(['@status', '@list']);
+    cy.get('[data-cy=agent-load-more]').should('not.exist');
+    cy.get('.conv-more').should('have.length', 1).and('have.text', 'Load more');
+    cy.get('.conv-more').click();
+    cy.wait('@list');
+    cy.get('[data-conversation-id=c3]').should('contain.text', 'Older one');
+    cy.get('.conv-more').should('not.exist');
+    cy.then(() => {
+      expect(cursors).to.deep.eq(['', 'p2']);
+    });
+  });
+
+  it('shows a user message as the characters typed, and assistant markdown as markdown', () => {
+    stubPage({
+      detail: {
+        id: 'c1',
+        title: 'Spring launch',
+        messages: [
+          userMessage('m1', '2 * 3 and **x**', [{ type: 'campaign', id: '7', label: 'Spring sale' }]),
+          assistantMessage('m2', 'That is **six**.'),
+        ],
+      },
+    });
+    cy.visit(`${fixture}?path=/agent/c1`);
+    cy.wait(['@status', '@list', '@conversation']);
+    cy.get('.user-turn').within(() => {
+      cy.get('[data-reference="campaign:7"]').should('be.visible');
+      cy.get('[data-role=user]').should('have.text', '2 * 3 and **x**');
+      cy.get('strong, em').should('not.exist');
+    });
+    cy.get('.message strong').should('have.text', 'six');
+  });
 });

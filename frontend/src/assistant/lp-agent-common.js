@@ -65,6 +65,22 @@ export const LP_STYLES = `
 
 export const renderMarkdown = renderAssistantMarkdown;
 
+// agent-panel 0.5 draws a user bubble with inlineMarkdownToHTML (bold and
+// italic). There is no separate switch for that; renderText is the supported
+// hook. Call it from a subclass's renderText, passing super.renderText(entry),
+// so reference chips and attachments stay on the base renderer and the words
+// stay the characters the person typed.
+export function plainUserBubble(entry, node) {
+  if (!entry || entry.role !== 'user' || typeof entry.content !== 'string' || entry.content === '' || !node) {
+    return node;
+  }
+  const bubble = typeof node.getAttribute === 'function' && node.getAttribute('data-role') === 'user'
+    ? node
+    : (typeof node.querySelector === 'function' ? node.querySelector('[data-role="user"]') : null);
+  if (bubble) bubble.textContent = entry.content;
+  return node;
+}
+
 export function referenceIcon(ref) {
   return icon(REFERENCE_ICONS[ref.type] || 'link', 13);
 }

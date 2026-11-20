@@ -57,6 +57,168 @@ export function pageContext(path, references) {
   };
 }
 
+/**
+ * An error counts for this send only when it is a different object from the
+ * one already stored at submit time. The controller replaces `state.error`
+ * on a new failure and clears it with null; a leftover object from an earlier
+ * failure must not restore that send's draft.
+ */
+export function isFreshError(before, after) {
+  if (after == null || after === '') return false;
+  return !Object.is(before, after);
+}
+
+/**
+ * One in-flight composer submit. `start` captures the path and references for
+ * that submit. A later start is blocked until `readContext` consumes the
+ * snapshot or the attempt is settled, so a second submit cannot overwrite
+ * them while uploads or `newConversation` are still running. `running`
+ * becoming true is not consumption: the controller sets it only after
+ * `context()`, and a host must not drop the snapshot on that signal.
+ */
+export function createSubmitTracker() {
+  let current = null;
+
+  function finish(submit, info) {
+    if (!submit || submit.settled) return { action: 'none', submit };
+    submit.settled = true;
+    if (current === submit) current = null;
+    return { action: classifySettlement(submit, info), submit };
+  }
+
+  return {
+    get current() {
+      return current;
+    },
+    start({ path, references, text, error, turn } = {}) {
+      if (current && !current.consumed && !current.settled) {
+        return { blocked: true, submit: current };
+      }
+      current = {
+        path: typeof path === 'string' ? path : '',
+        references: referencesOf(references),
+        text: typeof text === 'string' ? text : '',
+        error: error ?? null,
+        turn: turn ?? null,
+        consumed: false,
+        started: false,
+        settled: false,
+      };
+      return { blocked: false, submit: current };
+    },
+    noteStarted() {
+      if (current && !current.settled) current.started = true;
+    },
+    /** The binding returned without calling send or newConversation. */
+    abandonIfUnstarted() {
+      if (!current || current.started || current.settled) return { action: 'none', submit: current };
+      const submit = current;
+      submit.settled = true;
+      current = null;
+      return { action: 'release', submit };
+    },
+    readContext() {
+      if (!current || current.settled) return pageContext('', []);
+      current.consumed = true;
+      return pageContext(current.path, current.references);
+    },
+    settle(submit, info) {
+      return finish(submit, info);
+    },
+  };
+}
+
+/**
+ * The outcome of the send promise, not of a `running` change.
+ * `rejected` is an upload or a precondition throw: the binding keeps the draft.
+ * A resolved turn is acceptance. A new error with no turn is a failure before
+ * the server accepted the turn.
+ */
+export function classifySettlement(submit, { result, rejected = false, error = null } = {}) {
+  if (!submit) return 'none';
+  if (rejected) return 'release';
+  if (result && result.turn) return 'accept';
+  if (isFreshError(submit.error, error)) return 'restore';
+  return 'release';
+}
+
+/**
+ * What a controller `change` means for a submit. A turn object that was already
+ * current at submit time is not this send being accepted, and `running: true`
+ * before the snapshot has been read is not acceptance either (that flag is set
+ * before `submitTurn`). A stale error object is ignored.
+ */
+export function observeSubmit(submit, { running = false, turn = null, error = null } = {}) {
+  if (!submit || submit.settled) return 'keep';
+  if (turn && turn !== submit.turn) return 'accept';
+  // The snapshot is still the one this send will read. `running` flipping
+  // true first is not acceptance, and it must not drop the snapshot.
+  if (!submit.consumed) return 'keep';
+  if (isFreshError(submit.error, error) && running !== true) return 'restore';
+  return 'keep';
+}
+
+/**
+ * Wrap `send` and `newConversation` so the host hears the attempt's outcome.
+ * The binding calls these; the host never sees the promises otherwise.
+ * Upload rejections are reported as `release` (the binding restores files).
+ * A conversation that fails to appear, with nothing left open, is a failure
+ * before accept.
+ */
+export function attachSubmitTracking(controller, tracker, onOutcome) {
+  const send = controller.send.bind(controller);
+  const create = controller.newConversation.bind(controller);
+  const report = (outcome) => {
+    if (outcome && outcome.action && outcome.action !== 'none') onOutcome(outcome);
+  };
+  controller.send = (text, options) => {
+    tracker.noteStarted();
+    const submit = tracker.current;
+    if (submit) submit.sawSend = true;
+    let promise;
+    try {
+      promise = send(text, options);
+    } catch (err) {
+      report(tracker.settle(submit, { rejected: true, error: controller.state?.error }));
+      throw err;
+    }
+    Promise.resolve(promise).then(
+      (result) => report(tracker.settle(submit, { result, error: controller.state?.error })),
+      () => report(tracker.settle(submit, { rejected: true, error: controller.state?.error })),
+    );
+    return promise;
+  };
+  controller.newConversation = (title) => {
+    tracker.noteStarted();
+    const submit = tracker.current;
+    const promise = create(title);
+    Promise.resolve(promise).then((conversation) => {
+      if (!submit || submit.settled || submit.sawSend || conversation) return;
+      if (controller.state?.activeConversationId) return;
+      report(tracker.settle(submit, { result: null, error: controller.state?.error }));
+    });
+    return promise;
+  };
+  return controller;
+}
+
+/**
+ * The history write for a conversation-id change. `push` is a person selecting
+ * a conversation, starting a new chat, or deleting the open one. `replace` is
+ * the id a draft's first send assigns, so `/agent` does not stay under the new
+ * URL. `suspended` while the page is not aligned, or while a newer route is
+ * waiting, so a load cannot write itself over that URL.
+ */
+export function navigationWrite({
+  activeId = '', routeId = '', intent = 'replace', suspended = false,
+} = {}) {
+  if (suspended) return null;
+  const active = activeId == null ? '' : String(activeId);
+  const route = routeId == null ? '' : String(routeId);
+  if (active === route) return null;
+  return { method: intent === 'push' ? 'push' : 'replace', id: active };
+}
+
 /** Which host the /agent route renders, from /api/config. '' means not loaded. */
 export function backendOf(serverConfig) {
   if (!serverConfig || typeof serverConfig !== 'object' || Array.isArray(serverConfig)) return '';

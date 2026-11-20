@@ -10,7 +10,7 @@ import { AgentPageElement } from 'agent-panel/page-element';
 import { fileProblem } from '../agent/parts.mjs';
 import { hostErrorText, withContextReferences } from './chat-host.mjs';
 import {
-  LP_LABELS, LP_STYLES, referenceIcon, renderMarkdown, renderProposal,
+  LP_LABELS, LP_STYLES, plainUserBubble, referenceIcon, renderMarkdown, renderProposal,
 } from './lp-agent-common';
 
 // What `agent/attachments` takes: images and PDFs up to 6 MB, text files up to 2 MB.
@@ -68,6 +68,10 @@ export class ListPocketAgentPage extends AgentPageElement {
 
   renderMarkdown(text) {
     return renderMarkdown(text);
+  }
+
+  renderText(entry) {
+    return plainUserBubble(entry, super.renderText(entry));
   }
 
   renderEntry(entry) {

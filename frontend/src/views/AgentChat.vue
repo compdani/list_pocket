@@ -18,7 +18,7 @@
       :formatDate="formatDate"
       :labels="labels"
       :suggestions="suggestions"
-      :disabled="noProvider"
+      :disabled="!chatReady || noProvider"
       :placeholder="$t('agent.placeholder', { at: '@' })"
       :empty-title="$t('agent.welcomeTitle')"
       :empty-text="$t('agent.welcomeHelp', { at: '@' })"
@@ -29,9 +29,6 @@
       <span slot="composer-actions" class="agent-actions">
         <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-at" data-cy="agent-context" @click="toggleMention">{{ $t('agent.context') }}</v-btn>
         <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-content-paste" data-cy="agent-paste" @click="pasting = { name: '', content: '' }">{{ $t('agent.pasteData') }}</v-btn>
-      </span>
-      <span slot="sidebar-end" class="agent-sidebar-end">
-        <v-btn v-if="hasMore" block size="small" variant="text" class="text-none" data-cy="agent-load-more" @click="loadMore">{{ $t('agent.loadMore') }}</v-btn>
       </span>
     </lp-agent-page>
 
@@ -77,8 +74,8 @@ import { ChatController } from '@pocketbase-mcp/chat-client';
 import { ChatClient } from '@pocketbase-mcp/chat-client/client';
 import { assistantContext } from '../assistant/context';
 import {
-  cardProposalOf, choiceIdFor, contextReferencesFromTranscript,
-  pageContext, referencesOf, reviewPartOf, storedModelFor,
+  attachSubmitTracking, cardProposalOf, choiceIdFor, contextReferencesFromTranscript,
+  createSubmitTracker, navigationWrite, reviewPartOf, storedModelFor,
 } from '../assistant/chat-host.mjs';
 import { renderProposal } from '../assistant/lp-agent-common';
 import { CONTEXT_ICONS } from '../agent/parts.mjs';
@@ -101,8 +98,8 @@ const page = ref(null);
 const pickerRef = ref(null);
 const picker = ref(null);
 const inContext = ref([]);
-const hasMore = ref(false);
 const renamable = ref(false);
+const chatReady = ref(false);
 const noProvider = ref(false);
 const actionError = ref('');
 const previewing = ref(null);
@@ -115,10 +112,18 @@ let binding = null;
 let unsubscribeAuth = null;
 let aligned = false;
 let switchingAccount = false;
-// The references of the message being submitted. The controller reads them at
-// send time, after the binding's agent-submit handler has started the turn.
-let submittedReferences = [];
-let pendingSubmit = null;
+// A route change that arrived before the first open finished. The URL wins:
+// that id is applied once, and the load it interrupted must not write itself back.
+let sawQueuedRoute = false;
+let queuedRoute = '';
+// 'push' for a person selecting a conversation, starting a new chat, or
+// deleting the open one. The id a draft's first send assigns stays 'replace'.
+let urlIntent = 'replace';
+// The id of a push/replace that has not finished. A later state change for
+// that same id must not write again: the first write is the one that counts,
+// and a replace behind a push would drop the history step.
+let pendingNavId = null;
+const submits = createSubmitTracker();
 
 const reviewPart = computed(() => (reviewProposal.value ? reviewPartOf(reviewProposal.value) : null));
 const formatDate = shortStamp;
@@ -164,7 +169,10 @@ const client = new ChatClient({
 const chat = new ChatController({
   client,
   storageKey: accountKey(),
-  context: () => pageContext(route.fullPath, submittedReferences),
+  context: () => submits.readContext(),
+});
+attachSubmitTracking(chat, submits, (outcome) => {
+  if (outcome.action === 'restore') restoreFailedSend(outcome.submit);
 });
 
 function lastModel() {
@@ -180,17 +188,35 @@ function preselectModel() {
   if (id && page.value) page.value.model = id;
 }
 
+function activeId() {
+  return chat.state.activeConversationId ? String(chat.state.activeConversationId) : '';
+}
+
+function routeId() {
+  return String(route.params.id || '');
+}
+
 function syncUrl() {
-  if (!aligned || switchingAccount) return;
-  const id = chat.state.activeConversationId ? String(chat.state.activeConversationId) : '';
-  const current = String(route.params.id || '');
-  if (id === current) return;
-  router.replace({ name: 'agent', params: id ? { id } : {} });
+  const held = !aligned || switchingAccount || (sawQueuedRoute && queuedRoute !== activeId());
+  const change = navigationWrite({
+    activeId: activeId(),
+    routeId: routeId(),
+    intent: urlIntent,
+    suspended: held,
+  });
+  if (!change || pendingNavId === change.id) return;
+  urlIntent = 'replace';
+  pendingNavId = change.id;
+  const loc = { name: 'agent', params: change.id ? { id: change.id } : {} };
+  Promise.resolve(router[change.method](loc)).catch(() => {}).finally(() => {
+    if (pendingNavId === change.id) pendingNavId = null;
+  });
 }
 
 // A send that failed before the server accepted it puts the draft and its
 // references back, as the legacy page did. Upload failures are reported by the
-// binding itself and keep their chips.
+// binding itself and keep their chips. A send the server accepted is not put
+// back, including one that follows an earlier failure.
 function restoreFailedSend(submit) {
   const el = page.value;
   if (!el || !submit) return;
@@ -202,30 +228,60 @@ function onChange() {
   const state = chat.state;
   syncUrl();
   inContext.value = contextReferencesFromTranscript(state.transcript);
-  hasMore.value = Boolean(state.nextCursor);
   renamable.value = Boolean(state.activeConversationId);
-  noProvider.value = state.status === 'ready'
+  chatReady.value = state.status === 'ready';
+  noProvider.value = chatReady.value
     && state.models.length === 0 && state.choices.length === 0;
-  if (pendingSubmit) {
-    if (state.running) {
-      // The controller has read this turn's context; the next send captures its own.
-      pendingSubmit = null;
-      submittedReferences = [];
-    } else if (state.error) {
-      restoreFailedSend(pendingSubmit);
-      pendingSubmit = null;
-    }
-  }
 }
 
 // Registered before bindAgentPanel(), so it runs before the binding's own
-// agent-submit handler and captures this message's chips before any await.
+// agent-submit handler. The path and chips are captured here, before
+// newConversation and uploads; the controller reads them from context() later.
 function onSubmit(event) {
-  submittedReferences = referencesOf(event.detail?.references);
-  pendingSubmit = {
-    text: typeof event.detail?.text === 'string' ? event.detail.text : '',
-    references: submittedReferences,
-  };
+  const { blocked, submit } = submits.start({
+    path: route.fullPath,
+    references: event.detail?.references,
+    text: event.detail?.text,
+    error: chat.state.error,
+    turn: chat.state.turn,
+  });
+  if (blocked) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+  // The binding's handler runs before this microtask. If it refused the submit
+  // (uploads off, empty text, no conversation without autoCreate), it never
+  // calls send, and the snapshot must not stick.
+  queueMicrotask(() => {
+    if (submits.current === submit) {
+      const outcome = submits.abandonIfUnstarted();
+      if (outcome.action === 'restore') restoreFailedSend(outcome.submit);
+    }
+  });
+}
+
+function armHistoryPush() {
+  urlIntent = 'push';
+  // A new chat opened while the URL is already /agent does not navigate, so
+  // the push must not ride along with that draft's first send.
+  queueMicrotask(() => {
+    if (urlIntent === 'push' && activeId() === routeId()) urlIntent = 'replace';
+  });
+}
+
+function onSelectConversation() {
+  armHistoryPush();
+}
+
+function onNewConversation() {
+  armHistoryPush();
+}
+
+function onDeleteConversation(event) {
+  const id = event.detail?.id;
+  if (id == null || String(id) !== activeId()) return;
+  urlIntent = 'push';
 }
 
 function onModelChange(event) {
@@ -350,10 +406,6 @@ function savePaste() {
   page.value?.addFiles([new File([content], name.trim() || 'pasted.txt', { type: 'text/plain' })]);
 }
 
-function loadMore() {
-  void binding?.loadMore();
-}
-
 // One card per proposal the binding reports; the full proposal (arguments,
 // warnings, result, error) lives in the controller's state.
 function renderProposalEntry(entry, panel) {
@@ -379,14 +431,23 @@ function preAttach() {
   if (page.value) page.value.references = [{ type, id, label: typeof label === 'string' && label ? label : id }];
 }
 
-const stopRouteWatch = watch(() => route.params.id, (id) => {
-  if (!aligned) return;
+function followRoute(id) {
   const next = String(id || '');
-  const current = chat.state.activeConversationId ? String(chat.state.activeConversationId) : '';
-  if (next === current) return;
+  if (next === activeId()) return;
   if (page.value) page.value.references = [];
   if (next) void chat.open(next).then(() => page.value?.scrollToBottom({ force: true }));
   else chat.startDraft();
+}
+
+const stopRouteWatch = watch(() => route.params.id, (id) => {
+  const next = String(id || '');
+  if (!aligned) {
+    sawQueuedRoute = true;
+    queuedRoute = next;
+    return;
+  }
+  if (next === activeId()) return;
+  followRoute(next);
 });
 
 onMounted(async () => {
@@ -401,6 +462,9 @@ onMounted(async () => {
   // Before bindAgentPanel(): this listener must run before the binding's
   // agent-submit, which starts the turn that reads the page context.
   el.addEventListener('agent-submit', onSubmit);
+  el.addEventListener('agent-select-conversation', onSelectConversation);
+  el.addEventListener('agent-new-conversation', onNewConversation);
+  el.addEventListener('agent-delete-conversation', onDeleteConversation);
   el.addEventListener('agent-action', onAction);
   el.addEventListener('agent-mention', onMention);
   el.addEventListener('agent-mention-key', onMentionKey);
@@ -408,6 +472,16 @@ onMounted(async () => {
   el.addEventListener('agent-model-change', onModelChange);
 
   binding = bindAgentPanel(el, chat, { registerEntries: false });
+  const removeConversation = chat.remove.bind(chat);
+  chat.remove = (id) => {
+    const deletingOpen = String(id) === activeId();
+    if (deletingOpen) urlIntent = 'push';
+    const pending = removeConversation(id);
+    Promise.resolve(pending).then((ok) => {
+      if (deletingOpen && ok !== true && activeId() === routeId()) urlIntent = 'replace';
+    });
+    return pending;
+  };
   chat.addEventListener('change', onChange);
   unsubscribeAuth = pb.authStore.onChange(async () => {
     // setAccount clears the state, which would look like "no conversation";
@@ -428,10 +502,13 @@ onMounted(async () => {
   if (id) await chat.open(id);
   else chat.startDraft();
   aligned = true;
+  const queued = sawQueuedRoute ? queuedRoute : undefined;
+  sawQueuedRoute = false;
   preselectModel();
   preAttach();
-  onChange();
-  if (id) page.value?.scrollToBottom({ force: true });
+  if (queued !== undefined && queued !== activeId()) followRoute(queued);
+  else onChange();
+  if (routeId()) page.value?.scrollToBottom({ force: true });
 });
 
 onBeforeUnmount(() => {
@@ -465,10 +542,5 @@ onBeforeUnmount(() => {
   display: inline-flex;
   flex-wrap: wrap;
   gap: 2px;
-}
-
-.agent-sidebar-end {
-  display: block;
-  padding: 4px;
 }
 </style>
