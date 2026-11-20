@@ -2,8 +2,8 @@
 
 The assistant side panel (`<lp-agent-panel>`) and the full Agent page (`<lp-agent-page>`)
 are both built on the **`agent-panel`** package
-(https://github.com/compdani/agent-panel). It's installed from GitHub and pinned to a tag
-in `frontend/package.json`. The package's own contract is in
+(https://github.com/compdani/agent-panel). It's installed from GitHub and pinned to
+v0.5.0 in `frontend/package.json`. The package's own contract is in
 `node_modules/agent-panel/AGENTS.md`, and its human guide is in
 `node_modules/agent-panel/README.md`. Read the contract before changing anything here.
 This file covers only how List Pocket extends and hosts the two elements.
@@ -48,6 +48,10 @@ Both subclasses do the following (from `lp-agent-common.js`):
 - The theme tokens map to Vuetify's `--v-theme-*` variables, with fallbacks.
 - `referenceIcon` maps the context types in `CONTEXT_ICONS` (`agent/parts.mjs`) to
   `@mdi/js` paths. Add new types in both places.
+- The hosts set `plain-text` and `no-add-menu` on both elements. Since 0.3.0 the default
+  composer is a contenteditable rich-text editor and the default attach control is a "+"
+  menu. The legacy hosts keep the old `<textarea>` and paperclip until the chat module
+  host replaces them.
 - `defaultLabels` adds `review`, `view`, `discard`, `open` and `proposedEdit`. The side
   panel uses the English defaults; the Agent page passes translated ones.
 - It adds the entry type `{ id, type: 'proposal', proposal, busy: boolean, running:
@@ -114,8 +118,9 @@ Both subclasses do the following (from `lp-agent-common.js`):
 
 ## `AIAssistant.vue`, the side panel host
 
-- **Attributes and properties it sets:** `closable`, `sticky-attachments`, `accept`, the
-  text attributes, `entries`, `suggestions`, `running`, `error`.
+- **Attributes and properties it sets:** `closable`, `sticky-attachments`, `plain-text`,
+  `no-add-menu`, `accept`, the text attributes, `entries`, `suggestions`, `running`,
+  `error`.
 - **`entries`** is a `computed` that copies the transcript into plain objects. It reads
   every field shown (tool status and detail, proposals copied with JSON), so that changes
   made in place re-render the panel. It also puts `busy` and `running` into proposal

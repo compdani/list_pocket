@@ -274,6 +274,8 @@ const suggestions = computed(() => {
       class="assistant-panel"
       closable
       sticky-attachments
+      plain-text
+      no-add-menu
       :accept="ASSISTANT_ACCEPT"
       :entries="entries"
       :suggestions="suggestions"

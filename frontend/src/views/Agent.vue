@@ -4,6 +4,8 @@
       ref="page"
       class="agent-page"
       mention-trigger="@"
+      plain-text
+      no-add-menu
       :accept="AGENT_PAGE_ACCEPT"
       :max-file-size="MAX_BINARY_BYTES"
       :heading="title"
