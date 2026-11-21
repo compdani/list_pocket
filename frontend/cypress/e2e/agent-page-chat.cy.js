@@ -121,7 +121,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
         messages: [
           userMessage('m1', 'Draft the launch email', [{ type: 'campaign', id: '7', label: 'Spring sale' }]),
           assistantMessage('m2', 'Here is a **draft** for the launch.', [
-            { type: 'tool_call', callId: 'tool1', tool: 'campaigns' },
+            { type: 'tool_call', callId: 'tool1', tool: 'campaigns', arguments: { id: '7' } },
           ]),
           {
             id: 'm3',
@@ -169,7 +169,10 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
       cy.get('[data-role=user]').should('have.text', 'Draft the launch email');
     });
     cy.get('.message strong').should('have.text', 'draft');
-    cy.get('.tools').should('have.attr', 'data-status', 'completed');
+    cy.get('.tools').should('have.attr', 'data-status', 'completed').find('> summary').click();
+    cy.get('.tool > summary').click();
+    cy.get('.tool pre').should('be.visible').and('contain.text', '"arguments"')
+      .and('contain.text', '"id": "7"').and('contain.text', '"result"').and('contain.text', '"ok": true');
     cy.get('.notice').should('contain.text', 'The reply was not sent.');
     cy.get('[data-cy=assistant-proposal]').should('contain.text', 'Spring launch draft').within(() => {
       cy.contains('button', 'Review').should('be.visible');
@@ -817,5 +820,19 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.then(() => {
       expect(turns[0].effort).to.eq('medium');
     });
+  });
+
+  it('refreshes reasoning capabilities after settings change while chat is ready', () => {
+    stubPage();
+    cy.visit(fixture);
+    cy.wait(['@status', '@list']);
+    cy.get('[part=options-menu]').should('not.be.visible');
+    cy.intercept('GET', '**/api/mcp/chat/v1/status', statusBody({
+      choices: [{ id: 'api::gpt-4.1', provider: 'api', model: 'gpt-4.1', label: 'Reasoner', efforts: ['low', 'medium', 'high'], default: true }],
+    })).as('updatedStatus');
+    cy.window().then((win) => win.dispatchEvent(new win.Event('ai-settings-updated')));
+    cy.wait('@updatedStatus');
+    cy.get('[part=options-menu]').should('be.visible').click();
+    cy.contains('[role=menuitemradio]', 'High').should('be.visible');
   });
 });

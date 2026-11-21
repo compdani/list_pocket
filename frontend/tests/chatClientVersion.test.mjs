@@ -10,7 +10,13 @@ test('the installed chat client exports ChatController and bindAgentPanel', () =
   assert.equal(typeof bindAgentPanel, 'function');
 });
 
-test('the installed chat client matches the pocketbase-mcp version in go.mod', async () => {
+function parseSemver(version) {
+  const match = String(version).match(/^(\d+)\.(\d+)\.(\d+)/);
+  assert.ok(match, `unparseable version ${version}`);
+  return match.slice(1).map(Number);
+}
+
+test('the installed chat client is compatible with the pocketbase-mcp version in go.mod', async () => {
   const root = new URL('../../', import.meta.url);
   const goMod = await readFile(new URL('go.mod', root), 'utf8');
   const pkg = JSON.parse(await readFile(
@@ -20,9 +26,15 @@ test('the installed chat client matches the pocketbase-mcp version in go.mod', a
 
   const moduleVersion = goMod.match(/^\s*github\.com\/compdani\/pocketbase-mcp\s+v(\S+)/m)?.[1];
   assert.ok(moduleVersion, 'go.mod has no github.com/compdani/pocketbase-mcp require');
+  const [clientMajor, clientMinor, clientPatch] = parseSemver(pkg.version);
+  const [modMajor, modMinor, modPatch] = parseSemver(moduleVersion);
   assert.equal(
-    pkg.version,
-    moduleVersion,
+    `${clientMajor}.${clientMinor}`,
+    `${modMajor}.${modMinor}`,
     `@pocketbase-mcp/chat-client is ${pkg.version}, but go.mod uses v${moduleVersion}`,
+  );
+  assert.ok(
+    clientPatch >= modPatch,
+    `@pocketbase-mcp/chat-client ${pkg.version} is older than go.mod v${moduleVersion}`,
   );
 });

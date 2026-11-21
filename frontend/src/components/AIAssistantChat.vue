@@ -434,9 +434,9 @@ function removePicture(index) {
   savePictures(localStorage, userId(), activePictureId(), next);
 }
 
-async function refreshIfUnavailable() {
+async function refreshIfUnavailable(force = false) {
   if (unmounted || chat.state.status === 'loading') return;
-  if (chat.state.status !== 'error' && chat.state.features?.ready !== false) return;
+  if (!force && chat.state.status !== 'error' && chat.state.features?.ready !== false) return;
   const epoch = accountEpoch;
   await chat.init();
   if (unmounted || epoch !== accountEpoch) return;
@@ -444,8 +444,9 @@ async function refreshIfUnavailable() {
   onChange();
 }
 
-function onRefreshTrigger() {
-  void refreshIfUnavailable();
+function onRefreshTrigger(event) {
+  // Settings can change a healthy catalog's default model and effort levels too.
+  void refreshIfUnavailable(event?.type === 'ai-settings-updated');
 }
 
 watch(() => assistantContext.editor, (next, prev) => {

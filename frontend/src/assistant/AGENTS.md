@@ -3,7 +3,7 @@
 The assistant side panel (`<lp-agent-panel>`) and the full Agent page (`<lp-agent-page>`)
 are both built on the **`agent-panel`** package
 (https://github.com/compdani/agent-panel), pinned to v0.5.1 in `frontend/package.json`,
-and backed by **`@pocketbase-mcp/chat-client`** (v0.1.8) against `/api/mcp/chat/v1`.
+and backed by **`@pocketbase-mcp/chat-client`** (v0.1.9) against `/api/mcp/chat/v1`.
 The package's own contract is in `node_modules/agent-panel/AGENTS.md`, and its human
 guide is in `node_modules/agent-panel/README.md`. Read the contract before changing
 anything here. This file covers only how List Pocket extends and hosts the two elements.
@@ -131,8 +131,10 @@ it.
 created conversation id on first send. Retry is offered only for a failed accepted turn
 (`state.turn.error` with no active pre-accept `state.error`) and resends that turn's
 message, stored upload IDs, context references, and the selected `model` and `effort`.
-When `/status` fails or reports `features.ready === false`, opening the panel, regaining
-window focus, or changing Settings → AI (`ai-settings-updated`) re-runs `chat.init()`.
+When `/status` fails or reports `features.ready === false`, opening the panel or regaining
+window focus re-runs `chat.init()`. Changing Settings → AI (`ai-settings-updated`) always
+refreshes the catalog, including when the chat is already ready, so model capabilities
+and reasoning effort options update on both chat surfaces.
 
 ## Checking a change
 

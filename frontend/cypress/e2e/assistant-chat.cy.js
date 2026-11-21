@@ -885,4 +885,18 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
       expect(win.localStorage.getItem('listpocket_agent_model')).to.contain('gpt-4.1-mini');
     });
   });
+
+  it('refreshes reasoning capabilities after settings change while chat is ready', () => {
+    stubList([]);
+    visit('?editor=none');
+    cy.wait(['@status', '@list']);
+    cy.get('[part=options-menu]').should('not.be.visible');
+    cy.intercept('GET', '**/api/mcp/chat/v1/status', statusBody({
+      choices: [{ id: 'api::gpt-4.1', provider: 'api', model: 'gpt-4.1', label: 'Reasoner', efforts: ['low', 'medium', 'high'], default: true }],
+    })).as('updatedStatus');
+    cy.window().then((win) => win.dispatchEvent(new win.Event('ai-settings-updated')));
+    cy.wait('@updatedStatus');
+    cy.get('[part=options-menu]').should('be.visible').click();
+    cy.contains('[role=menuitemradio]', 'High').should('be.visible');
+  });
 });
