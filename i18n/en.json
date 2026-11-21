@@ -1302,6 +1302,8 @@
     "agent.conversations": "Conversations",
     "agent.newChat": "New chat",
     "agent.noConversations": "No conversations yet.",
+    "agent.loadMore": "Load more",
+    "agent.noProvider": "AI isn't set up. Add an API key or sign in with ChatGPT in Settings → AI, then reload this page.",
     "agent.titleLabel": "Title",
     "agent.rename": "Rename",
     "agent.inContext": "In context:",

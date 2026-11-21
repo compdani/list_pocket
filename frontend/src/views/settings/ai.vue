@@ -123,6 +123,7 @@ async function saveDefault() {
     // An API key with no model chosen goes back to the app's own default.
     await agentPut('ai/settings/default', choice.value.provider === 'api' && !model ? {} : { provider: choice.value.provider, model });
     message.value = { kind: 'success', text: proxy.$t('settings.ai.saved') };
+    window.dispatchEvent(new Event('ai-settings-updated'));
   } catch (err) {
     message.value = { kind: 'error', text: err.message };
   } finally {
@@ -145,6 +146,7 @@ function watchSignIn() {
       } else {
         message.value = { kind: 'success', text: proxy.$t('settings.ai.signedInAs', { email: next.status.email }) };
         loadModels(true);
+        window.dispatchEvent(new Event('ai-settings-updated'));
       }
     } catch (err) {
       message.value = { kind: 'error', text: err.message };
@@ -190,6 +192,7 @@ function signOut() {
       message.value = out.warning ? { kind: 'warning', text: out.warning } : { kind: 'success', text: proxy.$t('settings.ai.signedOut') };
       await load();
       loadModels(true);
+      window.dispatchEvent(new Event('ai-settings-updated'));
     } catch (err) {
       message.value = { kind: 'error', text: err.message };
     }
@@ -203,6 +206,7 @@ async function importCreds() {
     message.value = { kind: 'success', text: proxy.$t('settings.ai.imported') };
     await load();
     loadModels(true);
+    window.dispatchEvent(new Event('ai-settings-updated'));
   } catch (err) {
     message.value = { kind: 'error', text: err instanceof SyntaxError ? proxy.$t('settings.ai.importInvalid') : err.message };
   }

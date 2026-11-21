@@ -9,7 +9,8 @@ import { proposalInfo, proposalTitle } from '../agent/parts.mjs';
 import { renderAssistantMarkdown } from './markdown.mjs';
 
 const STATUS_TONES = {
-  pending: 'warning', applying: 'info', applied: 'success', approved: 'success', failed: 'error', discarded: 'muted', rejected: 'muted',
+  pending: 'warning', applying: 'info', applied: 'success', approved: 'success', failed: 'error', discarded: 'muted',
+  rejected: 'muted', expired: 'muted', unknown: 'warning', stale: 'warning',
 };
 
 // The same types as CONTEXT_ICONS in agent/parts.mjs, as SVG paths.
@@ -50,6 +51,8 @@ export const LP_STYLES = `
 .proposal-title { flex: 1; font-size: 13px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 .proposal-kind { color: var(--agent-muted); font-size: 12px; font-weight: 400; }
 .proposal-error { color: var(--agent-error); font-size: 12px; margin-top: 4px; }
+.proposal-state { color: var(--agent-muted); font-size: 12px; line-height: 1.45; margin: 6px 0 0; }
+.proposal-state.tone-warning { border-radius: 6px; padding: 4px 8px; }
 .proposal .alert { margin-top: 8px; }
 .op { margin-top: 10px; }
 .op-field { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
@@ -69,6 +72,9 @@ export function referenceIcon(ref) {
 // { proposal, busy, running, actionId? }: busy while a decision is in flight, running
 // while the agent is still answering. Buttons fire `agent-action` with
 // { action: 'apply' | 'review' | 'discard', id: actionId ?? proposal.id }.
+// A module-backed card adds `stateText` (what happened, in plain words) and a
+// `statusLabel`; the unknown state keeps its warning tone and never reads as a
+// success or a plain failure.
 export function renderProposal(el, { proposal, busy = false, running = false, actionId }) {
   const { labels } = el;
   const info = proposalInfo(proposal.tool);
@@ -102,9 +108,10 @@ export function renderProposal(el, { proposal, busy = false, running = false, ac
         title === proposal.tool ? labels.proposedEdit : title,
         info.label !== proposal.tool ? h('div', { class: 'proposal-kind' }, info.label) : null,
       ),
-      proposal.status === 'pending' ? null : h('span', { class: `badge tone-${STATUS_TONES[proposal.status] || 'muted'}`, 'data-cy': 'assistant-proposal-status' }, proposal.status),
+      proposal.status === 'pending' ? null : h('span', { class: `badge tone-${STATUS_TONES[proposal.status] || 'muted'}`, 'data-cy': 'assistant-proposal-status' }, proposal.statusLabel || proposal.status),
     ),
     (proposal.error || proposal.result?.error) ? h('div', { class: 'proposal-error' }, proposal.error || proposal.result?.error) : null,
+    proposal.stateText ? h('p', { class: `proposal-state${proposal.status === 'unknown' ? ' tone-warning' : ''}` }, proposal.stateText) : null,
     (proposal.warnings || []).map((warning) => h('div', { class: 'alert tone-warning' }, h('span', null, warning))),
     // Edits to the open editor are short, so they show in place.
     (operations || []).map((op) => h(

@@ -2,159 +2,132 @@
 
 The assistant side panel (`<lp-agent-panel>`) and the full Agent page (`<lp-agent-page>`)
 are both built on the **`agent-panel`** package
-(https://github.com/compdani/agent-panel). It's installed from GitHub and pinned to a tag
-in `frontend/package.json`. The package's own contract is in
-`node_modules/agent-panel/AGENTS.md`, and its human guide is in
-`node_modules/agent-panel/README.md`. Read the contract before changing anything here.
-This file covers only how List Pocket extends and hosts the two elements.
+(https://github.com/compdani/agent-panel), pinned to v0.5.1 in `frontend/package.json`,
+and backed by **`@pocketbase-mcp/chat-client`** (v0.1.8) against `/api/mcp/chat/v1`.
+The package's own contract is in `node_modules/agent-panel/AGENTS.md`, and its human
+guide is in `node_modules/agent-panel/README.md`. Read the contract before changing
+anything here. This file covers only how List Pocket extends and hosts the two elements.
 
 ## Rules
 
-1. **Never edit `node_modules/agent-panel`.**
-   - To change behaviour that any app could use, change the package repo
-     (`/Volumes/mini512/Components/agent-panel` locally), release a new tag, then update
-     the pin here with `npm install github:compdani/agent-panel#vX.Y.Z`.
-   - Behaviour specific to List Pocket goes in `lp-agent-panel.js` (a subclass) or
-     `AIAssistant.vue` (the host).
+1. **Never edit `node_modules/agent-panel` or `node_modules/@pocketbase-mcp/chat-client`.**
+   - To change behaviour that any app could use, change the package repo, release a
+     new tag, then update the pin here.
+   - Behaviour specific to List Pocket goes in `lp-agent-panel.js`, `lp-agent-page.js`,
+     `chat-host.mjs`, `chat-ui.mjs`, `AIAssistantChat.vue`, or `AgentChat.vue`.
 2. **Import by package name**: `agent-panel/element` (panel class, `h`, `icon`) and
    `agent-panel/page-element` (page class). These define no tags. Never import the
    package's files by path.
 3. **Register the tags with Vue's compiler.** `vite.config.js` lists `agent-panel`,
    `agent-page`, `lp-agent-panel` and `lp-agent-page` in
    `compilerOptions.isCustomElement`. A new custom-element tag must be added there.
-4. **Shared behaviour goes in `lp-agent-common.js`.** That covers the theme, labels,
-   markdown, proposal cards and reference icons. Both subclasses use it, and it defines
-   no tags.
+4. **Shared behaviour goes in `lp-agent-common.js` (element theme/cards),
+   `chat-host.mjs` (pure logic), and `chat-ui.mjs` (binding/DOM glue).**
 
 ## Files
 
 | File | Role |
 |---|---|
 | `lp-agent-common.js` | `LP_STYLES` (Vuetify theme mapping and card CSS), `LP_LABELS`, `renderMarkdown`, `renderProposal(el, entry)`, `referenceIcon(ref)` (`@mdi/js` paths per context type) |
-| `lp-agent-panel.js` | `ListPocketAgentPanel` (`<lp-agent-panel>`) and `ASSISTANT_ACCEPT` |
-| `lp-agent-page.js` | `ListPocketAgentPage` (`<lp-agent-page>`) and `AGENT_PAGE_ACCEPT`; adds the server's 2 MB limit for text files through `fileProblem` |
-| `models.js` | `useAgentModels()` (loads `agent/models` into the panel's built-in model menu: one entry per provider model, grouped by provider, provider errors as disabled entries), `modelKey(ai)` and `modelFromKey(id)` (menu ids are `provider/model`) |
-| `../views/Agent.vue` | The Agent page host: server-side conversations, turns, uploads, context picker, proposal decisions |
-| `../components/AIAssistant.vue` | The host: chats kept in the browser, streaming turns, proposal decisions, and the Vuetify controls placed in slots |
-| `markdown.mjs`, `threads.mjs`, `transcript.mjs`, `patches.mjs`, `client.js`, `context.js` | Conversation logic, independent of the panel |
-| `../../cypress/e2e/assistant.cy.js` | Browser tests for the side panel, including paste, drop and keeping attachments for the next message |
-| `../../cypress/e2e/agent-page.cy.js` + `fixtures/agent-page-harness.*` | Browser tests for the Agent page: conversations, references, `@` picker, paste and upload, rename and delete, narrow-screen drawer |
+| `lp-agent-panel.js` | `ListPocketAgentPanel` (`<lp-agent-panel>`): adds `toolLabel` and proposal `busy`/`running` flags on every binding write |
+| `lp-agent-page.js` | `ListPocketAgentPage` (`<lp-agent-page>`): adds proposal `busy`/`running` flags on every binding write |
+| `chat-host.mjs` | Pure logic for both hosts: page context, history writes, stored `@` chips, the "In context" list, proposal card and ReviewModal inputs, error wording, remembered model, tool labels, legacy `localStorage` cleanup, media pictures and the editor adapter |
+| `chat-ui.mjs` | DOM glue both hosts share: submit-reference capture, the composer hold until `/status`, proposal and notice renderers, `decideModuleProposal` |
+| `../views/AgentChat.vue` | The `/agent/:id?` route: `ChatClient` + `ChatController` + `bindAgentPanel`, `@` context picker, Paste data, proposal decisions, `ReviewModal` |
+| `../components/AIAssistantChat.vue` | The side panel mounted in `App.vue`: `ChatController` + `bindAgentPanel` on `<lp-agent-panel>`, editor adapter, undo, retry, media pictures |
+| `markdown.mjs`, `patches.mjs`, `context.js` | Markdown rendering, editor patch application/revisioning, and active editor registration |
+| `../../cypress/e2e/assistant-chat.cy.js` + `fixtures/assistant-chat-harness.*` | Browser tests for the side panel: conversations, page context, streams, proposals, editor apply and undo, wrong-editor pre-check, media pictures, no provider, overlapping sends, refused draft, status gate, retry, legacy storage cleanup |
+| `../../cypress/e2e/agent-page-chat.cy.js` + `fixtures/agent-page-chat-harness.*` | Browser tests for the Agent page: URL loading, `@` context, streams, proposals, refused decisions, no provider, rename/delete, paste upload, overlapping sends, failed-send restore, status gate, history, Load more, inline markdown |
 
 ## `<lp-agent-panel>` and `<lp-agent-page>`
 
-Both subclasses do the following (from `lp-agent-common.js`):
+Both subclasses share the following from `lp-agent-common.js`:
 
 - `renderMarkdown` uses `renderAssistantMarkdown` (markdown-it with `html: false`, images
   disabled, and links opening in a new tab with `rel=noopener`).
+- User bubbles keep agent-panel's own inline markdown (`inlineMarkdownToHTML`
+  in `renderText`), so `**x**` reads as bold there too. This is deliberate;
+  don't override `renderText` to make them plain.
 - The theme tokens map to Vuetify's `--v-theme-*` variables, with fallbacks.
 - `referenceIcon` maps the context types in `CONTEXT_ICONS` (`agent/parts.mjs`) to
   `@mdi/js` paths. Add new types in both places.
+- Both hosts set `plain-text` and `no-add-menu` on their elements, keeping the
+  `<textarea>` composer and paperclip button.
 - `defaultLabels` adds `review`, `view`, `discard`, `open` and `proposedEdit`. The side
   panel uses the English defaults; the Agent page passes translated ones.
-- It adds the entry type `{ id, type: 'proposal', proposal, busy: boolean, running:
-  boolean, actionId? }`. `proposal` follows the server's proposal object: `id`, `tool`, `status`,
-  `arguments` (with an optional `operations[]`), `warnings[]`, `result.source.href`.
-  - The card shows the title from `proposalTitle()`, the kind from `proposalInfo()`, a
-    status badge once the proposal is no longer pending, any warnings, and each
-    operation's before and after text.
-- Proposal buttons call `emitAction(action, { id: actionId ?? proposal.id })`:
-  - `apply`: shown when the status is `pending` and `!proposalInfo(tool).reviewFirst`.
-    Disabled when `busy || running`.
-  - `review`: shown when there are no `operations`. Labelled "Review" while pending and
-    "View" otherwise.
-  - `discard`: shown while pending. Disabled when `busy || running`.
-  - For an applied proposal with `result.source.href`, an "Open" link replaces the
-    buttons.
-- **`ASSISTANT_ACCEPT`** is
-  `image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,.txt`.
-  - It mirrors the backend: `validateAIBuilderStatusAttachments` /
-    `normalizeAIBuilderStatusMIME` in `cmd/ai_campaign_builder.go`, plus the
-    image/PDF/text check in `cmd/ai_assistant.go`.
-  - Change both sides together. Otherwise files pass the browser and then fail on the
-    server.
+- Both subclasses override the `entries` setter to copy host-owned `busy`/`running` flags
+  onto proposal entries (`lp-agent-panel.js` also fills in `toolLabel` on tool rows).
+  `repaint()` reassigns `this.rawEntries` so busy states show immediately.
 
-## `Agent.vue`, the Agent page host
+## `AgentChat.vue`, the Agent page
 
-- **Conversations live on the server**, unlike the side panel's, which live in the
-  browser. The host loads `agent/conversations` and sets `conversations` (with `href`
-  from the router), `active`, `heading`, `renamable` (once the conversation exists),
-  `contextReferences` (`contextInUse(messages)`), `formatDate` (`shortStamp`) and
-  translated `labels`.
-- **`entries`** is built from the server's messages:
-  - user messages become text entries with `references` (from `msg.context`);
-  - assistant messages become a tools entry (status `failed` with the error as the
-    detail when a tool erred), then the text, then one proposal entry per proposal part,
-    with `actionId: "<messageId>:<partIndex>"`;
-  - while a turn streams, `live:tools` and `live:text` entries are added.
-- **Sending:**
-  - `agent-submit` calls `send(text, attachments, references)`.
-  - **Files are uploaded when sending**, not when attached, through `agent/attachments`
-    (base64 for images and PDFs, text otherwise), after `ensureConversation()`. They're
-    then sent as `{ type: 'file', id, label }` context together with the references.
-  - If something fails, the draft, the references and (if the upload never finished)
-    the files are put back in the composer.
-- **The context picker:** `mention-trigger="@"`. `ContextPicker` sits in
-  `<div slot="mention">` and is shown while `agent-mention.open`. `agent-mention-key` is
-  forwarded to `pickerRef.key(event)`, and the event is cancelled when the picker used
-  the key. A pick calls `page.addReference()`. **Context** in the page's built-in "+"
-  menu (agent-panel 0.3.0) opens the picker without typing `@`.
-- **Paste data** is the "+" menu's built-in paste form (labels from `agent.pasteData`,
-  `agent.pasteName`, `agent.pasteContent`); it adds a text `File` whose type follows the
-  extension (`leads.csv` → `text/csv`).
-- **The model** is the page's built-in model menu: `:models` / `:model` /
-  `:default-model` from `useAgentModels()`, and `agent-model-change` → `setModel`.
-- **Other events:**
+**Client and controller.** `ChatClient({ baseUrl: pb.baseURL, getToken: () =>
+pb.authStore.token })` reads the token per request, never once. The controller's
+`storageKey` is `{ appUrl: pb.baseURL, mount: '/api/mcp/chat/v1', authCollectionId,
+userId }`; `pb.authStore.onChange` calls `setAccount()` only when the account actually
+changes (ignoring same-user token refreshes), and unmount calls `binding.unbind()` then
+`chat.dispose()`.
 
-  | Event | Response |
-  |---|---|
-  | `agent-select-conversation` | `preventDefault()`, then `router.push` |
-  | `agent-new-conversation` | Opens a new chat |
-  | `agent-delete-conversation` | `DELETE` |
-  | `agent-rename` | `PATCH` |
-  | `agent-action` | `apply` / `discard` → the parts endpoints; `review` → `ReviewModal` |
-  | `agent-reference-open` | `ContextPreviewModal` |
+**Who owns what.**
 
-- **`?ref=<type>&id=…&label=…` in the URL** pre-attaches a reference on mount.
+| Owner | Properties |
+|---|---|
+| `bindAgentPanel(page, chat, { registerEntries: false, errorText, contextReferences })` | `entries`, `running`, `error`, `models`, `conversations`, `active`, `hasMore`, `heading`, `no-attachments`, `accept`, `max-file-size`, `max-files`, `contextUsage` (the 0.5 ring), and `disabled` while `features.ready` is false |
+| `AgentChat.vue` | `labels`, `formatDate`, `renamable`, `contextReferences` (the "In context" list); the `mention` and `composer-actions` slots. It also holds `disabled` until `/status` has answered |
 
-## `AIAssistant.vue`, the side panel host
+Nothing in the template binds a binding-owned property; two writers would fight. The
+binding registers no entry renderers (`registerEntries: false`), so the host registers
+the proposal card (`renderModuleProposal`), `renderNoticeWithOpen` for `notice`, and
+`renderContextMarkerEntry` for `context-marker`.
 
-- **Attributes and properties it sets:** `closable`, `sticky-attachments`, `accept`, the
-  text attributes, `entries`, `suggestions`, `running`, `error`.
-- **`entries`** is a `computed` that copies the transcript into plain objects. It reads
-  every field shown (tool status and detail, proposals copied with JSON), so that changes
-  made in place re-render the panel. It also puts `busy` and `running` into proposal
-  entries.
-- **Events it handles:**
+**Proposals.** `cardProposalOf()` maps module states to `pending`, `applied` (`succeeded`),
+`failed`, `rejected`, `expired`, `applying`, `approved`, `stale`, and `unknown`;
+`unknown` keeps its warning line and never reads as success or plain failure. Approve/Reject
+call `chat.decide(id, 'approve' | 'reject')`; a 409/422 resolves with `{ error }`, shown on
+the card. Review opens `ReviewModal` with `reviewPartOf(proposal)` (read-only once decided).
+A `succeeded` approval dispatches the `assistant-applied` window event with `{ tool, result }`.
 
-  | Event | Response |
-  |---|---|
-  | `agent-submit` | `send(text, attachments)`, which reads `base64()` into `{ filename, mimeType, data }`. The event is cancelled when a turn is already running or there's no chat |
-  | `agent-stop` | Cancels the turn |
-  | `agent-close` | `assistantContext.open = false` |
-  | `agent-action` | `apply` / `discard` → `decide(proposal, …)`; `review` → opens `ReviewModal` |
-  | `agent-error-dismiss` | `error = ''` |
+**Page context & composer.** `pageContext(path, references)` sends `{ screen: 'agent', path,
+references }` (captured in an `agent-submit` listener registered before the binding so
+attachments don't strip references). `contextReferencesFromTranscript` computes the "In
+context" list (30 most recent distinct references newest-first). `?ref=` pre-attaches on
+mount; reference chips open `ContextPreviewModal`, attachment chips download through the
+binding. Model picks persist under `localStorage['listpocket_agent_model']`.
 
-- **Slots it fills.** Each is a native wrapper element that carries the `slot` attribute:
+## `AIAssistantChat.vue`, the side panel
 
-  | Slot | Content |
-  |---|---|
-  | `header-start` | Chat switcher menu |
-  | `header-actions` | New-chat button |
-  | `subheader` | The label of the page being looked at (hidden when there is none) |
-  | `transcript-end` | Undo, Resume and Retry |
-  | `composer-chips` | Media-library pictures |
+Mounted directly in `App.vue` (not on auth pages). On mount, `clearLegacyAssistantStorage`
+removes `listpocket_assistant_v1:*` and `listpocket_ai_builder_legacy_owner` from
+`localStorage` while keeping `listpocket_agent_model`, `listpocket_assistant_pictures_v1:*`,
+and `listpocket_ai_builder_threads_v1` (still used by `TemplateForm.vue`'s AI builder dialog).
 
-- **Built-in composer menus (agent-panel 0.3.0):** the model menu (`useAgentModels()`,
-  `agent-model-change` → `setModel`) and the "+" menu, set with `:addMenu` to attach
-  files, paste text, and "Add a picture from media" (handled in `agent-menu-select`,
-  which opens the media library).
+**Conversations & rename.** Uses the module's server-backed conversation list. Rename is
+a host button in `switcher-end` calling `chat.rename()`, since `bindAgentPanel` only
+listens for `agent-rename` on a page element. Deleting a conversation clears its stored
+pictures and active undo state.
 
-- **Methods it calls through the ref:** `scrollToBottom({ force: true })` when switching
-  chats, `clearAttachments()` when the signed-in account changes, and `attachments` for
-  Retry.
-- **Sticky attachments:** attachments stay in the composer after sending and go with
-  every turn. The server is stateless between turns, so this is how follow-up questions
-  still see a pasted screenshot.
+**Page context.** Built at send time from the current route: `screen: "panel"`, `path`,
+`page`, `params`, `filters`, the open editor (`editorContextOf`), media pictures
+(`pictureReferences`), and any `@` references.
+
+**Editor adapter & undo.** `snapshot()` returns the open editor (`editorId` = `editor.key`,
+revision from `patches.mjs`), or null. Before calling `chat.decide`, `approve()` checks
+`editorPrecheckError`: if no editor or a different editor is open, it shows "Open the
+original editor before applying this proposal." and leaves the proposal pending so the
+user can return to the original editor and apply it. Inside the adapter, `validatePatch`
+reports stale revisions as `stale` and refuses a mid-flight wrong editor; `applyPatch`
+applies via `editor.apply` and returns the new revision. The controller posts
+`/proposals/{id}/outcome`. Undo restores `before` while the same editor is open and
+unchanged; the next turn, switching/deleting the conversation, or switching editor clears
+it.
+
+**Pictures & Retry.** Media pictures persist per user and conversation in
+`localStorage['listpocket_assistant_pictures_v1:<userId>']`; draft pictures move onto the
+created conversation id on first send. Retry is offered only for a failed accepted turn
+(`state.turn.error` with no active pre-accept `state.error`) and resends that turn's
+message, stored upload IDs, context references, and the selected `model` and `effort`.
+When `/status` fails or reports `features.ready === false`, opening the panel, regaining
+window focus, or changing Settings → AI (`ai-settings-updated`) re-runs `chat.init()`.
 
 ## Checking a change
 
@@ -164,19 +137,7 @@ Run from `frontend/`:
 npm run test:unit
 npx vite build
 npx vite --port 5199 --force &   # --force: re-bundle agent-panel if it changed
-npx cypress run --spec cypress/e2e/assistant.cy.js,cypress/e2e/agent-page.cy.js \
+env -u ELECTRON_RUN_AS_NODE npx cypress run \
+  --spec cypress/e2e/assistant-chat.cy.js,cypress/e2e/agent-page-chat.cy.js \
   --config baseUrl=http://localhost:5199
 ```
-
-To try package changes before releasing them, copy the package into `node_modules`
-(`rsync -a --exclude .git /Volumes/mini512/Components/agent-panel/ node_modules/agent-panel/`)
-and restart Vite with `--force`. Afterwards, release a tag and install it, which restores
-`package.json` and the lockfile to a pinned version.
-
-The composer is agent-panel's rich-text editor (a `contenteditable`, not a
-`textarea`): tests type into `.input--rich` and read the text from the element's
-`draft` property.
-
-Known state: the test "streams replies, reviews targeted changes and supports undo across
-navigation" fails before and after the panel was introduced. It waits for the text
-`/analytics`, which the test page never shows. Don't treat it as a regression signal.

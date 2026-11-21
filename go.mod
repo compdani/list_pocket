@@ -8,6 +8,8 @@ require (
 	ganigeorgiev.com/pocketbase/pocketbase v0.41.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/altcha-org/altcha-lib-go v1.0.0
+	github.com/compdani/pocketbase-mcp v0.1.8
+	github.com/compdani/pocketbase-mcp/adapters/pocketbase v0.1.8
 	github.com/disintegration/imaging v1.6.2
 	github.com/dop251/goja v0.0.0-20261023121931-6ace4dde0b29
 	github.com/emersion/go-message v0.18.2
@@ -21,7 +23,6 @@ require (
 	github.com/knadh/go-pop3 v1.0.2
 	github.com/knadh/smtppool/v2 v2.2.0
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/paulbellamy/ratecounter v0.2.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/pquerna/otp v1.5.0
@@ -44,6 +45,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/boombuler/barcode v1.1.0 // indirect
+	github.com/compdani/pocketbase-mcp/auth/stockoauth v0.1.8 // indirect
 	github.com/dlclark/regexp2/v2 v2.9.1 // indirect
 	github.com/domodwyer/mailyak/v3 v3.6.2 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
@@ -51,7 +53,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.4+incompatible // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
@@ -64,18 +66,14 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/segmentio/asm v1.1.3 // indirect
-	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/image v0.47.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

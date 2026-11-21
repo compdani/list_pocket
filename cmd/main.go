@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -37,6 +38,7 @@ import (
 	"github.com/compdani/list_pocket/internal/plugins"
 	"github.com/compdani/list_pocket/internal/subimporter"
 	"github.com/compdani/list_pocket/models"
+	pbadapter "github.com/compdani/pocketbase-mcp/adapters/pocketbase"
 	"github.com/joho/godotenv"
 )
 
@@ -68,6 +70,7 @@ type App struct {
 	log               *log.Logger
 	bufLog            *buflog.BufLog
 	pb                *pocketbase.PocketBase
+	mcp               *pbadapter.Server
 	tpl               *template.Template
 	renderer          *tplRenderer
 
@@ -89,6 +92,64 @@ type App struct {
 	sync.Mutex
 	shutdownOnce sync.Once
 	cronJobs     *backgroundCallbacks
+
+	// chatReloads scopes background chat-catalog reloads to the app's
+	// lifetime. shutdownApp stops it before anything else is torn down, so a
+	// reload can't read PocketBase after it is reset. The zero value is
+	// usable: the scope starts on its first schedule, which keeps every App
+	// built directly in a test working without extra wiring.
+	chatReloads chatReloadScope
+}
+
+// chatReloadScope is the lifetime of the app's background chat-catalog
+// reloads. schedule starts the scope lazily and registers one unit of work;
+// stop cancels the scope and waits for every registered reload. Holding mu
+// across both the stopped check and wg.Add is what makes stop and schedule
+// race-free: once stop has set stopped, no new work can be registered, so the
+// Wait that follows can't miss a goroutine.
+type chatReloadScope struct {
+	mu      sync.Mutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	stopped bool
+	wg      sync.WaitGroup
+}
+
+// schedule returns the scope's context and true when a reload may start, or
+// false when the scope has been stopped (including by a previous shutdown).
+func (s *chatReloadScope) schedule() (context.Context, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped {
+		return nil, false
+	}
+	if s.ctx == nil {
+		s.ctx, s.cancel = context.WithCancel(context.Background())
+	}
+	s.wg.Add(1)
+	return s.ctx, true
+}
+
+// done registers one finished unit of work from schedule.
+func (s *chatReloadScope) done() {
+	s.wg.Done()
+}
+
+// stop cancels the scope and waits for the reloads it registered to return.
+// Cancellation is what makes that wait short: an in-flight /models fetch is
+// abandoned by its context. A nil scope is already stopped.
+func (s *chatReloadScope) stop() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.stopped = true
+	cancel := s.cancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	s.wg.Wait()
 }
 
 var (
@@ -225,7 +286,9 @@ func main() {
 		a := app
 		appMu.Unlock()
 
-		registerServeRoutes(se, a)
+		if err := registerServeRoutes(se, a); err != nil {
+			return err
+		}
 		return se.Next()
 	})
 
@@ -394,6 +457,11 @@ func shutdownApp(app *App) {
 		return
 	}
 	app.shutdownOnce.Do(func() {
+		// Background chat-catalog reloads may be waiting on a provider's
+		// /models and then read the database. Cancel and join them before
+		// anything below is torn down (the SIGHUP path resets PocketBase's
+		// bootstrap state right after shutdownApp returns).
+		app.chatReloads.stop()
 		if app.manager != nil {
 			app.manager.BeginShutdown()
 		}

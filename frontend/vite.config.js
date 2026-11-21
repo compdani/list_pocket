@@ -17,9 +17,9 @@ export default defineConfig(({ _, mode }) => {
     base: '/admin/',
     mode,
     resolve: {
-      alias: {
-        '@': path.resolve(__dirname, './src'),
-      },
+      alias: [
+        { find: '@', replacement: path.resolve(__dirname, './src') },
+      ],
     },
     define: {
       __VUE_OPTIONS_API__: true,

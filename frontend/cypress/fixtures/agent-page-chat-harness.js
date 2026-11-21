@@ -1,10 +1,11 @@
-// Mounts the Agent page (views/Agent.vue → <lp-agent-page>) with an in-memory router.
-// The specs stub the API with cy.intercept.
+// Mounts views/AgentChat.vue directly (the module chat API at /api/mcp/chat/v1).
+// The spec stubs the module API with cy.intercept.
 import { createApp, h } from 'vue';
 import { createRouter, createMemoryHistory, RouterView } from 'vue-router';
 import { VApp, VMain } from 'vuetify/components';
 import vuetify from '../../src/plugins/vuetify';
-import Agent from '../../src/views/Agent.vue';
+import store from '../../src/store';
+import AgentChat from '../../src/views/AgentChat.vue';
 import { pb } from '../../src/api';
 
 // Enough English to read the page; other keys show as themselves.
@@ -15,17 +16,19 @@ const EN = {
   'agent.placeholder': 'Ask anything… ({at} to attach context)', 'agent.pasteData': 'Paste data', 'agent.attach': 'Attach',
   'agent.usedTools': 'Used {n} tool(s)', 'agent.review.title': 'Review', 'agent.reject': 'Reject', 'agent.view': 'View',
   'agent.suggest.overview': 'Give me an overview', 'agent.suggest.replies': 'Which replies are waiting?', 'agent.suggest.workflow': 'Build a workflow',
-  'globals.buttons.delete': 'Delete', 'globals.buttons.cancel': 'Cancel', 'agent.defaultModel': 'Default',
+  'agent.loadMore': 'Load more',
+  'agent.noProvider': "AI isn't set up. Add an API key or sign in with ChatGPT in Settings → AI, then reload this page.",
+  'globals.buttons.delete': 'Delete', 'globals.buttons.cancel': 'Cancel', 'globals.buttons.close': 'Close', 'agent.defaultModel': 'Default',
 };
 const t = (key, params = {}) => (EN[key] || key).replace(/\{(\w+)\}/g, (_, k) => params[k] ?? '');
 
 const router = createRouter({
   history: createMemoryHistory(),
-  routes: [{ path: '/agent/:id?', name: 'agent', component: Agent }, { path: '/:rest(.*)*', component: { render: () => h('div') } }],
+  routes: [{ path: '/agent/:id?', name: 'agent', component: AgentChat }, { path: '/:rest(.*)*', component: { render: () => h('div') } }],
 });
 await router.push(new URLSearchParams(location.search).get('path') || '/agent');
-pb.authStore.save('fixture-token', { id: 'fixture-owner' });
-window.agentFixture = { router };
+pb.authStore.save('fixture-token', { id: 'fixture-owner', collectionId: 'users' });
+window.agentFixture = { router, store, pb };
 const app = createApp({ render: () => h(VApp, {}, () => [h(VMain, {}, () => [h('div', { style: 'padding: 16px' }, [h(RouterView)])])]) });
 app.config.globalProperties.$t = t;
-app.use(router).use(vuetify).mount('#app');
+app.use(store).use(router).use(vuetify).mount('#app');
