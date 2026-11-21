@@ -10,8 +10,7 @@
       conversations-menu
       closable
       sticky-attachments
-      plain-text
-      no-add-menu
+      :addMenu="addMenu"
       :formatDate="formatDate"
       :suggestions="suggestions"
       placeholder="Message the assistant…"
@@ -19,6 +18,7 @@
       empty-title="How can I help?"
       empty-text="Ask about your data, plan a campaign, or edit what you're working on. You review every change first."
       data-cy="assistant-panel"
+      @agent-menu-select="onMenuSelect"
     >
       <span slot="header-start" class="ai-mark" aria-hidden="true"><v-icon icon="mdi-creation-outline" size="16" /></span>
       <div slot="switcher-end" class="pa-1">
@@ -34,9 +34,6 @@
       </div>
       <span v-if="pictures.length" slot="composer-chips" class="d-contents" data-cy="assistant-attached">
         <v-chip v-for="(picture, index) in pictures" :key="picture.url" closable size="small" prepend-icon="mdi-image-outline" :title="picture.url" data-cy="assistant-picture" @click:close="removePicture(index)">{{ picture.name || picture.url.split('/').pop() }}</v-chip>
-      </span>
-      <span slot="composer-actions">
-        <v-btn type="button" icon="mdi-image-plus-outline" size="small" variant="text" density="comfortable" aria-label="Add a picture from media" title="Add a picture from media" data-cy="assistant-add-picture" :disabled="sending" @click="mediaOpen = true" />
       </span>
     </lp-agent-panel>
 
@@ -129,6 +126,17 @@ let pendingDraftMove = false;
 let pictureConversation = '';
 const submitCapture = createSubmitCapture();
 const formatDate = shortStamp;
+const addMenu = computed(() => [
+  'attach',
+  'paste',
+  { id: 'media', label: 'Add a picture from media', icon: 'image', disabled: sending.value },
+]);
+
+function onMenuSelect(event) {
+  if (event.detail?.id !== 'media') return;
+  event.preventDefault();
+  if (!sending.value) mediaOpen.value = true;
+}
 
 const reviewPart = computed(() => (reviewProposal.value ? reviewPartOf(reviewProposal.value) : null));
 const contextLabel = computed(() => {
@@ -211,7 +219,10 @@ function lastModel() {
 
 function preselectModel() {
   const id = choiceIdFor(lastModel(), chat.state.choices);
-  if (id && panel.value) panel.value.model = id;
+  if (id && panel.value) {
+    panel.value.model = id;
+    binding?.refresh();
+  }
 }
 
 function loadPictures(conversationId) {

@@ -389,8 +389,9 @@ func (o *OAuth) Revoke(ctx context.Context, c *Credentials) error {
 // --- models ---
 
 type Model struct {
-	Slug        string `json:"slug"`
-	DisplayName string `json:"display_name"`
+	Slug        string   `json:"slug"`
+	DisplayName string   `json:"display_name"`
+	Efforts     []string `json:"efforts,omitempty"`
 }
 
 // ListModels returns models the account may use (visibility == "list").
@@ -433,7 +434,30 @@ func ListModels(ctx context.Context, hc *http.Client, base, token string) ([]Mod
 		if name == "" {
 			name = slug
 		}
-		out = append(out, Model{Slug: slug, DisplayName: name})
+		out = append(out, Model{Slug: slug, DisplayName: name, Efforts: reasoningLevels(m["supported_reasoning_levels"])})
 	}
 	return out, nil
+}
+
+// reasoningLevels reads supported_reasoning_levels, which is either a list of
+// effort names or a list of {"effort": "...", "description": "..."} objects.
+func reasoningLevels(v any) []string {
+	list, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range list {
+		switch x := item.(type) {
+		case string:
+			if e := strings.TrimSpace(x); e != "" {
+				out = append(out, e)
+			}
+		case map[string]any:
+			if e, ok := x["effort"].(string); ok && strings.TrimSpace(e) != "" {
+				out = append(out, strings.TrimSpace(e))
+			}
+		}
+	}
+	return out
 }

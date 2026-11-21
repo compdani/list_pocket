@@ -15,6 +15,7 @@ import (
 
 	"github.com/compdani/list_pocket/internal/flow/chatgpt"
 	"github.com/compdani/list_pocket/internal/flow/llm"
+	"github.com/compdani/pocketbase-mcp/chat/provider"
 	"github.com/compdani/pocketbase-mcp/chat/provider/catalog"
 	"github.com/compdani/pocketbase-mcp/chat/provider/codex"
 )
@@ -110,13 +111,13 @@ func (s *chatProviderStore) codexProvider(ctx context.Context) (catalog.Provider
 		// Fall back to the configured ChatGPT default model so a ChatGPT-only
 		// install is immediately ready on cold start before /models answers.
 		if provider, model := a.aiDefaults(); provider == llm.ProviderChatGPT && strings.TrimSpace(model) != "" {
-			models = []catalog.Model{{ID: model, Label: model}}
+			models = []catalog.Model{{ID: model, Label: model, Efforts: modelEfforts(model, nil)}}
 		} else {
 			return catalog.Provider{}, false
 		}
 	}
-	// chatgpt.ListModels doesn't parse supported reasoning levels, so these
-	// models carry no efforts and the model's own default applies.
+	// chatgpt.ListModels parses supported_reasoning_levels; models without
+	// advertised levels fall back to catalog.DefaultEfforts for known reasoning families.
 	p := catalog.Provider{
 		ID:      llm.ProviderChatGPT,
 		Label:   "ChatGPT plan",
@@ -145,7 +146,7 @@ func (s *chatProviderStore) apiProvider(ctx context.Context) (catalog.Provider, 
 	models := catalogModels(list.models)
 	if list.err != "" || len(models) == 0 {
 		fallback := a.aiAPIDefaultModel()
-		models = []catalog.Model{{ID: fallback, Label: fallback}}
+		models = []catalog.Model{{ID: fallback, Label: fallback, Efforts: modelEfforts(fallback, nil)}}
 	}
 	p := catalog.Provider{
 		ID:      llm.ProviderAPI,
@@ -163,7 +164,7 @@ func (s *chatProviderStore) apiProvider(ctx context.Context) (catalog.Provider, 
 		// The builder's model may not be in the gateway's /models list. Chat
 		// still has to offer it, exactly like today's side panel.
 		if _, ok := p.Model(wanted); !ok {
-			p.Models = append(p.Models, catalog.Model{ID: wanted, Label: wanted})
+			p.Models = append(p.Models, catalog.Model{ID: wanted, Label: wanted, Efforts: modelEfforts(wanted, nil)})
 		}
 	}
 	if _, ok := p.Model(wanted); ok {
@@ -210,9 +211,26 @@ func catalogModels(models []aiModel) []catalog.Model {
 		if strings.TrimSpace(m.ID) == "" {
 			continue
 		}
-		out = append(out, catalog.Model{ID: m.ID, Label: m.Name})
+		out = append(out, catalog.Model{ID: m.ID, Label: m.Name, Efforts: modelEfforts(m.ID, m.Efforts)})
 	}
 	return out
+}
+
+// modelEfforts returns the valid reasoning efforts for a model: advertised
+// levels filtered to what pocketbase-mcp accepts (so an unknown future level
+// never fails provider validation), falling back to catalog.DefaultEfforts.
+func modelEfforts(modelID string, advertised []string) []string {
+	var known []string
+	for _, e := range advertised {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if provider.ValidReasoningEffort(e) {
+			known = append(known, e)
+		}
+	}
+	if len(known) > 0 {
+		return catalog.NormalizeEfforts(known)
+	}
+	return catalog.DefaultEfforts(modelID)
 }
 
 func chatEnvOr(key, fallback string) string {

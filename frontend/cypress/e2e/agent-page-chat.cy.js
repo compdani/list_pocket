@@ -28,7 +28,7 @@ const statusBody = (over = {}) => ({
     maxMessageChars: 200000,
     maxUploadBytes: 6 * 1024 * 1024,
     maxAttachmentsPerTurn: 5,
-    attachmentTypes: ['text/plain', 'image/png', 'application/pdf'],
+    attachmentTypes: ['text/plain', 'text/csv', 'image/png', 'application/pdf'],
   },
   ...over,
 });
@@ -153,11 +153,12 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
 
     // ?ref= pre-attaches a composer chip on mount.
     cy.get('.chips [data-reference="list:3"]').should('be.visible');
-    // The Context button opens the @ picker without typing.
-    cy.get('[data-cy=agent-context]').click();
+    // Context in the built-in "+" menu opens the @ picker without typing.
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Context').click();
     cy.wait('@mentions');
     cy.get('[data-cy=agent-context-picker]').should('be.visible').and('contain.text', 'Customers');
-    cy.get('[data-cy=agent-context]').click();
+    cy.get('lp-agent-page').then(($el) => $el[0].closeMention());
 
     cy.get('.conv').should('have.length', 2).first().should('contain.text', 'Spring launch');
     cy.get('.conv--active').should('contain.text', 'Spring launch');
@@ -206,13 +207,13 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.visit(fixture);
     cy.wait(['@status', '@list']);
 
-    cy.get('textarea').type('Compare @Spr');
+    cy.get('.input--rich').type('Compare @Spr');
     cy.wait('@mentions');
     cy.get('[data-cy=agent-context-picker]').should('be.visible');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.get('.chips [data-reference="campaign:7"]').should('be.visible');
 
-    cy.get('textarea').type('these{enter}');
+    cy.get('.input--rich').type('these{enter}');
     cy.wait(['@create', '@turn', '@newConversation']);
     cy.then(() => {
       expect(turns[0].text).to.eq('Compare these');
@@ -250,7 +251,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
 
     cy.visit(fixture);
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Hello{enter}');
+    cy.get('.input--rich').type('Hello{enter}');
     cy.wait(['@create', '@turn', '@events', '@newConversation']);
     cy.get('[data-role=assistant]').should('contain.text', 'Looking into it');
     cy.get('[data-cy=assistant-proposal]').should('not.exist');
@@ -464,13 +465,14 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.visit(`${fixture}?path=${encodeURIComponent('/agent/c1?ref=list&id=3&label=Customers')}`);
     cy.wait(['@status', '@list', '@conversation']);
     cy.get('.chips [data-reference="list:3"]').should('be.visible');
-    cy.get('[data-cy=agent-paste]').click();
-    cy.get('[data-cy=agent-paste-name] input').type('leads.csv');
-    cy.get('[data-cy=agent-paste-content] textarea').type('name,email');
-    cy.get('[data-cy=agent-paste-attach]').click();
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Paste data').click();
+    cy.get('[part=menu] input').type('leads.csv');
+    cy.get('[part=menu] textarea').type('name,email');
+    cy.contains('[part=menu] button', 'Attach').click();
     cy.get('.chip[data-attachment-id]').should('have.length', 1);
 
-    cy.get('textarea').type('these{enter}');
+    cy.get('.input--rich').type('these{enter}');
     cy.wait(['@upload', '@turn']);
     cy.then(() => {
       expect(turns[0].text).to.eq('these');
@@ -525,23 +527,23 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
 
     cy.visit(fixture);
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('One @Spr');
+    cy.get('.input--rich').type('One @Spr');
     cy.wait('@mentions');
     cy.get('[data-cy=agent-context-picker]').should('be.visible');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.get('[part=attachments] [data-reference="campaign:7"]').should('be.visible');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.wrap(null).should(() => expect(creates).to.eq(1));
 
-    cy.get('textarea').should('have.value', '');
-    cy.get('textarea').type('Two @Cust');
+    cy.get('lp-agent-page').should(($el) => expect($el[0].draft).to.eq(''));
+    cy.get('.input--rich').type('Two @Cust');
     cy.wait('@mentions');
     cy.get('[data-cy=agent-context-picker]').should('be.visible');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.get('[part=attachments] [data-reference="list:3"]').should('be.visible');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
 
-    cy.get('textarea').should('have.value', 'Two ');
+    cy.get('lp-agent-page').should(($el) => expect($el[0].draft).to.eq('Two '));
     cy.get('[part=attachments] [data-reference="list:3"]').should('be.visible');
     cy.wrap(null).should(() => {
       expect(creates).to.eq(1);
@@ -559,7 +561,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
         references: [{ type: 'campaign', id: '7', label: 'Spring sale' }],
       });
     });
-    cy.get('textarea').should('have.value', 'Two ');
+    cy.get('lp-agent-page').should(($el) => expect($el[0].draft).to.eq('Two '));
     cy.get('[part=attachments] [data-reference="list:3"]').should('be.visible');
   });
 
@@ -586,22 +588,22 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
 
     cy.visit(`${fixture}?path=/agent/c1`);
     cy.wait(['@status', '@list', '@conversation']);
-    cy.get('textarea').type('Keep @Spr');
+    cy.get('.input--rich').type('Keep @Spr');
     cy.wait('@mentions');
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.get('[part=attachments] [data-reference="campaign:7"]').should('be.visible');
-    cy.get('textarea').type('this{enter}');
+    cy.get('.input--rich').type('this{enter}');
     cy.wait('@turn');
-    cy.get('textarea').should('have.value', 'Keep this');
+    cy.get('lp-agent-page').should(($el) => expect($el[0].draft).to.eq('Keep this'));
     cy.get('[part=attachments] [data-reference="campaign:7"]').should('be.visible');
 
     // Cypress runs this function before the queued commands, so the flag has to
     // change inside the queue, after the refused send has restored the draft.
     cy.then(() => { fail = false; });
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.wait('@turn');
     cy.contains('[data-role=user]', 'Keep this').should('be.visible');
-    cy.get('textarea').should('have.value', '');
+    cy.get('lp-agent-page').should(($el) => expect($el[0].draft).to.eq(''));
     cy.get('[part=attachments] [data-reference="campaign:7"]').should('not.exist');
   });
 
@@ -634,14 +636,14 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
 
     cy.visit(fixture);
     cy.get('lp-agent-page').should('have.attr', 'disabled');
-    cy.get('textarea').should('be.disabled');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'true');
     cy.get('[part=error]').should('not.be.visible');
     cy.wrap(null).should(() => expect(seenStatus).to.eq(true));
     cy.then(() => releaseStatus());
     cy.wait('@status');
     cy.get('lp-agent-page').should('not.have.attr', 'disabled');
     cy.get('[part=error]').should('not.be.visible');
-    cy.get('textarea').should('not.be.disabled').type('Hello{enter}');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'false').type('Hello{enter}');
     cy.wait('@turn');
     cy.then(() => {
       expect(turns[0].text).to.eq('Hello');
@@ -704,7 +706,7 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/before');
     cy.window().its('agentFixture.router').invoke('push', '/agent');
     cy.wait(['@status', '@list']);
-    cy.get('textarea').should('not.be.disabled').type('Hello{enter}');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'false').type('Hello{enter}');
     cy.wait('@turn');
     cy.window().its('agentFixture.router.currentRoute.value.fullPath').should('eq', '/agent/new1');
     cy.window().its('agentFixture.router').invoke('back');
@@ -758,25 +760,62 @@ describe('Agent page on the chat module', { includeShadowDom: true }, () => {
     cy.get('.message strong').should('have.text', 'six');
   });
 
-  it('clears draft, references, attachments and paste dialog on an in-place account switch', () => {
+  it('clears draft, references, attachments and open menu on an in-place account switch', () => {
     stubPage({ list: [] });
     cy.visit(`${fixture}?path=/agent?ref=list&id=7&label=VIP`);
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Secret draft from user one');
-    cy.get('[data-cy=agent-paste]').click();
-    cy.get('[data-cy=agent-paste-content]').type('a,b\n1,2');
-    cy.get('[data-cy=agent-paste-attach]').click();
-    cy.get('[data-cy=agent-paste]').click();
-    cy.get('[data-cy=agent-paste-content]').should('be.visible');
+    cy.get('.input--rich').type('Secret draft from user one');
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Paste data').click();
+    cy.get('[part=menu] textarea').type('a,b\n1,2');
+    cy.contains('[part=menu] button', 'Attach').click();
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Paste data').click();
+    cy.get('[part=menu] textarea').should('be.visible');
 
     cy.window().then((win) => {
       win.agentFixture.pb.authStore.save('user-two-token', { id: 'user-two', collectionId: 'users' });
     });
-    cy.get('textarea').should('have.value', '');
-    cy.get('lp-agent-page').then(($el) => {
+    cy.get('lp-agent-page').should(($el) => {
+      expect($el[0].draft).to.eq('');
       expect($el[0].references).to.deep.eq([]);
       expect($el[0].attachments).to.deep.eq([]);
     });
-    cy.get('[data-cy=agent-paste-content]').should('not.exist');
+    cy.get('[part=menu]').should('not.be.visible');
+  });
+
+  it('shows reasoning effort options and sends the chosen effort', () => {
+    const turns = [];
+    stubPage({
+      list: [],
+      status: statusBody({
+        choices: [
+          { id: 'chatgpt::gpt-5-codex', provider: 'chatgpt', model: 'gpt-5-codex', label: 'GPT-5 Codex', efforts: ['low', 'medium', 'high'], default: true },
+        ],
+        defaultChoice: 'chatgpt::gpt-5-codex',
+      }),
+    });
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations', conversation('new1', '')).as('create');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/new1/turns', (req) => {
+      turns.push(req.body);
+      req.reply({ turn: { id: 't1', conversationId: 'new1', state: 'completed' }, created: true });
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/new1', {
+      conversation: conversation('new1', 'Analyze'),
+      messages: [userMessage('u1', 'Analyze')],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    });
+
+    cy.visit(fixture);
+    cy.wait(['@status', '@list']);
+    cy.get('[part=options-menu]').should('be.visible').click();
+    cy.contains('[role=menuitemradio]', 'Medium').click();
+    cy.get('.input--rich').type('Analyze{enter}');
+    cy.wait(['@create', '@turn']);
+    cy.then(() => {
+      expect(turns[0].effort).to.eq('medium');
+    });
   });
 });

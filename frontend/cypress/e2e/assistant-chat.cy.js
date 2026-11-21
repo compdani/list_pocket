@@ -209,7 +209,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     visit('?path=/campaigns/example?status=live');
     cy.wait(['@status', '@list']);
     cy.get('[data-cy=assistant-context]').should('contain.text', 'Unsaved campaign editor');
-    cy.get('textarea').type('Shorten the CTA{enter}');
+    cy.get('.input--rich').type('Shorten the CTA{enter}');
     cy.wait(['@create', '@turn', '@events']);
     cy.get('[data-role=assistant]').should('contain.text', 'Looking into it');
     cy.get('[data-tool-id=call1]').should('contain.text', 'Editor patch');
@@ -228,16 +228,43 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     });
   });
 
-  it('remembers the model picked last', () => {
-    stubList([]);
+  it('remembers the model picked last and shows reasoning effort options for it', () => {
+    const turns = [];
+    cy.intercept('GET', '**/api/mcp/chat/v1/status', statusBody({
+      choices: [
+        { id: 'api::gpt-4.1', provider: 'api', model: 'gpt-4.1', label: 'GPT-4.1', default: true },
+        { id: 'api::gpt-5', provider: 'api', model: 'gpt-5', label: 'GPT-5', efforts: ['low', 'medium', 'high'] },
+      ],
+    })).as('status');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations*', { items: [], nextCursor: '' }).as('list');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations', conversation('new1', '')).as('create');
+    cy.intercept('POST', '**/api/mcp/chat/v1/conversations/new1/turns', (req) => {
+      turns.push(req.body);
+      req.reply({ turn: { id: 't1', conversationId: 'new1', state: 'completed' }, created: true });
+    }).as('turn');
+    cy.intercept('GET', '**/api/mcp/chat/v1/conversations/new1', {
+      conversation: conversation('new1', 'Think hard'),
+      messages: [userMessage('u1', 'Think hard', 'new1')],
+      proposals: [],
+      activeTurn: null,
+      context: contextStatus(),
+    });
     visit('?editor=none');
     cy.wait('@status');
     cy.window().then((win) => {
-      win.localStorage.setItem('listpocket_agent_model', JSON.stringify({ provider: 'api', model: 'gpt-4.1-mini' }));
+      win.localStorage.setItem('listpocket_agent_model', JSON.stringify({ provider: 'api', model: 'gpt-5' }));
     });
     cy.reload();
     cy.wait('@status');
-    cy.get('.model-trigger').should('contain.text', 'GPT-4.1 mini');
+    cy.get('.model-trigger').should('contain.text', 'GPT-5');
+    cy.get('[part=options-menu]').should('be.visible').click();
+    cy.contains('[role=menuitemradio]', 'High').click();
+    cy.get('.input--rich').type('Think hard{enter}');
+    cy.wait('@turn');
+    cy.then(() => {
+      expect(turns[0].model).to.eq('gpt-5');
+      expect(turns[0].effort).to.eq('high');
+    });
   });
 
   it('approves a server proposal, shows the Open link and fires assistant-applied', () => {
@@ -319,7 +346,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     stubEditorTurn([{ op: 'replace_text', before: 'Shop today', after: 'Shop' }]);
     visit();
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait(['@create', '@turn', '@events']);
     cy.get('[data-cy=assistant-apply]').click();
     cy.wait(['@decision', '@outcome']);
@@ -333,7 +360,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     stubEditorTurn([{ op: 'set', field: 'subject', before: 'Hello', after: 'Hi' }]);
     visit('?editor=template');
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait(['@events']);
     cy.get('[data-cy=assistant-apply]').click();
     cy.wait('@outcome');
@@ -346,7 +373,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     stubEditorTurn([{ op: 'block', blockId: 'cta', before, after }]);
     visit('?editor=visual');
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait('@events');
     cy.get('[data-cy=assistant-apply]').click();
     cy.wait('@outcome');
@@ -362,7 +389,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     visit('?editor=workflow');
     cy.wait(['@status', '@list']);
     cy.get('[data-cy=assistant-context]').should('contain.text', 'Unsaved workflow editor');
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait('@events');
     cy.get('[data-cy=assistant-apply]').click();
     cy.wait('@outcome');
@@ -373,7 +400,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     stubEditorTurn([{ op: 'replace_text', before: 'Shop today', after: 'Shop' }]);
     visit();
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait('@events');
     cy.window().then((win) => win.assistantFixture.change());
     cy.get('[data-cy=assistant-apply]').click();
@@ -386,7 +413,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     stubEditorTurn([{ op: 'replace_text', before: 'Shop today', after: 'Shop' }]);
     visit();
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait('@events');
     cy.window().then((win) => win.assistantFixture.useEditor('template'));
     cy.get('[data-cy=assistant-apply]').click();
@@ -406,7 +433,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     stubEditorTurn([{ op: 'replace_text', before: 'Shop today', after: 'Shop' }]);
     visit();
     cy.wait(['@status', '@list']);
-    cy.get('textarea').type('Edit this{enter}');
+    cy.get('.input--rich').type('Edit this{enter}');
     cy.wait('@events');
     cy.get('[data-cy=assistant-apply]').click();
     cy.wait('@outcome');
@@ -450,10 +477,11 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
 
     visit('?editor=none');
     cy.wait(['@status', '@list']);
-    cy.get('[data-cy=assistant-add-picture]').click();
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Add a picture from media').click();
     cy.get('.thumb-link').first().click();
     cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
-    cy.get('textarea').type('Use this picture{enter}');
+    cy.get('.input--rich').type('Use this picture{enter}');
     cy.wait('@turn');
     cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
     cy.then(() => {
@@ -467,7 +495,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('[data-conversation-id=new1] .conv-link').click();
     cy.wait('@opened');
     cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
-    cy.get('textarea').type('And again{enter}');
+    cy.get('.input--rich').type('And again{enter}');
     cy.wait('@turn');
     cy.then(() => {
       expect(turns[1].context.pictureReferences).to.deep.eq([{ name: 'hero.png', url: 'https://cdn.example/hero.png' }]);
@@ -520,10 +548,10 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
 
     visit('?editor=none');
     cy.wait('@status');
-    cy.get('textarea').type('One{enter}');
-    cy.get('textarea').should('have.value', '');
-    cy.get('textarea').type('Two{enter}');
-    cy.get('textarea').should('have.value', 'Two');
+    cy.get('.input--rich').type('One{enter}');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq(''));
+    cy.get('.input--rich').type('Two{enter}');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq('Two'));
     cy.wrap(null).should(() => {
       expect(creates).to.eq(1);
       expect(turns).to.have.length(0);
@@ -535,7 +563,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
       expect(turns[0].text).to.eq('One');
       expect(turns[0].context.screen).to.eq('panel');
     });
-    cy.get('textarea').should('have.value', 'Two');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq('Two'));
   });
 
   it('restores the draft when a turn is refused', () => {
@@ -560,13 +588,13 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('[part=switcher-button]').click();
     cy.get('[data-conversation-id=c1] .conv-link').click();
     cy.wait('@conversation');
-    cy.get('textarea').type('Keep this{enter}');
+    cy.get('.input--rich').type('Keep this{enter}');
     cy.wait('@turn');
-    cy.get('textarea').should('have.value', 'Keep this');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq('Keep this'));
     cy.then(() => { fail = false; });
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.wait('@turn');
-    cy.get('textarea').should('have.value', '');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq(''));
   });
 
   it('keeps the composer disabled until status answers, then offers retry after a failed turn', () => {
@@ -580,14 +608,14 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.intercept('GET', '**/api/mcp/chat/v1/conversations', { items: [], nextCursor: '' }).as('list');
     visit('?editor=none');
     cy.get('lp-agent-panel').should('have.attr', 'disabled');
-    cy.get('textarea').should('be.disabled');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'true');
     cy.get('[part=error]').should('not.be.visible');
     cy.wrap(null).should(() => {
       expect(releaseStatus).to.be.a('function');
     });
     cy.then(() => releaseStatus());
     cy.wait('@status');
-    cy.get('textarea').should('not.be.disabled');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'false');
 
     cy.intercept('POST', '**/api/mcp/chat/v1/conversations', conversation('new1', '')).as('create');
     cy.intercept('GET', '**/api/mcp/chat/v1/turns/t1/events', sse([
@@ -611,7 +639,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
       req.reply({ turn: { id: 't2', conversationId: 'new1', state: 'completed' }, created: true });
     });
     cy.get('lp-agent-panel').then(($el) => { $el[0].model = 'api::gpt-4.1-mini'; });
-    cy.get('textarea').type('Hello there{enter}');
+    cy.get('.input--rich').type('Hello there{enter}');
     cy.wait('@events');
     cy.get('[data-cy=assistant-retry]').click();
     cy.wrap(null).should(() => {
@@ -667,13 +695,13 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.wait('@open1');
 
     // Refused second submit restores draft and must NOT show Retry (which would resend Earlier message).
-    cy.get('textarea').type('Second try{enter}');
+    cy.get('.input--rich').type('Second try{enter}');
     cy.wait('@turn');
-    cy.get('textarea').should('have.value', 'Second try');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq('Second try'));
     cy.get('[data-cy=assistant-retry]').should('not.exist');
 
     // Now accept a turn that fails mid-stream; Retry must appear, then hide if a subsequent submit is refused.
-    cy.get('textarea').type('{enter}');
+    cy.get('.input--rich').type('{enter}');
     cy.wait('@failedTurn');
     cy.get('[data-cy=assistant-retry]').should('be.visible');
 
@@ -683,9 +711,9 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
       statusCode: 400,
       body: { error: { code: 'turn_refused', message: 'Still refused.' } },
     }).as('refusedAfterFail');
-    cy.get('textarea').type('Blocked follow-up{enter}');
+    cy.get('.input--rich').type('Blocked follow-up{enter}');
     cy.wait('@refusedAfterFail');
-    cy.get('textarea').should('have.value', 'Blocked follow-up');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq('Blocked follow-up'));
     cy.get('[data-cy=assistant-retry]').should('not.exist');
   });
 
@@ -729,7 +757,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('[part=switcher-button]').click();
     cy.get('[data-conversation-id=c1] .conv-link').click();
     cy.wait('@open1');
-    cy.get('textarea').type('Check brief{enter}');
+    cy.get('.input--rich').type('Check brief{enter}');
     cy.wait('@failedTurn');
     cy.get('[data-cy=assistant-retry]').click();
     cy.wrap(null).should(() => {
@@ -752,13 +780,13 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
 
     visit('?editor=none');
     cy.wait('@status');
-    cy.get('textarea').should('be.disabled');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'true');
     cy.get('[part=error]').should('be.visible');
 
     cy.then(() => { ready = true; });
     cy.window().then((win) => win.dispatchEvent(new win.Event('ai-settings-updated')));
     cy.wait('@status');
-    cy.get('textarea').should('not.be.disabled');
+    cy.get('.input--rich').should('have.attr', 'aria-disabled', 'false');
   });
 
   it('keeps saved media pictures when deleting a conversation fails on the server', () => {
@@ -788,7 +816,8 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('[part=switcher-button]').click();
     cy.get('[data-conversation-id=c1] .conv-link').click();
     cy.wait('@open1');
-    cy.get('[data-cy=assistant-add-picture]').click();
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Add a picture from media').click();
     cy.get('.thumb-link').first().click();
     cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
 
@@ -821,8 +850,9 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.get('[part=switcher-button]').click();
     cy.get('[data-conversation-id=c1] .conv-link').click();
     cy.wait('@open1');
-    cy.get('textarea').type('Private draft for user one');
-    cy.get('[data-cy=assistant-add-picture]').click();
+    cy.get('.input--rich').type('Private draft for user one');
+    cy.get('[part~="add-menu"]').click();
+    cy.contains('[role=menuitem]', 'Add a picture from media').click();
     cy.get('.thumb-link').first().click();
     cy.get('[data-cy=assistant-picture]').should('contain.text', 'hero.png');
     cy.get('[part=switcher-button]').click();
@@ -833,7 +863,7 @@ describe('Side panel on the chat module', { includeShadowDom: true }, () => {
     cy.window().then((win) => {
       win.assistantFixture.pb.authStore.save('user-two-token', { id: 'user-two', collectionId: 'users' });
     });
-    cy.get('textarea').should('have.value', '');
+    cy.get('lp-agent-panel').should(($el) => expect($el[0].draft).to.eq(''));
     cy.get('[data-cy=assistant-picture]').should('not.exist');
     cy.get('[data-cy=assistant-rename-title]').should('not.exist');
   });

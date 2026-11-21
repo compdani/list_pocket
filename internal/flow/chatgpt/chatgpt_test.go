@@ -270,12 +270,18 @@ func TestListModels(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		_, _ = w.Write([]byte(`{"models":[{"slug":"gpt-a","display_name":"GPT A","visibility":"list"},{"slug":"hidden","visibility":"hide"},{"id":"gpt-b"}]}`))
+		_, _ = w.Write([]byte(`{"models":[{"slug":"gpt-a","display_name":"GPT A","visibility":"list","supported_reasoning_levels":[{"effort":"low","description":"fast"},{"effort":"high"}]},{"slug":"hidden","visibility":"hide"},{"id":"gpt-b","supported_reasoning_levels":["medium","xhigh"]}]}`))
 	}))
 	defer srv.Close()
 	models, err := chatgpt.ListModels(context.Background(), nil, srv.URL, "tok")
 	if err != nil || len(models) != 2 || models[0].Slug != "gpt-a" || models[1].DisplayName != "gpt-b" {
 		t.Errorf("models: %+v %v", models, err)
+	}
+	if strings.Join(models[0].Efforts, ",") != "low,high" {
+		t.Errorf("gpt-a efforts = %v, want [low high]", models[0].Efforts)
+	}
+	if strings.Join(models[1].Efforts, ",") != "medium,xhigh" {
+		t.Errorf("gpt-b efforts = %v, want [medium xhigh]", models[1].Efforts)
 	}
 	if _, err := chatgpt.ListModels(context.Background(), nil, srv.URL, "bad"); err == nil {
 		t.Error("expected 401 error")

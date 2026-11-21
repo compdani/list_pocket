@@ -76,8 +76,9 @@ type cachedAIModels struct {
 }
 
 type aiModel struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Efforts []string `json:"efforts,omitempty"`
 }
 
 func newChatGPTService(pb *pocketbase.PocketBase) *chatgptService {
@@ -355,7 +356,7 @@ func (a *App) aiProviderModels(ctx context.Context, provider string, refresh boo
 			out.err = err.Error()
 		}
 		for _, m := range list {
-			out.models = append(out.models, aiModel{ID: m.Slug, Name: m.DisplayName})
+			out.models = append(out.models, aiModel{ID: m.Slug, Name: m.DisplayName, Efforts: m.Efforts})
 		}
 	default:
 		out.models, err = listAPIModels(ctx, ep)
@@ -391,8 +392,9 @@ func listAPIModels(ctx context.Context, ep llm.Endpoint) ([]aiModel, error) {
 	}
 	var body struct {
 		Data []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			ID                       string `json:"id"`
+			Name                     string `json:"name"`
+			SupportedReasoningLevels any    `json:"supported_reasoning_levels"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil {
@@ -404,10 +406,31 @@ func listAPIModels(ctx context.Context, ep llm.Endpoint) ([]aiModel, error) {
 		if name == "" {
 			name = m.ID
 		}
-		out = append(out, aiModel{ID: m.ID, Name: name})
+		out = append(out, aiModel{ID: m.ID, Name: name, Efforts: parseReasoningLevels(m.SupportedReasoningLevels)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
+}
+
+func parseReasoningLevels(v any) []string {
+	list, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, item := range list {
+		switch x := item.(type) {
+		case string:
+			if e := strings.TrimSpace(x); e != "" {
+				out = append(out, e)
+			}
+		case map[string]any:
+			if e, ok := x["effort"].(string); ok && strings.TrimSpace(e) != "" {
+				out = append(out, strings.TrimSpace(e))
+			}
+		}
+	}
+	return out
 }
 
 // GetAgentModels lists what can be picked for a conversation, by provider.

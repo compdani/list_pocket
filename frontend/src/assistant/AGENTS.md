@@ -51,8 +51,13 @@ Both subclasses share the following from `lp-agent-common.js`:
 - The theme tokens map to Vuetify's `--v-theme-*` variables, with fallbacks.
 - `referenceIcon` maps the context types in `CONTEXT_ICONS` (`agent/parts.mjs`) to
   `@mdi/js` paths. Add new types in both places.
-- Both hosts set `plain-text` and `no-add-menu` on their elements, keeping the
-  `<textarea>` composer and paperclip button.
+- Both hosts use agent-panel's rich-text composer (`.input--rich`, bold/italic sent as
+  markdown) and built-in "+" menu: the Agent page keeps the defaults (`attach`, `paste`,
+  `context` via `mention-trigger="@"`), and the side panel passes `['attach', 'paste',
+  { id: 'media', label: 'Add a picture from media', icon: 'image' }]` to open the media
+  library and attach picture links as `pictureReferences`.
+- Reasoning effort options appear automatically in the built-in options menu whenever the
+  selected model choice from `/api/mcp/chat/v1/status` lists `efforts`.
 - `defaultLabels` adds `review`, `view`, `discard`, `open` and `proposedEdit`. The side
   panel uses the English defaults; the Agent page passes translated ones.
 - Both subclasses override the `entries` setter to copy host-owned `busy`/`running` flags

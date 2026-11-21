@@ -8,8 +8,6 @@
       ref="page"
       class="agent-page"
       mention-trigger="@"
-      plain-text
-      no-add-menu
       :renamable="renamable"
       :contextReferences="inContext"
       :formatDate="formatDate"
@@ -22,10 +20,6 @@
       <div slot="mention">
         <context-picker v-if="picker" ref="pickerRef" :query="picker.query" @pick="pickContext" @close="page?.closeMention()" />
       </div>
-      <span slot="composer-actions" class="agent-actions">
-        <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-at" data-cy="agent-context" @click="toggleMention">{{ $t('agent.context') }}</v-btn>
-        <v-btn size="small" variant="text" class="text-none" prepend-icon="mdi-content-paste" data-cy="agent-paste" @click="pasting = { name: '', content: '' }">{{ $t('agent.pasteData') }}</v-btn>
-      </span>
     </lp-agent-page>
 
     <review-modal
@@ -39,21 +33,6 @@
       @reject="rejectFromReview"
     />
     <context-preview-modal v-if="previewing" :item="previewing" @close="previewing = null" />
-
-    <v-dialog :model-value="Boolean(pasting)" max-width="680" @update:model-value="pasting = null">
-      <v-card v-if="pasting">
-        <v-card-title>{{ $t('agent.pasteData') }}</v-card-title>
-        <v-card-text>
-          <v-text-field v-model="pasting.name" :label="$t('agent.pasteName')" placeholder="leads.csv" density="compact" variant="outlined" class="mb-2" hide-details data-cy="agent-paste-name" />
-          <v-textarea v-model="pasting.content" :label="$t('agent.pasteContent')" rows="12" density="compact" variant="outlined" hide-details data-cy="agent-paste-content" />
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn class="text-none" @click="pasting = null">{{ $t('globals.buttons.cancel') }}</v-btn>
-          <v-btn color="primary" variant="flat" class="text-none" :disabled="!pasting.content.trim()" data-cy="agent-paste-attach" @click="savePaste">{{ $t('agent.attach') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
   </section>
 </template>
 
@@ -100,7 +79,6 @@ const inContext = ref([]);
 const renamable = ref(false);
 const actionError = ref('');
 const previewing = ref(null);
-const pasting = ref(null);
 const reviewProposal = ref(null);
 const reviewKey = ref(0);
 const reviewError = ref('');
@@ -136,10 +114,15 @@ const formatDate = shortStamp;
 const suggestions = computed(() => [$t('agent.suggest.overview'), $t('agent.suggest.replies'), $t('agent.suggest.workflow')]);
 
 const labels = computed(() => ({
+  addContext: $t('agent.context'),
+  addFile: $t('agent.attach'),
   attach: $t('agent.attachFile'),
+  attachFiles: $t('agent.attachFile'),
   attachHint: $t('agent.attachFile'),
   cancel: $t('globals.buttons.cancel'),
   conversations: $t('agent.conversations'),
+  defaultModel: $t('agent.defaultModel'),
+  defaultModelNamed: (model) => $t('agent.defaultNamed', { model }),
   delete: $t('globals.buttons.delete'),
   deleteConversation: (name) => `${$t('globals.buttons.delete')} ${name}`,
   discard: $t('agent.reject'),
@@ -148,8 +131,12 @@ const labels = computed(() => ({
   newChat: $t('agent.newChat'),
   noConversations: $t('agent.noConversations'),
   open: $t('agent.open'),
+  pasteContent: $t('agent.pasteContent'),
+  pasteName: $t('agent.pasteName'),
+  pasteText: $t('agent.pasteData'),
   rename: $t('agent.rename'),
   review: $t('agent.review.title'),
+  searchModels: $t('agent.searchModels'),
   send: $t('agent.send'),
   stop: $t('agent.stop'),
   titleLabel: $t('agent.titleLabel'),
@@ -188,7 +175,10 @@ function lastModel() {
 
 function preselectModel() {
   const id = choiceIdFor(lastModel(), chat.state.choices);
-  if (id && page.value) page.value.model = id;
+  if (id && page.value) {
+    page.value.model = id;
+    binding?.refresh();
+  }
 }
 
 function activeId() {
@@ -358,19 +348,8 @@ function onMentionKey(event) {
   if (pickerRef.value?.key(event.detail.event)) event.preventDefault();
 }
 
-function toggleMention() {
-  if (page.value?.mention.open) page.value.closeMention();
-  else page.value?.openMention();
-}
-
 function pickContext(item) {
   page.value?.addReference({ type: item.type, id: item.id, label: item.label });
-}
-
-function savePaste() {
-  const { name, content } = pasting.value;
-  pasting.value = null;
-  page.value?.addFiles([new File([content], name.trim() || 'pasted.txt', { type: 'text/plain' })]);
 }
 
 function renderProposalEntry(entry, panel) {
@@ -469,7 +448,6 @@ onMounted(async () => {
     actionError.value = '';
     closeReview();
     previewing.value = null;
-    pasting.value = null;
     picker.value = null;
     inContext.value = [];
     // setAccount clears the state, which would look like "no conversation";
@@ -537,12 +515,5 @@ onBeforeUnmount(() => {
   display: block;
   height: 100%;
   overflow: hidden;
-}
-
-.agent-actions {
-  align-items: center;
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 2px;
 }
 </style>

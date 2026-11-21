@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -503,5 +504,82 @@ func TestChatProviderStoreChatGPTColdFallback(t *testing.T) {
 	}
 	if len(providers) != 1 || providers[0].ID != llm.ProviderChatGPT || providers[0].DefaultModel != "gpt-5-codex" {
 		t.Fatalf("cold ChatGPT provider = %+v, want fallback default gpt-5-codex", providers)
+	}
+	if want := []string{"low", "medium", "high"}; !slices.Equal(providers[0].Models[0].Efforts, want) {
+		t.Fatalf("cold fallback efforts = %v, want %v", providers[0].Models[0].Efforts, want)
+	}
+}
+
+func TestChatProviderStoreModelEfforts(t *testing.T) {
+	a := chatProvidersTestApp(t)
+	t.Setenv("LISTPOCKET_AI_API_KEY", "sk-test")
+	t.Setenv("LISTPOCKET_AI_MODEL", "gpt-5")
+	if err := a.chatgpt.store.Save(signedInCreds()); err != nil {
+		t.Fatal(err)
+	}
+	a.chatgpt.modelsMu.Lock()
+	a.chatgpt.models[llm.ProviderChatGPT] = cachedAIModels{
+		at: time.Now(),
+		models: []aiModel{
+			// Advertised efforts out of order plus an unknown future level that must be ignored.
+			{ID: "gpt-5-codex", Name: "GPT-5 Codex", Efforts: []string{"high", "low", "future_level", "xhigh"}},
+			// No advertised levels: falls back to catalog.DefaultEfforts for known reasoning families.
+			{ID: "gpt-5", Name: "GPT-5"},
+			{ID: "gpt-4o", Name: "GPT-4o"},
+		},
+	}
+	a.chatgpt.models[llm.ProviderAPI] = cachedAIModels{
+		at: time.Now(),
+		models: []aiModel{
+			{ID: "gpt-5", Name: "GPT-5"},
+			{ID: "o3-mini", Name: "o3-mini"},
+			{ID: "gpt-5-chat-latest", Name: "GPT-5 Chat"},
+			{ID: "gpt-4o", Name: "GPT-4o"},
+			{ID: "custom-reasoner", Name: "Custom", Efforts: []string{"medium", "high"}},
+		},
+	}
+	a.chatgpt.modelsMu.Unlock()
+
+	store := &chatProviderStore{app: a}
+	providers, err := store.ListProviders(context.Background(), catalog.Scope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]catalog.Provider{}
+	for _, p := range providers {
+		byID[p.ID] = p
+	}
+	codexP, ok := byID[llm.ProviderChatGPT]
+	if !ok {
+		t.Fatalf("missing chatgpt provider in %+v", providers)
+	}
+	if m, _ := codexP.Model("gpt-5-codex"); !slices.Equal(m.Efforts, []string{"low", "high", "xhigh"}) {
+		t.Errorf("chatgpt gpt-5-codex efforts = %v, want [low high xhigh]", m.Efforts)
+	}
+	if m, _ := codexP.Model("gpt-5"); !slices.Equal(m.Efforts, []string{"low", "medium", "high"}) {
+		t.Errorf("chatgpt gpt-5 efforts = %v, want [low medium high]", m.Efforts)
+	}
+	if m, _ := codexP.Model("gpt-4o"); len(m.Efforts) != 0 {
+		t.Errorf("chatgpt gpt-4o efforts = %v, want none", m.Efforts)
+	}
+
+	apiP, ok := byID[llm.ProviderAPI]
+	if !ok {
+		t.Fatalf("missing api provider in %+v", providers)
+	}
+	if m, _ := apiP.Model("gpt-5"); !slices.Equal(m.Efforts, []string{"low", "medium", "high"}) {
+		t.Errorf("api gpt-5 efforts = %v, want [low medium high]", m.Efforts)
+	}
+	if m, _ := apiP.Model("o3-mini"); !slices.Equal(m.Efforts, []string{"low", "medium", "high"}) {
+		t.Errorf("api o3-mini efforts = %v, want [low medium high]", m.Efforts)
+	}
+	if m, _ := apiP.Model("gpt-5-chat-latest"); len(m.Efforts) != 0 {
+		t.Errorf("api gpt-5-chat-latest efforts = %v, want none", m.Efforts)
+	}
+	if m, _ := apiP.Model("gpt-4o"); len(m.Efforts) != 0 {
+		t.Errorf("api gpt-4o efforts = %v, want none", m.Efforts)
+	}
+	if m, _ := apiP.Model("custom-reasoner"); !slices.Equal(m.Efforts, []string{"medium", "high"}) {
+		t.Errorf("api custom-reasoner efforts = %v, want [medium high]", m.Efforts)
 	}
 }
